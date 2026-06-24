@@ -1,0 +1,31 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { AppShell } from '@/components/layout/AppShell'
+import { NotFoundPage } from '@/components/NotFoundPage'
+import { LoginPage, ProtectedRoute } from '@/features/auth'
+import { ServerDetailPage, ServersPage } from '@/features/servers'
+import { ServerUsersPage } from '@/features/server-users'
+import { DatabaseModelsPage } from '@/features/database-models'
+import { ManagedDatabasesPage } from '@/features/managed-databases'
+import { PrivilegesPage } from '@/features/privileges'
+
+export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <AppShell />,
+        children: [
+          { index: true, element: <Navigate to="/servers" replace /> },
+          { path: 'servers', element: <ServersPage /> },
+          { path: 'servers/:serverId', element: <ServerDetailPage /> },
+          { path: 'server-users', element: <ServerUsersPage /> },
+          { path: 'database-models', element: <DatabaseModelsPage /> },
+          { path: 'managed-databases', element: <ManagedDatabasesPage /> },
+          { path: 'privileges', element: <PrivilegesPage /> },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
+    ],
+  },
+])
