@@ -1,0 +1,123 @@
+/**
+ * theme.css — ÚNICA fuente de verdad de los colores del sitio.
+ *
+ * Cómo funciona (Tailwind v4, CSS-first):
+ *  - La capa "raw" (`--primary`, `--surface`, …) define los valores reales y se
+ *    redefine por tema en `:root` (claro) y `[data-theme='dark']` (oscuro).
+ *  - `@theme inline` mapea cada token semántico de Tailwind (`--color-*`,
+ *    `--shadow-*`) a una variable raw mediante `var(...)`. Al usar `inline`, las
+ *    utilidades generadas (`bg-primary`, `text-accent`, `shadow-clay`…) referencian
+ *    la variable en runtime, por lo que el cambio de tema es instantáneo.
+ *
+ * Criterio de aceptación: cambiar un color del sitio = editar UNA variable raw aquí.
+ * PROHIBIDO hardcodear colores en componentes; usar siempre las utilidades de token.
+ *
+ * Accesibilidad: cada color interactivo (primary/secondary/accent/estados) usa una
+ * variante suficientemente oscura para cumplir contraste WCAG AA (>= 4.5:1) con su
+ * `*-foreground` blanco.
+ */
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ── Tema CLARO (valores por defecto) ───────────────────────────────────────── */
+:root {
+  /* Marca (estables entre temas para garantizar contraste constante en controles) */
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #7c3aed;
+  --secondary-foreground: #ffffff;
+  --accent: #0f766e;
+  --accent-foreground: #ffffff;
+
+  /* Estados */
+  --success: #047857;
+  --success-foreground: #ffffff;
+  --error: #dc2626;
+  --error-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+
+  /* Neutros / superficies */
+  --background: #f1f5f9;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --foreground: #0f172a;
+  --muted-foreground: #475569;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #4f46e5;
+  --overlay: rgb(15 23 42 / 0.45);
+
+  /* Sombras de superficie (claymorphism suave) — NO se aplican a controles */
+  --clay: 6px 6px 16px rgb(15 23 42 / 0.08), -6px -6px 16px rgb(255 255 255 / 0.9);
+  --clay-inset:
+    inset 4px 4px 10px rgb(15 23 42 / 0.06), inset -4px -4px 10px rgb(255 255 255 / 0.85);
+  --elevated: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px rgb(15 23 42 / 0.08);
+}
+
+/* ── Tema OSCURO (redefine las MISMAS variables raw) ─────────────────────────── */
+[data-theme='dark'] {
+  --primary: #6366f1;
+  --primary-foreground: #0b1120;
+  --secondary: #a78bfa;
+  --secondary-foreground: #0b1120;
+  --accent: #2dd4bf;
+  --accent-foreground: #0b1120;
+
+  --success: #34d399;
+  --success-foreground: #052e22;
+  --error: #f87171;
+  --error-foreground: #2a0a0a;
+  --warning: #fbbf24;
+  --warning-foreground: #2a1a02;
+
+  --background: #0b1120;
+  --surface: #111a2e;
+  --surface-muted: #1b2740;
+  --foreground: #e8edf6;
+  --muted-foreground: #9aa8c0;
+  --border: #243049;
+  --input: #33415c;
+  --ring: #818cf8;
+  --overlay: rgb(2 6 16 / 0.6);
+
+  --clay: 6px 6px 18px rgb(2 6 16 / 0.55), -6px -6px 18px rgb(40 54 84 / 0.35);
+  --clay-inset: inset 4px 4px 10px rgb(2 6 16 / 0.5), inset -4px -4px 10px rgb(40 54 84 / 0.3);
+  --elevated: 0 1px 2px rgb(2 6 16 / 0.5), 0 8px 24px rgb(2 6 16 / 0.5);
+}
+
+/* ── Exposición a Tailwind: tokens semánticos → variables raw ─────────────────── */
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+
+  --shadow-clay: var(--clay);
+  --shadow-clay-inset: var(--clay-inset);
+  --shadow-elevated: var(--elevated);
+
+  --radius-card: 1rem;
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
