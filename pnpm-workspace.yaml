@@ -1,0 +1,5 @@
+# Configuración de pnpm (pnpm 11 dejó de leer el campo "pnpm" de package.json).
+# MSW solo se usa en tests vía `msw/node`, que NO requiere su build script (el worker
+# del navegador). Lo marcamos como no construible para reconocerlo sin ejecutarlo.
+allowBuilds:
+  msw: false
