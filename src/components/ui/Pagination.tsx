@@ -1,5 +1,15 @@
+import { PAGINATION } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { Button } from './Button'
+
+/**
+ * Opciones de "por página" recortadas al `size` máximo que admite la API
+ * (`PAGINATION.maxSize` ← `VITE_MAX_PAGE_SIZE`). Nunca ofrece un valor que el
+ * backend rechazaría con 422, y garantiza que el propio máximo sea elegible.
+ */
+const DEFAULT_SIZE_OPTIONS = Array.from(new Set([10, 20, 50, 100, PAGINATION.maxSize]))
+  .filter((option) => option <= PAGINATION.maxSize)
+  .sort((a, b) => a - b)
 
 export interface PaginationProps {
   page: number
@@ -24,7 +34,7 @@ export function Pagination({
   hasPrev,
   onPageChange,
   onSizeChange,
-  sizeOptions = [10, 20, 50, 100],
+  sizeOptions = DEFAULT_SIZE_OPTIONS,
   isFetching,
 }: PaginationProps) {
   return (
