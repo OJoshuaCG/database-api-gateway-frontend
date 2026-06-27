@@ -16,6 +16,22 @@ export type ServerStatus = z.infer<typeof serverStatusSchema>
 export const provisionStatusSchema = z.enum(['pending', 'active', 'error', 'archived'])
 export type ProvisionStatus = z.infer<typeof provisionStatusSchema>
 
+/** Desenlace de una migración en el historial (§4). */
+export const migrationStatusSchema = z.enum(['applied', 'failed'])
+export type MigrationStatus = z.infer<typeof migrationStatusSchema>
+
+/** Nivel de un grant (§4, §7, §11). `schema` y `sequence` solo PostgreSQL. */
+export const grantLevelSchema = z.enum([
+  'global',
+  'database',
+  'schema',
+  'table',
+  'column',
+  'sequence',
+  'routine',
+])
+export type GrantLevel = z.infer<typeof grantLevelSchema>
+
 export const sslModeSchema = z.enum([
   'disable',
   'allow',
@@ -35,6 +51,8 @@ export const HOST_PATTERN = /^[A-Za-z0-9_.%:-]{1,255}$/
 export const SLUG_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
 /** `charset` / `collation`: MySQL/MariaDB. */
 export const CHARSET_PATTERN = /^[A-Za-z0-9_]{1,64}$/
+/** `version` (ModelMigration): solo dígitos, 4–10; se ordena NUMÉRICAMENTE (§8). */
+export const MIGRATION_VERSION_PATTERN = /^\d{4,10}$/
 
 // ── Paginación (§3) ──────────────────────────────────────────────────────────
 export const paginationMetaSchema = z.object({
