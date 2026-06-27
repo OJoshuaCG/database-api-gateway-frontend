@@ -65,8 +65,26 @@ export const paginationMetaSchema = z.object({
 })
 export type PaginationMeta = z.infer<typeof paginationMetaSchema>
 
-/** Límites de paginación de la API (§3). */
-export const PAGINATION = { defaultPage: 1, defaultSize: 20, maxSize: 200 } as const
+/**
+ * Tamaño máximo de página que pedimos a la API en un único request (p. ej. al
+ * poblar selects con "toda" la lista). Debe coincidir con el `size` máximo que
+ * admite el backend (§3): si pedimos más, la API responde `422`.
+ *
+ * Se configura con `VITE_MAX_PAGE_SIZE` para mantenerlo sincronizado con el
+ * backend desde un único punto, sin tocar código. Si la variable falta o es
+ * inválida, se usa `50` como fallback seguro.
+ */
+function resolveMaxPageSize(): number {
+  const parsed = Number(import.meta.env.VITE_MAX_PAGE_SIZE)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 50
+}
+
+/** Límites de paginación de la API (§3). `maxSize` ← `VITE_MAX_PAGE_SIZE`. */
+export const PAGINATION = {
+  defaultPage: 1,
+  defaultSize: 20,
+  maxSize: resolveMaxPageSize(),
+} as const
 
 // ── Envelope `ApiResponse[T]` (§3) ─────────────────────────────────────────────
 /**
