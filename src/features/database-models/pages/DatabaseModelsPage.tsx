@@ -15,6 +15,7 @@ import type { DatabaseModelOut } from '@/lib/contracts'
 import { useDatabaseModels, useDeleteDatabaseModel } from '../hooks/use-database-models'
 import { DatabaseModelFormModal } from '../components/DatabaseModelFormModal'
 import { ModelDatabasesModal } from '../components/ModelDatabasesModal'
+import { ModelMigrationsModal } from '../components/ModelMigrationsModal'
 
 export function DatabaseModelsPage() {
   const [page, setPage] = useState(1)
@@ -23,6 +24,7 @@ export function DatabaseModelsPage() {
   const [editing, setEditing] = useState<DatabaseModelOut | undefined>(undefined)
   const [deleteTarget, setDeleteTarget] = useState<DatabaseModelOut | null>(null)
   const [databasesTarget, setDatabasesTarget] = useState<DatabaseModelOut | null>(null)
+  const [migrationsTarget, setMigrationsTarget] = useState<DatabaseModelOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useDatabaseModels({ page, size })
   const deleteModel = useDeleteDatabaseModel()
@@ -71,6 +73,9 @@ export function DatabaseModelsPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
+              Migraciones
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setDatabasesTarget(row.original)}>
               Ver BDs
             </Button>
@@ -149,6 +154,11 @@ export function DatabaseModelsPage() {
 
       <DatabaseModelFormModal open={formOpen} onClose={() => setFormOpen(false)} model={editing} />
       <ModelDatabasesModal model={databasesTarget} onClose={() => setDatabasesTarget(null)} />
+      <ModelMigrationsModal
+        key={migrationsTarget?.id ?? 'closed'}
+        model={migrationsTarget}
+        onClose={() => setMigrationsTarget(null)}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

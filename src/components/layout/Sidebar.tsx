@@ -75,6 +75,30 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    to: '/permission-profiles',
+    label: 'Perfiles de permisos',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <path d="M9 12h6M9 16h6M9 8h6" strokeWidth="1.6" strokeLinecap="round" />
+        <rect x="4" y="3" width="16" height="18" rx="2" strokeWidth="1.6" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin',
+    label: 'Administración',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <circle cx="12" cy="12" r="3" strokeWidth="1.6" />
+        <path
+          d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

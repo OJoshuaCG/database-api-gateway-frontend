@@ -11,12 +11,13 @@ import {
   Pagination,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
-import type { ServerOut, ServerUserOut } from '@/lib/contracts'
+import type { EngineType, ServerOut, ServerUserOut } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUsers } from '../hooks/use-server-users'
 import { ServerUserFormModal } from '../components/ServerUserFormModal'
 import { DeleteServerUserDialog } from '../components/DeleteServerUserDialog'
 import { OwnedDatabasesModal } from '../components/OwnedDatabasesModal'
+import { ServerUserGrantsModal } from '../components/ServerUserGrantsModal'
 
 export function ServerUsersPage() {
   const [page, setPage] = useState(1)
@@ -26,11 +27,17 @@ export function ServerUsersPage() {
   const [editing, setEditing] = useState<ServerUserOut | undefined>(undefined)
   const [deleteTarget, setDeleteTarget] = useState<ServerUserOut | null>(null)
   const [ownedTarget, setOwnedTarget] = useState<ServerUserOut | null>(null)
+  const [grantsTarget, setGrantsTarget] = useState<ServerUserOut | null>(null)
 
   const servers = useServerOptions()
   const serverNameById = useMemo(() => {
     const map = new Map<number, string>()
     for (const server of servers.data ?? []) map.set(server.id, server.name)
+    return map
+  }, [servers.data])
+  const serverEngineById = useMemo(() => {
+    const map = new Map<number, EngineType>()
+    for (const server of servers.data ?? []) map.set(server.id, server.engine)
     return map
   }, [servers.data])
 
@@ -92,6 +99,9 @@ export function ServerUsersPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setGrantsTarget(row.original)}>
+              Permisos
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setOwnedTarget(row.original)}>
               Ver BDs
             </Button>
@@ -197,6 +207,12 @@ export function ServerUsersPage() {
         <DeleteServerUserDialog user={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
       <OwnedDatabasesModal user={ownedTarget} onClose={() => setOwnedTarget(null)} />
+      <ServerUserGrantsModal
+        key={grantsTarget?.id ?? 'closed'}
+        user={grantsTarget}
+        engine={grantsTarget ? (serverEngineById.get(grantsTarget.server_id) ?? null) : null}
+        onClose={() => setGrantsTarget(null)}
+      />
     </div>
   )
 }

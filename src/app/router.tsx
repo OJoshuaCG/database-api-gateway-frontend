@@ -7,6 +7,8 @@ import { ServerUsersPage } from '@/features/server-users'
 import { DatabaseModelsPage } from '@/features/database-models'
 import { ManagedDatabasesPage } from '@/features/managed-databases'
 import { PrivilegesPage } from '@/features/privileges'
+import { PermissionProfilesPage } from '@/features/permission-profiles'
+import { AdminPage } from '@/features/admin'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -23,6 +25,8 @@ export const router = createBrowserRouter([
           { path: 'database-models', element: <DatabaseModelsPage /> },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
+          { path: 'permission-profiles', element: <PermissionProfilesPage /> },
+          { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

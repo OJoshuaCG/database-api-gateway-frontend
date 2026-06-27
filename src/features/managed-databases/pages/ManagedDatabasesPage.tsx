@@ -25,6 +25,7 @@ import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
 import { ManagedDatabaseFormModal } from '../components/ManagedDatabaseFormModal'
 import { ReassignOwnerModal } from '../components/ReassignOwnerModal'
 import { DeleteManagedDatabaseDialog } from '../components/DeleteManagedDatabaseDialog'
+import { ManagedDatabaseMigrationsModal } from '../components/ManagedDatabaseMigrationsModal'
 
 interface StatusOption {
   value: ProvisionStatus
@@ -53,6 +54,7 @@ export function ManagedDatabasesPage() {
   const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
   const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedDatabaseOut | null>(null)
+  const [migrationsTarget, setMigrationsTarget] = useState<ManagedDatabaseOut | null>(null)
 
   const servers = useServerOptions()
   const models = useDatabaseModelOptions()
@@ -122,6 +124,9 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
+              Migraciones
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setReassignTarget(row.original)}>
               Reasignar
             </Button>
@@ -260,6 +265,11 @@ export function ManagedDatabasesPage() {
           onClose={() => setDeleteTarget(null)}
         />
       )}
+      <ManagedDatabaseMigrationsModal
+        key={migrationsTarget?.id ?? 'closed'}
+        database={migrationsTarget}
+        onClose={() => setMigrationsTarget(null)}
+      />
     </div>
   )
 }
