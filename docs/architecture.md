@@ -73,11 +73,13 @@ src/
 │
 ├── features/
 │   ├── auth/                login, sesión, ProtectedRoute, SessionProvider
-│   ├── servers/             CRUD + test-connection + introspección
-│   ├── server-users/        CRUD + provision/drop_remote
-│   ├── database-models/     CRUD de blueprints
-│   ├── managed-databases/   CRUD + provision/drop_remote + reasignar owner
-│   ├── privileges/          catálogo + toggle
+│   ├── servers/             CRUD + test-connection + introspección + grantable
+│   ├── server-users/        CRUD + provision/drop_remote + grants + apply-profile
+│   ├── database-models/     CRUD de blueprints + migraciones (deltas SQL + apply-all)
+│   ├── managed-databases/   CRUD + provision/drop_remote + reasignar owner + migraciones por BD
+│   ├── privileges/          catálogo + toggle + selector reutilizable de privilegios
+│   ├── permission-profiles/ CRUD de perfiles de permisos por motor
+│   ├── admin/               rotación de cifrado (DEK)
 │   └── health/              indicador de estado del backend
 │
 ├── styles/
