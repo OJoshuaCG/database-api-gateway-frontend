@@ -39,6 +39,7 @@ pnpm dev                    # http://localhost:5173
 |---|---|---|
 | `VITE_API_BASE_URL` | Sí | Base de la API versionada, incluye `/api/v1`. Ej. `http://localhost:8000/api/v1`. |
 | `VITE_HEALTH_URL` | No | URL del health check (`/health`, fuera de `/api/v1`). Alimenta el indicador de estado; si no se define o CORS lo bloquea, el badge se oculta. |
+| `VITE_MAX_PAGE_SIZE` | No | Tamaño máximo de página (`size`) que el frontend solicita a la API. **Debe coincidir con el límite del backend**: si se pide más, la API responde `422`. Se usa al poblar selects con la lista completa y acota las opciones del selector "por página". Fallback: `50`. |
 
 Sin URLs hardcodeadas: el cliente falla rápido en arranque si falta `VITE_API_BASE_URL`.
 
