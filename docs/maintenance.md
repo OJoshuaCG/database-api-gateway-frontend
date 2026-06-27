@@ -93,7 +93,8 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 3. Registra la ruta en `app/router.tsx` (bajo el layout protegido).
 4. Añade el enlace de navegación en `components/layout/Sidebar.tsx` (`NAV_ITEMS`).
 5. Si necesita selects de otra entidad, reutiliza los hooks "options"
-   (`useServerOptions`, `useServerUserOptions`, `useDatabaseModelOptions`).
+   (`useServerOptions`, `useServerUserOptions`, `useDatabaseModelOptions`,
+   `usePermissionProfileOptions`).
 
 ## Patrones de UI reutilizables
 
@@ -105,6 +106,8 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 | Confirmación destructiva | `ConfirmDialog` (con `confirmWord` para doble confirmación) |
 | Diálogo/modal | `Modal` (usa `<dialog>` nativo: focus-trap + Esc gratis) |
 | Estado/etiqueta | `Badge` (+ badges de estado por feature) |
+| Seleccionar privilegios por motor | `PrivilegeMultiSelect` (en `features/privileges`; se alimenta del catálogo `/privileges`) |
+| Lista dinámica en un formulario | `useFieldArray` de RHF (p. ej. items de un perfil de permisos) |
 
 ## Trampas conocidas (gotchas)
 
@@ -112,6 +115,17 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
   validan con `superRefine` en el schema del formulario, no en el contrato base.
 - **Diálogos de borrado:** se **montan condicionalmente** (`{target && <Dialog/>}`) para
   obtener estado fresco sin `setState` dentro de efectos (regla `set-state-in-effect`).
+- **Modales con estado reutilizados entre filas** (permisos de usuario, migraciones por BD,
+  migraciones de blueprint): el componente vive montado en la página y `Modal` solo desmonta
+  sus *hijos*, así que su estado interno (pestaña, formulario, previsualización) **sangraría**
+  entre filas. Se reinicia con `key={target?.id ?? 'closed'}` (o montándolo condicionalmente).
+- **Campos que alimentan endpoints del motor 🔌** (p. ej. el `database` para ver grants en
+  PostgreSQL): aplica **debounce** para no disparar una consulta de introspección por pulsación.
+- **Doble confirmación más allá del borrado:** además de `confirm_name`/`confirm_username`,
+  el *rollback* de migración exige `confirm_version` (= versión actual) y el `REVOKE … CASCADE`
+  en PostgreSQL exige `confirm_grantee` (= username). Deshabilita la acción hasta que coincida.
+- **`apply-profile`:** la UI construye `object_mappings` por nivel a partir de una BD/esquema
+  objetivo; para perfiles con items a nivel **tabla/columna** habría que extender ese mapeo.
 - **Owner de una BD:** debe pertenecer al **mismo servidor**; al cambiar el servidor en el
   formulario se resetea `owner_id` (si no, el backend responde **409**).
 - **`/health`:** vive fuera de `/api/v1` y puede no tener CORS; el `HealthBadge` se degrada

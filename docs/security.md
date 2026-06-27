@@ -50,8 +50,15 @@ elegir este esquema en lugar de guardar JWT en el cliente.
   `CHARSET_PATTERN`. Esto alinea el cliente con la whitelist anti-inyección del backend,
   pero la defensa real contra inyección SQL vive en el backend.
 - **Operaciones destructivas** que tocan el motor exigen **doble confirmación**
-  (reescribir el nombre exacto: `confirm_name` / `confirm_username`). En la UI lo fuerza
-  `ConfirmDialog`; el backend lo vuelve a exigir (`422` si no coincide).
+  (reescribir el valor exacto del recurso). Hay cuatro tokens según la operación:
+  - `confirm_name` — borrar una BD del motor (`DROP DATABASE`, §9).
+  - `confirm_username` — borrar un usuario del motor (`DROP USER`, §7).
+  - `confirm_version` — *rollback* de una migración (debe igualar la versión actual, §9).
+  - `confirm_grantee` — `REVOKE … CASCADE` en PostgreSQL (repetir el username del grantee, §7).
+
+  En la UI lo fuerzan `ConfirmDialog` (con `confirmWord`) y, en los formularios de grants y
+  migraciones, un botón deshabilitado hasta que el valor coincide. El backend lo vuelve a
+  exigir (`422` si no coincide).
 
 ## 4. Salida y renderizado (XSS)
 
@@ -103,6 +110,6 @@ están en el checklist de [`deployment.md`](deployment.md):
 | Inyección (SQL/identificadores) | Validación por patrón (defensiva) + autoridad en el backend. |
 | XSS por renderizado | Escapado de React; sin `dangerouslySetInnerHTML`; respuestas validadas con Zod. |
 | Fuga de credenciales | El cliente nunca recibe ni loguea credenciales; solo `has_*` booleanos. |
-| Borrados accidentales en el motor | Doble confirmación (`confirm_name`/`confirm_username`). |
+| Borrados/operaciones destructivas en el motor | Doble confirmación (`confirm_name`/`confirm_username`/`confirm_version`/`confirm_grantee`). |
 | Secretos expuestos | `VITE_*` solo contiene URLs públicas; prohibido poner secretos ahí. |
 | CSRF | Cookie `same_site=lax` (backend); endpoints mutadores no son navegaciones GET. |

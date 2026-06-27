@@ -257,6 +257,78 @@ Cómo lo consume la UI:
 
 ---
 
+## Escenario I — Gestión de permisos de un usuario (grants 🔌)
+
+Desde la tabla de usuarios del motor, el botón "Permisos" abre un modal con tres pestañas.
+
+```
+ServerUsersPage: clic "Permisos" → setGrantsTarget(user)
+  └─ <ServerUserGrantsModal user engine key={user.id} … />   features/server-users/components/ServerUserGrantsModal.tsx
+       ├─ Pestaña "Permisos efectivos"
+       │    └─ useUserGrants(id, database?, enabled)          features/server-users/hooks/use-user-grants.ts
+       │         └─ listUserGrants(id, database)              → GET /server-users/{id}/grants 🔌
+       │    (PostgreSQL: el campo `database` lleva debounce para no consultar el motor en cada tecla)
+       ├─ Pestaña "Otorgar / revocar"  → GrantManager        features/server-users/components/GrantManager.tsx
+       │    • construye object_ref según el nivel (database/schema/table/column/sequence/routine)
+       │    • "Comprobar delegación" → useCheckGrantable(serverId) → POST /servers/{id}/grantable 🔌
+       │    • Otorgar → useGrantPrivileges(id)   → POST   /server-users/{id}/grants 🔌
+       │    • Revocar → useRevokePrivileges(id)  → DELETE /server-users/{id}/grants 🔌 (cuerpo + ?confirm_grantee si cascade)
+       └─ Pestaña "Aplicar perfil"     → ApplyProfilePanel    features/server-users/components/ApplyProfilePanel.tsx
+            └─ useApplyProfile(id)     → POST /server-users/{id}/apply-profile/{profileId} 🔌
+```
+
+- Los grants son 🔌 (introspección/DCL en el motor real); cada mutación invalida
+  `['server-users', id, 'grants']` para refrescar la pestaña de permisos efectivos.
+- `REVOKE … CASCADE` (solo PostgreSQL) exige `confirm_grantee` = username (defensa en cliente + `422` del backend).
+- El modal lleva `key={user.id}` para **reiniciar su estado entre filas** (ver gotcha en `maintenance.md`).
+- Los privilegios se eligen con `PrivilegeMultiSelect` (poblado desde el catálogo `/privileges` por motor).
+- **Atajo:** crear usuario + aprovisionar + grants iniciales en una sola llamada →
+  `useProvisionServerUser` → `POST /server-users/provision`.
+
+---
+
+## Escenario J — Migraciones de esquema (blueprint y por BD 🔌)
+
+Dos niveles: **definir** los deltas SQL en el blueprint (inventario) y **aplicarlos** sobre cada BD real (🔌).
+
+```
+# Definir (no toca motores)
+DatabaseModelsPage: "Migraciones" → ModelMigrationsModal(model)       features/database-models/components/ModelMigrationsModal.tsx
+  ├─ useModelMigrations(modelId, {page,size})  → GET  .../migrations            (resúmenes paginados)
+  ├─ Nueva migración → useCreateModelMigration → POST .../migrations
+  │     (la respuesta trae `translated` {mysql,postgresql} + `down_sql_suggested`; se muestran para revisión)
+  ├─ Detalle/edición → useUpdateModelMigration → PATCH .../migrations/{version} (confirmar down_sql / overrides)
+  └─ Aplicar a todas → ApplyAllDialog → useApplyAllMigrations → POST .../migrations/apply-all 🔌 (dry-run/force/max_databases)
+
+# Aplicar sobre UNA BD (🔌)
+ManagedDatabasesPage: "Migraciones" → ManagedDatabaseMigrationsModal(db)  features/managed-databases/components/ManagedDatabaseMigrationsModal.tsx
+  ├─ useMigrationStatus(dbId)            → GET  .../migrations/status         (actual vs. pendientes)
+  ├─ Aplicar → useApplyMigrations(dbId)  → POST .../migrations/apply          (dry-run = previsualización; isDryRunResult discrimina)
+  ├─ Rollback → useRollbackMigration     → POST .../migrations/rollback?confirm_version=…  (destructivo, doble confirmación)
+  ├─ Stamp → useStampMigration           → POST .../migrations/stamp?version=…            (marca sin ejecutar SQL)
+  └─ Historial → useMigrationHistory     → GET  .../migrations/history        (paginado)
+```
+
+- Requiere `model_id` asignado en la BD; si no, el backend responde **422** y el modal lo avisa y deshabilita.
+- `apply` en `dry_run` **no muta ni notifica** (es previsualización); `isDryRunResult()` distingue la respuesta
+  del envelope (`lib/contracts/db-migrations.ts`).
+- Tras `apply`/`rollback`/`stamp` se invalida `queryKeys.managedDatabases.all` (estado, historial, detalle y listas).
+- **Cuarentena:** un fallo deja la BD en `status:"error"`; se reintenta con `?force=true`.
+
+---
+
+## Escenario K — Administración: rotación de cifrado
+
+```
+AdminPage: "Rotar clave" → ConfirmDialog → useRotateCrypto()        features/admin/hooks/use-crypto-rotation.ts
+  └─ rotateCrypto()  → POST /admin/crypto/rotate  → { servers_reencrypted, server_users_reencrypted }
+```
+
+- Opera sobre la BD de metadatos del gateway (**no toca motores destino**).
+- El cliente solo muestra los contadores devueltos; nunca maneja claves ni credenciales.
+
+---
+
 ## Resumen: "¿qué toco para…?"
 
 | Quiero cambiar… | Archivo(s) |
