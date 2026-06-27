@@ -10,10 +10,13 @@ import {
 import {
   connectionInfoSchema,
   engineUserInfoSchema,
+  grantableResultSchema,
   serverOutSchema,
   tableSchemaSchema,
   type ConnectionInfo,
   type EngineUserInfo,
+  type GrantableRequest,
+  type GrantableResult,
   type Page,
   type ServerCreate,
   type ServerOut,
@@ -73,4 +76,16 @@ export function getTableSchema(
     tableSchemaSchema,
     { signal },
   )
+}
+
+/**
+ * `POST /servers/{id}/grantable` 🔌 — comprueba si la credencial pseudo-root puede delegar
+ * los privilegios indicados (`WITH GRANT OPTION`). No modifica nada (§6).
+ */
+export function checkGrantable(
+  id: number,
+  body: GrantableRequest,
+  signal?: AbortSignal,
+): Promise<GrantableResult> {
+  return mutateData('POST', `${BASE}/${id}/grantable`, grantableResultSchema, { body, signal })
 }

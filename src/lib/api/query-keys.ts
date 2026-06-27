@@ -28,20 +28,35 @@ export const queryKeys = {
     list: (params: QueryParams) => ['server-users', 'list', params] as const,
     detail: (id: number) => ['server-users', 'detail', id] as const,
     databases: (id: number) => ['server-users', id, 'databases'] as const,
+    grants: (id: number, database?: string | null) =>
+      ['server-users', id, 'grants', database ?? null] as const,
   },
   databaseModels: {
     all: ['database-models'] as const,
     list: (params: QueryParams) => ['database-models', 'list', params] as const,
     detail: (id: number) => ['database-models', 'detail', id] as const,
     databases: (id: number) => ['database-models', id, 'databases'] as const,
+    migrations: (modelId: number) => ['database-models', modelId, 'migrations'] as const,
+    migrationList: (modelId: number, params: QueryParams) =>
+      ['database-models', modelId, 'migrations', 'list', params] as const,
+    migrationDetail: (modelId: number, version: string) =>
+      ['database-models', modelId, 'migrations', 'detail', version] as const,
   },
   managedDatabases: {
     all: ['managed-databases'] as const,
     list: (params: QueryParams) => ['managed-databases', 'list', params] as const,
     detail: (id: number) => ['managed-databases', 'detail', id] as const,
+    migrationStatus: (id: number) => ['managed-databases', id, 'migrations', 'status'] as const,
+    migrationHistory: (id: number, params: QueryParams) =>
+      ['managed-databases', id, 'migrations', 'history', params] as const,
   },
   privileges: {
     all: ['privileges'] as const,
     list: (params: QueryParams) => ['privileges', 'list', params] as const,
+  },
+  permissionProfiles: {
+    all: ['permission-profiles'] as const,
+    list: (params: QueryParams) => ['permission-profiles', 'list', params] as const,
+    detail: (id: number) => ['permission-profiles', 'detail', id] as const,
   },
 } as const

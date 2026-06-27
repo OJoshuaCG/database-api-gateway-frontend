@@ -7,11 +7,23 @@ import {
   type QueryParams,
 } from '@/lib/api/client'
 import {
+  applyProfileResultSchema,
+  grantInfoSchema,
+  grantResultSchema,
   managedDatabaseOutSchema,
+  serverUserFullOutSchema,
   serverUserOutSchema,
+  type ApplyProfileRequest,
+  type ApplyProfileResult,
+  type GrantInfo,
+  type GrantRequest,
+  type GrantResult,
   type ManagedDatabaseOut,
   type Page,
+  type RevokeRequest,
   type ServerUserCreate,
+  type ServerUserFullCreate,
+  type ServerUserFullOut,
   type ServerUserOut,
   type ServerUserUpdate,
 } from '@/lib/contracts'
@@ -62,4 +74,48 @@ export function listOwnedDatabases(
   signal?: AbortSignal,
 ): Promise<ManagedDatabaseOut[]> {
   return fetchList(`${BASE}/${id}/databases`, managedDatabaseOutSchema, { signal })
+}
+
+// ── Grants granulares 🔌 (§7) ───────────────────────────────────────────────
+
+/** `GET /server-users/{id}/grants` 🔌 — permisos efectivos. PG: `database` obligatorio. */
+export function listUserGrants(
+  id: number,
+  database?: string,
+  signal?: AbortSignal,
+): Promise<GrantInfo[]> {
+  return fetchList(`${BASE}/${id}/grants`, grantInfoSchema, { query: { database }, signal })
+}
+
+/** `POST /server-users/{id}/grants` 🔌 — otorga privilegios (pre-chequea `can_grant`). */
+export function grantPrivileges(id: number, body: GrantRequest): Promise<GrantResult> {
+  return mutateData('POST', `${BASE}/${id}/grants`, grantResultSchema, { body })
+}
+
+/** `DELETE /server-users/{id}/grants` 🔌 — revoca (cuerpo en el DELETE). */
+export function revokePrivileges(
+  id: number,
+  body: RevokeRequest,
+  confirmGrantee?: string,
+): Promise<string | undefined> {
+  return mutateVoid('DELETE', `${BASE}/${id}/grants`, {
+    body,
+    query: { confirm_grantee: confirmGrantee },
+  })
+}
+
+/** `POST /server-users/{id}/apply-profile/{profile_id}` 🔌 — aplica un perfil de permisos. */
+export function applyProfile(
+  id: number,
+  profileId: number,
+  body: ApplyProfileRequest,
+): Promise<ApplyProfileResult> {
+  return mutateData('POST', `${BASE}/${id}/apply-profile/${profileId}`, applyProfileResultSchema, {
+    body,
+  })
+}
+
+/** `POST /server-users/provision` 🔌 — crea + aprovisiona + aplica `initial_grants`. */
+export function provisionServerUser(body: ServerUserFullCreate): Promise<ServerUserFullOut> {
+  return mutateData('POST', `${BASE}/provision`, serverUserFullOutSchema, { body })
 }
