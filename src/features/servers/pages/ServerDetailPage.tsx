@@ -16,8 +16,9 @@ import { useDeleteServer, useTestConnection } from '../hooks/use-server-mutation
 import { ServerStatusBadge } from '../components/ServerStatusBadge'
 import { ServerFormModal } from '../components/ServerFormModal'
 import { IntrospectionExplorer } from '../components/IntrospectionExplorer'
+import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
 
-type Tab = 'info' | 'introspection'
+type Tab = 'info' | 'introspection' | 'reconcile'
 
 export function ServerDetailPage() {
   const params = useParams()
@@ -91,9 +92,12 @@ export function ServerDetailPage() {
         <TabButton active={tab === 'introspection'} onClick={() => setTab('introspection')}>
           Introspección
         </TabButton>
+        <TabButton active={tab === 'reconcile'} onClick={() => setTab('reconcile')}>
+          Reconciliación
+        </TabButton>
       </div>
 
-      {tab === 'info' ? (
+      {tab === 'info' && (
         <Card>
           <CardContent>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -119,9 +123,9 @@ export function ServerDetailPage() {
             </dl>
           </CardContent>
         </Card>
-      ) : (
-        <IntrospectionExplorer serverId={serverId} />
       )}
+      {tab === 'introspection' && <IntrospectionExplorer serverId={serverId} />}
+      {tab === 'reconcile' && <ServerReconcilePanel serverId={serverId} />}
 
       <ServerFormModal open={editOpen} onClose={() => setEditOpen(false)} server={server} />
 
