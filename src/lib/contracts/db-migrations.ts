@@ -28,48 +28,62 @@ export const migrationRunItemSchema = z.object({
 })
 export type MigrationRunItem = z.infer<typeof migrationRunItemSchema>
 
-/** Respuesta de `apply?dry_run=true` — plan sin ejecutar (§9). */
-export const migrationApplyDryRunSchema = z.object({
+/**
+ * `MigrationApplyOut` (Plan 09 §7-bis) — respuesta UNIFICADA de `apply`, tanto para la ejecución
+ * real como para `dry_run=true`. Una sola llamada lleva de `from_version` a `to_version`
+ * aplicando todas las pendientes en orden; `target_version` es lo solicitado (`null` = última).
+ *
+ * Campos en `.optional()` con `default`: el backend puede omitirlos (p. ej. en un dry-run) y se
+ * rellenan con un valor seguro. `database_name`/`server_id`/`current_version`/`pending_count` se
+ * mantienen opcionales por compatibilidad con respuestas previas a Plan 09.
+ */
+export const migrationApplyOutSchema = z.object({
   managed_database_id: z.number().int(),
-  database_name: z.string(),
-  server_id: z.number().int(),
-  dry_run: z.literal(true),
-  current_version: z.string().nullable(),
-  pending_versions: z.array(z.string()),
-  pending_count: z.number().int(),
+  from_version: z.string().nullable().optional(),
+  to_version: z.string().nullable().optional(),
+  target_version: z.string().nullable().optional(),
+  applied_count: z.number().int().optional().default(0),
+  no_op: z.boolean().optional().default(false),
+  failed: z.boolean().optional().default(false),
+  quarantined: z.boolean().optional().default(false),
+  dry_run: z.boolean().optional().default(false),
+  pending_versions: z.array(z.string()).optional().default([]),
+  results: z.array(migrationRunItemSchema).optional().default([]),
+  // Compatibilidad / campos auxiliares.
+  database_name: z.string().optional(),
+  server_id: z.number().int().optional(),
+  current_version: z.string().nullable().optional(),
+  pending_count: z.number().int().optional(),
 })
-export type MigrationApplyDryRun = z.infer<typeof migrationApplyDryRunSchema>
+export type MigrationApplyOut = z.infer<typeof migrationApplyOutSchema>
 
-/** Respuesta de `apply` real (§9). */
-export const migrationApplyRunSchema = z.object({
-  managed_database_id: z.number().int(),
-  database_name: z.string(),
-  server_id: z.number().int(),
-  applied_count: z.number().int(),
-  failed: z.boolean(),
-  quarantined: z.boolean(),
-  results: z.array(migrationRunItemSchema),
-})
-export type MigrationApplyRun = z.infer<typeof migrationApplyRunSchema>
+/** Alias histórico: el shape de `apply` ahora es único (dry-run o real). */
+export const migrationApplyResultSchema = migrationApplyOutSchema
+export type MigrationApplyResult = MigrationApplyOut
+/** @deprecated El shape de dry-run y real es el mismo (`MigrationApplyOut`). */
+export type MigrationApplyDryRun = MigrationApplyOut
 
-/** Respuesta de `apply` — dry-run o ejecución real (§9). */
-export const migrationApplyResultSchema = z.union([
-  migrationApplyDryRunSchema,
-  migrationApplyRunSchema,
-])
-export type MigrationApplyResult = z.infer<typeof migrationApplyResultSchema>
-
-/** Discrimina la respuesta de `apply` entre plan (dry-run) y ejecución real. */
-export function isDryRunResult(result: MigrationApplyResult): result is MigrationApplyDryRun {
-  return 'dry_run' in result && result.dry_run === true
+/** Discrimina la respuesta de `apply`: `true` si fue una previsualización (no mutó nada). */
+export function isDryRunResult(result: MigrationApplyResult): boolean {
+  return result.dry_run === true
 }
 
-/** Respuesta de `rollback` (§9). */
+/**
+ * `MigrationRollbackOut` (Plan 09 §7-bis) — el rollback es el espejo de `apply`: en una sola
+ * llamada revierte secuencialmente de `from_version` hasta `target_version` (anterior a la
+ * actual). `reverted_versions` va de la más reciente a la más antigua.
+ */
 export const migrationRollbackResultSchema = z.object({
   managed_database_id: z.number().int(),
-  rolled_back_version: z.string(),
-  current_version: z.string().nullable(),
-  result: migrationRunItemSchema,
+  from_version: z.string().nullable().optional(),
+  to_version: z.string().nullable().optional(),
+  target_version: z.string().nullable().optional(),
+  reverted_count: z.number().int().optional().default(0),
+  reverted_versions: z.array(z.string()).optional().default([]),
+  no_op: z.boolean().optional().default(false),
+  failed: z.boolean().optional().default(false),
+  quarantined: z.boolean().optional().default(false),
+  results: z.array(migrationRunItemSchema).optional().default([]),
 })
 export type MigrationRollbackResult = z.infer<typeof migrationRollbackResultSchema>
 

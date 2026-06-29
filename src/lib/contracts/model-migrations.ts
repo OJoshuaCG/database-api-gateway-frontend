@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MIGRATION_VERSION_PATTERN, migrationStatusSchema } from './common'
+import { engineTypeSchema, MIGRATION_VERSION_PATTERN, migrationStatusSchema } from './common'
 
 /**
  * Migraciones de blueprint (§8): deltas SQL versionados por blueprint. CRUD de inventario;
@@ -16,7 +16,11 @@ export const migrationTranslatedSchema = z.object({
 })
 export type MigrationTranslated = z.infer<typeof migrationTranslatedSchema>
 
-/** `ModelMigrationOut` — detalle completo de una migración (§8). */
+/**
+ * `ModelMigrationOut` — detalle completo de una migración (§8). Plan 09 añade los campos de
+ * baseline de snapshot: `source_engine`, `is_baseline`, `has_non_portable` y `reviewed`
+ * (un baseline de snapshot nace `reviewed=false` y no se puede aplicar hasta aprobarlo).
+ */
 export const modelMigrationOutSchema = z.object({
   id: z.number().int(),
   model_id: z.number().int(),
@@ -29,12 +33,20 @@ export const modelMigrationOutSchema = z.object({
   down_sql_suggested: z.string().nullable().optional(),
   translated: migrationTranslatedSchema,
   checksum: z.string(),
+  source_engine: engineTypeSchema.nullable().optional(),
+  is_baseline: z.boolean().optional(),
+  has_non_portable: z.boolean().optional(),
+  reviewed: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
 export type ModelMigrationOut = z.infer<typeof modelMigrationOutSchema>
 
-/** `ModelMigrationSummary` — item de listado (§8). */
+/**
+ * `ModelMigrationSummary` — item de listado (§8). Los campos de baseline (`is_baseline`,
+ * `has_non_portable`, `reviewed`) son opcionales: si el backend los incluye en el resumen, la
+ * lista puede mostrar los badges sin pedir el detalle de cada versión.
+ */
 export const modelMigrationSummarySchema = z.object({
   id: z.number().int(),
   model_id: z.number().int(),
@@ -43,16 +55,24 @@ export const modelMigrationSummarySchema = z.object({
   has_mysql_override: z.boolean(),
   has_postgresql_override: z.boolean(),
   has_rollback: z.boolean(),
+  is_baseline: z.boolean().optional(),
+  has_non_portable: z.boolean().optional(),
+  reviewed: z.boolean().optional(),
   checksum: z.string(),
   created_at: z.string(),
 })
 export type ModelMigrationSummary = z.infer<typeof modelMigrationSummarySchema>
 
-/** `ModelMigrationCreate` (§8). El `up_sql` es el delta base en estilo MySQL. */
+/**
+ * `ModelMigrationCreate` (§8 / Plan 09 §7-ter). El `up_sql` es el delta base en estilo MySQL.
+ * `version` es **opcional**: si se omite, el gateway asigna la siguiente secuencial (max+1) de
+ * forma autónoma y con reintento ante colisión. Pásala solo para fijarla a mano.
+ */
 export const modelMigrationCreateSchema = z.object({
   version: z
     .string()
-    .regex(MIGRATION_VERSION_PATTERN, 'Solo dígitos, 4–10 (ej. 0001). Se ordena numéricamente.'),
+    .regex(MIGRATION_VERSION_PATTERN, 'Solo dígitos, 4–10 (ej. 0001). Se ordena numéricamente.')
+    .optional(),
   name: z.string().min(1, 'Requerido').max(200, 'Máximo 200 caracteres'),
   up_sql: z.string().min(1, 'Requerido').max(SQL_MAX, 'Máximo 256 KB'),
   up_sql_mysql: z.string().max(SQL_MAX, 'Máximo 256 KB').nullable().optional(),
@@ -62,14 +82,16 @@ export const modelMigrationCreateSchema = z.object({
 export type ModelMigrationCreate = z.infer<typeof modelMigrationCreateSchema>
 
 /**
- * `ModelMigrationPatch` (§8). No se puede modificar el SQL de una migración ya aplicada
- * en alguna BD (`409`).
+ * `ModelMigrationPatch` (§8 / Plan 09 §7-ter). No se puede modificar el SQL de una migración ya
+ * aplicada en alguna BD (`409`); `name`/`down_sql`/overrides/`reviewed` sí. `reviewed:true`
+ * aprueba un baseline de snapshot para que pueda aplicarse (R1).
  */
 export const modelMigrationPatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   down_sql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_mysql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_postgresql: z.string().max(SQL_MAX).nullable().optional(),
+  reviewed: z.boolean().optional(),
 })
 export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
 

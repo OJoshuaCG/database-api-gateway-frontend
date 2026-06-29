@@ -42,3 +42,21 @@ export const serverUserUpdateSchema = z.object({
   notes: z.string().nullable().optional(),
 })
 export type ServerUserUpdate = z.infer<typeof serverUserUpdateSchema>
+
+/**
+ * `AdoptUserIn` (Plan 09 §4) — registra un usuario **ya existente** en el motor sin recrearlo
+ * ni conocer su password (`has_password=false`). En PostgreSQL `host` se ignora.
+ */
+export const adoptUserInSchema = z.object({
+  server_id: z.number().int().min(1),
+  username: z
+    .string()
+    .min(1, 'Requerido')
+    .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
+  host: z
+    .string()
+    .regex(HOST_PATTERN, 'Host inválido (solo MySQL/MariaDB; `%` = wildcard)')
+    .optional(),
+  notes: z.string().nullable().optional(),
+})
+export type AdoptUserIn = z.infer<typeof adoptUserInSchema>

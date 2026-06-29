@@ -1,7 +1,14 @@
 import { z } from 'zod'
 import { CHARSET_PATTERN, IDENTIFIER_PATTERN, provisionStatusSchema } from './common'
 
-/** `ManagedDatabaseOut` (§9). */
+/**
+ * Origen de una BD gestionada (Plan 09): `provisioned` la creó el gateway, `adopted` ya existía
+ * en el motor y se trajo al inventario sin recrearla. Útil para distinguirlas con un badge.
+ */
+export const databaseOriginSchema = z.enum(['provisioned', 'adopted'])
+export type DatabaseOrigin = z.infer<typeof databaseOriginSchema>
+
+/** `ManagedDatabaseOut` (§9). Plan 09 añade `origin`. */
 export const managedDatabaseOutSchema = z.object({
   id: z.number().int(),
   name: z.string(),
@@ -12,6 +19,7 @@ export const managedDatabaseOutSchema = z.object({
   charset: z.string().nullable().optional(),
   collation: z.string().nullable().optional(),
   status: provisionStatusSchema,
+  origin: databaseOriginSchema.optional(),
   notes: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -55,3 +63,22 @@ export const reassignOwnerInSchema = z.object({
   owner_id: z.number().int().min(1, 'Selecciona un propietario'),
 })
 export type ReassignOwnerIn = z.infer<typeof reassignOwnerInSchema>
+
+/**
+ * `AdoptDatabaseIn` (Plan 09 §3) — registra una BD **ya existente** en el motor sin recrearla.
+ * El gateway verifica que exista (solo lectura); exige un `owner_id` (ServerUser del mismo
+ * servidor). `model_id` opcional para vincular un blueprint en el mismo paso.
+ */
+export const adoptDatabaseInSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Requerido')
+    .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
+  server_id: z.number().int().min(1),
+  owner_id: z.number().int().min(1, 'Selecciona un propietario'),
+  model_id: z.number().int().min(1).nullable().optional(),
+  charset: charsetField,
+  collation: charsetField,
+  notes: z.string().nullable().optional(),
+})
+export type AdoptDatabaseIn = z.infer<typeof adoptDatabaseInSchema>
