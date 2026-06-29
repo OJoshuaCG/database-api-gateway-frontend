@@ -7,6 +7,7 @@ import type { QueryParams } from '@/lib/api/client'
 import {
   createDatabaseModel,
   deleteDatabaseModel,
+  getDatabaseModel,
   listDatabaseModels,
   listModelDatabases,
   updateDatabaseModel,
@@ -17,6 +18,15 @@ export function useDatabaseModels(params: QueryParams) {
     queryKey: queryKeys.databaseModels.list(params),
     queryFn: ({ signal }) => listDatabaseModels(params, signal),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Detalle de un blueprint por id (para la página de versiones). */
+export function useDatabaseModel(id: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.databaseModels.detail(id),
+    queryFn: ({ signal }) => getDatabaseModel(id, signal),
+    enabled: enabled && Number.isFinite(id) && id > 0,
   })
 }
 

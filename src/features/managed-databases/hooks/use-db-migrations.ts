@@ -11,6 +11,7 @@ import {
   rollbackMigration,
   stampMigration,
   type ApplyOptions,
+  type RollbackOptions,
 } from '../api/db-migrations.api'
 
 export function useMigrationStatus(dbId: number, enabled: boolean) {
@@ -51,13 +52,25 @@ export function useApplyMigrations(dbId: number) {
       if (result.failed || result.quarantined) {
         toast.error(
           'Migraciones aplicadas con errores',
-          result.quarantined ? 'La BD quedó en cuarentena; revísala y reintenta con «forzar».' : undefined,
+          result.quarantined
+            ? 'La BD quedó en cuarentena; revísala y reintenta con «forzar».'
+            : undefined,
         )
+      } else if (result.no_op || result.applied_count === 0) {
+        toast.push({
+          variant: 'info',
+          title: 'La BD ya estaba al día',
+          description: `Versión actual: ${result.to_version ?? '—'}`,
+        })
       } else {
-        toast.success('Migraciones aplicadas', `${result.applied_count} migración(es)`)
+        toast.success(
+          'Base de datos actualizada',
+          `${result.applied_count} migración(es): ${result.from_version ?? '—'} → ${result.to_version ?? '—'}`,
+        )
       }
     },
-    onError: (error) => toast.error('No se pudieron aplicar las migraciones', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudieron aplicar las migraciones', toApiError(error).message),
   })
 }
 
@@ -65,13 +78,26 @@ export function useRollbackMigration(dbId: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
   return useMutation({
-    mutationFn: (confirmVersion: string) => rollbackMigration(dbId, confirmVersion),
+    mutationFn: (options: RollbackOptions) => rollbackMigration(dbId, options),
     onSuccess: (result) => {
       invalidateAfterRun(queryClient)
-      toast.success(
-        'Rollback ejecutado',
-        `Revertida ${result.rolled_back_version}; versión actual: ${result.current_version ?? 'ninguna'}`,
-      )
+      if (result.failed || result.quarantined) {
+        toast.error(
+          'Rollback con errores',
+          result.quarantined ? 'La BD quedó en cuarentena; revísala.' : undefined,
+        )
+      } else if (result.no_op || result.reverted_count === 0) {
+        toast.push({
+          variant: 'info',
+          title: 'Nada que revertir',
+          description: `Versión actual: ${result.to_version ?? '—'}`,
+        })
+      } else {
+        toast.success(
+          'Rollback ejecutado',
+          `Revertida(s) ${result.reverted_count}: ${result.from_version ?? '—'} → ${result.to_version ?? '—'}`,
+        )
+      }
     },
     onError: (error) => toast.error('No se pudo revertir la migración', toApiError(error).message),
   })
