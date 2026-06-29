@@ -22,6 +22,9 @@ export const queryKeys = {
       ['servers', id, 'databases', database, 'tables'] as const,
     tableSchema: (id: number, database: string, table: string) =>
       ['servers', id, 'databases', database, 'tables', table, 'schema'] as const,
+    reconcile: (id: number) => ['servers', id, 'reconcile'] as const,
+    snapshot: (id: number, database: string) =>
+      ['servers', id, 'databases', database, 'snapshot'] as const,
   },
   serverUsers: {
     all: ['server-users'] as const,

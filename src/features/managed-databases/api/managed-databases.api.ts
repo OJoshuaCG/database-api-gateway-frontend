@@ -1,6 +1,7 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
   managedDatabaseOutSchema,
+  type AdoptDatabaseIn,
   type ManagedDatabaseCreate,
   type ManagedDatabaseOut,
   type ManagedDatabaseUpdate,
@@ -9,6 +10,14 @@ import {
 } from '@/lib/contracts'
 
 const BASE = '/managed-databases'
+
+/**
+ * `POST /managed-databases/adopt` 🔌 (Plan 09 §3) — registra una BD **ya existente** en el motor
+ * sin recrearla (verifica que exista; nunca ejecuta `CREATE DATABASE`). Queda `origin=adopted`.
+ */
+export function adoptDatabase(body: AdoptDatabaseIn): Promise<ManagedDatabaseOut> {
+  return mutateData('POST', `${BASE}/adopt`, managedDatabaseOutSchema, { body })
+}
 
 export function listManagedDatabases(
   params: QueryParams,

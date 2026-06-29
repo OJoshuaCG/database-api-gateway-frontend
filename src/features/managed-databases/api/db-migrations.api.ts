@@ -39,13 +39,23 @@ export function applyMigrations(
   })
 }
 
-/** `POST .../migrations/rollback` 🔌 — revierte la última aplicada (doble confirmación) (§9). */
+export interface RollbackOptions {
+  /** Versión ACTUAL (doble confirmación de operación destructiva). */
+  confirmVersion: string
+  /** Destino: revierte secuencialmente hasta esta versión. Omitir = solo la última. */
+  targetVersion?: string
+}
+
+/**
+ * `POST .../migrations/rollback` 🔌 — revierte secuencialmente hasta `target_version` en una sola
+ * llamada (Plan 09 §7-bis). Si se omite `target_version`, revierte solo la última aplicada.
+ */
 export function rollbackMigration(
   dbId: number,
-  confirmVersion: string,
+  options: RollbackOptions,
 ): Promise<MigrationRollbackResult> {
   return mutateData('POST', `${base(dbId)}/rollback`, migrationRollbackResultSchema, {
-    query: { confirm_version: confirmVersion },
+    query: { confirm_version: options.confirmVersion, target_version: options.targetVersion },
   })
 }
 

@@ -8,15 +8,26 @@ import {
 } from '@/lib/api/client'
 import {
   databaseModelOutSchema,
+  fromSnapshotOutSchema,
   managedDatabaseOutSchema,
   type DatabaseModelCreate,
   type DatabaseModelOut,
   type DatabaseModelUpdate,
+  type FromSnapshotIn,
+  type FromSnapshotOut,
   type ManagedDatabaseOut,
   type Page,
 } from '@/lib/contracts'
 
 const BASE = '/database-models'
+
+/**
+ * `POST /database-models/from-snapshot` 🔌 (Plan 09 §6) — crea un blueprint cuyo baseline `0001`
+ * es el snapshot estructural de una BD existente. El baseline nace `reviewed=false`.
+ */
+export function createModelFromSnapshot(body: FromSnapshotIn): Promise<FromSnapshotOut> {
+  return mutateData('POST', `${BASE}/from-snapshot`, fromSnapshotOutSchema, { body })
+}
 
 export function listDatabaseModels(
   params: QueryParams,

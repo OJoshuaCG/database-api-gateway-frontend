@@ -11,16 +11,20 @@ import {
   connectionInfoSchema,
   engineUserInfoSchema,
   grantableResultSchema,
+  reconcileResultSchema,
   serverOutSchema,
+  structureDumpSchema,
   tableSchemaSchema,
   type ConnectionInfo,
   type EngineUserInfo,
   type GrantableRequest,
   type GrantableResult,
   type Page,
+  type ReconcileResult,
   type ServerCreate,
   type ServerOut,
   type ServerUpdate,
+  type StructureDump,
   type TableSchema,
 } from '@/lib/contracts'
 
@@ -57,6 +61,30 @@ export function listServerDatabases(id: number, signal?: AbortSignal): Promise<s
 
 export function listEngineUsers(id: number, signal?: AbortSignal): Promise<EngineUserInfo[]> {
   return fetchList(`${BASE}/${id}/users`, engineUserInfoSchema, { signal })
+}
+
+/**
+ * `GET /servers/{id}/reconcile` 🔌 (Plan 09 §2) — cruza el motor en vivo con el inventario y
+ * devuelve el estado de reconciliación de cada BD/usuario. No muta nada.
+ */
+export function reconcileServer(id: number, signal?: AbortSignal): Promise<ReconcileResult> {
+  return fetchData(`${BASE}/${id}/reconcile`, reconcileResultSchema, { signal })
+}
+
+/**
+ * `GET /servers/{id}/databases/{db}/snapshot` 🔌 (Plan 09 §5) — estructura DDL completa de una BD
+ * en orden de dependencia. Solo estructura, nunca filas.
+ */
+export function getDatabaseSnapshot(
+  id: number,
+  database: string,
+  signal?: AbortSignal,
+): Promise<StructureDump> {
+  return fetchData(
+    `${BASE}/${id}/databases/${encodeURIComponent(database)}/snapshot`,
+    structureDumpSchema,
+    { signal },
+  )
 }
 
 export function listTables(id: number, database: string, signal?: AbortSignal): Promise<string[]> {

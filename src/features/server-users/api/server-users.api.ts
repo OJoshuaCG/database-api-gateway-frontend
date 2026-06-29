@@ -13,6 +13,7 @@ import {
   managedDatabaseOutSchema,
   serverUserFullOutSchema,
   serverUserOutSchema,
+  type AdoptUserIn,
   type ApplyProfileRequest,
   type ApplyProfileResult,
   type GrantInfo,
@@ -35,6 +36,14 @@ export function listServerUsers(
   signal?: AbortSignal,
 ): Promise<Page<ServerUserOut>> {
   return fetchPage(BASE, serverUserOutSchema, { query: params, signal })
+}
+
+/**
+ * `POST /server-users/adopt` 🔌 (Plan 09 §4) — registra un usuario **ya existente** en el motor
+ * sin recrearlo ni conocer su password (`has_password=false`). En PostgreSQL `host` se ignora.
+ */
+export function adoptUser(body: AdoptUserIn): Promise<ServerUserOut> {
+  return mutateData('POST', `${BASE}/adopt`, serverUserOutSchema, { body })
 }
 
 export function getServerUser(id: number, signal?: AbortSignal): Promise<ServerUserOut> {
