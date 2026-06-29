@@ -4,7 +4,7 @@ import { NotFoundPage } from '@/components/NotFoundPage'
 import { LoginPage, ProtectedRoute } from '@/features/auth'
 import { ServerDetailPage, ServersPage } from '@/features/servers'
 import { ServerUsersPage } from '@/features/server-users'
-import { DatabaseModelsPage } from '@/features/database-models'
+import { BlueprintMigrationsPage, DatabaseModelsPage } from '@/features/database-models'
 import { ManagedDatabasesPage } from '@/features/managed-databases'
 import { PrivilegesPage } from '@/features/privileges'
 import { PermissionProfilesPage } from '@/features/permission-profiles'
@@ -23,6 +23,7 @@ export const router = createBrowserRouter([
           { path: 'servers/:serverId', element: <ServerDetailPage /> },
           { path: 'server-users', element: <ServerUsersPage /> },
           { path: 'database-models', element: <DatabaseModelsPage /> },
+          { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },

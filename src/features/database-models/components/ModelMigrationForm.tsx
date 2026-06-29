@@ -27,9 +27,13 @@ const DEFAULTS: ModelMigrationFormValues = {
 
 function buildSchema(mode: 'create' | 'edit') {
   return z.object({
+    // En create, `version` es opcional: vacío ⇒ el gateway autoasigna la siguiente secuencial.
     version:
       mode === 'create'
-        ? z.string().regex(MIGRATION_VERSION_PATTERN, 'Solo dígitos, 4–10 (ej. 0001)')
+        ? z
+            .string()
+            .regex(MIGRATION_VERSION_PATTERN, 'Solo dígitos, 4–10 (ej. 0001)')
+            .or(z.literal(''))
         : z.string(),
     name: z.string().min(1, 'Requerido').max(200, 'Máximo 200 caracteres'),
     up_sql:
@@ -46,7 +50,8 @@ const orNull = (value: string) => (value.trim() ? value : null)
 
 export function toCreate(values: ModelMigrationFormValues): ModelMigrationCreate {
   return {
-    version: values.version.trim(),
+    // Omitir la versión cuando está vacía: el gateway asigna la siguiente secuencial (max+1).
+    version: values.version.trim() || undefined,
     name: values.name.trim(),
     up_sql: values.up_sql,
     up_sql_mysql: orNull(values.up_sql_mysql),
@@ -94,10 +99,14 @@ export function ModelMigrationForm({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
-          label="Versión"
-          required={mode === 'create'}
+          label="Versión (opcional)"
           readOnly={mode === 'edit'}
-          hint={mode === 'create' ? 'Solo dígitos; mantén ancho consistente (0001, 0002…).' : 'Inmutable.'}
+          placeholder={mode === 'create' ? 'auto (siguiente secuencial)' : undefined}
+          hint={
+            mode === 'create'
+              ? 'Déjalo vacío para autoasignar la siguiente (recomendado), o fíjala a mano.'
+              : 'Inmutable.'
+          }
           error={errors.version?.message}
           {...register('version')}
         />

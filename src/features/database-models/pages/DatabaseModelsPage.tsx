@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -15,16 +16,17 @@ import type { DatabaseModelOut } from '@/lib/contracts'
 import { useDatabaseModels, useDeleteDatabaseModel } from '../hooks/use-database-models'
 import { DatabaseModelFormModal } from '../components/DatabaseModelFormModal'
 import { ModelDatabasesModal } from '../components/ModelDatabasesModal'
-import { ModelMigrationsModal } from '../components/ModelMigrationsModal'
+import { FromSnapshotModal } from '../components/FromSnapshotModal'
 
 export function DatabaseModelsPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [formOpen, setFormOpen] = useState(false)
+  const [snapshotOpen, setSnapshotOpen] = useState(false)
   const [editing, setEditing] = useState<DatabaseModelOut | undefined>(undefined)
   const [deleteTarget, setDeleteTarget] = useState<DatabaseModelOut | null>(null)
   const [databasesTarget, setDatabasesTarget] = useState<DatabaseModelOut | null>(null)
-  const [migrationsTarget, setMigrationsTarget] = useState<DatabaseModelOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useDatabaseModels({ page, size })
   const deleteModel = useDeleteDatabaseModel()
@@ -73,8 +75,12 @@ export function DatabaseModelsPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
-            <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
-              Migraciones
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/database-models/${row.original.id}/migrations`)}
+            >
+              Versiones
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setDatabasesTarget(row.original)}>
               Ver BDs
@@ -96,7 +102,7 @@ export function DatabaseModelsPage() {
         ),
       },
     ],
-    [],
+    [navigate],
   )
 
   return (
@@ -105,14 +111,19 @@ export function DatabaseModelsPage() {
         title="Blueprints"
         description="Categorías lógicas reutilizables de bases de datos (metadato de inventario)."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(undefined)
-              setFormOpen(true)
-            }}
-          >
-            Crear blueprint
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setSnapshotOpen(true)}>
+              Crear desde snapshot 🔌
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(undefined)
+                setFormOpen(true)
+              }}
+            >
+              Crear blueprint
+            </Button>
+          </>
         }
       />
 
@@ -154,11 +165,7 @@ export function DatabaseModelsPage() {
 
       <DatabaseModelFormModal open={formOpen} onClose={() => setFormOpen(false)} model={editing} />
       <ModelDatabasesModal model={databasesTarget} onClose={() => setDatabasesTarget(null)} />
-      <ModelMigrationsModal
-        key={migrationsTarget?.id ?? 'closed'}
-        model={migrationsTarget}
-        onClose={() => setMigrationsTarget(null)}
-      />
+      <FromSnapshotModal open={snapshotOpen} onClose={() => setSnapshotOpen(false)} />
 
       <ConfirmDialog
         open={deleteTarget !== null}
