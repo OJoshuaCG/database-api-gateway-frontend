@@ -11,7 +11,7 @@ import {
   Switch,
 } from '@/components/ui'
 import { cn, formatDateTime } from '@/lib/utils'
-import { isDryRunResult, type ManagedDatabaseOut, type MigrationApplyDryRun } from '@/lib/contracts'
+import { isDryRunResult, type ManagedDatabaseOut, type MigrationApplyResult } from '@/lib/contracts'
 import {
   useApplyMigrations,
   useMigrationHistory,
@@ -27,7 +27,10 @@ interface ManagedDatabaseMigrationsModalProps {
 
 type Tab = 'actions' | 'history'
 
-/** Migraciones sobre una BD gestionada (§9): estado, apply/rollback/stamp e historial 🔌. */
+/**
+ * Migraciones sobre una BD gestionada (§9 / Plan 09 §7-bis): estado, actualizar a la última en un
+ * clic, ir a una versión concreta, rollback secuencial e historial 🔌.
+ */
 export function ManagedDatabaseMigrationsModal({
   database,
   onClose,
@@ -44,20 +47,21 @@ export function ManagedDatabaseMigrationsModal({
 
   const [applyVersion, setApplyVersion] = useState('')
   const [force, setForce] = useState(false)
-  const [preview, setPreview] = useState<MigrationApplyDryRun | null>(null)
+  const [preview, setPreview] = useState<MigrationApplyResult | null>(null)
   const [confirmVersion, setConfirmVersion] = useState('')
+  const [rollbackTarget, setRollbackTarget] = useState('')
   const [stampVersion, setStampVersion] = useState('')
 
   const currentVersion = status.data?.current_version ?? null
+  const latest = status.data?.latest_available ?? null
+  const pendingCount = status.data?.pending_count ?? 0
   const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion
 
-  const runApply = (dryRun: boolean) => {
+  const runApply = (options: { version?: string; dryRun: boolean }) => {
     apply.mutate(
-      { version: applyVersion.trim() || undefined, force, dryRun },
+      { version: options.version, force, dryRun: options.dryRun },
       {
-        onSuccess: (result) => {
-          setPreview(isDryRunResult(result) ? result : null)
-        },
+        onSuccess: (result) => setPreview(isDryRunResult(result) ? result : null),
       },
     )
   }
@@ -115,10 +119,10 @@ export function ManagedDatabaseMigrationsModal({
                 <ErrorState error={status.error} onRetry={() => void status.refetch()} />
               ) : status.data ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
-                  <Badge tone="info">actual: {status.data.current_version ?? 'ninguna'}</Badge>
-                  <Badge tone="neutral">última: {status.data.latest_available ?? '—'}</Badge>
-                  <Badge tone={status.data.pending_count > 0 ? 'warning' : 'success'}>
-                    {status.data.pending_count} pendiente(s)
+                  <Badge tone="info">actual: {currentVersion ?? 'ninguna'}</Badge>
+                  <Badge tone="neutral">última: {latest ?? '—'}</Badge>
+                  <Badge tone={pendingCount > 0 ? 'warning' : 'success'}>
+                    {pendingCount} pendiente(s)
                   </Badge>
                   {status.data.pending_versions.length > 0 && (
                     <span className="text-xs text-muted-foreground">
@@ -128,58 +132,100 @@ export function ManagedDatabaseMigrationsModal({
                 </div>
               ) : null}
 
-              {/* Aplicar */}
-              <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
-                <h3 className="text-sm font-semibold text-foreground">Aplicar migraciones</h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Hasta versión (opcional)"
-                    placeholder="p. ej. 0003"
-                    value={applyVersion}
-                    onChange={(event) => setApplyVersion(event.target.value)}
-                  />
-                  <div className="flex items-end">
-                    <Switch
-                      checked={force}
-                      onCheckedChange={setForce}
-                      label="Forzar (cuarentena)"
-                      hint="Reintenta una BD en error tras inspección."
-                    />
-                  </div>
+              {/* Actualizar a la última — acción de un clic (Plan 09 §7-bis) */}
+              <section className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-sm font-semibold text-foreground">Actualizar</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Aplica <strong>todas</strong> las migraciones pendientes en orden, en una sola
+                    operación. No necesitas elegir la versión: el gateway llega hasta la última
+                    {latest ? ` (${latest})` : ''}.
+                  </p>
                 </div>
-                {preview && (
-                  <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
-                    Plan: {preview.pending_count} pendiente(s)
-                    {preview.pending_versions.length > 0
-                      ? ` · ${preview.pending_versions.join(', ')}`
-                      : ''}
-                  </div>
-                )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    isLoading={apply.isPending}
+                    disabled={pendingCount === 0}
+                    onClick={() => runApply({ dryRun: false })}
+                  >
+                    {pendingCount === 0
+                      ? 'Ya está al día'
+                      : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     isLoading={apply.isPending}
-                    onClick={() => runApply(true)}
+                    disabled={pendingCount === 0}
+                    onClick={() => runApply({ dryRun: true })}
                   >
                     Previsualizar (dry-run)
                   </Button>
-                  <Button size="sm" isLoading={apply.isPending} onClick={() => runApply(false)}>
-                    Aplicar 🔌
+                  <Switch
+                    checked={force}
+                    onCheckedChange={setForce}
+                    label="Forzar"
+                    hint="Override de cuarentena."
+                  />
+                </div>
+                {preview && (
+                  <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
+                    Plan: {preview.pending_versions.length} pendiente(s)
+                    {preview.pending_versions.length > 0
+                      ? ` · ${preview.pending_versions.join(', ')}`
+                      : ' · nada que aplicar'}
+                  </div>
+                )}
+              </section>
+
+              {/* Ir a una versión concreta (avanzado) */}
+              <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
+                <h3 className="text-sm font-semibold text-foreground">Ir a una versión concreta</h3>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-[12rem] flex-1">
+                    <Input
+                      label="Versión objetivo"
+                      placeholder="p. ej. 0003"
+                      value={applyVersion}
+                      onChange={(event) => setApplyVersion(event.target.value)}
+                      hint="Aplica desde la actual+1 hasta esta versión (inclusive). Forward-only."
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    isLoading={apply.isPending}
+                    disabled={applyVersion.trim().length === 0}
+                    onClick={() => runApply({ version: applyVersion.trim(), dryRun: false })}
+                  >
+                    Aplicar hasta esa versión 🔌
                   </Button>
                 </div>
               </section>
 
-              {/* Rollback */}
+              {/* Rollback secuencial */}
               <section className="flex flex-col gap-3 rounded-lg border border-error/30 p-3">
                 <h3 className="text-sm font-semibold text-foreground">Rollback (destructivo)</h3>
-                <Input
-                  label="Confirma la versión actual"
-                  hint="Debe coincidir con la versión actual; requiere down_sql confirmado."
-                  placeholder={currentVersion ?? 'sin versión actual'}
-                  value={confirmVersion}
-                  onChange={(event) => setConfirmVersion(event.target.value)}
-                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Confirma la versión actual"
+                    hint="Debe coincidir con la versión actual (doble confirmación)."
+                    placeholder={currentVersion ?? 'sin versión actual'}
+                    value={confirmVersion}
+                    onChange={(event) => setConfirmVersion(event.target.value)}
+                  />
+                  <Input
+                    label="Revertir hasta (opcional)"
+                    hint="Versión destino, anterior a la actual. Vacío = solo la última."
+                    placeholder="p. ej. 0007"
+                    value={rollbackTarget}
+                    onChange={(event) => setRollbackTarget(event.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Revierte secuencialmente en una sola llamada; requiere <code>down_sql</code>{' '}
+                  confirmado en cada versión del camino (si falta, responde <code>409</code>).
+                </p>
                 <div className="flex justify-end">
                   <Button
                     variant="danger"
@@ -187,10 +233,21 @@ export function ManagedDatabaseMigrationsModal({
                     disabled={!canRollback}
                     isLoading={rollback.isPending}
                     onClick={() =>
-                      rollback.mutate(confirmVersion, { onSuccess: () => setConfirmVersion('') })
+                      rollback.mutate(
+                        {
+                          confirmVersion,
+                          targetVersion: rollbackTarget.trim() || undefined,
+                        },
+                        {
+                          onSuccess: () => {
+                            setConfirmVersion('')
+                            setRollbackTarget('')
+                          },
+                        },
+                      )
                     }
                   >
-                    Revertir última migración
+                    Revertir
                   </Button>
                 </div>
               </section>

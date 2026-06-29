@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
+  Badge,
   Button,
   Combobox,
   DataTable,
@@ -85,7 +86,16 @@ export function ManagedDatabasesPage() {
       {
         accessorKey: 'name',
         header: 'Nombre',
-        cell: ({ row }) => <span className="font-medium text-foreground">{row.original.name}</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-foreground">{row.original.name}</span>
+            {row.original.origin === 'adopted' && (
+              <Badge tone="neutral" className="shrink-0">
+                📥 adoptada
+              </Badge>
+            )}
+          </div>
+        ),
       },
       {
         id: 'server',
