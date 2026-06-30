@@ -1,20 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Badge,
   Button,
   Card,
   CardContent,
+  Combobox,
   ConfirmDialog,
   EmptyState,
   ErrorState,
   FullPageSpinner,
   PageHeader,
-  Pagination,
   Spinner,
 } from '@/components/ui'
-import { cn } from '@/lib/utils'
-import type { ModelMigrationSummary } from '@/lib/contracts'
+import { PAGINATION, type ModelMigrationSummary } from '@/lib/contracts'
 import { useDatabaseModel } from '../hooks/use-database-models'
 import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-migrations'
 import { ModelMigrationFormModal } from '../components/ModelMigrationFormModal'
@@ -22,30 +21,35 @@ import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPan
 import { ApplyAllDialog } from '../components/ApplyAllDialog'
 
 /**
- * Página completa (maestro-detalle) de las versiones de un blueprint (Plan 09 §7-ter). Sustituye
- * al antiguo modal: a la izquierda el catálogo de versiones (ligero, sin SQL); a la derecha el
- * detalle de la versión seleccionada (SQL traducido, edición, aprobación de baseline).
+ * Página de versiones de un blueprint (Plan 09 §7-ter), a todo el ancho: arriba un desplegable con
+ * las versiones; al elegir una, un card delgado con su estado y, debajo, un card con el SQL y la
+ * edición. Sustituye al antiguo modal y al layout maestro-detalle de dos columnas.
  */
 export function BlueprintMigrationsPage() {
   const params = useParams()
   const modelId = Number(params.modelId)
 
-  const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [applyAllOpen, setApplyAllOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ModelMigrationSummary | null>(null)
 
   const model = useDatabaseModel(modelId)
-  const migrations = useModelMigrations(modelId, { page, size: 20 }, Number.isFinite(modelId))
+  // El desplegable necesita el catálogo completo (ligero, sin SQL): pedimos el máximo por página.
+  const migrations = useModelMigrations(
+    modelId,
+    { page: 1, size: PAGINATION.maxSize },
+    Number.isFinite(modelId),
+  )
+
   const deleteMigration = useDeleteModelMigration(modelId)
 
-  // Selección por defecto: la primera versión visible si todavía no hay ninguna elegida.
   const items = migrations.data?.items ?? []
-  useEffect(() => {
-    const first = items[0]
-    if (selected === null && first) setSelected(first.version)
-  }, [items, selected])
+  const total = migrations.data?.pagination.total ?? items.length
+
+  // Selección efectiva derivada (sin estado redundante): la versión elegida si sigue existiendo,
+  // o por defecto la primera. Así no hace falta sincronizar con un efecto.
+  const selected = items.find((m) => m.version === selectedVersion) ?? items[0] ?? null
 
   if (Number.isNaN(modelId)) {
     return <ErrorState error={new Error('Identificador de blueprint inválido.')} />
@@ -84,94 +88,60 @@ export function BlueprintMigrationsPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
-        {/* Maestro: catálogo de versiones */}
-        <Card className="h-fit">
-          <CardContent className="p-0">
-            <div className="border-b border-border px-4 py-3 text-sm font-semibold text-foreground">
-              Versiones
+      {/* Selector de versión (desplegable, ancho completo) */}
+      <Card>
+        <CardContent className="py-4">
+          {migrations.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4" /> Cargando versiones…
             </div>
-            {migrations.isLoading ? (
-              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                <Spinner className="h-4 w-4" /> Cargando…
-              </div>
-            ) : migrations.isError ? (
-              <div className="p-4">
-                <ErrorState error={migrations.error} onRetry={() => void migrations.refetch()} />
-              </div>
-            ) : items.length === 0 ? (
-              <div className="p-4">
-                <EmptyState
-                  title="Sin migraciones"
-                  description="Crea la primera migración (delta SQL) de este blueprint."
-                />
-              </div>
-            ) : (
-              <>
-                <ul className="flex flex-col">
-                  {items.map((m) => (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(m.version)}
-                        className={cn(
-                          'flex w-full flex-col gap-1 border-b border-border px-4 py-3 text-left transition-colors last:border-0',
-                          selected === m.version
-                            ? 'bg-primary/10'
-                            : 'hover:bg-surface-muted',
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
-                            {m.version}
-                          </code>
-                          <span className="truncate text-sm font-medium text-foreground">
-                            {m.name}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          <Badge tone={m.has_rollback ? 'success' : 'neutral'}>
-                            {m.has_rollback ? 'rollback' : 'sin rollback'}
-                          </Badge>
-                          {m.has_mysql_override && <Badge tone="warning">MySQL*</Badge>}
-                          {m.has_postgresql_override && <Badge tone="warning">PG*</Badge>}
-                          {m.is_baseline && <Badge tone="info">baseline</Badge>}
-                          {m.reviewed === false && <Badge tone="warning">⚠ revisar</Badge>}
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {migrations.data && migrations.data.pagination.pages > 1 && (
-                  <div className="p-3">
-                    <Pagination
-                      page={migrations.data.pagination.page}
-                      pages={migrations.data.pagination.pages}
-                      total={migrations.data.pagination.total}
-                      size={migrations.data.pagination.size}
-                      hasNext={migrations.data.pagination.has_next}
-                      hasPrev={migrations.data.pagination.has_prev}
-                      onPageChange={setPage}
-                    />
+          ) : migrations.isError ? (
+            <ErrorState error={migrations.error} onRetry={() => void migrations.refetch()} />
+          ) : items.length === 0 ? (
+            <EmptyState
+              title="Sin migraciones"
+              description="Crea la primera migración (delta SQL) de este blueprint."
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Combobox<ModelMigrationSummary>
+                items={items}
+                value={selected}
+                onChange={(m) => setSelectedVersion(m?.version ?? null)}
+                itemToString={(m) => `${m.version} · ${m.name}`}
+                itemToKey={(m) => m.id}
+                label="Versión"
+                placeholder="Selecciona una versión…"
+                renderItem={(m) => (
+                  <div className="flex w-full items-center gap-2">
+                    <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                      {m.version}
+                    </code>
+                    <span className="truncate text-foreground">{m.name}</span>
+                    <span className="ml-auto flex shrink-0 items-center gap-1">
+                      {m.is_baseline && <Badge tone="info">baseline</Badge>}
+                      {m.reviewed === false && <Badge tone="warning">⚠</Badge>}
+                      {m.has_rollback && <Badge tone="success">↩</Badge>}
+                    </span>
                   </div>
                 )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+              />
+              <p className="text-xs text-muted-foreground">
+                {total} versión(es){total > items.length ? ` · mostrando ${items.length}` : ''}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Detalle: SQL de la versión seleccionada */}
-        <Card className="h-fit">
-          <CardContent>
-            <ModelMigrationDetailPanel
-              modelId={modelId}
-              version={selected}
-              onDeleted={() => setSelected(null)}
-              onRequestDelete={setDeleteTarget}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      {/* Estado + detalle de la versión seleccionada */}
+      {items.length > 0 && (
+        <ModelMigrationDetailPanel
+          modelId={modelId}
+          version={selected?.version ?? null}
+          onRequestDelete={setDeleteTarget}
+        />
+      )}
 
       <ModelMigrationFormModal
         open={createOpen}
@@ -190,12 +160,8 @@ export function BlueprintMigrationsPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
           if (!deleteTarget) return
-          const removed = deleteTarget.version
           deleteMigration.mutate(deleteTarget.version, {
-            onSuccess: () => {
-              setDeleteTarget(null)
-              if (selected === removed) setSelected(null)
-            },
+            onSuccess: () => setDeleteTarget(null),
           })
         }}
         title="Eliminar migración"
