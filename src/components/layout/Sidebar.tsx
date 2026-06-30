@@ -101,32 +101,86 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+interface SidebarProps {
+  onNavigate?: () => void
+  /** Modo comprimido: solo iconos (desktop). */
+  collapsed?: boolean
+  /** Si se provee, muestra el botón de comprimir/expandir en la cabecera. */
+  onToggleCollapse?: () => void
+}
+
+const brandLogo = (
+  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" aria-hidden>
+      <ellipse cx="12" cy="5.5" rx="7" ry="2.5" strokeWidth="1.8" />
+      <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" strokeWidth="1.8" />
+    </svg>
+  </span>
+)
+
+export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: SidebarProps) {
   return (
-    <nav className="flex h-full flex-col gap-1 p-4" aria-label="Navegación principal">
-      <div className="mb-4 flex items-center gap-2 px-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <ellipse cx="12" cy="5.5" rx="7" ry="2.5" strokeWidth="1.8" />
-            <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" strokeWidth="1.8" />
-          </svg>
-        </span>
-        <span className="text-sm font-semibold text-foreground">DB Gateway</span>
+    <nav
+      className={cn('flex h-full flex-col gap-1', collapsed ? 'p-3' : 'p-4')}
+      aria-label="Navegación principal"
+    >
+      <div className={cn('mb-4 flex items-center gap-2', collapsed ? 'flex-col' : 'px-2')}>
+        {collapsed ? (
+          onToggleCollapse ? (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label="Expandir menú lateral"
+              title="Expandir menú lateral"
+              className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {brandLogo}
+            </button>
+          ) : (
+            brandLogo
+          )
+        ) : (
+          <>
+            {brandLogo}
+            <span className="text-sm font-semibold text-foreground">DB Gateway</span>
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label="Comprimir menú lateral"
+                title="Comprimir menú lateral"
+                className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  aria-hidden
+                >
+                  <path
+                    d="M14 8l-4 4 4 4"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
       </div>
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
           onClick={onNavigate}
+          title={collapsed ? item.label : undefined}
+          aria-label={collapsed ? item.label : undefined}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'flex items-center gap-3 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2',
               isActive
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground',
@@ -134,7 +188,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           }
         >
           {item.icon}
-          {item.label}
+          {!collapsed && item.label}
         </NavLink>
       ))}
     </nav>
