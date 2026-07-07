@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Combobox, Input, Modal, Textarea } from '@/components/ui'
+import { toApiError } from '@/lib/api/errors'
 import { PAGINATION } from '@/lib/contracts'
 import type { DatabaseModelOut, ServerUserOut } from '@/lib/contracts'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
@@ -54,6 +55,8 @@ export function AdoptDatabaseModal({
   const [version, setVersion] = useState<VersionOption>(EMPTY_VERSION)
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Error del backend (detail.msg) con matiz por código; separado del error de validación local.
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   // El selector de versión solo tiene sentido con un blueprint elegido; se puebla al vuelo.
   const migrations = useModelMigrations(
@@ -78,6 +81,7 @@ export function AdoptDatabaseModal({
     setVersion(EMPTY_VERSION)
     setNotes('')
     setError(null)
+    setSubmitError(null)
     onClose()
   }
 
@@ -93,6 +97,7 @@ export function AdoptDatabaseModal({
       return
     }
     setError(null)
+    setSubmitError(null)
     adopt.mutate(
       {
         name: databaseName,
@@ -103,7 +108,22 @@ export function AdoptDatabaseModal({
         model_version: model && version.version ? version.version : null,
         notes: notes.trim() || null,
       },
-      { onSuccess: handleClose },
+      {
+        onSuccess: handleClose,
+        onError: (err) => {
+          const apiError = toApiError(err)
+          // Matiz por código sobre el detail.msg del backend (el hook además muestra el toast).
+          const hint =
+            apiError.status === 422
+              ? ' La base de datos NO quedó registrada: corrige y reintenta.'
+              : apiError.status === 409
+                ? ' Esta BD ya está adoptada; búscala en la lista de bases de datos.'
+                : apiError.status === 404
+                  ? ' Revisa que el nombre coincida exactamente con la BD del motor.'
+                  : ''
+          setSubmitError(apiError.message + hint)
+        },
+      },
     )
   }
 
@@ -178,6 +198,11 @@ export function AdoptDatabaseModal({
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
         />
+        {submitError && (
+          <p className="rounded-lg border border-error/40 bg-error/5 p-3 text-xs text-error">
+            {submitError}
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={handleClose} disabled={adopt.isPending}>
             Cancelar
