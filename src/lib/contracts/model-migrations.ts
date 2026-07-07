@@ -82,12 +82,16 @@ export const modelMigrationCreateSchema = z.object({
 export type ModelMigrationCreate = z.infer<typeof modelMigrationCreateSchema>
 
 /**
- * `ModelMigrationPatch` (§8 / Plan 09 §7-ter). No se puede modificar el SQL de una migración ya
- * aplicada en alguna BD (`409`); `name`/`down_sql`/overrides/`reviewed` sí. `reviewed:true`
- * aprueba un baseline de snapshot para que pueda aplicarse (R1).
+ * `ModelMigrationPatch` (§8 / Plan 09 §7-ter / Cambio 2). Se puede corregir el `up_sql` de una
+ * migración **mientras no se haya aplicado con éxito** en ninguna BD (si ya se aplicó, `409` que
+ * sugiere fix-forward). Al cambiar `up_sql`, el backend regenera `down_sql_suggested` y recalcula
+ * `checksum`, y exige reenviar corregidos o limpiar con `null` los overrides por motor (si no,
+ * `409` de overrides obsoletos). `name`/`down_sql`/overrides/`reviewed` no tienen esa restricción;
+ * `reviewed:true` aprueba un baseline de snapshot para que pueda aplicarse (R1).
  */
 export const modelMigrationPatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
+  up_sql: z.string().min(1, 'Requerido').max(SQL_MAX, 'Máximo 256 KB').optional(),
   down_sql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_mysql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_postgresql: z.string().max(SQL_MAX).nullable().optional(),

@@ -14,6 +14,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import { PAGINATION, type ModelMigrationSummary } from '@/lib/contracts'
+import { toApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
 import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-migrations'
 import { ModelMigrationFormModal } from '../components/ModelMigrationFormModal'
@@ -46,6 +47,13 @@ export function BlueprintMigrationsPage() {
 
   const items = migrations.data?.items ?? []
   const total = migrations.data?.pagination.total ?? items.length
+
+  // Versión punta: la de mayor número (las versiones se ordenan NUMÉRICAMENTE, §8). Solo la punta
+  // se puede eliminar (Cambio 3); el backend recalcula `current_version` al borrarla.
+  const latestVersion = items.reduce<string | null>(
+    (max, m) => (max === null || Number(m.version) > Number(max) ? m.version : max),
+    null,
+  )
 
   // Selección efectiva derivada (sin estado redundante): la versión elegida si sigue existiendo,
   // o por defecto la primera. Así no hace falta sincronizar con un efecto.
@@ -139,7 +147,9 @@ export function BlueprintMigrationsPage() {
         <ModelMigrationDetailPanel
           modelId={modelId}
           version={selected?.version ?? null}
+          latestVersion={latestVersion}
           onRequestDelete={setDeleteTarget}
+          onCreateNewVersion={() => setCreateOpen(true)}
         />
       )}
 
@@ -162,10 +172,19 @@ export function BlueprintMigrationsPage() {
           if (!deleteTarget) return
           deleteMigration.mutate(deleteTarget.version, {
             onSuccess: () => setDeleteTarget(null),
+            onError: (err) => {
+              // Solo el 409 (dejó de ser la punta o ganó historial) invalida la premisa: cerramos y
+              // refrescamos para recalcular la punta. En otros errores (red/500) mantenemos el
+              // diálogo abierto para reintentar (el hook ya muestra el detail.msg en un toast).
+              if (toApiError(err).status === 409) {
+                setDeleteTarget(null)
+                void migrations.refetch()
+              }
+            },
           })
         }}
-        title="Eliminar migración"
-        description={`Se eliminará la versión ${deleteTarget?.version}. Solo posible si no tiene historial de aplicación.`}
+        title="Eliminar la última versión"
+        description={`Se eliminará la versión ${deleteTarget?.version} del blueprint. Esta acción es irreversible y solo es posible en la última versión sin historial de aplicación.`}
         confirmLabel="Eliminar"
         isLoading={deleteMigration.isPending}
       />

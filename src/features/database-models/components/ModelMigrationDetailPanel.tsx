@@ -1,33 +1,44 @@
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  EmptyState,
-  ErrorState,
-  Spinner,
-} from '@/components/ui'
-import type { ModelMigrationSummary } from '@/lib/contracts'
+import { useState } from 'react'
+import { Badge, Button, Card, CardContent, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import { toApiError } from '@/lib/api/errors'
+import type { ModelMigrationPatch, ModelMigrationSummary } from '@/lib/contracts'
 import { useModelMigration, useUpdateModelMigration } from '../hooks/use-model-migrations'
-import { ModelMigrationForm, toPatch, type ModelMigrationFormValues } from './ModelMigrationForm'
+import { ModelMigrationForm } from './ModelMigrationForm'
 import { MigrationSqlView } from './MigrationSqlView'
 
 interface ModelMigrationDetailPanelProps {
   modelId: number
   version: string | null
+  /** Versión punta (mayor número) del blueprint: solo ella se puede eliminar (Cambio 3). */
+  latestVersion: string | null
   onRequestDelete: (migration: ModelMigrationSummary) => void
+  /** Fix-forward: abre el formulario de nueva migración (cuando el up_sql ya se aplicó). */
+  onCreateNewVersion: () => void
+}
+
+/**
+ * ¿El `409` al editar es del caso A (ya aplicada ⇒ fix-forward, bloquear up_sql)?
+ * El caso B (overrides obsoletos) lo previene el formulario, que exige resolver los overrides antes
+ * de enviar; por eso basta con descartar los `409` cuyo mensaje habla explícitamente de overrides
+ * y tratar el resto como "ya aplicada", sin depender de acertar el texto exacto del backend.
+ */
+function isAlreadyAppliedConflict(status: number, message: string): boolean {
+  return status === 409 && !/override/i.test(message)
 }
 
 /**
  * Detalle de la versión seleccionada, en dos cards apiladas a todo el ancho:
  *  1) un card "delgado" con el estado de la versión (badges + aprobación de baseline R1);
- *  2) un card con el SQL traducido y la edición (name/down_sql/overrides).
- * El SQL base de una versión ya aplicada no se edita (`409`).
+ *  2) un card con el SQL traducido y la edición (up_sql/name/down_sql/overrides).
+ * El SQL base de una versión ya aplicada con éxito no se edita: el backend responde `409` y la UI
+ * bloquea el campo sugiriendo fix-forward (Cambio 2).
  */
 export function ModelMigrationDetailPanel({
   modelId,
   version,
+  latestVersion,
   onRequestDelete,
+  onCreateNewVersion,
 }: ModelMigrationDetailPanelProps) {
   const open = version !== null
   const { data, isLoading, isError, error, refetch } = useModelMigration(
@@ -36,6 +47,18 @@ export function ModelMigrationDetailPanel({
     open,
   )
   const update = useUpdateModelMigration(modelId)
+
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [upSqlLocked, setUpSqlLocked] = useState(false)
+
+  // Al cambiar de versión, se descarta el error/bloqueo de la anterior. Se ajusta el estado en
+  // render (patrón recomendado por React) en vez de con un efecto, para no encadenar renders.
+  const [trackedVersion, setTrackedVersion] = useState(version)
+  if (version !== trackedVersion) {
+    setTrackedVersion(version)
+    setSubmitError(null)
+    setUpSqlLocked(false)
+  }
 
   if (!open) {
     return (
@@ -71,8 +94,25 @@ export function ModelMigrationDetailPanel({
   }
   if (!data) return null
 
-  const handleSubmit = (values: ModelMigrationFormValues) => {
-    update.mutate({ version: data.version, body: toPatch(values) })
+  const handleSubmitEdit = (body: ModelMigrationPatch) => {
+    setSubmitError(null)
+    update.mutate(
+      { version: data.version, body },
+      {
+        onSuccess: () => {
+          setSubmitError(null)
+          setUpSqlLocked(false)
+        },
+        onError: (err) => {
+          const apiError = toApiError(err)
+          setSubmitError(apiError.message)
+          // 409 caso A: ya aplicada ⇒ bloquear el up_sql; caso B (overrides) ya se resuelve en el form.
+          if (isAlreadyAppliedConflict(apiError.status, apiError.message)) {
+            setUpSqlLocked(true)
+          }
+        },
+      },
+    )
   }
 
   const approveBaseline = () => {
@@ -80,6 +120,10 @@ export function ModelMigrationDetailPanel({
   }
 
   const needsReview = data.reviewed === false
+  const isTip = latestVersion !== null && data.version === latestVersion
+  const deleteHint = isTip
+    ? undefined
+    : `Solo se puede eliminar la última versión${latestVersion ? ` (${latestVersion})` : ''}.`
 
   return (
     <div className="flex flex-col gap-4">
@@ -124,6 +168,7 @@ export function ModelMigrationDetailPanel({
       <Card>
         <CardContent className="flex flex-col gap-4">
           <ModelMigrationForm
+            key={data.version}
             mode="edit"
             defaultValues={{
               version: data.version,
@@ -134,7 +179,10 @@ export function ModelMigrationDetailPanel({
               down_sql: data.down_sql ?? data.down_sql_suggested ?? '',
             }}
             isSubmitting={update.isPending}
-            onSubmit={handleSubmit}
+            submitError={submitError}
+            upSqlLocked={upSqlLocked}
+            onCreateNewVersion={onCreateNewVersion}
+            onSubmitEdit={handleSubmitEdit}
             onCancel={() => void refetch()}
           />
 
@@ -148,28 +196,31 @@ export function ModelMigrationDetailPanel({
           </details>
 
           <div className="flex justify-end border-t border-border pt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                onRequestDelete({
-                  id: data.id,
-                  model_id: data.model_id,
-                  version: data.version,
-                  name: data.name,
-                  has_mysql_override: Boolean(data.up_sql_mysql),
-                  has_postgresql_override: Boolean(data.up_sql_postgresql),
-                  has_rollback: Boolean(data.down_sql),
-                  is_baseline: data.is_baseline,
-                  has_non_portable: data.has_non_portable,
-                  reviewed: data.reviewed,
-                  checksum: data.checksum,
-                  created_at: data.created_at,
-                })
-              }
-            >
-              Eliminar esta versión
-            </Button>
+            <span title={deleteHint} className={isTip ? undefined : 'cursor-not-allowed'}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!isTip}
+                onClick={() =>
+                  onRequestDelete({
+                    id: data.id,
+                    model_id: data.model_id,
+                    version: data.version,
+                    name: data.name,
+                    has_mysql_override: Boolean(data.up_sql_mysql),
+                    has_postgresql_override: Boolean(data.up_sql_postgresql),
+                    has_rollback: Boolean(data.down_sql),
+                    is_baseline: data.is_baseline,
+                    has_non_portable: data.has_non_portable,
+                    reviewed: data.reviewed,
+                    checksum: data.checksum,
+                    created_at: data.created_at,
+                  })
+                }
+              >
+                Eliminar esta versión
+              </Button>
+            </span>
           </div>
         </CardContent>
       </Card>

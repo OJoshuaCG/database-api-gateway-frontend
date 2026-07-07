@@ -68,17 +68,28 @@ export type ReassignOwnerIn = z.infer<typeof reassignOwnerInSchema>
  * `AdoptDatabaseIn` (Plan 09 §3) — registra una BD **ya existente** en el motor sin recrearla.
  * El gateway verifica que exista (solo lectura); exige un `owner_id` (ServerUser del mismo
  * servidor). `model_id` opcional para vincular un blueprint en el mismo paso.
+ *
+ * `model_version` (Cambio 1) declara en qué versión del blueprint ya se encuentra la BD: el
+ * gateway hace `stamp` de esa versión (sin ejecutar DDL) para que un `apply` posterior no
+ * reintente crear objetos que ya existen. Requiere `model_id`; el backend valida que la versión
+ * exista antes de registrar la BD (si no, `422` y la BD **no** queda registrada).
  */
-export const adoptDatabaseInSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Requerido')
-    .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
-  server_id: z.number().int().min(1),
-  owner_id: z.number().int().min(1, 'Selecciona un propietario'),
-  model_id: z.number().int().min(1).nullable().optional(),
-  charset: charsetField,
-  collation: charsetField,
-  notes: z.string().nullable().optional(),
-})
+export const adoptDatabaseInSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, 'Requerido')
+      .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
+    server_id: z.number().int().min(1),
+    owner_id: z.number().int().min(1, 'Selecciona un propietario'),
+    model_id: z.number().int().min(1).nullable().optional(),
+    model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
+    charset: charsetField,
+    collation: charsetField,
+    notes: z.string().nullable().optional(),
+  })
+  .refine((value) => value.model_version == null || value.model_id != null, {
+    message: 'La versión de partida requiere elegir un blueprint.',
+    path: ['model_version'],
+  })
 export type AdoptDatabaseIn = z.infer<typeof adoptDatabaseInSchema>
