@@ -28,6 +28,27 @@ describe('normalizeApiError', () => {
     expect(error.fieldErrors).toEqual([{ field: 'host', message: 'host privado' }])
   })
 
+  it('extrae violations con hint y skipped_tables del context (422 layout manual)', () => {
+    const error = normalizeApiError(422, {
+      detail: {
+        msg: 'El layout manual no es aplicable:\n- …',
+        type: 'AppHttpException',
+        context: {
+          violations: [
+            { object: 'monedas', object_type: 'data', version: 0, reason: 'unassigned_data_table', hint: 'Agrega un bucket…' },
+          ],
+          skipped_tables: [{ table: 'tags', reason: 'no_primary_key' }],
+        },
+      },
+    })
+    expect(error.violations?.[0]?.hint).toBe('Agrega un bucket…')
+    expect(error.skippedTables).toEqual([{ table: 'tags', reason: 'no_primary_key' }])
+  })
+
+  it('captura el X-Request-ID del tercer argumento', () => {
+    expect(normalizeApiError(500, {}, 'req-123').requestId).toBe('req-123')
+  })
+
   it('usa un mensaje de fallback por status cuando no hay detalle utilizable', () => {
     const error = normalizeApiError(502, {})
     expect(error.message).toMatch(/servidor de base de datos destino/i)

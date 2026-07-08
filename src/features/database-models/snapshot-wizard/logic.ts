@@ -375,8 +375,12 @@ export function buildFromSnapshotBody(input: WizardBodyInput): FromSnapshotIn {
   const description = input.description.trim()
   if (description) body.description = description
 
+  // `baseline_name` se IGNORA en layout manual (cada versión usa el nombre de su bucket): no se
+  // envía para no inducir a error (Corrección 3, 2026-07-08).
   const baseline = input.baselineName.trim()
-  if (baseline && baseline !== DEFAULT_BASELINE_NAME) body.baseline_name = baseline
+  if (input.layout !== 'manual' && baseline && baseline !== DEFAULT_BASELINE_NAME) {
+    body.baseline_name = baseline
+  }
 
   if (input.layout !== 'single') body.layout = input.layout
 
@@ -391,15 +395,23 @@ export function buildFromSnapshotBody(input: WizardBodyInput): FromSnapshotIn {
     body.exclude_objects = input.selection.excludedObjectKeys.map(parseObjectKey)
   }
 
-  // Layout manual (solo buckets de esquema; los datos van al final vía data_tables).
+  // Layout manual: buckets de esquema + un bucket de datos POR TABLA al final. Autogenerar los
+  // buckets de datos (uno por tabla) garantiza que toda tabla de `data_tables` esté declarada en
+  // `manual_layout` — de lo contrario el backend devuelve 422 `unassigned_data_table`
+  // (Corrección 2, 2026-07-08). La posición 1:1 bucket↔versión hace legibles los mensajes de error.
   if (input.layout === 'manual') {
-    body.manual_layout = input.manualBuckets.map<ManualBucket>((bucket) => ({
+    const schemaBuckets = input.manualBuckets.map<ManualBucket>((bucket) => ({
       name: bucket.name.trim() || undefined,
       objects: bucket.objectKeys.map(parseObjectKey),
     }))
+    const dataBuckets = input.dataSelections.map<ManualBucket>((sel) => ({
+      name: `Datos: ${sel.table}`,
+      data_tables: [sel.table],
+    }))
+    body.manual_layout = [...schemaBuckets, ...dataBuckets]
   }
 
-  // Datos-semilla.
+  // Datos-semilla (nivel raíz: define QUÉ tablas y su modo; en manual, el bucket define DÓNDE).
   if (input.dataSelections.length > 0) {
     body.data_tables = input.dataSelections.map((sel) => ({ table: sel.table, mode: sel.mode }))
     if (input.onOversize !== 'skip') body.on_oversize = input.onOversize

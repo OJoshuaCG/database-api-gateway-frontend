@@ -70,7 +70,7 @@ export type DataTableSel = z.infer<typeof dataTableSelSchema>
  */
 export const manualBucketSchema = z
   .object({
-    name: z.string().optional(),
+    name: z.string().max(200).optional(),
     objects: z.array(snapshotObjectRefSchema).optional(),
     data_tables: z.array(z.string()).optional(),
   })
@@ -95,7 +95,7 @@ export type ManualBucket = z.infer<typeof manualBucketSchema>
 export const fromSnapshotInSchema = z
   .object({
     server_id: z.number().int().min(1),
-    database: z.string().min(1, 'Requerido'),
+    database: z.string().min(1, 'Requerido').max(64, 'Máximo 64 caracteres'),
     name: z.string().min(1, 'Requerido').max(100, 'Máximo 100 caracteres'),
     slug: z
       .string()

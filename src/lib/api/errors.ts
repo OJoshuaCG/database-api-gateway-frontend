@@ -21,6 +21,8 @@ export interface FieldError {
  */
 export interface ManualLayoutViolation {
   reason: string
+  /** Mensaje accionable en español ya formateado por el backend (Corrección 2026-07-08). */
+  hint?: string
   object?: string
   object_type?: string
   version?: number
@@ -34,6 +36,15 @@ export interface ManualLayoutViolation {
   [key: string]: unknown
 }
 
+/**
+ * Tabla de datos omitida reportada dentro del `context` de un error 422 de layout manual
+ * (Corrección 2026-07-08): explica por qué una tabla de `data_tables` no llegó a evaluarse.
+ */
+export interface ContextSkippedTable {
+  table: string
+  reason: string
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -43,6 +54,8 @@ export class ApiError extends Error {
   readonly fieldErrors?: FieldError[]
   /** Violaciones del layout manual (`context.violations`, solo en desarrollo del backend). */
   readonly violations?: ManualLayoutViolation[]
+  /** Tablas de datos omitidas antes de validar el layout (`context.skipped_tables`, dev-only). */
+  readonly skippedTables?: ContextSkippedTable[]
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -52,6 +65,7 @@ export class ApiError extends Error {
     type?: string
     fieldErrors?: FieldError[]
     violations?: ManualLayoutViolation[]
+    skippedTables?: ContextSkippedTable[]
     requestId?: string
   }) {
     super(args.message)
@@ -60,6 +74,7 @@ export class ApiError extends Error {
     this.type = args.type
     this.fieldErrors = args.fieldErrors
     this.violations = args.violations
+    this.skippedTables = args.skippedTables
     this.requestId = args.requestId
   }
 
@@ -132,6 +147,18 @@ function extractViolations(context: unknown): ManualLayoutViolation[] | undefine
   return violations.length > 0 ? violations : undefined
 }
 
+/** Extrae `context.skipped_tables` (tablas de datos descartadas antes de validar el layout). */
+function extractSkippedTables(context: unknown): ContextSkippedTable[] | undefined {
+  if (!isRecord(context) || !Array.isArray(context.skipped_tables)) return undefined
+  const tables: ContextSkippedTable[] = []
+  for (const entry of context.skipped_tables) {
+    if (isRecord(entry) && typeof entry.table === 'string' && typeof entry.reason === 'string') {
+      tables.push({ table: entry.table, reason: entry.reason })
+    }
+  }
+  return tables.length > 0 ? tables : undefined
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -151,6 +178,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         type,
         fieldErrors: extractFieldErrors(d.context),
         violations: extractViolations(d.context),
+        skippedTables: extractSkippedTables(d.context),
         requestId,
       })
     }

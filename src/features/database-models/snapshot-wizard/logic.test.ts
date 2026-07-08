@@ -216,6 +216,35 @@ describe('buildFromSnapshotBody', () => {
     ])
     expect(fromSnapshotInSchema.safeParse(body).success).toBe(true)
   })
+
+  it('en manual autogenera un bucket de datos por tabla y omite baseline_name (Corrección 2/3)', () => {
+    const body = buildFromSnapshotBody({
+      ...base,
+      layout: 'manual',
+      baselineName: 'ignorado',
+      manualBuckets: [{ id: 'a', name: 'Tablas', objectKeys: ['table:clientes'] }],
+      dataSelections: [
+        { table: 'monedas', mode: 'upsert' },
+        { table: 'estados', mode: 'insert_ignore' },
+      ],
+      confirmDataRollback: true,
+    })
+    expect(body.manual_layout).toEqual([
+      { name: 'Tablas', objects: [{ object_type: 'table', name: 'clientes' }] },
+      { name: 'Datos: monedas', data_tables: ['monedas'] },
+      { name: 'Datos: estados', data_tables: ['estados'] },
+    ])
+    expect(body.data_tables).toEqual([
+      { table: 'monedas', mode: 'upsert' },
+      { table: 'estados', mode: 'insert_ignore' },
+    ])
+    // baseline_name se ignora en manual → no debe enviarse.
+    expect(body).not.toHaveProperty('baseline_name')
+    // Toda tabla de data_tables tiene su bucket en manual_layout (evita 422 unassigned_data_table).
+    const bucketTables = (body.manual_layout ?? []).flatMap((b) => b.data_tables ?? [])
+    for (const sel of body.data_tables ?? []) expect(bucketTables).toContain(sel.table)
+    expect(fromSnapshotInSchema.safeParse(body).success).toBe(true)
+  })
 })
 
 describe('slugify / parseObjectKey', () => {
