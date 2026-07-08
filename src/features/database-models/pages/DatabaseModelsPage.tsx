@@ -16,14 +16,12 @@ import type { DatabaseModelOut } from '@/lib/contracts'
 import { useDatabaseModels, useDeleteDatabaseModel } from '../hooks/use-database-models'
 import { DatabaseModelFormModal } from '../components/DatabaseModelFormModal'
 import { ModelDatabasesModal } from '../components/ModelDatabasesModal'
-import { FromSnapshotModal } from '../components/FromSnapshotModal'
 
 export function DatabaseModelsPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [formOpen, setFormOpen] = useState(false)
-  const [snapshotOpen, setSnapshotOpen] = useState(false)
   const [editing, setEditing] = useState<DatabaseModelOut | undefined>(undefined)
   const [deleteTarget, setDeleteTarget] = useState<DatabaseModelOut | null>(null)
   const [databasesTarget, setDatabasesTarget] = useState<DatabaseModelOut | null>(null)
@@ -112,7 +110,7 @@ export function DatabaseModelsPage() {
         description="Categorías lógicas reutilizables de bases de datos (metadato de inventario)."
         actions={
           <>
-            <Button variant="outline" onClick={() => setSnapshotOpen(true)}>
+            <Button variant="outline" onClick={() => navigate('/database-models/from-snapshot')}>
               Crear desde snapshot 🔌
             </Button>
             <Button
@@ -165,7 +163,6 @@ export function DatabaseModelsPage() {
 
       <DatabaseModelFormModal open={formOpen} onClose={() => setFormOpen(false)} model={editing} />
       <ModelDatabasesModal model={databasesTarget} onClose={() => setDatabasesTarget(null)} />
-      <FromSnapshotModal open={snapshotOpen} onClose={() => setSnapshotOpen(false)} />
 
       <ConfirmDialog
         open={deleteTarget !== null}

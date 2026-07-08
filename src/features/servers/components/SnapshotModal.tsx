@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Badge, Button, ErrorState, Modal, Spinner } from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
-import { FromSnapshotModal } from '@/features/database-models/components/FromSnapshotModal'
 import { useDatabaseSnapshot } from '../hooks/use-snapshot'
 
 interface SnapshotModalProps {
@@ -30,7 +30,7 @@ const TYPE_LABELS: Record<DumpObjectType, string> = {
  */
 export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProps) {
   const open = database !== null
-  const [saveOpen, setSaveOpen] = useState(false)
+  const navigate = useNavigate()
   const { data, isLoading, isError, error, refetch } = useDatabaseSnapshot(serverId, database, open)
 
   const grouped = useMemo(() => {
@@ -99,21 +99,21 @@ export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProp
           </div>
 
           <div className="flex justify-end border-t border-border pt-3">
-            <Button onClick={() => setSaveOpen(true)} disabled={data.statements.length === 0}>
-              Guardar como blueprint baseline ▸
+            <Button
+              onClick={() =>
+                navigate(
+                  `/database-models/from-snapshot?serverId=${serverId}&database=${encodeURIComponent(
+                    database ?? '',
+                  )}`,
+                )
+              }
+              disabled={data.statements.length === 0}
+            >
+              Crear blueprint desde snapshot ▸
             </Button>
           </div>
         </div>
       ) : null}
-
-      {database && (
-        <FromSnapshotModal
-          open={saveOpen}
-          onClose={() => setSaveOpen(false)}
-          presetServerId={serverId}
-          presetDatabase={database}
-        />
-      )}
     </Modal>
   )
 }
