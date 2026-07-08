@@ -28,6 +28,11 @@ export function ErrorState({
             conectividad de red.
           </p>
         )}
+        {apiError.requestId && (
+          <p className="max-w-md text-xs text-muted-foreground">
+            ID de solicitud: <code className="font-mono">{apiError.requestId}</code>
+          </p>
+        )}
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>

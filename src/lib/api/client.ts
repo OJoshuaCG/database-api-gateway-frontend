@@ -92,7 +92,9 @@ async function apiRequest<S extends z.ZodTypeAny>(
     if (response.status === 401 && !suppressAuthHandler) {
       unauthorizedHandler?.()
     }
-    throw normalizeApiError(response.status, parsed)
+    // El backend adjunta `X-Request-ID` a toda respuesta; se muestra en los estados de error.
+    const requestId = response.headers.get('X-Request-ID') ?? undefined
+    throw normalizeApiError(response.status, parsed, requestId)
   }
 
   const result = schema.safeParse(parsed)

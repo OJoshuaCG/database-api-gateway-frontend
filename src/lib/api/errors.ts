@@ -13,6 +13,27 @@ export interface FieldError {
   message: string
 }
 
+/**
+ * Violación del layout manual de un snapshot (Plan 09 §3/§6). El backend solo la incluye en
+ * `detail.context.violations` cuando corre en `APP_ENV=development`; en producción la UI se apoya
+ * en su validación en cliente + `detail.msg`. `version` es 1-based (posición del bucket). Los
+ * campos extra dependen del `reason` (p. ej. `also_in_version`, `dependency_version`).
+ */
+export interface ManualLayoutViolation {
+  reason: string
+  object?: string
+  object_type?: string
+  version?: number
+  also_in_version?: number
+  depends_on?: string
+  dependency_version?: number
+  must_be_at_most?: number
+  must_be_at_least?: number
+  first_data_version?: number
+  table_structure_version?: number
+  [key: string]: unknown
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -20,18 +41,31 @@ export class ApiError extends Error {
   readonly type?: string
   /** Errores por campo cuando el status es 422 (modo desarrollo del backend). */
   readonly fieldErrors?: FieldError[]
+  /** Violaciones del layout manual (`context.violations`, solo en desarrollo del backend). */
+  readonly violations?: ManualLayoutViolation[]
+  /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
+  readonly requestId?: string
 
   constructor(args: {
     status: number
     message: string
     type?: string
     fieldErrors?: FieldError[]
+    violations?: ManualLayoutViolation[]
+    requestId?: string
   }) {
     super(args.message)
     this.name = 'ApiError'
     this.status = args.status
     this.type = args.type
     this.fieldErrors = args.fieldErrors
+    this.violations = args.violations
+    this.requestId = args.requestId
+  }
+
+  /** Rate limit del backend excedido (§3, `from-snapshot` 10/min). */
+  get isRateLimited(): boolean {
+    return this.status === 429
   }
 
   /** El recurso/credenciales requieren (re)autenticación. */
@@ -83,24 +117,46 @@ function extractFieldErrors(context: unknown): FieldError[] | undefined {
   return errors.length > 0 ? errors : undefined
 }
 
-/** Construye un `ApiError` a partir del status y el cuerpo (ya parseado) de la respuesta. */
-export function normalizeApiError(status: number, body: unknown): ApiError {
+/**
+ * Extrae `context.violations` (layout manual del snapshot). Solo presente en desarrollo del
+ * backend; se conservan todos los campos extra por `reason` para el mapeo accionable en la UI.
+ */
+function extractViolations(context: unknown): ManualLayoutViolation[] | undefined {
+  if (!isRecord(context) || !Array.isArray(context.violations)) return undefined
+  const violations: ManualLayoutViolation[] = []
+  for (const entry of context.violations) {
+    if (isRecord(entry) && typeof entry.reason === 'string') {
+      violations.push({ ...(entry as ManualLayoutViolation), reason: entry.reason })
+    }
+  }
+  return violations.length > 0 ? violations : undefined
+}
+
+/** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
+export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
 
   if (isRecord(body) && 'detail' in body) {
     const detail = body.detail
     if (typeof detail === 'string' && detail.trim().length > 0) {
-      return new ApiError({ status, message: detail })
+      return new ApiError({ status, message: detail, requestId })
     }
     if (isRecord(detail)) {
       const d = detail as DetailObject
       const message = typeof d.msg === 'string' && d.msg.trim().length > 0 ? d.msg : fallback
       const type = typeof d.type === 'string' ? d.type : undefined
-      return new ApiError({ status, message, type, fieldErrors: extractFieldErrors(d.context) })
+      return new ApiError({
+        status,
+        message,
+        type,
+        fieldErrors: extractFieldErrors(d.context),
+        violations: extractViolations(d.context),
+        requestId,
+      })
     }
   }
 
-  return new ApiError({ status, message: fallback })
+  return new ApiError({ status, message: fallback, requestId })
 }
 
 /** Error de red (fetch rechazado: offline, DNS, CORS preflight bloqueado…). */
