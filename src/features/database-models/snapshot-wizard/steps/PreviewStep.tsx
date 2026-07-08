@@ -151,25 +151,6 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
               excluirlos en el siguiente paso.
             </p>
           )}
-
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-            <Button variant="ghost" onClick={wizard.back}>
-              ← Cambiar origen
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                onClick={wizard.submitExpress}
-                isLoading={wizard.create.isPending}
-                title="Captura todo el esquema en una versión, sin datos ni filtros"
-              >
-                Crear con valores por defecto
-              </Button>
-              <Button variant="outline" onClick={wizard.next} disabled={wizard.create.isPending}>
-                Personalizar →
-              </Button>
-            </div>
-          </div>
         </>
       )}
 

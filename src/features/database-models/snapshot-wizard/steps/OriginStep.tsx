@@ -1,11 +1,22 @@
-import { Button, Combobox, EmptyState, ErrorState } from '@/components/ui'
-import type { ServerOut } from '@/lib/contracts'
+import { Badge, Combobox, EmptyState, ErrorState } from '@/components/ui'
+import type { ReconcileDatabaseItem, ReconcileState, ServerOut } from '@/lib/contracts'
 import type { SnapshotWizard } from '../use-snapshot-wizard'
 
-/** Vista 1 — elige servidor + BD de origen y dispara el preview. */
+const STATE_BADGE: Record<ReconcileState, { tone: 'success' | 'warning' | 'error'; label: string }> =
+  {
+    managed: { tone: 'success', label: 'gestionada' },
+    unmanaged: { tone: 'warning', label: 'sin gestionar' },
+    orphan: { tone: 'error', label: 'huérfana' },
+  }
+
+/** Vista 1 — elige servidor + BD de origen (descubiertas por reconciliación) y dispara el preview. */
 export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
-  const { databases } = wizard
-  const canContinue = Boolean(wizard.serverId) && Boolean(wizard.database)
+  const { reconcile } = wizard
+  // Las candidatas naturales van primero (sin gestionar), pero se puede fotografiar cualquiera.
+  const items = [...wizard.databaseItems].sort((a, b) =>
+    a.state === b.state ? a.name.localeCompare(b.name) : a.state === 'unmanaged' ? -1 : 1,
+  )
+  const selectedDb = items.find((d) => d.name === wizard.database) ?? null
 
   return (
     <div className="flex flex-col gap-5">
@@ -13,7 +24,8 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
         <h2 className="text-lg font-semibold text-foreground">Origen del snapshot</h2>
         <p className="text-sm text-muted-foreground">
           Elige de qué servidor y base de datos se tomará la estructura. El gateway leerá el motor
-          en vivo (solo lectura); puede tardar en BDs grandes.
+          en vivo (solo lectura); puede tardar en BDs grandes. Las bases{' '}
+          <strong>sin gestionar</strong> son las candidatas naturales a convertir en blueprint.
         </p>
       </div>
 
@@ -36,39 +48,46 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
             required
           />
 
-          {wizard.serverId && databases.isError ? (
+          {wizard.serverId && reconcile.isError ? (
             <ErrorState
-              error={databases.error}
-              onRetry={() => void databases.refetch()}
+              error={reconcile.error}
+              onRetry={() => void reconcile.refetch()}
               title="No se pudieron listar las bases de datos"
             />
-          ) : wizard.serverId && !databases.isLoading && (databases.data?.length ?? 0) === 0 ? (
+          ) : wizard.serverId && !reconcile.isLoading && items.length === 0 ? (
             <EmptyState
               title="Sin bases de datos"
-              description="Este servidor no tiene bases de datos accesibles."
+              description="Este servidor no tiene bases de datos accesibles para fotografiar."
             />
           ) : (
-            <Combobox<string>
-              items={databases.data ?? []}
-              value={wizard.database}
-              onChange={wizard.setDatabase}
-              itemToString={(d) => d}
-              itemToKey={(d) => d}
+            <Combobox<ReconcileDatabaseItem>
+              items={items}
+              value={selectedDb}
+              onChange={(item) => wizard.setDatabase(item?.name ?? null)}
+              itemToString={(d) => d.name}
+              itemToKey={(d) => d.name}
+              renderItem={(d) => (
+                <span className="flex items-center justify-between gap-2">
+                  <span>{d.name}</span>
+                  <Badge tone={STATE_BADGE[d.state].tone}>{STATE_BADGE[d.state].label}</Badge>
+                </span>
+              )}
               label="Base de datos"
               placeholder={wizard.serverId ? 'Selecciona la BD' : 'Elige un servidor primero'}
-              isLoading={databases.isLoading}
+              isLoading={reconcile.isLoading}
               disabled={!wizard.serverId}
               required
             />
           )}
+
+          {selectedDb && selectedDb.state === 'managed' && (
+            <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-foreground">
+              «{selectedDb.name}» ya está gestionada por el gateway. Puedes fotografiarla igualmente
+              para derivar un blueprint, pero no es el caso habitual.
+            </p>
+          )}
         </div>
       )}
-
-      <div className="flex justify-end gap-2 border-t border-border pt-4">
-        <Button onClick={wizard.next} disabled={!canContinue}>
-          Ver estructura →
-        </Button>
-      </div>
     </div>
   )
 }

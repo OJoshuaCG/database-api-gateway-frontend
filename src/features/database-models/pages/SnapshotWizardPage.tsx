@@ -9,6 +9,7 @@ import { DataSeedStep } from '../snapshot-wizard/steps/DataSeedStep'
 import { SummaryStep } from '../snapshot-wizard/steps/SummaryStep'
 import { ResultStep } from '../snapshot-wizard/steps/ResultStep'
 import { WizardStepper } from '../snapshot-wizard/WizardStepper'
+import { WizardNav } from '../snapshot-wizard/WizardNav'
 import { useSnapshotWizard } from '../snapshot-wizard/use-snapshot-wizard'
 
 /**
@@ -31,7 +32,10 @@ export function SnapshotWizardPage() {
   const wizard = useSnapshotWizard(preset)
 
   return (
-    <div className="flex flex-col gap-6">
+    // Alto mínimo = viewport menos topbar (4rem) y padding de main (3rem): así la barra de
+    // navegación (con `mt-auto`) queda anclada al pie en una posición ESTABLE en todos los pasos,
+    // sin importar la altura del contenido del card.
+    <div className="flex min-h-[calc(100dvh-7rem)] flex-col gap-6">
       <PageHeader
         title="Crear blueprint desde snapshot 🔌"
         description="Convierte una BD existente en un blueprint versionado. Solo lee el motor; no ejecuta DDL."
@@ -58,6 +62,9 @@ export function SnapshotWizardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Navegación fija al pie, fuera del card: posición estable pese a la altura variable. */}
+      <WizardNav wizard={wizard} />
     </div>
   )
 }

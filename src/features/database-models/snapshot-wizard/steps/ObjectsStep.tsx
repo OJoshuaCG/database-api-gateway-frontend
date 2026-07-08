@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button } from '@/components/ui'
+import { Badge } from '@/components/ui'
 import { type DumpObjectType } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { objectKey, OBJECT_TYPE_LABELS, summarizeCounts, TYPE_ORDER } from '../logic'
@@ -156,15 +156,6 @@ export function ObjectsStep({ wizard }: { wizard: SnapshotWizard }) {
           La selección excluye todo. Ajusta los filtros para incluir al menos un objeto.
         </p>
       )}
-
-      <div className="flex justify-between gap-2 border-t border-border pt-4">
-        <Button variant="ghost" onClick={wizard.back}>
-          ← Atrás
-        </Button>
-        <Button onClick={wizard.next} disabled={!canContinue}>
-          Continuar →
-        </Button>
-      </div>
     </div>
   )
 }

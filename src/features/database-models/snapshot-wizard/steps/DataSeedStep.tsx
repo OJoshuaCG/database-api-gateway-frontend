@@ -16,17 +16,6 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
   const candidates = wizard.dataCandidateList
   const atLimit = wizard.dataCount >= MAX_DATA_TABLES
 
-  const footer = (
-    <div className="flex justify-between gap-2 border-t border-border pt-4">
-      <Button variant="ghost" onClick={wizard.back}>
-        ← Atrás
-      </Button>
-      <Button onClick={wizard.next}>
-        {wizard.dataCount > 0 ? 'Continuar →' : 'Continuar sin datos →'}
-      </Button>
-    </div>
-  )
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -167,8 +156,6 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
           </div>
         </>
       )}
-
-      {footer}
     </div>
   )
 }

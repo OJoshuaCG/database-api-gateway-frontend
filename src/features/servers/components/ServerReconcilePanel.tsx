@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Badge, Button, EmptyState, ErrorState, Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import type { ReconcileState } from '@/lib/contracts'
@@ -21,6 +22,7 @@ const STATE_BADGE: Record<ReconcileState, { tone: 'success' | 'warning' | 'error
  * ofrece las acciones de adopción sobre lo `unmanaged`. Es el puente entre los dos planos.
  */
 export function ServerReconcilePanel({ serverId }: { serverId: number }) {
+  const navigate = useNavigate()
   const [subTab, setSubTab] = useState<SubTab>('databases')
   const [adoptDb, setAdoptDb] = useState<string | null>(null)
   const [adoptUser, setAdoptUser] = useState<{ username: string; host?: string | null } | null>(
@@ -94,6 +96,22 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
                         <Button variant="ghost" size="sm" onClick={() => setSnapshotDb(db.name)}>
                           Ver snapshot
                         </Button>
+                        {db.state !== 'orphan' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              navigate(
+                                `/database-models/from-snapshot?serverId=${serverId}&database=${encodeURIComponent(
+                                  db.name,
+                                )}`,
+                              )
+                            }
+                            title="Abre el asistente para elegir qué objetos y datos capturar"
+                          >
+                            Crear blueprint
+                          </Button>
+                        )}
                         {db.state === 'unmanaged' && (
                           <Button variant="outline" size="sm" onClick={() => setAdoptDb(db.name)}>
                             Adoptar

@@ -5,11 +5,12 @@ import {
   type DumpObjectType,
   type FromSnapshotOut,
   type OnOversize,
+  type ReconcileDatabaseItem,
   type ServerOut,
   type SnapshotLayout,
 } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
-import { useServerDatabases } from '@/features/servers/hooks/use-introspection'
+import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import { useDatabaseSnapshot } from '@/features/servers/hooks/use-snapshot'
 import { useCreateModelFromSnapshot } from '../hooks/use-from-snapshot'
 import {
@@ -73,7 +74,9 @@ export interface SnapshotWizard {
   setServer: (server: ServerOut | null) => void
   setDatabase: (database: string | null) => void
   servers: ReturnType<typeof useServerOptions>
-  databases: ReturnType<typeof useServerDatabases>
+  reconcile: ReturnType<typeof useReconcile>
+  /** BDs del servidor con su estado de reconciliación; las `unmanaged` son las candidatas. */
+  databaseItems: ReconcileDatabaseItem[]
 
   // ── Preview (Vista 2) ───────────────────────────────────────────────────
   snapshot: ReturnType<typeof useDatabaseSnapshot>
@@ -172,9 +175,14 @@ export function useSnapshotWizard(options: WizardOptions = {}): SnapshotWizard {
 
   const servers = useServerOptions()
   const serverId = options.presetServerId ?? server?.id ?? null
-  const databases = useServerDatabases(
+  const reconcile = useReconcile(
     serverId ?? 0,
     !presetLocked && Number.isFinite(serverId) && (serverId ?? 0) > 0,
+  )
+  // Solo son fotografiables las BDs que existen en el motor (managed/unmanaged); las orphan no.
+  const databaseItems = useMemo(
+    () => (reconcile.data?.databases ?? []).filter((db) => db.state !== 'orphan'),
+    [reconcile.data],
   )
   const snapshot = useDatabaseSnapshot(
     serverId ?? 0,
@@ -518,7 +526,8 @@ export function useSnapshotWizard(options: WizardOptions = {}): SnapshotWizard {
     setServer,
     setDatabase,
     servers,
-    databases,
+    reconcile,
+    databaseItems,
     snapshot,
     includeDataStats,
     setIncludeDataStats,

@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui'
 import type { SnapshotLayout } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { VersionPreviewList } from '../VersionPreviewList'
@@ -76,13 +75,6 @@ export function LayoutStep({ wizard }: { wizard: SnapshotWizard }) {
           añaden después, como versiones al final.
         </p>
       )}
-
-      <div className="flex justify-between gap-2 border-t border-border pt-4">
-        <Button variant="ghost" onClick={wizard.back}>
-          ← Atrás
-        </Button>
-        <Button onClick={wizard.next}>Continuar →</Button>
-      </div>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { Badge, Button, Input, Textarea } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import type { SnapshotLayout } from '@/lib/contracts'
 import { summarizeCounts } from '../logic'
-import { describeViolation, violationTarget } from '../messages'
+import { describeSkippedReason, describeViolation, violationTarget } from '../messages'
 import type { SnapshotWizard } from '../use-snapshot-wizard'
 
 const LAYOUT_LABELS: Record<SnapshotLayout, string> = {
@@ -15,7 +15,6 @@ const LAYOUT_LABELS: Record<SnapshotLayout, string> = {
 export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
   const engine = wizard.snapshot.data?.source_engine
   const nonPortable = !wizard.schemaPortable || wizard.dataCount > 0
-  const canSubmit = wizard.name.trim().length > 0 && wizard.slugValid && !wizard.create.isPending
 
   const error = wizard.create.error ? toApiError(wizard.create.error) : null
   const is409 = error?.status === 409
@@ -37,6 +36,7 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
         <Input
           label="Nombre del blueprint"
           required
+          maxLength={100}
           value={wizard.name}
           onChange={(event) => wizard.setName(event.target.value)}
           error={is409 ? 'Ya existe un blueprint con ese nombre o slug' : undefined}
@@ -44,6 +44,7 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
         <Input
           label="Slug"
           required
+          maxLength={120}
           value={wizard.slug}
           onChange={(event) => wizard.setSlug(event.target.value)}
           hint="Identificador estable (kebab/snake en minúsculas)."
@@ -61,12 +62,24 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
           value={wizard.description}
           onChange={(event) => wizard.setDescription(event.target.value)}
         />
-        <Input
-          label="Nombre del baseline"
-          value={wizard.baselineName}
-          onChange={(event) => wizard.setBaselineName(event.target.value)}
-          hint="Nombre de la versión 0001."
-        />
+        {/* `baseline_name` se ignora en layout manual (cada versión usa el nombre de su bucket). */}
+        {wizard.layout === 'manual' ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-muted-foreground">Nombre del baseline</span>
+            <p className="rounded-lg border border-border bg-surface-muted p-2.5 text-xs text-muted-foreground">
+              No aplica en layout manual: cada versión usa el nombre de su bucket, definido en el
+              paso de versionado.
+            </p>
+          </div>
+        ) : (
+          <Input
+            label="Nombre del baseline"
+            maxLength={200}
+            value={wizard.baselineName}
+            onChange={(event) => wizard.setBaselineName(event.target.value)}
+            hint="Nombre de la versión 0001."
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
@@ -113,7 +126,8 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
 
       {error && (
         <div className="flex flex-col gap-2 rounded-lg border border-error/30 bg-error/5 p-3">
-          <p className="text-sm font-semibold text-error">{error.message}</p>
+          {/* `detail.msg` puede venir formateado como lista multilínea desde el backend. */}
+          <p className="whitespace-pre-line text-sm font-semibold text-error">{error.message}</p>
           {is429 && (
             <p className="text-sm text-muted-foreground">
               Límite de 10/min excedido. Espera un momento e inténtalo de nuevo.
@@ -130,12 +144,28 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
                     </span>
                     <span>
                       {target && <code className="mr-1 font-mono text-xs">{target}</code>}
-                      {describeViolation(violation)}
+                      {/* El backend ya provee `hint` formateado; si no, se mapea en cliente. */}
+                      {violation.hint ?? describeViolation(violation)}
                     </span>
                   </li>
                 )
               })}
             </ul>
+          )}
+          {is422 && error.skippedTables && error.skippedTables.length > 0 && (
+            <div className="flex flex-col gap-1 rounded-lg bg-surface-muted p-2.5 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Tablas de datos que no se pudieron extraer
+              </span>
+              <ul className="flex flex-col gap-0.5">
+                {error.skippedTables.map((skipped) => (
+                  <li key={skipped.table} className="text-foreground">
+                    <code className="font-mono text-xs">{skipped.table}</code> —{' '}
+                    {describeSkippedReason(skipped.reason)}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {is422 && wizard.layout === 'manual' && (
@@ -156,15 +186,6 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
           </div>
         </div>
       )}
-
-      <div className="flex justify-between gap-2 border-t border-border pt-4">
-        <Button variant="ghost" onClick={wizard.back} disabled={wizard.create.isPending}>
-          ← Atrás
-        </Button>
-        <Button onClick={wizard.submit} disabled={!canSubmit} isLoading={wizard.create.isPending}>
-          Crear blueprint
-        </Button>
-      </div>
     </div>
   )
 }

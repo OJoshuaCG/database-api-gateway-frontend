@@ -105,6 +105,7 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
                 <code className="font-mono text-xs text-muted-foreground">v{index + 1}</code>
                 <Input
                   value={bucket.name}
+                  maxLength={200}
                   onChange={(event) => wizard.renameBucket(bucket.id, event.target.value)}
                   placeholder="Nombre de la versión"
                 />
@@ -180,15 +181,6 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
           topológica completa.
         </p>
       )}
-
-      <div className="flex justify-between gap-2 border-t border-border pt-4">
-        <Button variant="ghost" onClick={wizard.back}>
-          ← Atrás
-        </Button>
-        <Button onClick={wizard.next} disabled={hasProblems}>
-          Continuar →
-        </Button>
-      </div>
     </div>
   )
 }
