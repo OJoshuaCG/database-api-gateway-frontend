@@ -73,17 +73,20 @@ export function reconcileServer(id: number, signal?: AbortSignal): Promise<Recon
 
 /**
  * `GET /servers/{id}/databases/{db}/snapshot` 🔌 (Plan 09 §5) — estructura DDL completa de una BD
- * en orden de dependencia. Solo estructura, nunca filas.
+ * en orden de dependencia. Solo estructura, nunca filas. Con `includeDataStats=true` agrega
+ * `table_stats` (una consulta extra de catálogo por tabla: más lento) para decidir qué catálogos
+ * sembrar.
  */
 export function getDatabaseSnapshot(
   id: number,
   database: string,
-  signal?: AbortSignal,
+  options: { includeDataStats?: boolean; signal?: AbortSignal } = {},
 ): Promise<StructureDump> {
+  const { includeDataStats = false, signal } = options
   return fetchData(
     `${BASE}/${id}/databases/${encodeURIComponent(database)}/snapshot`,
     structureDumpSchema,
-    { signal },
+    { query: includeDataStats ? { include_data_stats: true } : undefined, signal },
   )
 }
 
