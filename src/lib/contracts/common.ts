@@ -20,6 +20,14 @@ export type ProvisionStatus = z.infer<typeof provisionStatusSchema>
 export const migrationStatusSchema = z.enum(['applied', 'failed'])
 export type MigrationStatus = z.infer<typeof migrationStatusSchema>
 
+/**
+ * Naturaleza de una versión/migración (Plan 09 §6, Plan 02): `schema` (DDL, portable salvo
+ * procedurales) o `data` (datos-semilla de catálogo; siempre atada a `source_engine`, no se
+ * traduce cross-engine).
+ */
+export const migrationKindSchema = z.enum(['schema', 'data'])
+export type MigrationKind = z.infer<typeof migrationKindSchema>
+
 /** Nivel de un grant (§4, §7, §11). `schema` y `sequence` solo PostgreSQL. */
 export const grantLevelSchema = z.enum([
   'global',

@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { engineTypeSchema, MIGRATION_VERSION_PATTERN, migrationStatusSchema } from './common'
+import {
+  engineTypeSchema,
+  migrationKindSchema,
+  MIGRATION_VERSION_PATTERN,
+  migrationStatusSchema,
+} from './common'
 
 /**
  * Migraciones de blueprint (§8): deltas SQL versionados por blueprint. CRUD de inventario;
@@ -34,6 +39,7 @@ export const modelMigrationOutSchema = z.object({
   translated: migrationTranslatedSchema,
   checksum: z.string(),
   source_engine: engineTypeSchema.nullable().optional(),
+  kind: migrationKindSchema.optional(),
   is_baseline: z.boolean().optional(),
   has_non_portable: z.boolean().optional(),
   reviewed: z.boolean().optional(),
@@ -55,6 +61,7 @@ export const modelMigrationSummarySchema = z.object({
   has_mysql_override: z.boolean(),
   has_postgresql_override: z.boolean(),
   has_rollback: z.boolean(),
+  kind: migrationKindSchema.optional(),
   is_baseline: z.boolean().optional(),
   has_non_portable: z.boolean().optional(),
   reviewed: z.boolean().optional(),
