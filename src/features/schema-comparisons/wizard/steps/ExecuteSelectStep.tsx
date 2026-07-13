@@ -30,7 +30,7 @@ const MODE_OPTIONS: { value: ExecuteMode; label: string; hint: string }[] = [
 
 /** Vista 5a (Opción B) — modo de ejecución + selección granular (solo en `custom`) + vista previa. */
 export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }) {
-  const targetName = wizard.targetDetail.data?.name ?? wizard.targetDb?.name ?? 'el target'
+  const targetName = wizard.targetName ?? 'el target'
 
   return (
     <div className="flex flex-col gap-5">

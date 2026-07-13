@@ -30,10 +30,15 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
   if (!summary.data) return null
   const data = summary.data
 
-  const sourceName = wizard.sourceDb?.name ?? `BD #${data.source_database_id}`
-  const targetName = wizard.targetDetail.data?.name ?? wizard.targetDb?.name ?? `BD #${data.target_database_id}`
-  const branchLoading = wizard.targetDetail.isLoading
-  const hasBlueprint = wizard.targetDetail.data?.model_id != null
+  // Los nombres físicos SIEMPRE vienen poblados (adoptada o cruda); nunca depender de un detalle
+  // en vivo que no existe para una BD sin registrar.
+  const sourceName = data.source_database_name
+  const targetName = data.target_database_name
+  // `actionEntryStep` ya resuelve la rama con la regla completa (target sin inventario → solo B;
+  // target en inventario → según su blueprint). Si sigue `null` aquí es porque el target SÍ está
+  // en inventario y su detalle todavía se está resolviendo.
+  const branchLoading = wizard.actionEntryStep === null
+  const hasBlueprint = wizard.actionEntryStep === 'adoptSelect'
 
   if (data.item_count === 0) {
     return (

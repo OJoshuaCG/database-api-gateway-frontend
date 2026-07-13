@@ -9,7 +9,9 @@ import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
  * autoritativo de `execute-preview`, más el override de cuarentena si aplica.
  */
 export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard }) {
-  const targetName = wizard.targetDetail.data?.name ?? ''
+  // SIEMPRE desde la respuesta de la comparación: `targetDetail` no existe para una BD cruda sin
+  // registrar (no hay nada que consultar), pero `target_database_name` sí está garantizado.
+  const targetName = wizard.targetName ?? ''
   const isQuarantined = wizard.targetDetail.data?.status === 'error'
   const error = wizard.execute.error
 

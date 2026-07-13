@@ -22,7 +22,9 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
           onClick={wizard.createComparison}
           isLoading={wizard.createComparisonState.isPending}
           disabled={
-            wizard.sourceId == null || wizard.targetId == null || wizard.createComparisonState.isPending
+            wizard.sourceSelection == null ||
+            wizard.targetSelection == null ||
+            wizard.createComparisonState.isPending
           }
         >
           {wizard.createComparisonState.isPending ? 'Calculando diferencias…' : 'Calcular diferencias →'}
@@ -83,7 +85,7 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
 
     case 'executeConfirm': {
       const nameMatches =
-        wizard.confirmTargetName.length > 0 && wizard.confirmTargetName === wizard.targetDetail.data?.name
+        wizard.confirmTargetName.length > 0 && wizard.confirmTargetName === wizard.targetName
       const disabled =
         busy ||
         wizard.actionCooldown ||

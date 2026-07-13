@@ -2,17 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toApiError } from '@/lib/api/errors'
 import {
   type AdoptComparisonOut,
+  type EngineType,
   type ExecuteComparisonOut,
   type ExecuteMode,
-  type ManagedDatabaseOut,
   type SchemaChangeType,
   type SchemaObjectType,
   type ServerOut,
 } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
+import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import {
   useManagedDatabase,
   useManagedDatabaseOptions,
+  useManagedDatabasesByServer,
 } from '@/features/managed-databases/hooks/use-managed-databases'
 import {
   useAllSchemaComparisonItems,
@@ -27,13 +29,17 @@ import {
 } from '../hooks/use-schema-comparison-actions'
 import {
   buildAdoptBody,
+  buildCreateComparisonBody,
   buildExecuteBody,
   ENGINES_BY_FAMILY,
   isCrossFlavorPair,
+  managedDatabasesToOptions,
+  reconcileItemsToOptions,
   resolveDatabaseEngine,
   resolveEngineFamily,
   resolveShortcutSelection,
   pendingIndividualReviewIds,
+  type DatabaseSideOption,
   type EngineFamily,
   type SelectionShortcut,
 } from './logic'
@@ -68,7 +74,9 @@ const STAGE_KEY_BY_STEP: Record<WizardStep, StageKey> = {
   result: 'action',
 }
 
-export type DatabaseOption = ManagedDatabaseOut & { resolvedEngine?: ManagedDatabaseOut['engine'] }
+/** Modo del selector (Vista 1): "por motor" (BDs adoptadas, comportamiento original) o "por
+ * servidor" (feature "referencias crudas": incluye BDs vivas del motor sin registrar). */
+export type SelectionMode = 'family' | 'server'
 
 export type WizardResult =
   | { kind: 'adopt'; data: AdoptComparisonOut }
@@ -92,20 +100,25 @@ export interface SchemaComparisonWizard {
   actionEntryStep: 'adoptSelect' | 'executeSelect' | null
 
   // ── Selector (Vista 1) ────────────────────────────────────────────────────────
+  selectionMode: SelectionMode
+  setSelectionMode: (mode: SelectionMode) => void
+  /** Modo "por motor": BDs adoptadas del motor/familia elegida (comportamiento original). */
   family: EngineFamily | null
   setFamily: (family: EngineFamily | null) => void
-  databases: DatabaseOption[]
-  databasesLoading: boolean
-  databasesError: unknown
-  refetchDatabases: () => void
-  sourceId: number | null
-  targetId: number | null
-  setSourceId: (id: number | null) => void
-  setTargetId: (id: number | null) => void
-  sourceDb: DatabaseOption | null
-  targetDb: DatabaseOption | null
-  sourceOptions: DatabaseOption[]
-  targetOptions: DatabaseOption[]
+  /** Modo "por servidor": servidor elegido, cuya lista combina adoptadas + BDs sin registrar. */
+  serverOptions: ReturnType<typeof useServerOptions>
+  pickerServerId: number | null
+  setPickerServerId: (serverId: number | null) => void
+  options: DatabaseSideOption[]
+  optionsLoading: boolean
+  optionsError: unknown
+  refetchOptions: () => void
+  sourceSelection: DatabaseSideOption | null
+  targetSelection: DatabaseSideOption | null
+  setSourceSelection: (option: DatabaseSideOption | null) => void
+  setTargetSelection: (option: DatabaseSideOption | null) => void
+  sourceOptions: DatabaseSideOption[]
+  targetOptions: DatabaseSideOption[]
   crossFlavorWarning: boolean
   createComparison: () => void
   createComparisonState: ReturnType<typeof useCreateSchemaComparison>
@@ -113,10 +126,14 @@ export interface SchemaComparisonWizard {
   // ── Comparación (Vistas 2/3) ─────────────────────────────────────────────────
   comparisonId: number | null
   summary: ReturnType<typeof useSchemaComparison>
-  /** Verdad viva sobre el blueprint del target — determina la rama Opción A/B. */
+  /** Verdad viva sobre el blueprint del target — determina la rama Opción A/B. `undefined` si
+   * el target no está en el inventario (BD cruda): no hay nada que consultar. */
   targetDetail: ReturnType<typeof useManagedDatabase>
-  /** Motor real del target (detalle en vivo, con fallback al resuelto en el selector). */
-  targetEngine: DatabaseOption['resolvedEngine']
+  /** Motor real del target (siempre poblado en la respuesta de la comparación). */
+  targetEngine: EngineType | undefined
+  /** Nombre físico de cada lado — siempre poblado, sea BD adoptada o cruda (§ referencias crudas). */
+  sourceName: string | null
+  targetName: string | null
   itemsPage: number
   itemsSize: number
   itemsObjectType: SchemaObjectType | null
@@ -164,12 +181,33 @@ export interface SchemaComparisonWizard {
   reset: () => void
 }
 
-export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaComparisonWizard {
+/**
+ * Estado del selector agrupado en un único objeto (en vez de 5 `useState` independientes):
+ * así, tanto los resets (`setFamily`/`setPickerServerId`/`setSelectionMode`) como el prellenado
+ * desde `?targetDatabaseId=` actualizan todo lo que corresponde con UNA sola llamada a
+ * `setState`, nunca varias sincrónicas dentro del mismo efecto/callback.
+ */
+interface SelectorState {
+  mode: SelectionMode
+  family: EngineFamily | null
+  pickerServerId: number | null
+  sourceSelection: DatabaseSideOption | null
+  targetSelection: DatabaseSideOption | null
+}
+
+const INITIAL_SELECTOR_STATE: SelectorState = {
+  mode: 'family',
+  family: null,
+  pickerServerId: null,
+  sourceSelection: null,
+  targetSelection: null,
+}
+
+export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): SchemaComparisonWizard {
   const [step, setStep] = useState<WizardStep>('selector')
 
-  const [family, setFamilyState] = useState<EngineFamily | null>(null)
-  const [sourceId, setSourceId] = useState<number | null>(null)
-  const [targetId, setTargetId] = useState<number | null>(options.presetTargetId ?? null)
+  const [selector, setSelector] = useState<SelectorState>(INITIAL_SELECTOR_STATE)
+  const { mode: selectionMode, family, pickerServerId, sourceSelection, targetSelection } = selector
 
   const [comparisonId, setComparisonId] = useState<number | null>(null)
 
@@ -177,6 +215,19 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
   const [itemsSize, setItemsSizeState] = useState(20)
   const [itemsObjectType, setItemsObjectTypeState] = useState<SchemaObjectType | null>(null)
   const [itemsChangeType, setItemsChangeTypeState] = useState<SchemaChangeType | null>(null)
+
+  const setItemsSize = useCallback((size: number) => {
+    setItemsSizeState(size)
+    setItemsPage(1)
+  }, [])
+  const setItemsObjectType = useCallback((value: SchemaObjectType | null) => {
+    setItemsObjectTypeState(value)
+    setItemsPage(1)
+  }, [])
+  const setItemsChangeType = useCallback((value: SchemaChangeType | null) => {
+    setItemsChangeTypeState(value)
+    setItemsPage(1)
+  }, [])
 
   const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set())
   const [reviewedItemIds, setReviewedItemIds] = useState<Set<number>>(new Set())
@@ -192,7 +243,7 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
   const [actionCooldown, setActionCooldown] = useState(false)
   const [result, setResult] = useState<WizardResult | null>(null)
 
-  // ── Servidores (join para resolver el motor) + BDs por motor ────────────────────
+  // ── Servidores (join para resolver el motor) ────────────────────────────────────
   const serverOptions = useServerOptions()
   const serverById = useMemo(() => {
     const map = new Map<number, ServerOut>()
@@ -200,16 +251,16 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
     return map
   }, [serverOptions.data])
 
-  const mysqlDbs = useManagedDatabaseOptions('mysql', family === 'mysql_mariadb')
-  const mariadbDbs = useManagedDatabaseOptions('mariadb', family === 'mysql_mariadb')
-  const postgresDbs = useManagedDatabaseOptions('postgresql', family === 'postgresql')
+  // ── Modo "por motor": BDs adoptadas del motor/familia elegida (comportamiento original) ──────
+  const mysqlDbs = useManagedDatabaseOptions('mysql', selectionMode === 'family' && family === 'mysql_mariadb')
+  const mariadbDbs = useManagedDatabaseOptions('mariadb', selectionMode === 'family' && family === 'mysql_mariadb')
+  const postgresDbs = useManagedDatabaseOptions('postgresql', selectionMode === 'family' && family === 'postgresql')
 
-  const databasesLoading =
+  const familyLoading =
     family === 'postgresql' ? postgresDbs.isLoading : mysqlDbs.isLoading || mariadbDbs.isLoading
-  const databasesIsError =
-    family === 'postgresql' ? postgresDbs.isError : mysqlDbs.isError || mariadbDbs.isError
-  const databasesError = family === 'postgresql' ? postgresDbs.error : (mysqlDbs.error ?? mariadbDbs.error)
-  const refetchDatabases = useCallback(() => {
+  const familyIsError = family === 'postgresql' ? postgresDbs.isError : mysqlDbs.isError || mariadbDbs.isError
+  const familyError = family === 'postgresql' ? postgresDbs.error : (mysqlDbs.error ?? mariadbDbs.error)
+  const refetchFamily = useCallback(() => {
     if (family === 'postgresql') void postgresDbs.refetch()
     else {
       void mysqlDbs.refetch()
@@ -217,59 +268,131 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
     }
   }, [family, postgresDbs, mysqlDbs, mariadbDbs])
 
-  const databases = useMemo<DatabaseOption[]>(() => {
+  const familyModeOptions = useMemo<DatabaseSideOption[]>(() => {
     const raw = family === 'postgresql' ? (postgresDbs.data ?? []) : [...(mysqlDbs.data ?? []), ...(mariadbDbs.data ?? [])]
     const allowedEngines = family ? ENGINES_BY_FAMILY[family] : null
-    return raw
-      .map((db) => ({ ...db, resolvedEngine: resolveDatabaseEngine(db, serverById) }))
-      .filter((db) => {
-        // Defensa en profundidad: si el backend ignorase el filtro `?engine=` (no está firmado en
-        // el contrato documentado hoy), esto evita que una BD de un motor incompatible se cuele
-        // en el selector solo porque la llamada la devolvió igual. Si el motor real aún no se
-        // pudo resolver (join con servidores todavía cargando), no se oculta — se reevalúa en
-        // cuanto `serverById` se pueble.
-        if (!allowedEngines || !db.resolvedEngine) return true
-        return allowedEngines.includes(db.resolvedEngine)
-      })
+    return managedDatabasesToOptions(raw, serverById).filter((option) => {
+      // Defensa en profundidad: si el backend ignorase el filtro `?engine=`, esto evita que una
+      // BD de un motor incompatible se cuele en el selector solo porque la llamada la devolvió
+      // igual. Motor aún sin resolver (servidores cargando) → no se oculta, se reevalúa después.
+      if (!allowedEngines || !option.resolvedEngine) return true
+      return allowedEngines.includes(option.resolvedEngine)
+    })
   }, [family, postgresDbs.data, mysqlDbs.data, mariadbDbs.data, serverById])
 
-  const sourceDb = useMemo(() => databases.find((db) => db.id === sourceId) ?? null, [databases, sourceId])
-  const targetDb = useMemo(() => databases.find((db) => db.id === targetId) ?? null, [databases, targetId])
-  const sourceOptions = useMemo(() => databases.filter((db) => db.id !== targetId), [databases, targetId])
-  const targetOptions = useMemo(() => databases.filter((db) => db.id !== sourceId), [databases, sourceId])
+  // ── Modo "por servidor": combina reconcile (vivas + estado) con el inventario de ese servidor ──
+  const reconcile = useReconcile(pickerServerId ?? 0, selectionMode === 'server' && pickerServerId != null)
+  const serverManagedDbs = useManagedDatabasesByServer(
+    pickerServerId ?? 0,
+    selectionMode === 'server' && pickerServerId != null,
+  )
+  const pickerServer = useMemo(
+    () => (pickerServerId != null ? (serverById.get(pickerServerId) ?? null) : null),
+    [pickerServerId, serverById],
+  )
+  const serverModeOptions = useMemo<DatabaseSideOption[]>(() => {
+    if (!reconcile.data || pickerServerId == null) return []
+    const modelIdByManagedId = new Map<number, number | null>()
+    for (const db of serverManagedDbs.data ?? []) modelIdByManagedId.set(db.id, db.model_id ?? null)
+    return reconcileItemsToOptions(
+      reconcile.data.databases,
+      pickerServerId,
+      pickerServer?.engine,
+      modelIdByManagedId,
+    )
+  }, [reconcile.data, serverManagedDbs.data, pickerServerId, pickerServer])
 
-  const crossFlavorWarning = Boolean(
-    sourceDb?.resolvedEngine &&
-      targetDb?.resolvedEngine &&
-      isCrossFlavorPair(sourceDb.resolvedEngine, targetDb.resolvedEngine),
+  const options = selectionMode === 'server' ? serverModeOptions : familyModeOptions
+  const optionsLoading = selectionMode === 'server' ? reconcile.isLoading : familyLoading
+  const optionsIsError = selectionMode === 'server' ? reconcile.isError : familyIsError
+  const optionsError = selectionMode === 'server' ? reconcile.error : familyError
+  const refetchOptions = useCallback(() => {
+    if (selectionMode === 'server') void reconcile.refetch()
+    else refetchFamily()
+  }, [selectionMode, reconcile, refetchFamily])
+
+  const sourceOptions = useMemo(
+    () => options.filter((option) => option.key !== targetSelection?.key),
+    [options, targetSelection],
+  )
+  const targetOptions = useMemo(
+    () => options.filter((option) => option.key !== sourceSelection?.key),
+    [options, sourceSelection],
   )
 
-  const setFamily = useCallback((next: EngineFamily | null) => {
-    setFamilyState(next)
-    setSourceId(null)
-    setTargetId(null)
+  // En modo "por servidor" ambos lados son SIEMPRE del mismo servidor → mismo motor siempre; el
+  // aviso cross-flavor solo aplica al modo "por motor" (única forma de comparar servidores/
+  // motores distintos, MySQL↔MariaDB).
+  const crossFlavorWarning = useMemo(() => {
+    if (selectionMode === 'server') return false
+    return Boolean(
+      sourceSelection?.resolvedEngine &&
+        targetSelection?.resolvedEngine &&
+        isCrossFlavorPair(sourceSelection.resolvedEngine, targetSelection.resolvedEngine),
+    )
+  }, [selectionMode, sourceSelection, targetSelection])
+
+  const setSourceSelection = useCallback((next: DatabaseSideOption | null) => {
+    setSelector((prev) => ({ ...prev, sourceSelection: next }))
+  }, [])
+  const setTargetSelection = useCallback((next: DatabaseSideOption | null) => {
+    setSelector((prev) => ({ ...prev, targetSelection: next }))
   }, [])
 
-  // ── model_id del target: SIEMPRE se resuelve en vivo (nunca congelado del selector) ─────────
-  const targetDetail = useManagedDatabase(targetId ?? 0, targetId != null)
+  const setSelectionMode = useCallback((mode: SelectionMode) => {
+    setSelector({
+      mode,
+      family: null,
+      pickerServerId: null,
+      sourceSelection: null,
+      targetSelection: null,
+    })
+  }, [])
+  const setFamily = useCallback((next: EngineFamily | null) => {
+    setSelector((prev) => ({ ...prev, family: next, sourceSelection: null, targetSelection: null }))
+  }, [])
+  const setPickerServerId = useCallback((serverId: number | null) => {
+    setSelector((prev) => ({
+      ...prev,
+      pickerServerId: serverId,
+      sourceSelection: null,
+      targetSelection: null,
+    }))
+  }, [])
 
-  // Prellenado: si se llega con ?targetDatabaseId=, deriva la familia del motor real del target.
-  useEffect(() => {
-    if (family == null && targetDetail.data) {
-      const engine = resolveDatabaseEngine(targetDetail.data, serverById)
-      if (engine) setFamilyState(resolveEngineFamily(engine))
+  // ── Prellenado: si se llega con ?targetDatabaseId=, deriva motor + modo del target real ──────
+  // Patrón "ajustar estado durante el render" (no un efecto): se compara contra el id ya
+  // aplicado y, si cambió, se actualiza el estado ahí mismo — React re-renderiza antes de pintar,
+  // sin el ciclo extra de un `useEffect` y sin el `setState` síncrono dentro de un efecto.
+  const presetTargetId = wizardOptions.presetTargetId
+  const presetTargetDetail = useManagedDatabase(presetTargetId ?? 0, presetTargetId != null)
+  const [appliedPresetId, setAppliedPresetId] = useState<number | null>(null)
+  if (
+    presetTargetId != null &&
+    presetTargetId !== appliedPresetId &&
+    presetTargetDetail.data &&
+    sourceSelection == null &&
+    targetSelection == null
+  ) {
+    setAppliedPresetId(presetTargetId)
+    const engine = resolveDatabaseEngine(presetTargetDetail.data, serverById)
+    if (engine) {
+      setSelector({
+        mode: 'family',
+        family: resolveEngineFamily(engine),
+        pickerServerId: null,
+        sourceSelection: null,
+        targetSelection: {
+          key: `managed:${presetTargetDetail.data.id}`,
+          name: presetTargetDetail.data.name,
+          serverId: presetTargetDetail.data.server_id,
+          resolvedEngine: engine,
+          managedId: presetTargetDetail.data.id,
+          modelId: presetTargetDetail.data.model_id ?? null,
+        },
+      })
     }
-  }, [family, targetDetail.data, serverById])
-
-  const actionEntryStep = useMemo<'adoptSelect' | 'executeSelect' | null>(() => {
-    if (!targetDetail.data) return null
-    return targetDetail.data.model_id != null ? 'adoptSelect' : 'executeSelect'
-  }, [targetDetail.data])
-
-  // Motor del target: prioriza el detalle en vivo sobre el resuelto en el selector, para que la
-  // limitación de procedurales MySQL/MariaDB (Opción A) y demás avisos usen siempre el motor real
-  // más reciente. Un único cómputo aquí evita que los pasos lo re-deriven cada uno por su cuenta.
-  const targetEngine = targetDetail.data?.engine ?? targetDb?.resolvedEngine
+  }
 
   // ── Creación de la comparación ────────────────────────────────────────────────
   const createComparisonState = useCreateSchemaComparison()
@@ -294,33 +417,50 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
   // unifican para que no puedan divergir — p. ej. que solo una de las dos limpie la selección de
   // ítems, dejando ids de una comparación vieja colándose en el body de un submit nuevo.
   const runComparisonCreate = useCallback(() => {
-    if (sourceId == null || targetId == null) return
-    createComparisonState.mutate(
-      { source_database_id: sourceId, target_database_id: targetId },
-      {
-        onSuccess: (summary) => {
-          resetComparisonScopedState()
-          setComparisonId(summary.id)
-          setStep('summary')
-        },
+    if (!sourceSelection || !targetSelection) return
+    const body = buildCreateComparisonBody(sourceSelection, targetSelection)
+    createComparisonState.mutate(body, {
+      onSuccess: (summaryOut) => {
+        resetComparisonScopedState()
+        setComparisonId(summaryOut.id)
+        setStep('summary')
       },
-    )
-  }, [sourceId, targetId, createComparisonState, resetComparisonScopedState])
+    })
+  }, [sourceSelection, targetSelection, createComparisonState, resetComparisonScopedState])
 
   const createComparison = runComparisonCreate
   const recalculate = runComparisonCreate
 
   const reset = useCallback(() => {
     setStep('selector')
-    setFamilyState(null)
-    setSourceId(null)
-    setTargetId(null)
+    setSelector(INITIAL_SELECTOR_STATE)
     setComparisonId(null)
     resetComparisonScopedState()
     createComparisonState.reset()
   }, [resetComparisonScopedState, createComparisonState])
 
   const summary = useSchemaComparison(comparisonId ?? 0, comparisonId != null)
+
+  // Identidad autoritativa del target: SIEMPRE se lee de la respuesta de la comparación (nunca
+  // de la selección pre-submit), porque `target_database_id` puede venir `null` (BD cruda sin
+  // registrar) o auto-resuelto a un id distinto del que se mandó (§ referencias crudas).
+  const targetManagedId = summary.data?.target_database_id ?? null
+  const targetDetail = useManagedDatabase(targetManagedId ?? 0, targetManagedId != null)
+
+  const actionEntryStep = useMemo<'adoptSelect' | 'executeSelect' | null>(() => {
+    if (!summary.data) return null
+    // target sin inventario (BD cruda): nunca hay Opción A, no hace falta esperar nada más.
+    if (targetManagedId == null) return 'executeSelect'
+    if (!targetDetail.data) return null
+    return targetDetail.data.model_id != null ? 'adoptSelect' : 'executeSelect'
+  }, [summary.data, targetManagedId, targetDetail.data])
+
+  // Motor/nombres: siempre desde la respuesta de la comparación (únicos campos garantizados para
+  // ambos modos, adoptada o cruda — nunca desde el detalle en vivo, que no existe para una BD sin
+  // registrar).
+  const targetEngine = summary.data?.target_engine
+  const sourceName = summary.data?.source_database_name ?? null
+  const targetName = summary.data?.target_database_name ?? null
 
   // ── Vista 3: ítems paginados de solo lectura ─────────────────────────────────
   const itemsParams = useMemo(
@@ -333,19 +473,6 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
     [itemsPage, itemsSize, itemsObjectType, itemsChangeType],
   )
   const items = useSchemaComparisonItems(comparisonId ?? 0, itemsParams, comparisonId != null)
-
-  const setItemsSize = useCallback((size: number) => {
-    setItemsSizeState(size)
-    setItemsPage(1)
-  }, [])
-  const setItemsObjectType = useCallback((value: SchemaObjectType | null) => {
-    setItemsObjectTypeState(value)
-    setItemsPage(1)
-  }, [])
-  const setItemsChangeType = useCallback((value: SchemaChangeType | null) => {
-    setItemsChangeTypeState(value)
-    setItemsPage(1)
-  }, [])
 
   // ── Selección compartida (Vistas 4a/5a): fetch-all + Set independiente de la paginación ──────
   const selectionActive =
@@ -495,18 +622,21 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
     goToStep,
     actionEntryStep,
 
+    selectionMode,
+    setSelectionMode,
     family,
     setFamily,
-    databases,
-    databasesLoading,
-    databasesError: databasesIsError ? databasesError : null,
-    refetchDatabases,
-    sourceId,
-    targetId,
-    setSourceId,
-    setTargetId,
-    sourceDb,
-    targetDb,
+    serverOptions,
+    pickerServerId,
+    setPickerServerId,
+    options,
+    optionsLoading,
+    optionsError: optionsIsError ? optionsError : null,
+    refetchOptions,
+    sourceSelection,
+    targetSelection,
+    setSourceSelection,
+    setTargetSelection,
     sourceOptions,
     targetOptions,
     crossFlavorWarning,
@@ -517,6 +647,8 @@ export function useSchemaComparisonWizard(options: WizardOptions = {}): SchemaCo
     summary,
     targetDetail,
     targetEngine,
+    sourceName,
+    targetName,
     itemsPage,
     itemsSize,
     itemsObjectType,
