@@ -1,8 +1,10 @@
 import type {
   AdoptComparisonIn,
+  CreateSchemaComparisonIn,
   EngineType,
   ExecuteComparisonIn,
   ManagedDatabaseOut,
+  ReconcileDatabaseItem,
   SchemaChangeType,
   SchemaComparisonCounts,
   SchemaComparisonItemOut,
@@ -83,6 +85,87 @@ export function canCompareEngines(source: EngineType, target: EngineType): boole
 /** `true` si la combinación de motores dispara el aviso de ruido esperable MySQL↔MariaDB. */
 export function isCrossFlavorPair(source: EngineType, target: EngineType): boolean {
   return source !== target && canCompareEngines(source, target)
+}
+
+// ── Selector de BDs (Vista 1) — unifica "adoptada" y "cruda sin registrar" ──────
+/**
+ * Una opción del selector de source/target (feature "referencias crudas"): o bien una BD YA
+ * adoptada (`managedId` no nulo, con su `modelId` para la rama A/B), o una BD "cruda" que solo
+ * existe en vivo en el motor del servidor (`managedId: null`) — comparable igual, pero que
+ * nunca podrá pasar por Opción A (adoptar como blueprint) mientras no se registre.
+ */
+export interface DatabaseSideOption {
+  key: string
+  name: string
+  serverId: number
+  resolvedEngine?: EngineType
+  managedId: number | null
+  modelId: number | null
+}
+
+/** Opciones del modo "por motor": BDs adoptadas del motor/familia elegida (comportamiento previo). */
+export function managedDatabasesToOptions(
+  databases: ManagedDatabaseOut[],
+  serverById: Map<number, ServerOut>,
+): DatabaseSideOption[] {
+  return databases.map((db) => ({
+    key: `managed:${db.id}`,
+    name: db.name,
+    serverId: db.server_id,
+    resolvedEngine: resolveDatabaseEngine(db, serverById),
+    managedId: db.id,
+    modelId: db.model_id ?? null,
+  }))
+}
+
+/**
+ * Opciones del modo "por servidor": TODAS las BDs vivas de un servidor (adoptadas o no),
+ * combinando `GET /servers/{id}/reconcile` (estado managed/unmanaged/orphan) con el `model_id`
+ * de las que sí están en inventario (`modelIdByManagedId`, cruzado por `managed_id`). Las
+ * `orphan` (en inventario pero ya no existen en el motor) se excluyen: no hay nada real que
+ * comparar. Un servidor tiene un único motor, así que `engine` es el mismo para toda la lista.
+ */
+export function reconcileItemsToOptions(
+  items: ReconcileDatabaseItem[],
+  serverId: number,
+  engine: EngineType | undefined,
+  modelIdByManagedId: Map<number, number | null>,
+): DatabaseSideOption[] {
+  return items
+    .filter((item) => item.state !== 'orphan')
+    .map((item) => ({
+      key: item.managed_id != null ? `managed:${item.managed_id}` : `raw:${serverId}:${item.name}`,
+      name: item.name,
+      serverId,
+      resolvedEngine: engine,
+      managedId: item.managed_id ?? null,
+      modelId: item.managed_id != null ? (modelIdByManagedId.get(item.managed_id) ?? null) : null,
+    }))
+}
+
+function buildSideFields(
+  prefix: 'source' | 'target',
+  option: DatabaseSideOption,
+): Partial<CreateSchemaComparisonIn> {
+  if (option.managedId != null) {
+    return prefix === 'source'
+      ? { source_database_id: option.managedId }
+      : { target_database_id: option.managedId }
+  }
+  return prefix === 'source'
+    ? { source_server_id: option.serverId, source_database_name: option.name }
+    : { target_server_id: option.serverId, target_database_name: option.name }
+}
+
+/**
+ * Cuerpo de `POST /schema-comparisons`: cada lado por `database_id` (BD adoptada) o por
+ * referencia cruda `server_id`+`database_name` (BD sin registrar) — nunca ambas ni ninguna.
+ */
+export function buildCreateComparisonBody(
+  source: DatabaseSideOption,
+  target: DatabaseSideOption,
+): CreateSchemaComparisonIn {
+  return { ...buildSideFields('source', source), ...buildSideFields('target', target) }
 }
 
 // ── Objetos procedurales (limitación conocida v1 de Opción A) ───────────────────
