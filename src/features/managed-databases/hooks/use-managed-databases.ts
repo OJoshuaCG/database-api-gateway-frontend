@@ -2,11 +2,19 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
-import type { ManagedDatabaseCreate, ManagedDatabaseUpdate, ReassignOwnerIn } from '@/lib/contracts'
+import type {
+  EngineType,
+  ManagedDatabaseCreate,
+  ManagedDatabaseOut,
+  ManagedDatabaseUpdate,
+  ReassignOwnerIn,
+} from '@/lib/contracts'
+import { PAGINATION } from '@/lib/contracts'
 import type { QueryParams } from '@/lib/api/client'
 import {
   createManagedDatabase,
   deleteManagedDatabase,
+  getManagedDatabase,
   listManagedDatabases,
   reassignOwner,
   updateManagedDatabase,
@@ -17,6 +25,31 @@ export function useManagedDatabases(params: QueryParams) {
     queryKey: queryKeys.managedDatabases.list(params),
     queryFn: ({ signal }) => listManagedDatabases(params, signal),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Detalle en vivo de una BD gestionada (p. ej. para conocer su `model_id` actual). */
+export function useManagedDatabase(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.managedDatabases.detail(id),
+    queryFn: ({ signal }) => getManagedDatabase(id, signal),
+    enabled: enabled && Number.isFinite(id) && id > 0,
+  })
+}
+
+/**
+ * Lista (casi) completa de BDs gestionadas para poblar selects, opcionalmente filtrada por
+ * motor (feature `schema-comparisons`: el selector de origen/target necesita elegir dos BDs del
+ * mismo motor). Mirror de `useServerOptions`/`useDatabaseModelOptions`.
+ */
+export function useManagedDatabaseOptions(engine?: EngineType, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.managedDatabases.list({ options: 'all', engine }),
+    queryFn: ({ signal }) =>
+      listManagedDatabases({ page: 1, size: PAGINATION.maxSize, engine }, signal),
+    enabled,
+    staleTime: 30_000,
+    select: (page): ManagedDatabaseOut[] => page.items,
   })
 }
 
