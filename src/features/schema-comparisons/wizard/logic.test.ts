@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { RiskFlags, SchemaComparisonItemOut, SchemaObjectType, SchemaChangeType } from '@/lib/contracts'
+import type {
+  ReconcileDatabaseItem,
+  RiskFlags,
+  SchemaComparisonItemOut,
+  SchemaObjectType,
+  SchemaChangeType,
+} from '@/lib/contracts'
 import {
   buildAdoptBody,
+  buildCreateComparisonBody,
   buildExecuteBody,
   canCompareEngines,
   compositionRows,
@@ -9,10 +16,13 @@ import {
   hasMysqlProceduralRisk,
   isCrossFlavorPair,
   isSafeAdditive,
+  managedDatabasesToOptions,
   pendingIndividualReviewIds,
+  reconcileItemsToOptions,
   resolveDatabaseEngine,
   resolveEngineFamily,
   resolveShortcutSelection,
+  type DatabaseSideOption,
 } from './logic'
 
 const NO_RISK: RiskFlags = {
@@ -203,5 +213,88 @@ describe('buildAdoptBody / buildExecuteBody', () => {
       confirmToken: 'tok',
     })
     expect(all.selected_item_ids).toBeNull()
+  })
+})
+
+describe('managedDatabasesToOptions', () => {
+  it('mapea cada BD adoptada a una opción managed con su model_id y motor resuelto', () => {
+    const db = { id: 12, name: 'productos_db', server_id: 5, model_id: 9 } as never
+    const serverById = new Map([[5, { id: 5, engine: 'mysql' } as never]])
+    expect(managedDatabasesToOptions([db], serverById)).toEqual([
+      {
+        key: 'managed:12',
+        name: 'productos_db',
+        serverId: 5,
+        resolvedEngine: 'mysql',
+        managedId: 12,
+        modelId: 9,
+      },
+    ])
+  })
+
+  it('modelId queda null cuando la BD no tiene blueprint', () => {
+    const db = { id: 12, name: 'productos_db', server_id: 5, model_id: null } as never
+    expect(managedDatabasesToOptions([db], new Map())[0]!.modelId).toBeNull()
+  })
+})
+
+describe('reconcileItemsToOptions', () => {
+  function reconcileItem(overrides: Partial<ReconcileDatabaseItem>): ReconcileDatabaseItem {
+    return { name: 'db', state: 'unmanaged', managed_id: null, owner_id: null, status: null, ...overrides }
+  }
+
+  it('excluye las orphan y distingue managed (con model_id cruzado) de unmanaged (cruda)', () => {
+    const items = [
+      reconcileItem({ name: 'legacy_db_09', state: 'unmanaged' }),
+      reconcileItem({ name: 'productos_db', state: 'managed', managed_id: 12 }),
+      reconcileItem({ name: 'borrada_del_motor', state: 'orphan', managed_id: 3 }),
+    ]
+    const modelIdByManagedId = new Map([[12, 9]])
+    const options = reconcileItemsToOptions(items, 5, 'mysql', modelIdByManagedId)
+
+    expect(options).toEqual([
+      { key: 'raw:5:legacy_db_09', name: 'legacy_db_09', serverId: 5, resolvedEngine: 'mysql', managedId: null, modelId: null },
+      { key: 'managed:12', name: 'productos_db', serverId: 5, resolvedEngine: 'mysql', managedId: 12, modelId: 9 },
+    ])
+  })
+
+  it('una BD managed sin entrada en modelIdByManagedId queda con modelId null (no explota)', () => {
+    const items = [reconcileItem({ name: 'x', state: 'managed', managed_id: 99 })]
+    const options = reconcileItemsToOptions(items, 5, 'mysql', new Map())
+    expect(options[0]!.modelId).toBeNull()
+  })
+})
+
+describe('buildCreateComparisonBody', () => {
+  const managedOption: DatabaseSideOption = {
+    key: 'managed:7',
+    name: 'productos_ref',
+    serverId: 3,
+    resolvedEngine: 'mysql',
+    managedId: 7,
+    modelId: null,
+  }
+  const rawOption: DatabaseSideOption = {
+    key: 'raw:5:legacy_db_09',
+    name: 'legacy_db_09',
+    serverId: 5,
+    resolvedEngine: 'mysql',
+    managedId: null,
+    modelId: null,
+  }
+
+  it('una BD adoptada se manda por database_id', () => {
+    expect(buildCreateComparisonBody(managedOption, managedOption)).toEqual({
+      source_database_id: 7,
+      target_database_id: 7,
+    })
+  })
+
+  it('una BD cruda se manda por server_id + database_name; los lados son independientes', () => {
+    expect(buildCreateComparisonBody(managedOption, rawOption)).toEqual({
+      source_database_id: 7,
+      target_server_id: 5,
+      target_database_name: 'legacy_db_09',
+    })
   })
 })
