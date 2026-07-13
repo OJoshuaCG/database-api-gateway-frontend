@@ -37,6 +37,17 @@ describe('classifyComparisonError', () => {
     ).toBe('switchToExecute')
   })
 
+  it('reconoce "target sin inventario" (BD cruda, addendum) → switchToExecute', () => {
+    expect(
+      classifyComparisonError(
+        error(
+          422,
+          'El target no está en el inventario del gateway (es una BD cruda no registrada): la adopción como versión de blueprint (Opción A) no está disponible. Usa /execute (Opción B).',
+        ),
+      ),
+    ).toBe('switchToExecute')
+  })
+
   it('reconoce cuarentena → forceQuarantine', () => {
     expect(
       classifyComparisonError(error(409, 'El target está en cuarentena (status=error); reintenta con ?force=true.')),
