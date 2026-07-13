@@ -76,10 +76,25 @@ export const schemaComparisonCountsSchema = z.record(
 export type SchemaComparisonCounts = z.infer<typeof schemaComparisonCountsSchema>
 
 // ── Resumen de la comparación ───────────────────────────────────────────────────
+/**
+ * `source_database_id`/`target_database_id` son `null` cuando ese lado es una BD "cruda" (viva
+ * en el motor pero fuera del inventario del gateway) — o un número si está en el inventario
+ * (mandada por id directo, o auto-resuelta desde una referencia cruda que coincidía con una BD
+ * ya adoptada). `*_server_id`/`*_database_name` identifican la BD FÍSICA de cada lado y SIEMPRE
+ * vienen poblados, sea cual sea la forma en que se mandó ese lado — son los únicos campos
+ * garantizados para etiquetar los lados en toda la UI (encabezados, `confirm_target_name`,
+ * resultado). Estos campos `null` se serializan literalmente (el modelo Pydantic de `data` no
+ * excluye sus propios `None`; solo el envelope `ApiResponse` de nivel superior lo hace) — hay
+ * que comparar el VALOR contra `null`, nunca comprobar si la clave existe.
+ */
 export const schemaComparisonSummaryOutSchema = z.object({
   id: z.number().int(),
-  source_database_id: z.number().int(),
-  target_database_id: z.number().int(),
+  source_server_id: z.number().int(),
+  source_database_name: z.string(),
+  target_server_id: z.number().int(),
+  target_database_name: z.string(),
+  source_database_id: z.number().int().nullable(),
+  target_database_id: z.number().int().nullable(),
   source_engine: engineTypeSchema,
   target_engine: engineTypeSchema,
   cross_flavor_warning: z.boolean(),
@@ -93,10 +108,21 @@ export const schemaComparisonSummaryOutSchema = z.object({
 })
 export type SchemaComparisonSummaryOut = z.infer<typeof schemaComparisonSummaryOutSchema>
 
-/** Body de `POST /schema-comparisons`. Ambos ids son siempre explícitos (nunca inferidos). */
+/**
+ * Body de `POST /schema-comparisons`. Cada lado (`source`/`target`) se especifica con
+ * EXACTAMENTE una de dos representaciones: `{lado}_database_id` (BD del inventario) o
+ * `{lado}_server_id` + `{lado}_database_name` (referencia cruda: cualquier BD viva del motor
+ * de ese servidor, esté o no adoptada — el backend la auto-resuelve si coincide con una
+ * adoptada). Nunca ambas ni ninguna para un mismo lado (`422` si se viola). La dirección
+ * (`source` = referencia/estado deseado, `target` = la que se modifica) sigue siendo explícita.
+ */
 export const createSchemaComparisonInSchema = z.object({
-  source_database_id: z.number().int(),
-  target_database_id: z.number().int(),
+  source_database_id: z.number().int().optional(),
+  source_server_id: z.number().int().optional(),
+  source_database_name: z.string().optional(),
+  target_database_id: z.number().int().optional(),
+  target_server_id: z.number().int().optional(),
+  target_database_name: z.string().optional(),
 })
 export type CreateSchemaComparisonIn = z.infer<typeof createSchemaComparisonInSchema>
 
