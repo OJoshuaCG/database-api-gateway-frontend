@@ -53,6 +53,23 @@ export function useManagedDatabaseOptions(engine?: EngineType, enabled = true) {
   })
 }
 
+/**
+ * BDs adoptadas de UN servidor (feature `schema-comparisons`, selector "por servidor"): se
+ * cruza por `id` contra `GET /servers/{id}/reconcile` para resolver el `model_id` de las BDs
+ * en vivo que sí están en el inventario. `staleTime` corto: el estado de adopción puede cambiar
+ * por fuera mientras el selector está abierto.
+ */
+export function useManagedDatabasesByServer(serverId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.managedDatabases.list({ options: 'by-server', server_id: serverId }),
+    queryFn: ({ signal }) =>
+      listManagedDatabases({ page: 1, size: PAGINATION.maxSize, server_id: serverId }, signal),
+    enabled: enabled && Number.isFinite(serverId) && serverId > 0,
+    staleTime: 10_000,
+    select: (page): ManagedDatabaseOut[] => page.items,
+  })
+}
+
 export function useCreateManagedDatabase() {
   const queryClient = useQueryClient()
   const toast = useToast()
