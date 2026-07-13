@@ -24,6 +24,9 @@ const MESSAGE_PATTERNS: [RegExp, ComparisonErrorAction][] = [
   [/expiró/i, 'recalculate'],
   [/tiene un blueprint asignado/i, 'switchToAdopt'],
   [/no tiene blueprint asignado/i, 'switchToExecute'],
+  // Addendum "referencias crudas": target sin registrar en el inventario (adopt 422 distinto
+  // del "sin blueprint" de arriba) — misma acción de recuperación (usar Opción B).
+  [/no está en el inventario del gateway/i, 'switchToExecute'],
   [/cuarentena/i, 'forceQuarantine'],
   [/nombre de confirmación no coincide/i, 'fixConfirmName'],
   [/token de confirmación no coincide/i, 'recomputeToken'],
