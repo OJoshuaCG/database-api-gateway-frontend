@@ -45,6 +45,10 @@ describe('useSchemaComparison', () => {
         HttpResponse.json({
           data: {
             id: 42,
+            source_server_id: 3,
+            source_database_name: 'productos_ref',
+            target_server_id: 5,
+            target_database_name: 'productos_db',
             source_database_id: 7,
             target_database_id: 12,
             source_engine: 'mysql',
