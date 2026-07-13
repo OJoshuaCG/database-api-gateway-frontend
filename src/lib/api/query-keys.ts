@@ -62,4 +62,13 @@ export const queryKeys = {
     list: (params: QueryParams) => ['permission-profiles', 'list', params] as const,
     detail: (id: number) => ['permission-profiles', 'detail', id] as const,
   },
+  schemaComparisons: {
+    all: ['schema-comparisons'] as const,
+    detail: (id: number) => ['schema-comparisons', 'detail', id] as const,
+    items: (id: number, params: QueryParams) => ['schema-comparisons', id, 'items', params] as const,
+    itemsAll: (id: number, filters: QueryParams) =>
+      ['schema-comparisons', id, 'items', 'all', filters] as const,
+    preview: (id: number, mode: string, selectedItemIds: number[]) =>
+      ['schema-comparisons', id, 'execute-preview', mode, selectedItemIds] as const,
+  },
 } as const

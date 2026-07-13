@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CHARSET_PATTERN, IDENTIFIER_PATTERN, provisionStatusSchema } from './common'
+import { CHARSET_PATTERN, engineTypeSchema, IDENTIFIER_PATTERN, provisionStatusSchema } from './common'
 
 /**
  * Origen de una BD gestionada (Plan 09): `provisioned` la creó el gateway, `adopted` ya existía
@@ -8,7 +8,11 @@ import { CHARSET_PATTERN, IDENTIFIER_PATTERN, provisionStatusSchema } from './co
 export const databaseOriginSchema = z.enum(['provisioned', 'adopted'])
 export type DatabaseOrigin = z.infer<typeof databaseOriginSchema>
 
-/** `ManagedDatabaseOut` (§9). Plan 09 añade `origin`. */
+/**
+ * `ManagedDatabaseOut` (§9). Plan 09 añade `origin`. `engine` (feature `schema-comparisons`) es
+ * opcional: si el backend no lo incluye, se resuelve por join con `ServerOut.engine` vía
+ * `server_id` (mismo patrón que `ManagedDatabasesPage` ya usa para resolver el nombre del server).
+ */
 export const managedDatabaseOutSchema = z.object({
   id: z.number().int(),
   name: z.string(),
@@ -20,6 +24,7 @@ export const managedDatabaseOutSchema = z.object({
   collation: z.string().nullable().optional(),
   status: provisionStatusSchema,
   origin: databaseOriginSchema.optional(),
+  engine: engineTypeSchema.optional(),
   notes: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
