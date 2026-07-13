@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -46,6 +47,7 @@ const STATUS_OPTIONS: StatusOption[] = provisionStatusSchema.options.map((value)
 }))
 
 export function ManagedDatabasesPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [serverFilter, setServerFilter] = useState<ServerOut | null>(null)
@@ -134,6 +136,13 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
+            >
+              Comparar esquema
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
               Migraciones
             </Button>
@@ -168,14 +177,19 @@ export function ManagedDatabasesPage() {
         title="Bases de datos"
         description="Bases de datos gestionadas en los servidores destino."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(undefined)
-              setFormOpen(true)
-            }}
-          >
-            Crear base de datos
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => navigate('/schema-comparisons')}>
+              Comparar esquemas
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(undefined)
+                setFormOpen(true)
+              }}
+            >
+              Crear base de datos
+            </Button>
+          </>
         }
       />
 

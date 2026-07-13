@@ -10,6 +10,7 @@ import {
   SnapshotWizardPage,
 } from '@/features/database-models'
 import { ManagedDatabasesPage } from '@/features/managed-databases'
+import { SchemaComparisonWizardPage } from '@/features/schema-comparisons'
 import { PrivilegesPage } from '@/features/privileges'
 import { PermissionProfilesPage } from '@/features/permission-profiles'
 import { AdminPage } from '@/features/admin'
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
+          { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },
           { path: 'admin', element: <AdminPage /> },

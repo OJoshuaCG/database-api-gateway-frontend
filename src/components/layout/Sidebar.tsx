@@ -62,6 +62,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: '/schema-comparisons',
+    label: 'Comparar esquemas',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <rect x="2" y="5" width="8" height="14" rx="1.5" strokeWidth="1.6" />
+        <rect x="14" y="5" width="8" height="14" rx="1.5" strokeWidth="1.6" />
+        <path d="M10 12h4M12 10l2 2-2 2" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
     to: '/privileges',
     label: 'Privilegios',
     icon: (
