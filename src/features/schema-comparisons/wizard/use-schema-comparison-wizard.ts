@@ -31,6 +31,7 @@ import {
   buildAdoptBody,
   buildCreateComparisonBody,
   buildExecuteBody,
+  canCompareEngines,
   ENGINES_BY_FAMILY,
   isCrossFlavorPair,
   managedDatabasesToOptions,
@@ -105,20 +106,33 @@ export interface SchemaComparisonWizard {
   /** Modo "por motor": BDs adoptadas del motor/familia elegida (comportamiento original). */
   family: EngineFamily | null
   setFamily: (family: EngineFamily | null) => void
-  /** Modo "por servidor": servidor elegido, cuya lista combina adoptadas + BDs sin registrar. */
+  /**
+   * Modo "por servidor": source y target eligen su servidor de forma 100% INDEPENDIENTE — el
+   * backend no tiene ningún concepto de "servidor de la comparación" compartido, cada lado trae
+   * su propio `server_id`. Pueden coincidir (caso común) o no (p. ej. comparar staging vs
+   * producción, servidores distintos por definición).
+   */
   serverOptions: ReturnType<typeof useServerOptions>
-  pickerServerId: number | null
-  setPickerServerId: (serverId: number | null) => void
-  options: DatabaseSideOption[]
-  optionsLoading: boolean
-  optionsError: unknown
-  refetchOptions: () => void
+  sourcePickerServerId: number | null
+  targetPickerServerId: number | null
+  setSourcePickerServerId: (serverId: number | null) => void
+  setTargetPickerServerId: (serverId: number | null) => void
+  /** Servidores ofrecidos a cada lado, filtrados por conveniencia a un motor compatible con el
+   * servidor YA elegido en el otro lado (si lo hay) — el backend revalida igual con `422`. */
+  sourceServerChoices: ServerOut[]
+  targetServerChoices: ServerOut[]
   sourceSelection: DatabaseSideOption | null
   targetSelection: DatabaseSideOption | null
   setSourceSelection: (option: DatabaseSideOption | null) => void
   setTargetSelection: (option: DatabaseSideOption | null) => void
   sourceOptions: DatabaseSideOption[]
   targetOptions: DatabaseSideOption[]
+  sourceOptionsLoading: boolean
+  targetOptionsLoading: boolean
+  sourceOptionsError: unknown
+  targetOptionsError: unknown
+  refetchSourceOptions: () => void
+  refetchTargetOptions: () => void
   crossFlavorWarning: boolean
   createComparison: () => void
   createComparisonState: ReturnType<typeof useCreateSchemaComparison>
@@ -183,14 +197,17 @@ export interface SchemaComparisonWizard {
 
 /**
  * Estado del selector agrupado en un único objeto (en vez de 5 `useState` independientes):
- * así, tanto los resets (`setFamily`/`setPickerServerId`/`setSelectionMode`) como el prellenado
+ * así, tanto los resets (`setFamily`/`setSourcePickerServerId`/`setTargetPickerServerId`/
+ * `setSelectionMode`) como el prellenado
  * desde `?targetDatabaseId=` actualizan todo lo que corresponde con UNA sola llamada a
  * `setState`, nunca varias sincrónicas dentro del mismo efecto/callback.
  */
 interface SelectorState {
   mode: SelectionMode
   family: EngineFamily | null
-  pickerServerId: number | null
+  /** Servidor elegido por CADA lado en modo "por servidor" — 100% independientes entre sí. */
+  sourcePickerServerId: number | null
+  targetPickerServerId: number | null
   sourceSelection: DatabaseSideOption | null
   targetSelection: DatabaseSideOption | null
 }
@@ -198,7 +215,8 @@ interface SelectorState {
 const INITIAL_SELECTOR_STATE: SelectorState = {
   mode: 'family',
   family: null,
-  pickerServerId: null,
+  sourcePickerServerId: null,
+  targetPickerServerId: null,
   sourceSelection: null,
   targetSelection: null,
 }
@@ -207,7 +225,14 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   const [step, setStep] = useState<WizardStep>('selector')
 
   const [selector, setSelector] = useState<SelectorState>(INITIAL_SELECTOR_STATE)
-  const { mode: selectionMode, family, pickerServerId, sourceSelection, targetSelection } = selector
+  const {
+    mode: selectionMode,
+    family,
+    sourcePickerServerId,
+    targetPickerServerId,
+    sourceSelection,
+    targetSelection,
+  } = selector
 
   const [comparisonId, setComparisonId] = useState<number | null>(null)
 
@@ -280,57 +305,108 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     })
   }, [family, postgresDbs.data, mysqlDbs.data, mariadbDbs.data, serverById])
 
-  // ── Modo "por servidor": combina reconcile (vivas + estado) con el inventario de ese servidor ──
-  const reconcile = useReconcile(pickerServerId ?? 0, selectionMode === 'server' && pickerServerId != null)
-  const serverManagedDbs = useManagedDatabasesByServer(
-    pickerServerId ?? 0,
-    selectionMode === 'server' && pickerServerId != null,
+  // ── Modo "por servidor": cada LADO elige su propio servidor, 100% independiente del otro ──────
+  // (el backend no tiene ningún campo "servidor de la comparación" compartido: cada lado manda
+  // su propio server_id/database_name o database_id). Se combina reconcile (vivas + estado) con
+  // el inventario de ESE servidor, una vez por lado.
+  const sourceReconcile = useReconcile(
+    sourcePickerServerId ?? 0,
+    selectionMode === 'server' && sourcePickerServerId != null,
   )
-  const pickerServer = useMemo(
-    () => (pickerServerId != null ? (serverById.get(pickerServerId) ?? null) : null),
-    [pickerServerId, serverById],
+  const sourceServerManagedDbs = useManagedDatabasesByServer(
+    sourcePickerServerId ?? 0,
+    selectionMode === 'server' && sourcePickerServerId != null,
   )
-  const serverModeOptions = useMemo<DatabaseSideOption[]>(() => {
-    if (!reconcile.data || pickerServerId == null) return []
+  const targetReconcile = useReconcile(
+    targetPickerServerId ?? 0,
+    selectionMode === 'server' && targetPickerServerId != null,
+  )
+  const targetServerManagedDbs = useManagedDatabasesByServer(
+    targetPickerServerId ?? 0,
+    selectionMode === 'server' && targetPickerServerId != null,
+  )
+
+  const sourcePickerServer = useMemo(
+    () => (sourcePickerServerId != null ? (serverById.get(sourcePickerServerId) ?? null) : null),
+    [sourcePickerServerId, serverById],
+  )
+  const targetPickerServer = useMemo(
+    () => (targetPickerServerId != null ? (serverById.get(targetPickerServerId) ?? null) : null),
+    [targetPickerServerId, serverById],
+  )
+
+  // Conveniencia de UX: una vez elegido el servidor de UN lado, el combobox de servidor del OTRO
+  // lado se acota a motores compatibles (mismo motor, o MySQL↔MariaDB) — nunca obligatorio, el
+  // backend revalida igual con 422 si se arma una combinación incompatible.
+  const allServers = serverOptions.data ?? []
+  const sourceServerChoices = useMemo(
+    () => (targetPickerServer ? allServers.filter((s) => canCompareEngines(s.engine, targetPickerServer.engine)) : allServers),
+    [allServers, targetPickerServer],
+  )
+  const targetServerChoices = useMemo(
+    () => (sourcePickerServer ? allServers.filter((s) => canCompareEngines(s.engine, sourcePickerServer.engine)) : allServers),
+    [allServers, sourcePickerServer],
+  )
+
+  const sourceServerModeOptions = useMemo<DatabaseSideOption[]>(() => {
+    if (!sourceReconcile.data || sourcePickerServerId == null) return []
     const modelIdByManagedId = new Map<number, number | null>()
-    for (const db of serverManagedDbs.data ?? []) modelIdByManagedId.set(db.id, db.model_id ?? null)
+    for (const db of sourceServerManagedDbs.data ?? []) modelIdByManagedId.set(db.id, db.model_id ?? null)
     return reconcileItemsToOptions(
-      reconcile.data.databases,
-      pickerServerId,
-      pickerServer?.engine,
+      sourceReconcile.data.databases,
+      sourcePickerServerId,
+      sourcePickerServer?.engine,
       modelIdByManagedId,
     )
-  }, [reconcile.data, serverManagedDbs.data, pickerServerId, pickerServer])
+  }, [sourceReconcile.data, sourceServerManagedDbs.data, sourcePickerServerId, sourcePickerServer])
 
-  const options = selectionMode === 'server' ? serverModeOptions : familyModeOptions
-  const optionsLoading = selectionMode === 'server' ? reconcile.isLoading : familyLoading
-  const optionsIsError = selectionMode === 'server' ? reconcile.isError : familyIsError
-  const optionsError = selectionMode === 'server' ? reconcile.error : familyError
-  const refetchOptions = useCallback(() => {
-    if (selectionMode === 'server') void reconcile.refetch()
-    else refetchFamily()
-  }, [selectionMode, reconcile, refetchFamily])
-
-  const sourceOptions = useMemo(
-    () => options.filter((option) => option.key !== targetSelection?.key),
-    [options, targetSelection],
-  )
-  const targetOptions = useMemo(
-    () => options.filter((option) => option.key !== sourceSelection?.key),
-    [options, sourceSelection],
-  )
-
-  // En modo "por servidor" ambos lados son SIEMPRE del mismo servidor → mismo motor siempre; el
-  // aviso cross-flavor solo aplica al modo "por motor" (única forma de comparar servidores/
-  // motores distintos, MySQL↔MariaDB).
-  const crossFlavorWarning = useMemo(() => {
-    if (selectionMode === 'server') return false
-    return Boolean(
-      sourceSelection?.resolvedEngine &&
-        targetSelection?.resolvedEngine &&
-        isCrossFlavorPair(sourceSelection.resolvedEngine, targetSelection.resolvedEngine),
+  const targetServerModeOptions = useMemo<DatabaseSideOption[]>(() => {
+    if (!targetReconcile.data || targetPickerServerId == null) return []
+    const modelIdByManagedId = new Map<number, number | null>()
+    for (const db of targetServerManagedDbs.data ?? []) modelIdByManagedId.set(db.id, db.model_id ?? null)
+    return reconcileItemsToOptions(
+      targetReconcile.data.databases,
+      targetPickerServerId,
+      targetPickerServer?.engine,
+      modelIdByManagedId,
     )
-  }, [selectionMode, sourceSelection, targetSelection])
+  }, [targetReconcile.data, targetServerManagedDbs.data, targetPickerServerId, targetPickerServer])
+
+  const sourceOptions = useMemo(() => {
+    const base = selectionMode === 'server' ? sourceServerModeOptions : familyModeOptions
+    return base.filter((option) => option.key !== targetSelection?.key)
+  }, [selectionMode, sourceServerModeOptions, familyModeOptions, targetSelection])
+  const targetOptions = useMemo(() => {
+    const base = selectionMode === 'server' ? targetServerModeOptions : familyModeOptions
+    return base.filter((option) => option.key !== sourceSelection?.key)
+  }, [selectionMode, targetServerModeOptions, familyModeOptions, sourceSelection])
+
+  const sourceOptionsLoading = selectionMode === 'server' ? sourceReconcile.isLoading : familyLoading
+  const targetOptionsLoading = selectionMode === 'server' ? targetReconcile.isLoading : familyLoading
+  const sourceOptionsError =
+    selectionMode === 'server' ? (sourceReconcile.isError ? sourceReconcile.error : null) : (familyIsError ? familyError : null)
+  const targetOptionsError =
+    selectionMode === 'server' ? (targetReconcile.isError ? targetReconcile.error : null) : (familyIsError ? familyError : null)
+  const refetchSourceOptions = useCallback(() => {
+    if (selectionMode === 'server') void sourceReconcile.refetch()
+    else refetchFamily()
+  }, [selectionMode, sourceReconcile, refetchFamily])
+  const refetchTargetOptions = useCallback(() => {
+    if (selectionMode === 'server') void targetReconcile.refetch()
+    else refetchFamily()
+  }, [selectionMode, targetReconcile, refetchFamily])
+
+  // Cross-flavor ya no depende del modo: con servidor independiente por lado, comparar motores
+  // distintos (MySQL↔MariaDB) es igual de posible en modo "por servidor" que en "por motor".
+  const crossFlavorWarning = useMemo(
+    () =>
+      Boolean(
+        sourceSelection?.resolvedEngine &&
+          targetSelection?.resolvedEngine &&
+          isCrossFlavorPair(sourceSelection.resolvedEngine, targetSelection.resolvedEngine),
+      ),
+    [sourceSelection, targetSelection],
+  )
 
   const setSourceSelection = useCallback((next: DatabaseSideOption | null) => {
     setSelector((prev) => ({ ...prev, sourceSelection: next }))
@@ -343,7 +419,8 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     setSelector({
       mode,
       family: null,
-      pickerServerId: null,
+      sourcePickerServerId: null,
+      targetPickerServerId: null,
       sourceSelection: null,
       targetSelection: null,
     })
@@ -351,13 +428,13 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   const setFamily = useCallback((next: EngineFamily | null) => {
     setSelector((prev) => ({ ...prev, family: next, sourceSelection: null, targetSelection: null }))
   }, [])
-  const setPickerServerId = useCallback((serverId: number | null) => {
-    setSelector((prev) => ({
-      ...prev,
-      pickerServerId: serverId,
-      sourceSelection: null,
-      targetSelection: null,
-    }))
+  // Elegir el servidor de UN lado solo resetea LA SELECCIÓN DE ESE LADO — el otro lado es
+  // independiente y no debe perder lo que ya tenía elegido.
+  const setSourcePickerServerId = useCallback((serverId: number | null) => {
+    setSelector((prev) => ({ ...prev, sourcePickerServerId: serverId, sourceSelection: null }))
+  }, [])
+  const setTargetPickerServerId = useCallback((serverId: number | null) => {
+    setSelector((prev) => ({ ...prev, targetPickerServerId: serverId, targetSelection: null }))
   }, [])
 
   // ── Prellenado: si se llega con ?targetDatabaseId=, deriva motor + modo del target real ──────
@@ -380,7 +457,8 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
       setSelector({
         mode: 'family',
         family: resolveEngineFamily(engine),
-        pickerServerId: null,
+        sourcePickerServerId: null,
+        targetPickerServerId: null,
         sourceSelection: null,
         targetSelection: {
           key: `managed:${presetTargetDetail.data.id}`,
@@ -627,18 +705,24 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     family,
     setFamily,
     serverOptions,
-    pickerServerId,
-    setPickerServerId,
-    options,
-    optionsLoading,
-    optionsError: optionsIsError ? optionsError : null,
-    refetchOptions,
+    sourcePickerServerId,
+    targetPickerServerId,
+    setSourcePickerServerId,
+    setTargetPickerServerId,
+    sourceServerChoices,
+    targetServerChoices,
     sourceSelection,
     targetSelection,
     setSourceSelection,
     setTargetSelection,
     sourceOptions,
     targetOptions,
+    sourceOptionsLoading,
+    targetOptionsLoading,
+    sourceOptionsError,
+    targetOptionsError,
+    refetchSourceOptions,
+    refetchTargetOptions,
     crossFlavorWarning,
     createComparison,
     createComparisonState,

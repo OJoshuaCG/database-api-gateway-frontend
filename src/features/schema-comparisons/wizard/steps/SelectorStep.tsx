@@ -13,13 +13,56 @@ const SELECTION_MODES: { value: SelectionMode; label: string; hint: string }[] =
   {
     value: 'server',
     label: 'Por servidor (incluye BDs sin registrar)',
-    hint: 'Elige un servidor y compara cualquiera de sus BDs, esté o no adoptada.',
+    hint: 'Cada lado elige su propio servidor y cualquiera de sus BDs, esté o no adoptada.',
   },
 ]
 
 const FAMILIES: EngineFamily[] = ['mysql_mariadb', 'postgresql']
 
 function DatabasePicker({
+  options,
+  value,
+  onChange,
+  isLoading,
+}: {
+  options: DatabaseSideOption[]
+  value: DatabaseSideOption | null
+  onChange: (option: DatabaseSideOption | null) => void
+  isLoading: boolean
+}) {
+  return (
+    <Combobox<DatabaseSideOption>
+      items={options}
+      value={value}
+      onChange={onChange}
+      itemToString={(option) => option.name}
+      itemToKey={(option) => option.key}
+      renderItem={(option) => (
+        <span className="flex items-center justify-between gap-2">
+          <span className="truncate">{option.name}</span>
+          <span className="flex shrink-0 items-center gap-1">
+            {option.resolvedEngine && <Badge tone="neutral">{option.resolvedEngine}</Badge>}
+            {option.managedId == null ? (
+              <Badge tone="warning">sin registrar</Badge>
+            ) : option.modelId != null ? (
+              <Badge tone="primary">🔒 blueprint</Badge>
+            ) : (
+              <Badge tone="neutral">adoptada</Badge>
+            )}
+          </span>
+        </span>
+      )}
+      label="Base de datos"
+      placeholder="Selecciona una base de datos"
+      isLoading={isLoading}
+      clearable
+      required
+    />
+  )
+}
+
+/** Vista 1, modo "por motor" — panel simple: la BD sale de la lista ya filtrada por familia. */
+function FamilyModePanel({
   label,
   options,
   value,
@@ -35,49 +78,96 @@ function DatabasePicker({
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <Combobox<DatabaseSideOption>
-        items={options}
-        value={value}
-        onChange={onChange}
-        itemToString={(option) => option.name}
-        itemToKey={(option) => option.key}
-        renderItem={(option) => (
+      <DatabasePicker options={options} value={value} onChange={onChange} isLoading={isLoading} />
+    </div>
+  )
+}
+
+/**
+ * Vista 1, modo "por servidor" — panel compuesto: PRIMERO su propio servidor, LUEGO la BD de ese
+ * servidor (adoptada o cruda). Cada lado (source/target) monta su propia instancia: no comparten
+ * servidor entre sí, cada uno es 100% independiente (así lo exige el backend).
+ */
+function ServerScopedPanel({
+  label,
+  servers,
+  serversLoading,
+  pickerServerId,
+  onServerChange,
+  databaseOptions,
+  databaseValue,
+  onDatabaseChange,
+  databaseLoading,
+  databaseError,
+  onRetryDatabases,
+}: {
+  label: string
+  servers: ServerOut[]
+  serversLoading: boolean
+  pickerServerId: number | null
+  onServerChange: (serverId: number | null) => void
+  databaseOptions: DatabaseSideOption[]
+  databaseValue: DatabaseSideOption | null
+  onDatabaseChange: (option: DatabaseSideOption | null) => void
+  databaseLoading: boolean
+  databaseError: unknown
+  onRetryDatabases: () => void
+}) {
+  const selectedServer = servers.find((server) => server.id === pickerServerId) ?? null
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <Combobox<ServerOut>
+        items={servers}
+        value={selectedServer}
+        onChange={(server) => onServerChange(server?.id ?? null)}
+        itemToString={(server) => server.name}
+        itemToKey={(server) => server.id}
+        renderItem={(server) => (
           <span className="flex items-center justify-between gap-2">
-            <span className="truncate">{option.name}</span>
-            <span className="flex shrink-0 items-center gap-1">
-              {option.resolvedEngine && <Badge tone="neutral">{option.resolvedEngine}</Badge>}
-              {option.managedId == null ? (
-                <Badge tone="warning">sin registrar</Badge>
-              ) : option.modelId != null ? (
-                <Badge tone="primary">🔒 blueprint</Badge>
-              ) : (
-                <Badge tone="neutral">adoptada</Badge>
-              )}
-            </span>
+            <span className="truncate">{server.name}</span>
+            <Badge tone="neutral">{server.engine}</Badge>
           </span>
         )}
-        placeholder="Selecciona una base de datos"
-        isLoading={isLoading}
+        label="Servidor"
+        placeholder="Selecciona un servidor"
+        isLoading={serversLoading}
         clearable
         required
       />
+      {pickerServerId != null &&
+        (databaseError ? (
+          <ErrorState
+            error={databaseError}
+            onRetry={onRetryDatabases}
+            title="No se pudieron cargar las bases de datos"
+          />
+        ) : !databaseLoading && databaseOptions.length === 0 ? (
+          <EmptyState
+            title="Sin bases de datos"
+            description="Este servidor no tiene bases de datos accesibles."
+          />
+        ) : (
+          <DatabasePicker
+            options={databaseOptions}
+            value={databaseValue}
+            onChange={onDatabaseChange}
+            isLoading={databaseLoading}
+          />
+        ))}
     </div>
   )
 }
 
 /**
  * Vista 1 — dos modos de selección: "por motor" (BDs adoptadas, comportamiento original) y "por
- * servidor" (feature "referencias crudas": incluye BDs vivas del motor sin registrar en el
- * inventario). Ambos alimentan el mismo `sourceSelection`/`targetSelection` del wizard.
+ * servidor" (feature "referencias crudas": cada lado elige su PROPIO servidor de forma 100%
+ * independiente del otro — el backend no tiene ningún concepto de "servidor de la comparación"
+ * compartido; comparar servidores distintos, p. ej. staging vs producción, es el caso de uso
+ * principal). Ambos modos alimentan el mismo `sourceSelection`/`targetSelection` del wizard.
  */
 export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
-  const showPickers =
-    wizard.selectionMode === 'family' ? Boolean(wizard.family) : wizard.pickerServerId != null
-  const selectedServer =
-    wizard.pickerServerId != null
-      ? (wizard.serverOptions.data?.find((server) => server.id === wizard.pickerServerId) ?? null)
-      : null
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -144,63 +234,68 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
               En PostgreSQL la comparación cubre únicamente el schema <code className="font-mono">public</code>.
             </p>
           )}
+
+          {wizard.family &&
+            (wizard.sourceOptionsError ? (
+              <ErrorState
+                error={wizard.sourceOptionsError}
+                onRetry={wizard.refetchSourceOptions}
+                title="No se pudieron cargar las bases de datos"
+              />
+            ) : !wizard.sourceOptionsLoading && wizard.sourceOptions.length === 0 && wizard.targetOptions.length === 0 ? (
+              <EmptyState
+                title="Sin bases de datos"
+                description="No hay bases de datos gestionadas de este motor en el inventario."
+              />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FamilyModePanel
+                  label="SOURCE — referencia / estado deseado"
+                  options={wizard.sourceOptions}
+                  value={wizard.sourceSelection}
+                  onChange={wizard.setSourceSelection}
+                  isLoading={wizard.sourceOptionsLoading}
+                />
+                <FamilyModePanel
+                  label="TARGET — la BD que se modificaría"
+                  options={wizard.targetOptions}
+                  value={wizard.targetSelection}
+                  onChange={wizard.setTargetSelection}
+                  isLoading={wizard.targetOptionsLoading}
+                />
+              </div>
+            ))}
         </>
       ) : (
-        <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Servidor</p>
-          <Combobox<ServerOut>
-            items={wizard.serverOptions.data ?? []}
-            value={selectedServer}
-            onChange={(server) => wizard.setPickerServerId(server?.id ?? null)}
-            itemToString={(server) => server.name}
-            itemToKey={(server) => server.id}
-            renderItem={(server) => (
-              <span className="flex items-center justify-between gap-2">
-                <span className="truncate">{server.name}</span>
-                <Badge tone="neutral">{server.engine}</Badge>
-              </span>
-            )}
-            placeholder="Selecciona un servidor"
-            isLoading={wizard.serverOptions.isLoading}
-            clearable
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ServerScopedPanel
+            label="SOURCE — referencia / estado deseado"
+            servers={wizard.sourceServerChoices}
+            serversLoading={wizard.serverOptions.isLoading}
+            pickerServerId={wizard.sourcePickerServerId}
+            onServerChange={wizard.setSourcePickerServerId}
+            databaseOptions={wizard.sourceOptions}
+            databaseValue={wizard.sourceSelection}
+            onDatabaseChange={wizard.setSourceSelection}
+            databaseLoading={wizard.sourceOptionsLoading}
+            databaseError={wizard.sourceOptionsError}
+            onRetryDatabases={wizard.refetchSourceOptions}
+          />
+          <ServerScopedPanel
+            label="TARGET — la BD que se modificaría"
+            servers={wizard.targetServerChoices}
+            serversLoading={wizard.serverOptions.isLoading}
+            pickerServerId={wizard.targetPickerServerId}
+            onServerChange={wizard.setTargetPickerServerId}
+            databaseOptions={wizard.targetOptions}
+            databaseValue={wizard.targetSelection}
+            onDatabaseChange={wizard.setTargetSelection}
+            databaseLoading={wizard.targetOptionsLoading}
+            databaseError={wizard.targetOptionsError}
+            onRetryDatabases={wizard.refetchTargetOptions}
           />
         </div>
       )}
-
-      {showPickers &&
-        (wizard.optionsError ? (
-          <ErrorState
-            error={wizard.optionsError}
-            onRetry={wizard.refetchOptions}
-            title="No se pudieron cargar las bases de datos"
-          />
-        ) : !wizard.optionsLoading && wizard.options.length === 0 ? (
-          <EmptyState
-            title="Sin bases de datos"
-            description={
-              wizard.selectionMode === 'server'
-                ? 'Este servidor no tiene bases de datos accesibles.'
-                : 'No hay bases de datos gestionadas de este motor en el inventario.'
-            }
-          />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <DatabasePicker
-              label="SOURCE — referencia / estado deseado"
-              options={wizard.sourceOptions}
-              value={wizard.sourceSelection}
-              onChange={wizard.setSourceSelection}
-              isLoading={wizard.optionsLoading}
-            />
-            <DatabasePicker
-              label="TARGET — la BD que se modificaría"
-              options={wizard.targetOptions}
-              value={wizard.targetSelection}
-              onChange={wizard.setTargetSelection}
-              isLoading={wizard.optionsLoading}
-            />
-          </div>
-        ))}
 
       <p className="rounded-lg bg-surface-muted p-3 text-sm text-foreground">
         Todo el DDL será: qué correr en <strong>TARGET</strong> para que quede como{' '}
