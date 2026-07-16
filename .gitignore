@@ -29,3 +29,6 @@ dist-ssr
 .claude/.cache/
 .claude/*.tmp
 .claude/worktrees/
+
+# Environment variables
+.env
