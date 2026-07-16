@@ -129,4 +129,28 @@ describe('useExecutePreview', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.confirm_token).toBe('abc123')
   })
+
+  it('acepta target_database_id null (target crudo sin adoptar)', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/schema-comparisons/42/execute-preview', () =>
+        HttpResponse.json({
+          data: {
+            comparison_id: 42,
+            target_database_id: null,
+            mode: 'all_except_destructive',
+            statements: [],
+            confirm_token: 'abc123',
+          },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(
+      () => useExecutePreview(42, 'all_except_destructive', [], true),
+      { wrapper },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.target_database_id).toBeNull()
+  })
 })

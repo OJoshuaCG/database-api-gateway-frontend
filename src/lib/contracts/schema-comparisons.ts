@@ -184,11 +184,13 @@ export type ExecutePreviewStatement = z.infer<typeof executePreviewStatementSche
 /**
  * `data` de `POST .../execute-preview`. `confirm_token` se reenvía TAL CUAL (sin recomputarlo
  * en cliente) en `POST .../execute`: es un SHA256 calculado por el servidor sobre el conjunto
- * exacto de sentencias resueltas, la única fuente de verdad soportada.
+ * exacto de sentencias resueltas, la única fuente de verdad soportada. `target_database_id` es
+ * `null` cuando el target es una BD cruda sin adoptar (mismo significado que en
+ * `schemaComparisonSummaryOutSchema`).
  */
 export const executePreviewOutSchema = z.object({
   comparison_id: z.number().int(),
-  target_database_id: z.number().int(),
+  target_database_id: z.number().int().nullable(),
   mode: z.string(),
   statements: z.array(executePreviewStatementSchema),
   confirm_token: z.string(),
@@ -220,7 +222,7 @@ export type SchemaComparisonStatementResult = z.infer<typeof schemaComparisonSta
 
 export const executeComparisonOutSchema = z.object({
   comparison_id: z.number().int(),
-  target_database_id: z.number().int(),
+  target_database_id: z.number().int().nullable(),
   mode: z.string(),
   total: z.number().int(),
   applied_count: z.number().int(),
