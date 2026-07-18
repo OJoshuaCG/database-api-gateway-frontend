@@ -17,6 +17,7 @@ profundidad. Rutas de código (`src/...`) relativas a `frontend/`.
 | [`security.md`](security.md) | Modelo de seguridad del cliente: auth por cookie, almacenamiento, validación de entrada, XSS, CORS y datos sensibles. | …trabajas con auth, formularios o despliegue. |
 | [`maintenance.md`](maintenance.md) | Convenciones, dónde vive cada cosa y recetas para **añadir un endpoint/feature**. | …vas a ampliar el frontend. |
 | [`deployment.md`](deployment.md) | Build, servido del SPA (fallback de rutas), CORS, Docker/nginx, CI y checklist de endurecimiento. | …vas a desplegar o montar CI/CD. |
+| [`dokploy.md`](dokploy.md) | Guía específica de despliegue en Dokploy: build args, dominio (mismo dominio vs. subdominios), HTTPS y health check. | …vas a desplegar (o configurar) este frontend en Dokploy. |
 | [`adr/`](adr/) | Architecture Decision Records: el *porqué* de las decisiones clave. | …te preguntas "¿por qué está hecho así?". |
 
 ## Contexto del proyecto

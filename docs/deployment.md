@@ -51,30 +51,12 @@ server {
 }
 ```
 
-### Docker (multi-stage, ejemplo)
+### Docker
 
-```dockerfile
-# build
-FROM node:24-alpine AS build
-WORKDIR /app
-RUN corepack enable
-COPY pnpm-lock.yaml package.json ./
-RUN pnpm install --frozen-lockfile
-COPY . .
-ARG VITE_API_BASE_URL
-ARG VITE_HEALTH_URL
-RUN pnpm build
-
-# runtime
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-```
-
-> Estos snippets son una **referencia lista para copiar**; los archivos
-> (`Dockerfile`, `nginx.conf`) no están versionados todavía — créalos cuando se decida
-> la plataforma de despliegue.
+`Dockerfile` y `nginx.conf` ya están versionados en la raíz del repo (multi-stage:
+build con `node:24-alpine` + runtime `nginx:alpine`, con fallback SPA y cabeceras de
+seguridad incluidos). Para la configuración específica de la plataforma de despliegue
+(Dokploy: build args, dominio, HTTPS), ver [`dokploy.md`](dokploy.md).
 
 ## CORS y cookies (lo más fácil de olvidar)
 
@@ -122,14 +104,17 @@ producción"):
 - [x] Build, typecheck, lint y tests en verde.
 - [x] Variables de entorno (sin URLs hardcodeadas).
 - [x] Manejo de errores transversal + estados loading/empty/error.
+- [x] **Fallback SPA** configurado en el servidor — ver `nginx.conf` (raíz del repo).
+- [x] **Cabeceras de seguridad / CSP** en la capa de servido — ver `nginx.conf`.
+- [ ] **Decisión de dominio** (mismo dominio vs. subdominios para frontend/backend) —
+      ver [`dokploy.md`](dokploy.md#3-dominio--decisión-pendiente-dos-escenarios).
 - [ ] **Validado contra el backend real** (hoy solo con mocks MSW). Confirmar shapes
       ambiguos: paginación de `/{id}/databases` y forma exacta de `detail` de error.
-- [ ] **Fallback SPA** configurado en el servidor (nginx/Caddy) — ver arriba.
-- [ ] **HTTPS** en el frontend (requisito de la cookie `Secure`).
+- [ ] **HTTPS** en el frontend (requisito de la cookie `Secure`) — activar el
+      certificado gestionado de la plataforma una vez decidido el dominio.
 - [ ] **CI** que corra typecheck/lint/test/build.
 - [ ] **Observabilidad**: integrar un reporter de errores (p. ej. Sentry) en vez de solo
       `console.error`.
-- [ ] **Cabeceras de seguridad / CSP** en la capa de servido.
 - [ ] **Auditoría de accesibilidad** con axe/Lighthouse (los contrastes se eligieron por
       cálculo; falta certificarlos en ejecución).
 - [ ] Ampliar **cobertura de tests** (formularios con provisión, Combobox, introspección,
