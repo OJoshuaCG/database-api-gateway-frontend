@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
-import { useCreateModelMigration, useModelMigrations } from './use-model-migrations'
+import { useCreateModelMigration, useModelMigration, useModelMigrations } from './use-model-migrations'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AllProviders queryClient={createTestQueryClient()}>{children}</AllProviders>
@@ -49,6 +49,34 @@ describe('useModelMigrations', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.items[0]?.version).toBe('0001')
+  })
+})
+
+describe('useModelMigration', () => {
+  it('acepta un baseline de snapshot cuyo `translated` no trae la traducción a un motor', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/database-models/1/migrations/0001', () =>
+        HttpResponse.json({
+          data: {
+            ...detailFixture,
+            up_sql_postgresql: null,
+            down_sql: null,
+            down_sql_suggested: null,
+            kind: 'schema',
+            source_engine: 'mariadb',
+            is_baseline: true,
+            // sqlglot no logró traducir: la clave `postgresql` está ausente, no `null`.
+            translated: { mysql: detailFixture.up_sql },
+          },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(() => useModelMigration(1, '0001', true), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.translated.mysql).toBe(detailFixture.up_sql)
+    expect(result.current.data?.translated.postgresql).toBeUndefined()
   })
 })
 

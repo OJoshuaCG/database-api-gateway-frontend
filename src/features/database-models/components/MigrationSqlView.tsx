@@ -22,18 +22,26 @@ export function MigrationSqlView({ migration }: { migration: ModelMigrationOut }
 
   return (
     <div className="flex flex-col gap-4">
-      <SqlBlock
-        title="MySQL / MariaDB"
-        sql={migration.translated.mysql}
-        extra={migration.up_sql_mysql ? <Badge tone="warning">override manual</Badge> : null}
-      />
-      <SqlBlock
-        title="PostgreSQL"
-        sql={migration.translated.postgresql}
-        extra={
-          migration.up_sql_postgresql ? <Badge tone="warning">override manual</Badge> : null
-        }
-      />
+      {migration.translated.mysql ? (
+        <SqlBlock
+          title="MySQL / MariaDB"
+          sql={migration.translated.mysql}
+          extra={migration.up_sql_mysql ? <Badge tone="warning">override manual</Badge> : null}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">Sin traducción para MySQL/MariaDB.</p>
+      )}
+      {migration.translated.postgresql ? (
+        <SqlBlock
+          title="PostgreSQL"
+          sql={migration.translated.postgresql}
+          extra={
+            migration.up_sql_postgresql ? <Badge tone="warning">override manual</Badge> : null
+          }
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">Sin traducción para PostgreSQL.</p>
+      )}
       {rollback ? (
         <SqlBlock
           title="Rollback (down_sql)"

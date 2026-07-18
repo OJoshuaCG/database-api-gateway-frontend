@@ -14,10 +14,14 @@ import {
 
 const SQL_MAX = 262144 // 256 KB
 
-/** Traducción cross-engine calculada por el gateway. */
+/**
+ * Traducción cross-engine calculada por el gateway. Claves no garantizadas: en migraciones
+ * `kind: 'data'` o baselines de snapshot atados a un `source_engine`, o cuando `sqlglot` no
+ * logra transpilar el SQL, el motor contrario queda ausente (no `null`, directamente sin clave).
+ */
 export const migrationTranslatedSchema = z.object({
-  mysql: z.string(),
-  postgresql: z.string(),
+  mysql: z.string().optional(),
+  postgresql: z.string().optional(),
 })
 export type MigrationTranslated = z.infer<typeof migrationTranslatedSchema>
 
