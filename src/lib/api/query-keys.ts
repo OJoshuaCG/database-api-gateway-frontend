@@ -71,4 +71,14 @@ export const queryKeys = {
     preview: (id: number, mode: string, selectedItemIds: number[]) =>
       ['schema-comparisons', id, 'execute-preview', mode, selectedItemIds] as const,
   },
+  databaseClones: {
+    all: ['database-clones'] as const,
+    detail: (id: number) => ['database-clones', 'detail', id] as const,
+    objects: (id: number) => ['database-clones', id, 'objects'] as const,
+    resolveSelection: (id: number, selection: string[]) =>
+      ['database-clones', id, 'resolve-selection', selection] as const,
+    preview: (id: number, selection: string[] | null) =>
+      ['database-clones', id, 'preview', selection] as const,
+    items: (id: number, params: QueryParams) => ['database-clones', id, 'items', params] as const,
+  },
 } as const

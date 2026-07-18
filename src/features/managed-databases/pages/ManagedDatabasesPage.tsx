@@ -143,6 +143,13 @@ export function ManagedDatabasesPage() {
             >
               Comparar esquema
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
+            >
+              Clonar
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
               Migraciones
             </Button>
