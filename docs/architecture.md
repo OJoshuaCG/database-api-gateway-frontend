@@ -77,6 +77,8 @@ src/
 │   ├── server-users/        CRUD + provision/drop_remote + grants + apply-profile
 │   ├── database-models/     CRUD de blueprints + migraciones (deltas SQL + apply-all)
 │   ├── managed-databases/   CRUD + provision/drop_remote + reasignar owner + migraciones por BD
+│   ├── schema-comparisons/  asistente: diff de esquema entre dos BDs → adoptar versión o ejecutar
+│   ├── database-clones/     asistente: clonar una BD (estructura + datos opcionales) a otro servidor, asíncrono con polling
 │   ├── privileges/          catálogo + toggle + selector reutilizable de privilegios
 │   ├── permission-profiles/ CRUD de perfiles de permisos por motor
 │   ├── admin/               rotación de cifrado (DEK)

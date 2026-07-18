@@ -86,7 +86,11 @@ src/
     server-users/ CRUD + provision/drop_remote
     database-models/  CRUD de blueprints
     managed-databases/ CRUD + provision/drop_remote + reasignar owner
+    schema-comparisons/ Asistente: diff de esquema entre dos BDs
+    database-clones/    Asistente: clonar una BD a otro servidor (asíncrono, con polling)
     privileges/   Catálogo + toggle
+    permission-profiles/ CRUD de perfiles de permisos por motor
+    admin/        Rotación de cifrado (DEK)
     health/       Indicador de estado del backend
   styles/         theme.css (tokens) + index.css
   test/           setup, util de render, servidor MSW
