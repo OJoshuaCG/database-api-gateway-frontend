@@ -17,7 +17,7 @@ export const queryKeys = {
     list: (params: QueryParams) => ['servers', 'list', params] as const,
     detail: (id: number) => ['servers', 'detail', id] as const,
     databases: (id: number) => ['servers', id, 'databases'] as const,
-    engineUsers: (id: number) => ['servers', id, 'engine-users'] as const,
+    groupedUsers: (id: number) => ['servers', id, 'grouped-users'] as const,
     tables: (id: number, database: string) =>
       ['servers', id, 'databases', database, 'tables'] as const,
     tableSchema: (id: number, database: string, table: string) =>

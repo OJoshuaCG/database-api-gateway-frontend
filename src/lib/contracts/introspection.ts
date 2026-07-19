@@ -1,12 +1,5 @@
 import { z } from 'zod'
 
-/** `EngineUserInfo` — usuario/rol del motor (§6). `host` solo en MySQL/MariaDB. */
-export const engineUserInfoSchema = z.object({
-  username: z.string(),
-  host: z.string().nullable().optional(),
-})
-export type EngineUserInfo = z.infer<typeof engineUserInfoSchema>
-
 /** `ColumnInfo` — columna de una tabla (§6). */
 export const columnInfoSchema = z.object({
   name: z.string(),
