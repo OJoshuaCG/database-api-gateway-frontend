@@ -17,8 +17,9 @@ import { ServerStatusBadge } from '../components/ServerStatusBadge'
 import { ServerFormModal } from '../components/ServerFormModal'
 import { IntrospectionExplorer } from '../components/IntrospectionExplorer'
 import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
+import { EngineUsersPanel } from '../components/EngineUsersPanel'
 
-type Tab = 'info' | 'introspection' | 'reconcile'
+type Tab = 'info' | 'introspection' | 'users' | 'reconcile'
 
 export function ServerDetailPage() {
   const params = useParams()
@@ -92,6 +93,9 @@ export function ServerDetailPage() {
         <TabButton active={tab === 'introspection'} onClick={() => setTab('introspection')}>
           Introspección
         </TabButton>
+        <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
+          Usuarios
+        </TabButton>
         <TabButton active={tab === 'reconcile'} onClick={() => setTab('reconcile')}>
           Reconciliación
         </TabButton>
@@ -125,6 +129,7 @@ export function ServerDetailPage() {
         </Card>
       )}
       {tab === 'introspection' && <IntrospectionExplorer serverId={serverId} />}
+      {tab === 'users' && <EngineUsersPanel serverId={serverId} engine={server.engine} />}
       {tab === 'reconcile' && <ServerReconcilePanel serverId={serverId} />}
 
       <ServerFormModal open={editOpen} onClose={() => setEditOpen(false)} server={server} />
