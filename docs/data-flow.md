@@ -196,10 +196,13 @@ ServerDetailPage (tab "Introspección")            features/servers/pages/Server
        │     (Combobox de bases de datos)
        ├─ al elegir BD →  useTables(serverId, db, enabled)  → GET /servers/{id}/databases/{db}/tables 🔌
        │     (Combobox de tablas)
-       ├─ al elegir tabla → useTableSchema(serverId, db, table, enabled) → .../tables/{t}/schema 🔌
-       │     (tabla de columnas + PK/FK/índices)
-       └─ useEngineUsers(serverId, enabled:true)            → GET /servers/{id}/users 🔌
+       └─ al elegir tabla → useTableSchema(serverId, db, table, enabled) → .../tables/{t}/schema 🔌
+             (tabla de columnas + PK/FK/índices)
 ```
+
+- Los usuarios del motor tienen su **propia** pestaña ("Usuarios", Escenario L) — ya no
+  se listan aquí en plano; la vista agrupada por username reemplaza ese uso de
+  `GET /servers/{id}/users`.
 
 (Hooks en `features/servers/hooks/use-introspection.ts`.)
 
@@ -326,6 +329,44 @@ AdminPage: "Rotar clave" → ConfirmDialog → useRotateCrypto()        features
 
 - Opera sobre la BD de metadatos del gateway (**no toca motores destino**).
 - El cliente solo muestra los contadores devueltos; nunca maneja claves ni credenciales.
+
+---
+
+## Escenario L — Usuarios del motor por identidad física (adopción opcional 🔌)
+
+Pestaña "Usuarios" de `ServerDetailPage`. Ver `docs/features/engine-users-management.md`.
+
+```
+ServerDetailPage (tab "Usuarios")                 features/servers/pages/ServerDetailPage.tsx
+  └─ EngineUsersPanel(serverId, engine)            features/servers/components/EngineUsersPanel.tsx
+       └─ useGroupedEngineUsers(serverId)          → GET /servers/{id}/users/grouped 🔌
+             (una fila por username; `supports_hosts` decide si se muestra la columna/expansión de hosts)
+
+       Por identidad, según `status` (adopted | unmanaged | orphan):
+       ├─ adopted   → Revelar (si has_password) · Rotar · Ver grants · Eliminar
+       │     ├─ RevealEngineUserPasswordModal → useRevealEngineUserPassword(serverId)
+       │     │     → POST /servers/{id}/users/reveal-password 🔌  (secreto NUNCA cacheado; solo estado local del modal)
+       │     ├─ ChangeEngineUserPasswordModal → useChangeEngineUserPassword(serverId)
+       │     │     → PATCH /servers/{id}/users/password 🔌
+       │     ├─ "Ver grants" → useServerUser(server_user_id) → <ServerUserGrantsModal>  (reusa features/server-users)
+       │     └─ DeleteEngineUserDialog → useDeleteEngineUser(serverId)
+       │           → DELETE /servers/{id}/users 🔌 (confirm_username exacto; 409 si posee BDs gestionadas)
+       ├─ unmanaged → Adoptar (reusa <AdoptUserModal> de features/server-users) · Rotar (adopt=true) · Eliminar · Agregar host
+       └─ orphan    → Recrear en el motor (CreateEngineUserModal prefill) · Limpiar registro (useDeleteServerUser, dropRemote:false)
+
+       Por username (si supports_hosts) → AddEngineUserHostModal → useAddEngineUserHost(serverId)
+             → POST /servers/{id}/users/add-host 🔌  (reuse_password clona el hash; copy_grants es best-effort)
+```
+
+- **Complementa, no reemplaza** el inventario `/server-users`: toda mutación por identidad
+  invalida tanto `queryKeys.servers.groupedUsers(serverId)` como `queryKeys.serverUsers.all`,
+  porque puede crear/actualizar la fila de inventario (`adopt=true`) sin pasar por ese feature.
+- **Guard anti auto-lockout**: crear/rotar/dropear/agregar-host sobre `Server.root_username`
+  responde **409** — el backend lo protege, el frontend solo muestra el `message`.
+- **PostgreSQL** (`supports_hosts:false`): sin columna de host, sin expansión, sin botón
+  "Agregar host" (el endpoint daría 422 — ni se ofrece).
+- **Revelar contraseña** es una acción explícita (no se auto-dispara al abrir el modal) y
+  su resultado vive únicamente en el estado del componente: al cerrar el modal, desaparece.
 
 ---
 
