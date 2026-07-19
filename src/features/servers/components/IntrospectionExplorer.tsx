@@ -10,12 +10,7 @@ import {
   ErrorState,
   Spinner,
 } from '@/components/ui'
-import {
-  useEngineUsers,
-  useServerDatabases,
-  useTableSchema,
-  useTables,
-} from '../hooks/use-introspection'
+import { useServerDatabases, useTableSchema, useTables } from '../hooks/use-introspection'
 
 /** Explorador de estructura (solo lectura, nunca filas) de un servidor alcanzable 🔌. */
 export function IntrospectionExplorer({ serverId }: { serverId: number }) {
@@ -23,7 +18,6 @@ export function IntrospectionExplorer({ serverId }: { serverId: number }) {
   const [table, setTable] = useState<string | null>(null)
 
   const databases = useServerDatabases(serverId, true)
-  const engineUsers = useEngineUsers(serverId, true)
   const tables = useTables(serverId, database, true)
   const schema = useTableSchema(serverId, database, table, true)
 
@@ -78,34 +72,6 @@ export function IntrospectionExplorer({ serverId }: { serverId: number }) {
           )}
 
           {table && <TableSchemaView state={schema} />}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuarios del motor</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {engineUsers.isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner className="h-4 w-4" /> Cargando usuarios…
-            </div>
-          ) : engineUsers.isError ? (
-            <ErrorState error={engineUsers.error} onRetry={() => void engineUsers.refetch()} />
-          ) : (engineUsers.data?.length ?? 0) === 0 ? (
-            <EmptyState title="No se encontraron usuarios en el motor" />
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {engineUsers.data?.map((user) => (
-                <li key={`${user.username}@${user.host ?? ''}`}>
-                  <Badge tone="neutral">
-                    {user.username}
-                    {user.host ? `@${user.host}` : ''}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
         </CardContent>
       </Card>
     </div>

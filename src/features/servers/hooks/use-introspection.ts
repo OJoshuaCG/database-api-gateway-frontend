@@ -1,11 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import {
-  getTableSchema,
-  listEngineUsers,
-  listServerDatabases,
-  listTables,
-} from '../api/servers.api'
+import { getTableSchema, listServerDatabases, listTables } from '../api/servers.api'
 
 /**
  * Introspección 🔌 como cadena de queries dependientes:
@@ -15,14 +10,6 @@ export function useServerDatabases(serverId: number, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.servers.databases(serverId),
     queryFn: ({ signal }) => listServerDatabases(serverId, signal),
-    enabled,
-  })
-}
-
-export function useEngineUsers(serverId: number, enabled: boolean) {
-  return useQuery({
-    queryKey: queryKeys.servers.engineUsers(serverId),
-    queryFn: ({ signal }) => listEngineUsers(serverId, signal),
     enabled,
   })
 }
