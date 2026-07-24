@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -67,6 +68,8 @@ export function ManagedDatabaseMigrationsModal({
   const [preview, setPreview] = useState<MigrationApplyResult | null>(null)
   const [confirmVersion, setConfirmVersion] = useState('')
   const [rollbackTarget, setRollbackTarget] = useState('')
+  // Versiones sin `down_sql` confirmado devueltas por el 409 (`public_context.missing_down_sql`).
+  const [missingDownSql, setMissingDownSql] = useState<string[] | null>(null)
   const [stampVersion, setStampVersion] = useState('')
   const [stampOpen, setStampOpen] = useState(false)
   // Tras un 429 (rate limit 10/min) bloqueamos el botón de stamp unos segundos (Item 9).
@@ -124,7 +127,10 @@ export function ManagedDatabaseMigrationsModal({
     <>
       <Modal
         open={open}
-        onClose={onClose}
+        onClose={() => {
+          setMissingDownSql(null)
+          onClose()
+        }}
         title="Migraciones de la base de datos"
         description={database ? `«${database.name}» (#${database.id})` : undefined}
         size="lg"
@@ -343,6 +349,22 @@ export function ManagedDatabaseMigrationsModal({
                         Revierte secuencialmente en una sola llamada; requiere <code>down_sql</code>{' '}
                         confirmado en cada versión del camino (si falta, responde <code>409</code>).
                       </p>
+                      {missingDownSql && missingDownSql.length > 0 && (
+                        <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-3 text-xs">
+                          <p className="text-foreground">
+                            Falta confirmar el <code>down_sql</code> de la(s) versión(es){' '}
+                            <strong>{missingDownSql.join(', ')}</strong> antes de poder revertir.
+                          </p>
+                          {database?.model_id && (
+                            <Link
+                              to={`/database-models/${database.model_id}/migrations`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              Ir al blueprint a confirmarlas →
+                            </Link>
+                          )}
+                        </div>
+                      )}
                       <div className="flex justify-end">
                         <Button
                           variant="danger"
@@ -359,6 +381,15 @@ export function ManagedDatabaseMigrationsModal({
                                 onSuccess: () => {
                                   setConfirmVersion('')
                                   setRollbackTarget('')
+                                  setMissingDownSql(null)
+                                },
+                                onError: (err) => {
+                                  const apiError = toApiError(err)
+                                  setMissingDownSql(
+                                    apiError.status === 409 && apiError.missingDownSql
+                                      ? apiError.missingDownSql
+                                      : null,
+                                  )
                                 },
                               },
                             )

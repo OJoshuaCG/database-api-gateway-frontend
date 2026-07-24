@@ -45,6 +45,24 @@ describe('normalizeApiError', () => {
     expect(error.skippedTables).toEqual([{ table: 'tags', reason: 'no_primary_key' }])
   })
 
+  it('extrae missing_down_sql de public_context (409 de rollback)', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'No se puede revertir: las versiones 0008 no tienen rollback confirmado.',
+        type: 'AppHttpException',
+        public_context: { missing_down_sql: ['0008'] },
+      },
+    })
+    expect(error.missingDownSql).toEqual(['0008'])
+  })
+
+  it('no extrae missing_down_sql cuando public_context no lo trae', () => {
+    const error = normalizeApiError(409, {
+      detail: { msg: 'Conflicto', type: 'AppHttpException' },
+    })
+    expect(error.missingDownSql).toBeUndefined()
+  })
+
   it('captura el X-Request-ID del tercer argumento', () => {
     expect(normalizeApiError(500, {}, 'req-123').requestId).toBe('req-123')
   })

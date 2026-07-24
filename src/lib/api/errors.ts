@@ -56,6 +56,11 @@ export class ApiError extends Error {
   readonly violations?: ManualLayoutViolation[]
   /** Tablas de datos omitidas antes de validar el layout (`context.skipped_tables`, dev-only). */
   readonly skippedTables?: ContextSkippedTable[]
+  /**
+   * Versiones del blueprint sin `down_sql` confirmado (`public_context.missing_down_sql` del 409
+   * de rollback). A diferencia de `context`, `public_context` viaja siempre, en cualquier entorno.
+   */
+  readonly missingDownSql?: string[]
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -66,6 +71,7 @@ export class ApiError extends Error {
     fieldErrors?: FieldError[]
     violations?: ManualLayoutViolation[]
     skippedTables?: ContextSkippedTable[]
+    missingDownSql?: string[]
     requestId?: string
   }) {
     super(args.message)
@@ -75,6 +81,7 @@ export class ApiError extends Error {
     this.fieldErrors = args.fieldErrors
     this.violations = args.violations
     this.skippedTables = args.skippedTables
+    this.missingDownSql = args.missingDownSql
     this.requestId = args.requestId
   }
 
@@ -112,6 +119,7 @@ interface DetailObject {
   msg?: unknown
   type?: unknown
   context?: unknown
+  public_context?: unknown
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -159,6 +167,18 @@ function extractSkippedTables(context: unknown): ContextSkippedTable[] | undefin
   return tables.length > 0 ? tables : undefined
 }
 
+/**
+ * Extrae `public_context.missing_down_sql` (versiones sin rollback confirmado, 409 de
+ * `.../migrations/rollback`). A diferencia de `context`, `public_context` viaja siempre.
+ */
+function extractMissingDownSql(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.missing_down_sql)) return undefined
+  const versions = publicContext.missing_down_sql.filter(
+    (v): v is string => typeof v === 'string',
+  )
+  return versions.length > 0 ? versions : undefined
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -179,6 +199,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         fieldErrors: extractFieldErrors(d.context),
         violations: extractViolations(d.context),
         skippedTables: extractSkippedTables(d.context),
+        missingDownSql: extractMissingDownSql(d.public_context),
         requestId,
       })
     }
