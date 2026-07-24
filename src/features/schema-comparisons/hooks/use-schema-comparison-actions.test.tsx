@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
-import { useAdoptComparison, useCreateSchemaComparison } from './use-schema-comparison-actions'
+import {
+  useAdoptComparison,
+  useCreateSchemaComparison,
+  useExportSchemaComparisonSql,
+} from './use-schema-comparison-actions'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AllProviders queryClient={createTestQueryClient()}>{children}</AllProviders>
@@ -98,5 +102,63 @@ describe('useAdoptComparison', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('useExportSchemaComparisonSql', () => {
+  // jsdom no implementa la API de descarga de blobs; se simula para no romper `downloadBlob`.
+  URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  URL.revokeObjectURL = vi.fn()
+
+  it('descarga el .sql y emite un toast de éxito con el filename del header', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/schema-comparisons/42/export', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.getAll('item_ids')).toEqual(['1', '2'])
+        expect(url.searchParams.get('include_rollback')).toBe('true')
+        return HttpResponse.text('-- DDL de ejemplo\nCREATE TABLE clientes (id INT);', {
+          headers: {
+            'Content-Type': 'application/sql',
+            'Content-Disposition': 'attachment; filename="schema-diff-42-ventas_prod.sql"',
+          },
+        })
+      }),
+    )
+
+    const { result } = renderHook(() => useExportSchemaComparisonSql(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({ itemIds: [1, 2], includeRollback: true })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(screen.getByRole('status')).toHaveTextContent('schema-diff-42-ventas_prod.sql')
+  })
+
+  it('emite un toast de error (no descarga) cuando la selección no matchea ningún ítem (422)', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/schema-comparisons/42/export', () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'No hay sentencias para exportar con la selección/filtros indicados.',
+              type: 'AppHttpException',
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+
+    const { result } = renderHook(() => useExportSchemaComparisonSql(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({})
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'No hay sentencias para exportar con la selección/filtros indicados.',
+    )
   })
 })
