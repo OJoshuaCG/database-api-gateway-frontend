@@ -147,7 +147,7 @@ export function ItemSelectionPanel({
         </p>
       )}
 
-      <div className="flex max-h-[28rem] flex-col gap-3 overflow-auto rounded-lg border border-border p-3">
+      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
         {groups.map((group) => (
           <div key={group.objectName} className="flex flex-col gap-1.5">
             <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -171,34 +171,38 @@ export function ItemSelectionPanel({
                     />
                     <Badge tone={CHANGE_TONE[item.change_type]}>{CHANGE_TYPE_LABELS[item.change_type]}</Badge>
                     <code className="font-mono text-xs text-muted-foreground">#{item.id}</code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto"
-                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    >
-                      {isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
-                    </Button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      {requiresReview &&
+                        (isReviewed ? (
+                          <Badge tone="success">Revisado ✓</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onMarkReviewed(item.id)}
+                          >
+                            Marcar como revisado
+                          </Button>
+                        ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                      >
+                        {isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
+                      </Button>
+                    </div>
                   </div>
                   <RiskFlagsBadgeRow riskFlags={item.risk_flags} className="pl-7" />
                   {requiresReview && !isReviewed && (
                     <p className="pl-7 text-xs text-muted-foreground">
-                      Objeto procedural: abre el SQL completo para poder seleccionarlo.
+                      Objeto procedural: márcalo como revisado (revisa el SQL con «Ver SQL» si lo
+                      necesitas) para poder seleccionarlo.
                     </p>
                   )}
                   {isExpanded && (
                     <div className="flex flex-col gap-2 pl-7">
                       <SqlStatementViewer item={item} />
-                      {requiresReview && !isReviewed && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="self-start"
-                          onClick={() => onMarkReviewed(item.id)}
-                        >
-                          Marcar como revisado
-                        </Button>
-                      )}
                     </div>
                   )}
                 </div>
