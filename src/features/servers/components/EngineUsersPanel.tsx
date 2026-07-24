@@ -128,7 +128,11 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
               >
                 Ver grants
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setDeleteTarget({ username, host })}>
+              <Button
+                variant="danger-soft"
+                size="sm"
+                onClick={() => setDeleteTarget({ username, host })}
+              >
                 Eliminar
               </Button>
             </div>
@@ -154,7 +158,11 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
             >
               Rotar contraseña
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget({ username, host })}>
+            <Button
+              variant="danger-soft"
+              size="sm"
+              onClick={() => setDeleteTarget({ username, host })}
+            >
               Eliminar
             </Button>
           </div>

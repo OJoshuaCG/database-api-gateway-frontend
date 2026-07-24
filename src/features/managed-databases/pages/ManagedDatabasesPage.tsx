@@ -166,7 +166,7 @@ export function ManagedDatabasesPage() {
             >
               Editar
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)}>
+            <Button variant="danger-soft" size="sm" onClick={() => setDeleteTarget(row.original)}>
               Eliminar
             </Button>
           </div>

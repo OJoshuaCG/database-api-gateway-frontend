@@ -2,7 +2,14 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 import { Spinner } from './Spinner'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger'
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'outline'
+  | 'ghost'
+  | 'danger'
+  | 'danger-soft'
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -10,8 +17,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/90',
   accent: 'bg-accent text-accent-foreground hover:bg-accent/90',
   outline: 'border border-input bg-surface text-foreground hover:bg-surface-muted',
-  ghost: 'text-foreground hover:bg-surface-muted',
+  ghost: 'border border-border/70 text-foreground hover:border-border hover:bg-surface-muted',
   danger: 'bg-error text-error-foreground hover:bg-error/90',
+  'danger-soft': 'border border-error/30 bg-error/5 text-error hover:bg-error/10 hover:border-error/50',
 }
 
 const SIZES: Record<ButtonSize, string> = {
