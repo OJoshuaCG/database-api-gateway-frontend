@@ -13,12 +13,42 @@ Todos consumen tokens de color (ver [`theming.md`](theming.md)) y cuidan accesib
 ### `Button`
 Botón con variantes y estado de carga. **No** usa neumorphism (rompería el contraste).
 
-- Props: `variant` (`primary` | `secondary` | `accent` | `outline` | `ghost` | `danger`),
-  `size` (`sm` | `md` | `lg` | `icon`), `isLoading`, + atributos nativos de `<button>`.
+- Props: `variant` (`primary` | `secondary` | `accent` | `outline` | `ghost` | `danger` |
+  `danger-soft`), `size` (`sm` | `md` | `lg` | `icon`), `isLoading`, + atributos nativos de
+  `<button>`.
 - `isLoading` deshabilita y muestra `Spinner`.
 
 ```tsx
 <Button variant="danger" isLoading={mutation.isPending} onClick={…}>Eliminar</Button>
+```
+
+#### Cuándo usar cada variante
+
+Todas las variantes deben verse como **botón** en reposo (fondo y/o borde visibles), no
+solo al hacer hover — esto es intencional tras detectar que `ghost` sin borde se percibía
+como texto plano y confundía a los usuarios.
+
+| Variante | Uso | Ejemplo |
+| --- | --- | --- |
+| `primary` | Acción principal de la vista/formulario (una por pantalla). | Guardar, Crear, Confirmar |
+| `secondary` / `accent` | Acciones alternativas de marca, poco frecuentes. | — |
+| `outline` | Acción secundaria con el mismo peso visual que `primary` pero sin color de marca. | Adoptar, Probar conexión |
+| `ghost` | Acción de fila **no destructiva** en tablas/paneles (bajo énfasis, pero con borde sutil visible en reposo). | Editar, Ver grants, Reasignar, Revelar, Rotar contraseña, Cancelar |
+| `danger-soft` | Acción de fila **destructiva** en tablas/paneles (mismo bajo énfasis que `ghost`, pero en rojo sutil para diferenciarla del resto). | Botón "Eliminar" dentro de una fila de `DataTable` |
+| `danger` | Acción destructiva de **alto énfasis**: botón de confirmación final dentro de `ConfirmDialog`, o un trigger de página/toolbar (fuera de una fila de tabla) que abre ese diálogo. | Confirmar borrado en `ConfirmDialog`, botón "Eliminar" en el header de una página de detalle |
+
+Regla práctica: en una fila de `DataTable`, el patrón estándar es **`ghost` para las
+acciones normales + `danger-soft` para "Eliminar"** (nunca `ghost` para eliminar, ni
+`danger` sólido repetido en cada fila — es demasiado intenso para usarse así). El `danger`
+sólido se reserva para el momento de mayor relevancia (confirmación final o acción sin
+diálogo intermedio).
+
+```tsx
+// Patrón estándar de acciones de fila en una tabla
+<Button variant="ghost" size="sm" onClick={onEdit}>Editar</Button>
+<Button variant="danger-soft" size="sm" onClick={() => setDeleteTarget(row.original)}>
+  Eliminar
+</Button>
 ```
 
 ### `Input` / `Textarea`
