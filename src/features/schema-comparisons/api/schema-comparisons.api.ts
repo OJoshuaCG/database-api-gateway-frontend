@@ -1,4 +1,4 @@
-import { fetchData, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
+import { fetchBlob, fetchData, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
 import {
   adoptComparisonOutSchema,
   executeComparisonOutSchema,
@@ -113,5 +113,31 @@ export function executeComparison(
   return mutateData('POST', `${base(id)}/execute`, executeComparisonOutSchema, {
     body,
     query: { force },
+  })
+}
+
+export interface ExportSchemaComparisonSqlParams {
+  /** Mismos `id` de `GET .../items`; omitido o vacío = exporta todo el diff. */
+  itemIds?: number[]
+  /** Anexa el `down_sql` sugerido (orden inverso) comentado al final del archivo. */
+  includeRollback?: boolean
+}
+
+/**
+ * `GET .../export` — descarga de solo lectura, NO devuelve el envelope `ApiResponse`: el
+ * cuerpo es texto `.sql` plano (`Content-Type: application/sql`), por eso usa `fetchBlob` en
+ * vez de `fetchData`. No toca el motor, no valida fingerprint, no requiere `confirm_token`.
+ */
+export function exportSchemaComparisonSql(
+  id: number,
+  params: ExportSchemaComparisonSqlParams,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  return fetchBlob(`${base(id)}/export`, {
+    query: {
+      item_ids: params.itemIds?.length ? params.itemIds : undefined,
+      include_rollback: params.includeRollback || undefined,
+    },
+    signal,
   })
 }

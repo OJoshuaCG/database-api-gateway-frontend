@@ -71,6 +71,7 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
 
       {wizard.executeMode === 'custom' && (
         <ItemSelectionPanel
+          comparisonId={wizard.comparisonId ?? 0}
           itemsQuery={wizard.allItems}
           selectedItemIds={wizard.selectedItemIds}
           reviewedItemIds={wizard.reviewedItemIds}

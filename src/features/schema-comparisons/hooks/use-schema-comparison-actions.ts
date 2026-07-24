@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
+import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { downloadBlob } from '@/lib/utils'
 import type {
   AdoptComparisonIn,
   AdoptComparisonOut,
@@ -9,7 +11,13 @@ import type {
   ExecuteComparisonOut,
   SchemaComparisonSummaryOut,
 } from '@/lib/contracts'
-import { adoptComparison, createSchemaComparison, executeComparison } from '../api/schema-comparisons.api'
+import {
+  adoptComparison,
+  createSchemaComparison,
+  executeComparison,
+  exportSchemaComparisonSql,
+  type ExportSchemaComparisonSqlParams,
+} from '../api/schema-comparisons.api'
 
 /**
  * Mutaciones "propiedad del asistente" (mismo patrón documentado en
@@ -70,5 +78,23 @@ export function useExecuteComparison(comparisonId: number) {
         )
       }
     },
+  })
+}
+
+/**
+ * Descarga de solo lectura: no es un paso del asistente, es una acción puntual — el error SÍ
+ * se notifica por toast global (a diferencia de `adopt`/`execute`), mismo patrón que
+ * `useDeleteEngineUser`/`useRevealEngineUserPassword`.
+ */
+export function useExportSchemaComparisonSql(comparisonId: number) {
+  const toast = useToast()
+  return useMutation({
+    mutationFn: (params: ExportSchemaComparisonSqlParams) =>
+      exportSchemaComparisonSql(comparisonId, params),
+    onSuccess: ({ blob, filename }) => {
+      downloadBlob(blob, filename)
+      toast.success('Descarga iniciada', filename)
+    },
+    onError: (error) => toast.error('No se pudo exportar el .sql', toApiError(error).message),
   })
 }

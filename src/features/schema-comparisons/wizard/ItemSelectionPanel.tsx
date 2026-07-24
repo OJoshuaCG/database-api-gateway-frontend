@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { type BadgeTone, Badge, Button, Checkbox, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import { type BadgeTone, Badge, Button, Checkbox, EmptyState, ErrorState, Spinner, Switch } from '@/components/ui'
 import type { EngineType, SchemaChangeType } from '@/lib/contracts'
 import { CHANGE_TYPE_LABELS, groupItemsByObjectName, hasMysqlProceduralRisk, OBJECT_TYPE_LABELS, type SelectionShortcut } from './logic'
 import { RiskFlagsBadgeRow } from './RiskFlagsBadgeRow'
 import { SqlStatementViewer } from './SqlStatementViewer'
 import type { useAllSchemaComparisonItems } from '../hooks/use-schema-comparisons'
+import { useExportSchemaComparisonSql } from '../hooks/use-schema-comparison-actions'
 
 const CHANGE_TONE: Record<SchemaChangeType, BadgeTone> = {
   new: 'success',
@@ -13,6 +14,7 @@ const CHANGE_TONE: Record<SchemaChangeType, BadgeTone> = {
 }
 
 interface ItemSelectionPanelProps {
+  comparisonId: number
   itemsQuery: ReturnType<typeof useAllSchemaComparisonItems>
   selectedItemIds: Set<number>
   reviewedItemIds: Set<number>
@@ -32,6 +34,7 @@ interface ItemSelectionPanelProps {
  * adoptar procedurales MySQL/MariaDB. Un mismo componente para ambas rutas evita inconsistencias.
  */
 export function ItemSelectionPanel({
+  comparisonId,
   itemsQuery,
   selectedItemIds,
   reviewedItemIds,
@@ -42,6 +45,8 @@ export function ItemSelectionPanel({
   supportsBulkModes = true,
 }: ItemSelectionPanelProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [includeRollback, setIncludeRollback] = useState(false)
+  const exportSql = useExportSchemaComparisonSql(comparisonId)
 
   // Se derivan ANTES de cualquier `return` condicional (reglas de hooks): con la lista vacía en
   // los renders de carga/error, la memoización no aporta pero tampoco cuesta nada relevante; una
@@ -98,6 +103,30 @@ export function ItemSelectionPanel({
         <span className="text-sm text-muted-foreground">
           Seleccionados: {selectedItemIds.size} de {items.length}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          isLoading={exportSql.isPending}
+          disabled={exportSql.isPending}
+          onClick={() =>
+            exportSql.mutate({
+              itemIds: selectedItemIds.size > 0 ? [...selectedItemIds] : undefined,
+              includeRollback,
+            })
+          }
+        >
+          {selectedItemIds.size > 0
+            ? `Descargar seleccionados (${selectedItemIds.size})`
+            : `Descargar todo (${items.length})`}
+        </Button>
+        <Switch
+          checked={includeRollback}
+          onCheckedChange={setIncludeRollback}
+          label="Incluir rollback (comentado)"
+        />
       </div>
 
       {truncated && (

@@ -16,6 +16,7 @@ export function AdoptSelectStep({ wizard }: { wizard: SchemaComparisonWizard }) 
       </div>
 
       <ItemSelectionPanel
+        comparisonId={wizard.comparisonId ?? 0}
         itemsQuery={wizard.allItems}
         selectedItemIds={wizard.selectedItemIds}
         reviewedItemIds={wizard.reviewedItemIds}

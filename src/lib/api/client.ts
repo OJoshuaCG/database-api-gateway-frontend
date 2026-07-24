@@ -25,7 +25,7 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 }
 
 // ── Tipos de petición ───────────────────────────────────────────────────────
-export type QueryValue = string | number | boolean | null | undefined
+export type QueryValue = string | number | boolean | null | undefined | number[]
 export type QueryParams = Record<string, QueryValue>
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
@@ -41,7 +41,10 @@ function buildUrl(path: string, query?: QueryParams): string {
   const url = new URL(`${BASE_URL}${path}`)
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== null && value !== undefined && value !== '') {
+      if (Array.isArray(value)) {
+        // Param repetible (`?item_ids=1&item_ids=2`), p. ej. para `.../export`.
+        for (const item of value) url.searchParams.append(key, String(item))
+      } else if (value !== null && value !== undefined && value !== '') {
         url.searchParams.set(key, String(value))
       }
     }
@@ -50,17 +53,19 @@ function buildUrl(path: string, query?: QueryParams): string {
 }
 
 /**
- * Núcleo de toda llamada a la API. Adjunta la cookie de sesión (`credentials: include`),
- * parsea y valida la respuesta contra `schema`, y normaliza cualquier error a `ApiError`.
+ * Fetch + manejo de errores compartido por `apiRequest` (JSON) y `fetchBlob` (descarga de
+ * archivo): adjunta la cookie de sesión, y ante `!response.ok` parsea el `detail` estándar
+ * de `AppHttpException` y lo normaliza a `ApiError` con el `X-Request-ID` de la respuesta.
+ * Devuelve el `Response` crudo en éxito — cada llamador decide cómo leer el cuerpo.
  */
-async function apiRequest<S extends z.ZodTypeAny>(
+async function runRequest(
   method: HttpMethod,
   path: string,
-  schema: S,
-  options: RequestOptions = {},
-): Promise<z.output<S>> {
+  options: RequestOptions,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
   const { query, body, signal, suppressAuthHandler } = options
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { ...extraHeaders }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   let response: Response
@@ -77,7 +82,39 @@ async function apiRequest<S extends z.ZodTypeAny>(
     throw networkError()
   }
 
-  // Las respuestas exitosas y de error son JSON; un cuerpo vacío se trata como `{}`.
+  if (!response.ok) {
+    // Las respuestas de error son siempre JSON; un cuerpo vacío se trata como `{}`.
+    const text = await response.text()
+    let parsed: unknown = {}
+    if (text.length > 0) {
+      try {
+        parsed = JSON.parse(text)
+      } catch {
+        parsed = {}
+      }
+    }
+    if (response.status === 401 && !suppressAuthHandler) {
+      unauthorizedHandler?.()
+    }
+    // El backend adjunta `X-Request-ID` a toda respuesta; se muestra en los estados de error.
+    const requestId = response.headers.get('X-Request-ID') ?? undefined
+    throw normalizeApiError(response.status, parsed, requestId)
+  }
+
+  return response
+}
+
+/**
+ * Núcleo de toda llamada JSON a la API. Parsea y valida la respuesta contra `schema`.
+ */
+async function apiRequest<S extends z.ZodTypeAny>(
+  method: HttpMethod,
+  path: string,
+  schema: S,
+  options: RequestOptions = {},
+): Promise<z.output<S>> {
+  const response = await runRequest(method, path, options, { Accept: 'application/json' })
+
   const text = await response.text()
   let parsed: unknown = {}
   if (text.length > 0) {
@@ -88,15 +125,6 @@ async function apiRequest<S extends z.ZodTypeAny>(
     }
   }
 
-  if (!response.ok) {
-    if (response.status === 401 && !suppressAuthHandler) {
-      unauthorizedHandler?.()
-    }
-    // El backend adjunta `X-Request-ID` a toda respuesta; se muestra en los estados de error.
-    const requestId = response.headers.get('X-Request-ID') ?? undefined
-    throw normalizeApiError(response.status, parsed, requestId)
-  }
-
   const result = schema.safeParse(parsed)
   if (!result.success) {
     // Contrato desincronizado entre frontend y backend: error de programación, no del usuario.
@@ -104,6 +132,30 @@ async function apiRequest<S extends z.ZodTypeAny>(
     throw new ApiError({ status: 0, message: 'La API devolvió una respuesta inesperada.' })
   }
   return result.data
+}
+
+const DEFAULT_DOWNLOAD_FILENAME = 'export.sql'
+
+/** Extrae `filename="..."` de `Content-Disposition`; cae al nombre por defecto si no viene. */
+function extractFilename(contentDisposition: string | null): string {
+  if (!contentDisposition) return DEFAULT_DOWNLOAD_FILENAME
+  const match = /filename="?([^";]+)"?/.exec(contentDisposition)
+  return match?.[1] ?? DEFAULT_DOWNLOAD_FILENAME
+}
+
+/**
+ * GET que devuelve una descarga de archivo cruda (p. ej. `.../export`), no el envelope
+ * `ApiResponse` JSON del resto de la API. Los errores (4xx/5xx) sí llegan como JSON estándar
+ * y se normalizan igual que en `apiRequest` (vía `runRequest`).
+ */
+export async function fetchBlob(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await runRequest('GET', path, options)
+  const blob = await response.blob()
+  const filename = extractFilename(response.headers.get('Content-Disposition'))
+  return { blob, filename }
 }
 
 // ── Helpers tipados sobre el envelope `ApiResponse[T]` ──────────────────────
