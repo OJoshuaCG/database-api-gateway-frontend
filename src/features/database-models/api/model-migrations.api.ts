@@ -8,6 +8,7 @@ import {
   type ModelMigrationOut,
   type ModelMigrationPatch,
   type ModelMigrationSummary,
+  type OnFailureMode,
   type Page,
 } from '@/lib/contracts'
 
@@ -47,9 +48,14 @@ export function updateModelMigration(
   version: string,
   body: ModelMigrationPatch,
 ): Promise<ModelMigrationOut> {
-  return mutateData('PATCH', `${base(modelId)}/${encodeURIComponent(version)}`, modelMigrationOutSchema, {
-    body,
-  })
+  return mutateData(
+    'PATCH',
+    `${base(modelId)}/${encodeURIComponent(version)}`,
+    modelMigrationOutSchema,
+    {
+      body,
+    },
+  )
 }
 
 /** `DELETE .../migrations/{version}` — solo si no tiene historial de aplicación (§8). */
@@ -64,6 +70,8 @@ export interface ApplyAllOptions {
   maxDatabases?: number
   force?: boolean
   dryRun?: boolean
+  /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
+  onFailure?: OnFailureMode
 }
 
 /** `POST .../migrations/apply-all` 🔌 — aplica a todas las BDs del blueprint (rate limit 3/min). */
@@ -76,6 +84,7 @@ export function applyAllMigrations(
       max_databases: options.maxDatabases,
       force: options.force,
       dry_run: options.dryRun,
+      on_failure: options.onFailure,
     },
   })
 }

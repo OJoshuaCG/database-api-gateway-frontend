@@ -110,7 +110,10 @@ export const modelMigrationPatchSchema = z.object({
 })
 export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
 
-/** Resultado por BD dentro de `apply-all` (§8). */
+/**
+ * Resultado por BD dentro de `apply-all` (§8). Las entradas de `applied` pueden traer los
+ * campos de checkpoint/reconciliación de §9 (`resumed`, `failed_at_statement_index` 1-based…).
+ */
 export const applyAllItemSchema = z.object({
   managed_database_id: z.number().int(),
   database_name: z.string(),
@@ -122,6 +125,10 @@ export const applyAllItemSchema = z.object({
         version: z.string(),
         status: migrationStatusSchema,
         execution_ms: z.number().optional(),
+        resumed: z.boolean().optional(),
+        resumed_from_statement: z.number().int().nullish(),
+        statement_total: z.number().int().nullish(),
+        failed_at_statement_index: z.number().int().nullish(),
       }),
     )
     .optional(),

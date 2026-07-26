@@ -5,12 +5,15 @@ import {
   migrationRollbackResultSchema,
   migrationStampResultSchema,
   migrationStatusOutSchema,
+  reconcilePartialResultSchema,
   type MigrationApplyResult,
   type MigrationHistoryItem,
   type MigrationRollbackResult,
   type MigrationStampResult,
   type MigrationStatusOut,
+  type OnFailureMode,
   type Page,
+  type ReconcilePartialResult,
 } from '@/lib/contracts'
 
 const base = (dbId: number) => `/managed-databases/${dbId}/migrations`
@@ -27,6 +30,8 @@ export interface ApplyOptions {
   version?: string
   force?: boolean
   dryRun?: boolean
+  /** Manejo del fallo a mitad de una migración multi-sentencia (solo MySQL/MariaDB). Default: `auto`. */
+  onFailure?: OnFailureMode
 }
 
 /** `POST .../migrations/apply` 🔌 — aplica las pendientes (o hasta `version`); dry-run opcional (§9). */
@@ -35,7 +40,12 @@ export function applyMigrations(
   options: ApplyOptions = {},
 ): Promise<MigrationApplyResult> {
   return mutateData('POST', `${base(dbId)}/apply`, migrationApplyResultSchema, {
-    query: { version: options.version, force: options.force, dry_run: options.dryRun },
+    query: {
+      version: options.version,
+      force: options.force,
+      dry_run: options.dryRun,
+      on_failure: options.onFailure,
+    },
   })
 }
 
@@ -59,10 +69,48 @@ export function rollbackMigration(
   })
 }
 
-/** `POST .../migrations/stamp` 🔌 — marca una versión sin ejecutar SQL (§9). */
-export function stampMigration(dbId: number, version: string): Promise<MigrationStampResult> {
+export interface StampOptions {
+  version: string
+  /**
+   * Marca la versión aunque el estado registrado no coincida. ⚠️ NO arregla un apply fallido a
+   * mitad (afirmaría que la migración corrió completa); solo para "ya reconcilié a mano".
+   */
+  force?: boolean
+}
+
+/** `POST .../migrations/stamp` 🔌 — marca una versión sin ejecutar SQL (§9). Rate limit 10/min. */
+export function stampMigration(dbId: number, options: StampOptions): Promise<MigrationStampResult> {
   return mutateData('POST', `${base(dbId)}/stamp`, migrationStampResultSchema, {
-    query: { version },
+    query: { version: options.version, force: options.force },
+  })
+}
+
+export interface ReconcilePartialOptions {
+  /** Versión de `partial_application[]` a deshacer (doble confirmación, obligatoria). */
+  confirmVersion: string
+  dryRun?: boolean
+  /** Permite continuar aunque haya sentencias sin reverso (quedarán aplicadas). */
+  force?: boolean
+}
+
+/**
+ * `POST .../migrations/reconcile-partial` 🔌 — deshace las sentencias aplicadas de una migración
+ * que falló a mitad (§9). Rate limit 10/min. ⚠️ El backend valida `force` ANTES de `dry_run`: con
+ * sentencias sin reverso y sin `force=true` responde 409 incluso en dry-run (con
+ * `public_context.unreversible_statements`); ver `useReconcilePreview` para el auto-reintento.
+ */
+export function reconcilePartial(
+  dbId: number,
+  options: ReconcilePartialOptions,
+  signal?: AbortSignal,
+): Promise<ReconcilePartialResult> {
+  return mutateData('POST', `${base(dbId)}/reconcile-partial`, reconcilePartialResultSchema, {
+    query: {
+      confirm_version: options.confirmVersion,
+      dry_run: options.dryRun,
+      force: options.force,
+    },
+    signal,
   })
 }
 
