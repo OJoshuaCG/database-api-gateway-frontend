@@ -17,6 +17,7 @@ import {
   type ManagedDatabaseOut,
   type ProvisionStatus,
   type ServerOut,
+  type ServerUserOut,
   type DatabaseModelOut,
 } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
@@ -53,6 +54,8 @@ export function ManagedDatabasesPage() {
   const [serverFilter, setServerFilter] = useState<ServerOut | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusOption | null>(null)
   const [modelFilter, setModelFilter] = useState<DatabaseModelOut | null>(null)
+  // Filtro por propietario: solo tiene sentido con un servidor elegido (los owners son por server).
+  const [ownerFilter, setOwnerFilter] = useState<ServerUserOut | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
   const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
@@ -81,6 +84,7 @@ export function ManagedDatabasesPage() {
     server_id: serverFilter?.id,
     status: statusFilter?.value,
     model_id: modelFilter?.id,
+    owner_id: ownerFilter?.id,
   })
 
   const columns = useMemo<ColumnDef<ManagedDatabaseOut>[]>(
@@ -212,18 +216,35 @@ export function ManagedDatabasesPage() {
             searchPlaceholder="Buscar base de datos…"
             enableColumnVisibility
             toolbar={
-              <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[36rem]">
+              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[48rem] lg:grid-cols-4">
                 <Combobox<ServerOut>
                   items={servers.data ?? []}
                   value={serverFilter}
                   onChange={(server) => {
                     setServerFilter(server)
+                    // Los propietarios son por servidor: al cambiarlo, el filtro deja de aplicar.
+                    setOwnerFilter(null)
                     resetPage()
                   }}
                   itemToString={(s) => s.name}
                   itemToKey={(s) => s.id}
                   label="Servidor"
                   placeholder="Todos"
+                  clearable
+                />
+                <Combobox<ServerUserOut>
+                  items={owners.data ?? []}
+                  value={ownerFilter}
+                  onChange={(owner) => {
+                    setOwnerFilter(owner)
+                    resetPage()
+                  }}
+                  itemToString={(u) => u.username}
+                  itemToKey={(u) => u.id}
+                  label="Propietario"
+                  placeholder={serverFilter ? 'Todos' : 'Elige un servidor primero'}
+                  disabled={!serverFilter}
+                  isLoading={Boolean(serverFilter) && owners.isLoading}
                   clearable
                 />
                 <Combobox<StatusOption>
