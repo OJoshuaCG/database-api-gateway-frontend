@@ -3,6 +3,7 @@ import {
   adoptComparisonOutSchema,
   executeComparisonOutSchema,
   executePreviewOutSchema,
+  resolveComparisonSelectionOutSchema,
   schemaComparisonItemOutSchema,
   schemaComparisonSummaryOutSchema,
   type AdoptComparisonIn,
@@ -13,8 +14,12 @@ import {
   type ExecutePreviewIn,
   type ExecutePreviewOut,
   type Page,
+  type ResolveComparisonSelectionIn,
+  type ResolveComparisonSelectionOut,
+  type SchemaChangeType,
   type SchemaComparisonItemOut,
   type SchemaComparisonSummaryOut,
+  type SchemaObjectType,
 } from '@/lib/contracts'
 import { PAGINATION } from '@/lib/contracts'
 
@@ -96,6 +101,23 @@ export function previewExecuteComparison(
   })
 }
 
+/**
+ * `POST .../resolve-selection` (§10.6) — SOLO LECTURA: cierra las dependencias de una selección
+ * propuesta sin adoptar ni ejecutar nada. Igual que `execute-preview`, se consume vía `useQuery`
+ * (idempotente y cacheable por conjunto de selección). ⚠ NO valida expiración: nunca usarlo como
+ * sustituto de refrescar la comparación.
+ */
+export function resolveComparisonSelection(
+  id: number,
+  body: ResolveComparisonSelectionIn,
+  signal?: AbortSignal,
+): Promise<ResolveComparisonSelectionOut> {
+  return mutateData('POST', `${base(id)}/resolve-selection`, resolveComparisonSelectionOutSchema, {
+    body,
+    signal,
+  })
+}
+
 /** `POST .../adopt` 🔌 (Opción A, rate limit 3/min) — adopta el diff como versión del blueprint. */
 export function adoptComparison(id: number, body: AdoptComparisonIn): Promise<AdoptComparisonOut> {
   return mutateData('POST', `${base(id)}/adopt`, adoptComparisonOutSchema, { body })
@@ -121,6 +143,9 @@ export interface ExportSchemaComparisonSqlParams {
   itemIds?: number[]
   /** Anexa el `down_sql` sugerido (orden inverso) comentado al final del archivo. */
   includeRollback?: boolean
+  /** Mismos filtros de `GET .../items` (§10.6), combinables con `itemIds`. */
+  objectType?: SchemaObjectType | null
+  changeType?: SchemaChangeType | null
 }
 
 /**
@@ -137,6 +162,8 @@ export function exportSchemaComparisonSql(
     query: {
       item_ids: params.itemIds?.length ? params.itemIds : undefined,
       include_rollback: params.includeRollback || undefined,
+      object_type: params.objectType ?? undefined,
+      change_type: params.changeType ?? undefined,
     },
     signal,
   })

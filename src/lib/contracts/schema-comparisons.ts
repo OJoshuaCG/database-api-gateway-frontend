@@ -127,6 +127,14 @@ export const createSchemaComparisonInSchema = z.object({
 export type CreateSchemaComparisonIn = z.infer<typeof createSchemaComparisonInSchema>
 
 // ── Ítems del diff (detalle paginado) ───────────────────────────────────────────
+/**
+ * `op_group` (§10.3): grupo ATÓMICO del cambio. Un objeto redefinido (mismo nombre, definición
+ * distinta) rinde DOS filas (DROP del viejo + CREATE del nuevo) que comparten `op_group` y deben
+ * seleccionarse/deseleccionarse JUNTAS (enviar media selección da 422). `null` = ítem suelto sin
+ * grupo (comparaciones creadas antes de este campo): se trata como individual. `depends_on` lista
+ * los `op_group` que deben ejecutarse ANTES (solo dependencias que se crean en esta misma
+ * comparación) — advisory en la UI; el cierre real lo hace `POST .../resolve-selection`.
+ */
 export const schemaComparisonItemOutSchema = z.object({
   id: z.number().int(),
   comparison_id: z.number().int(),
@@ -137,6 +145,8 @@ export const schemaComparisonItemOutSchema = z.object({
   phase: z.number().int(),
   sql: z.string(),
   risk_flags: riskFlagsSchema,
+  op_group: z.string().nullable(),
+  depends_on: z.array(z.string()),
   down_sql: z.string().nullable(),
   down_confirmed: z.boolean(),
   execution_status: schemaComparisonExecutionStatusSchema.nullable(),
@@ -145,21 +155,81 @@ export const schemaComparisonItemOutSchema = z.object({
 })
 export type SchemaComparisonItemOut = z.infer<typeof schemaComparisonItemOutSchema>
 
+// ── Avisos de plan (§10.6, en adopt / execute-preview / execute) ────────────────
+/**
+ * Avisos NO bloqueantes sobre el conjunto de sentencias resuelto. Codes conocidos:
+ * `create_and_drop_same_object` (casi siempre un rename no detectado) y
+ * `destructive_without_rollback` (la versión no podrá revertirse automáticamente). `code` se
+ * modela como string abierto: un code nuevo del backend nunca debe romper el contrato.
+ */
+export const planWarningSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  op_group: z.string().nullable().optional(),
+})
+export type PlanWarning = z.infer<typeof planWarningSchema>
+
+// ── Cierre de dependencias (§10.6, `POST .../resolve-selection`) ─────────────────
+/**
+ * `POST /schema-comparisons/{id}/resolve-selection` — SOLO LECTURA: no adopta ni ejecuta nada.
+ * Cierra las dependencias de una selección propuesta. ⚠ NO valida expiración (a diferencia de
+ * adopt/execute): nunca usarlo como sustituto de refrescar la comparación.
+ */
+export const resolveComparisonSelectionInSchema = z.object({
+  selected_item_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un ítem'),
+})
+export type ResolveComparisonSelectionIn = z.infer<typeof resolveComparisonSelectionInSchema>
+
+/** Detalle de cada ítem AGREGADO por el cierre (para mostrarlo antes de confirmar). */
+export const resolvedSelectionAddedItemSchema = z.object({
+  item_id: z.number().int(),
+  object_type: schemaObjectTypeSchema,
+  object_name: z.string(),
+  change_type: schemaChangeTypeSchema,
+  sql: z.string(),
+})
+export type ResolvedSelectionAddedItem = z.infer<typeof resolvedSelectionAddedItemSchema>
+
+/**
+ * `data` de `POST .../resolve-selection`. `resolved_item_ids` viene EN ORDEN DE EJECUCIÓN y es
+ * la selección final que debe mandarse a adopt/execute. `added_reasons` mapea cada `op_group`
+ * agregado → los `op_group` que lo requieren.
+ */
+export const resolveComparisonSelectionOutSchema = z.object({
+  comparison_id: z.number().int(),
+  requested_item_ids: z.array(z.number().int()),
+  resolved_item_ids: z.array(z.number().int()),
+  added_item_ids: z.array(z.number().int()),
+  added_reasons: z.record(z.string(), z.array(z.string())),
+  added: z.array(resolvedSelectionAddedItemSchema),
+  total: z.number().int(),
+})
+export type ResolveComparisonSelectionOut = z.infer<typeof resolveComparisonSelectionOutSchema>
+
 // ── Opción A: adoptar el diff como versión del blueprint ────────────────────────
+/**
+ * `auto_resolve_dependencies` (default `false`, fail-closed): si la selección no cierra sus
+ * dependencias, el backend responde 422 en vez de completarla solo. Este asistente NUNCA lo
+ * activa: el cierre se hace explícito y visible vía `resolve-selection` antes de confirmar.
+ */
 export const adoptComparisonInSchema = z.object({
   selected_item_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un ítem'),
   name: z.string().min(1, 'Requerido').max(200, 'Máximo 200 caracteres'),
   description: z.string().max(1000, 'Máximo 1000 caracteres').optional(),
   execute_immediately: z.boolean().optional().default(false),
+  auto_resolve_dependencies: z.boolean().optional(),
 })
 export type AdoptComparisonIn = z.infer<typeof adoptComparisonInSchema>
 
+/** `added_item_ids`: ítems que el backend sumó a la versión por cierre de dependencias. */
 export const adoptComparisonOutSchema = z.object({
   comparison_id: z.number().int(),
   model_id: z.number().int(),
   version: z.string(),
   statements: z.number().int(),
   executed: z.boolean(),
+  added_item_ids: z.array(z.number().int()),
+  plan_warnings: z.array(planWarningSchema),
   migration: modelMigrationOutSchema,
   apply_result: migrationApplyOutSchema.nullable(),
 })
@@ -186,13 +256,18 @@ export type ExecutePreviewStatement = z.infer<typeof executePreviewStatementSche
  * en cliente) en `POST .../execute`: es un SHA256 calculado por el servidor sobre el conjunto
  * exacto de sentencias resueltas, la única fuente de verdad soportada. `target_database_id` es
  * `null` cuando el target es una BD cruda sin adoptar (mismo significado que en
- * `schemaComparisonSummaryOutSchema`).
+ * `schemaComparisonSummaryOutSchema`). `excluded_by_dependency` (§10.6): en los modos
+ * automáticos, si el filtro de riesgo excluye una dependencia, el backend PODA transitivamente a
+ * sus dependientes huérfanos — estos `op_group` quedaron FUERA del conjunto y hay que mostrarlos
+ * antes de confirmar, porque cambian lo que realmente se ejecuta.
  */
 export const executePreviewOutSchema = z.object({
   comparison_id: z.number().int(),
   target_database_id: z.number().int().nullable(),
   mode: z.string(),
   statements: z.array(executePreviewStatementSchema),
+  plan_warnings: z.array(planWarningSchema),
+  excluded_by_dependency: z.array(z.string()),
   confirm_token: z.string(),
 })
 export type ExecutePreviewOut = z.infer<typeof executePreviewOutSchema>
@@ -227,6 +302,8 @@ export const executeComparisonOutSchema = z.object({
   total: z.number().int(),
   applied_count: z.number().int(),
   failed: z.boolean(),
+  plan_warnings: z.array(planWarningSchema),
+  excluded_by_dependency: z.array(z.string()),
   statements: z.array(schemaComparisonStatementResultSchema),
 })
 export type ExecuteComparisonOut = z.infer<typeof executeComparisonOutSchema>

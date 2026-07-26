@@ -8,6 +8,7 @@ import {
   getSchemaComparison,
   listSchemaComparisonItems,
   previewExecuteComparison,
+  resolveComparisonSelection,
 } from '../api/schema-comparisons.api'
 
 /** Resumen de una comparación (§ Endpoint 2) — no vuelve a tocar el motor, solo lee el inventario. */
@@ -75,4 +76,35 @@ export function useExecutePreview(
       ),
     enabled: enabled && resolvable && Number.isFinite(id) && id > 0,
   })
+}
+
+/**
+ * Cierre de dependencias de la selección (§10.6): solo lectura, se modela como `useQuery`
+ * cacheable por conjunto de ids (mismo patrón que `useExecutePreview` aquí y que
+ * `useCloneResolveSelection` en database-clones). Los ids se ordenan antes de entrar a la query
+ * key (el cierre de un conjunto no depende del orden de marcado) y se difieren con
+ * `useDeferredValue` por si la selección cambia en ráfaga (p. ej. al aplicar los
+ * `suggested_item_ids` de un 422).
+ *
+ * `isStale` es `true` mientras la selección EN VIVO aún no alcanzó a la diferida con la que se
+ * calculó `data`: el caller debe bloquear el submit mientras tanto (si no, podría confirmar con
+ * un cierre que describe la selección ANTERIOR).
+ */
+export function useResolveComparisonSelection(
+  id: number,
+  selectedItemIds: number[],
+  enabled: boolean,
+) {
+  const sortedIds = useMemo(() => [...selectedItemIds].sort((a, b) => a - b), [selectedItemIds])
+  const deferredIds = useDeferredValue(sortedIds)
+  const isStale = sortedIds !== deferredIds
+
+  const query = useQuery({
+    queryKey: queryKeys.schemaComparisons.resolveSelection(id, deferredIds),
+    queryFn: ({ signal }) =>
+      resolveComparisonSelection(id, { selected_item_ids: deferredIds }, signal),
+    enabled: enabled && deferredIds.length > 0 && Number.isFinite(id) && id > 0,
+  })
+
+  return { ...query, isStale }
 }
