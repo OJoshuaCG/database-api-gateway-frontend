@@ -49,7 +49,7 @@ cliente → contratos). Los contratos no importan nada del resto.
 src/
 ├── app/
 │   ├── providers.tsx        Composición de providers (ver "Árbol de providers")
-│   ├── router.tsx           Definición de rutas (createBrowserRouter)
+│   ├── router.tsx           Rutas (createBrowserRouter) + carga diferida por ruta
 │   └── App.tsx              RouterProvider + ErrorBoundary raíz
 ├── main.tsx                 Punto de entrada (createRoot)
 │
@@ -129,3 +129,8 @@ invalidar la sesión ante un 401. Ver [`data-flow.md`](data-flow.md) escenario G
   (ver [ADR-0004](adr/0004-theming-tailwind-v4.md)).
 - **Errores y éxitos** se comunican con toasts; los fallos de carga con `ErrorState`;
   los vacíos con `EmptyState`.
+- **Una ruta = un chunk.** `router.tsx` monta cada vista con `React.lazy` sobre el
+  **barrel** de su feature, y el `Suspense` vive dentro de `AppShell` (el sidebar y la
+  topbar no parpadean al navegar). Quedan *eager* solo `auth` y el shell, que son el
+  primer render. Al añadir una ruta, seguí ese patrón: importarla de forma directa
+  devuelve los asistentes pesados al bundle inicial.

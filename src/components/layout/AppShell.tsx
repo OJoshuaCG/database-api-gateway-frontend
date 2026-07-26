@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from 'react-error-boundary'
+import { Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -58,7 +59,17 @@ export function AppShell() {
         />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
-            <Outlet />
+            {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
+                del shell para que el sidebar y la topbar no parpadeen al navegar. */}
+            <Suspense
+              fallback={
+                <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+                  <Spinner className="h-8 w-8" label="Cargando vista" />
+                </div>
+              }
+            >
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
