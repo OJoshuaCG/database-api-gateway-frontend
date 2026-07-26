@@ -5,7 +5,10 @@ import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
 import {
+  useAdoptAllHosts,
+  useChangeEngineUserPasswordAllHosts,
   useCreateEngineUser,
+  useDefineKnownPassword,
   useDeleteEngineUser,
   useGroupedEngineUsers,
   useRevealEngineUserPassword,
@@ -114,6 +117,217 @@ describe('useDeleteEngineUser', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(receivedUrl?.searchParams.get('confirm_username')).toBe('alice')
     expect(receivedUrl?.searchParams.get('host')).toBe('localhost')
+  })
+})
+
+describe('useAdoptAllHosts', () => {
+  it('adopta todas las identidades y trata already_adopted como éxito (no error)', async () => {
+    let body: unknown
+    server.use(
+      http.post('http://localhost/api/v1/servers/42/users/adopt-all-hosts', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              username: 'alice',
+              dialect: 'mysql',
+              total_hosts: 3,
+              adopted: 2,
+              results: [
+                { host: 'localhost', status: 'adopted', server_user_id: 41 },
+                { host: '%', status: 'already_adopted', server_user_id: 12 },
+                { host: '10.0.0.5', status: 'adopted', server_user_id: 42 },
+              ],
+            },
+          },
+          { status: 201 },
+        )
+      }),
+    )
+
+    const { result } = renderHook(() => useAdoptAllHosts(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({ username: 'alice', known_password: 's3cr3t', notes: null })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(body).toMatchObject({ username: 'alice', known_password: 's3cr3t' })
+    expect(result.current.data?.adopted).toBe(2)
+    expect(result.current.data?.results).toHaveLength(3)
+    expect(result.current.data?.results[1]?.status).toBe('already_adopted')
+  })
+
+  it('acepta results con host null (PostgreSQL)', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/servers/7/users/adopt-all-hosts', () =>
+        HttpResponse.json(
+          {
+            data: {
+              username: 'pg_role',
+              dialect: 'postgresql',
+              total_hosts: 1,
+              adopted: 1,
+              results: [{ host: null, status: 'adopted', server_user_id: 90 }],
+            },
+          },
+          { status: 201 },
+        ),
+      ),
+    )
+
+    const { result } = renderHook(() => useAdoptAllHosts(7), { wrapper })
+
+    act(() => {
+      result.current.mutate({ username: 'pg_role' })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.results[0]?.host).toBeNull()
+  })
+})
+
+describe('useDefineKnownPassword', () => {
+  it('resuelve 200 con conflict_needs_overwrite en results (no es error)', async () => {
+    let body: unknown
+    server.use(
+      http.post('http://localhost/api/v1/servers/42/users/define-password', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({
+          data: {
+            username: 'alice',
+            scope: 'all_hosts',
+            total_hosts: 2,
+            updated: 1,
+            results: [
+              { host: '%', status: 'updated', server_user_id: 12 },
+              { host: 'localhost', status: 'conflict_needs_overwrite', server_user_id: 41 },
+            ],
+          },
+        })
+      }),
+    )
+
+    const { result } = renderHook(() => useDefineKnownPassword(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({
+        username: 'alice',
+        scope: 'all_hosts',
+        known_password: 'conocida',
+        adopt_if_missing: false,
+      })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(body).toMatchObject({ username: 'alice', scope: 'all_hosts' })
+    expect(result.current.data?.results[1]?.status).toBe('conflict_needs_overwrite')
+  })
+
+  it('reenvía con overwrite=true para sobrescribir contraseñas ya guardadas', async () => {
+    const bodies: unknown[] = []
+    server.use(
+      http.post('http://localhost/api/v1/servers/42/users/define-password', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return HttpResponse.json({
+          data: {
+            username: 'alice',
+            scope: 'host',
+            total_hosts: 1,
+            updated: body.overwrite ? 1 : 0,
+            results: [
+              {
+                host: '%',
+                status: body.overwrite ? 'updated' : 'conflict_needs_overwrite',
+                server_user_id: 12,
+              },
+            ],
+          },
+        })
+      }),
+    )
+
+    const { result } = renderHook(() => useDefineKnownPassword(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({ username: 'alice', scope: 'host', host: '%', known_password: 'x' })
+    })
+    await waitFor(() =>
+      expect(result.current.data?.results[0]?.status).toBe('conflict_needs_overwrite'),
+    )
+
+    act(() => {
+      result.current.mutate({ ...result.current.variables!, overwrite: true })
+    })
+    await waitFor(() => expect(result.current.data?.results[0]?.status).toBe('updated'))
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]).toMatchObject({ overwrite: true, host: '%' })
+  })
+})
+
+describe('useChangeEngineUserPasswordAllHosts', () => {
+  it('expone el detalle por host cuando la rotación es parcial (status error)', async () => {
+    let body: unknown
+    server.use(
+      http.patch(
+        'http://localhost/api/v1/servers/42/users/password-all-hosts',
+        async ({ request }) => {
+          body = await request.json()
+          return HttpResponse.json({
+            data: {
+              username: 'alice',
+              total_hosts: 2,
+              updated: 1,
+              results: [
+                { host: '%', status: 'rotated', server_user_id: 12, adopted: false, error: null },
+                {
+                  host: 'localhost',
+                  status: 'error',
+                  server_user_id: null,
+                  adopted: false,
+                  error: 'motor caído',
+                },
+              ],
+            },
+          })
+        },
+      ),
+    )
+
+    const { result } = renderHook(() => useChangeEngineUserPasswordAllHosts(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({
+        username: 'alice',
+        new_password: 'nueva',
+        confirm_username: 'alice',
+        adopt_if_missing: true,
+      })
+    })
+
+    // Fail-tolerant: HTTP 200 aunque un host falle — el desenlace vive en results[].
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(body).toMatchObject({ confirm_username: 'alice', adopt_if_missing: true })
+    expect(result.current.data?.results[1]?.status).toBe('error')
+    expect(result.current.data?.results[1]?.error).toBe('motor caído')
+  })
+
+  it('propaga el 422 cuando confirm_username no coincide', async () => {
+    server.use(
+      http.patch('http://localhost/api/v1/servers/42/users/password-all-hosts', () =>
+        HttpResponse.json({ detail: 'confirm_username no coincide.' }, { status: 422 }),
+      ),
+    )
+
+    const { result } = renderHook(() => useChangeEngineUserPasswordAllHosts(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({ username: 'alice', new_password: 'x', confirm_username: 'alicia' })
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.error).toMatchObject({ status: 422 })
   })
 })
 
