@@ -135,6 +135,32 @@ describe('useExportSchemaComparisonSql', () => {
     expect(screen.getByRole('status')).toHaveTextContent('schema-diff-42-ventas_prod.sql')
   })
 
+  it('reenvía los filtros object_type/change_type activos (§10.6) junto con include_rollback', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/schema-comparisons/42/export', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.get('object_type')).toBe('view')
+        expect(url.searchParams.get('change_type')).toBe('modified')
+        expect(url.searchParams.getAll('item_ids')).toEqual([])
+        expect(url.searchParams.get('include_rollback')).toBe('true')
+        return HttpResponse.text('-- DDL filtrado', {
+          headers: {
+            'Content-Type': 'application/sql',
+            'Content-Disposition': 'attachment; filename="schema-diff-42-filtrado.sql"',
+          },
+        })
+      }),
+    )
+
+    const { result } = renderHook(() => useExportSchemaComparisonSql(42), { wrapper })
+
+    act(() => {
+      result.current.mutate({ objectType: 'view', changeType: 'modified', includeRollback: true })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  })
+
   it('emite un toast de error (no descarga) cuando la selección no matchea ningún ítem (422)', async () => {
     server.use(
       http.get('http://localhost/api/v1/schema-comparisons/42/export', () =>

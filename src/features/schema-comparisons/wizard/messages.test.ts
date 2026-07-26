@@ -63,6 +63,26 @@ describe('classifyComparisonError', () => {
     ).toBe('recomputeToken')
   })
 
+  it('reconoce el 422 de dependencias por su public_context estructurado → resolveDependencies', () => {
+    const withSuggestions = new ApiError({
+      status: 422,
+      message: 'La selección no cierra sus dependencias.',
+      suggestedItemIds: [4, 9],
+    })
+    expect(classifyComparisonError(withSuggestions)).toBe('resolveDependencies')
+
+    const onlyMissing = new ApiError({
+      status: 422,
+      message: 'La selección no cierra sus dependencias.',
+      missingDependencies: ['table:clientes'],
+    })
+    expect(classifyComparisonError(onlyMissing)).toBe('resolveDependencies')
+  })
+
+  it('un 422 sin contexto de dependencias NO se clasifica como resolveDependencies', () => {
+    expect(classifyComparisonError(error(422, 'La selección no cierra sus dependencias.'))).toBe('none')
+  })
+
   it('cae en none cuando el texto no calza con ningún patrón conocido', () => {
     expect(classifyComparisonError(error(422, 'source_database_id y target_database_id deben ser distintos.'))).toBe(
       'none',

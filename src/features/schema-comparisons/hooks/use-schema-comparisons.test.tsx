@@ -4,7 +4,12 @@ import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
-import { useAllSchemaComparisonItems, useExecutePreview, useSchemaComparison } from './use-schema-comparisons'
+import {
+  useAllSchemaComparisonItems,
+  useExecutePreview,
+  useResolveComparisonSelection,
+  useSchemaComparison,
+} from './use-schema-comparisons'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AllProviders queryClient={createTestQueryClient()}>{children}</AllProviders>
@@ -29,6 +34,8 @@ function item(id: number, overrides: Partial<Record<string, unknown>> = {}) {
       cross_flavor_warning: false,
       possible_rename_of: null,
     },
+    op_group: null,
+    depends_on: [],
     down_sql: null,
     down_confirmed: false,
     execution_status: null,
@@ -115,6 +122,8 @@ describe('useExecutePreview', () => {
             target_database_id: 12,
             mode: 'all_except_destructive',
             statements: [],
+            plan_warnings: [],
+            excluded_by_dependency: [],
             confirm_token: 'abc123',
           },
         }),
@@ -139,6 +148,8 @@ describe('useExecutePreview', () => {
             target_database_id: null,
             mode: 'all_except_destructive',
             statements: [],
+            plan_warnings: [],
+            excluded_by_dependency: [],
             confirm_token: 'abc123',
           },
         }),
@@ -152,5 +163,87 @@ describe('useExecutePreview', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.target_database_id).toBeNull()
+  })
+
+  it('expone plan_warnings y excluded_by_dependency (§10.6) del preview', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/schema-comparisons/42/execute-preview', () =>
+        HttpResponse.json({
+          data: {
+            comparison_id: 42,
+            target_database_id: 12,
+            mode: 'all_except_destructive',
+            statements: [],
+            plan_warnings: [
+              {
+                code: 'create_and_drop_same_object',
+                message: 'Se crea y elimina el mismo objeto; probablemente sea un rename.',
+                op_group: 'view:v_ventas',
+              },
+            ],
+            excluded_by_dependency: ['fk:ventas'],
+            confirm_token: 'abc123',
+          },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(
+      () => useExecutePreview(42, 'all_except_destructive', [], true),
+      { wrapper },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.plan_warnings[0]?.code).toBe('create_and_drop_same_object')
+    expect(result.current.data?.excluded_by_dependency).toEqual(['fk:ventas'])
+  })
+})
+
+describe('useResolveComparisonSelection', () => {
+  it('no dispara la llamada sin selección', () => {
+    const { result } = renderHook(() => useResolveComparisonSelection(42, [], true), { wrapper })
+    expect(result.current.fetchStatus).toBe('idle')
+  })
+
+  it('resuelve el cierre: ids ordenados en el body y resolved_item_ids en orden de ejecución', async () => {
+    let requestedBody: unknown = null
+    server.use(
+      http.post(
+        'http://localhost/api/v1/schema-comparisons/42/resolve-selection',
+        async ({ request }) => {
+          requestedBody = await request.json()
+          return HttpResponse.json({
+            data: {
+              comparison_id: 42,
+              requested_item_ids: [3, 7],
+              resolved_item_ids: [1, 3, 7],
+              added_item_ids: [1],
+              added_reasons: { 'table:clientes': ['fk:ventas'] },
+              added: [
+                {
+                  item_id: 1,
+                  object_type: 'table',
+                  object_name: 'clientes',
+                  change_type: 'new',
+                  sql: 'CREATE TABLE clientes (id INT)',
+                },
+              ],
+              total: 3,
+            },
+          })
+        },
+      ),
+    )
+
+    const { result } = renderHook(() => useResolveComparisonSelection(42, [7, 3], true), {
+      wrapper,
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    // El conjunto viaja ordenado (la query key no depende del orden de marcado).
+    expect(requestedBody).toEqual({ selected_item_ids: [3, 7] })
+    expect(result.current.data?.resolved_item_ids).toEqual([1, 3, 7])
+    expect(result.current.data?.added_item_ids).toEqual([1])
+    expect(result.current.isStale).toBe(false)
   })
 })

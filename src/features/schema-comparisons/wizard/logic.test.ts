@@ -13,15 +13,20 @@ import {
   canCompareEngines,
   compositionRows,
   groupItemsByObjectName,
+  groupItemsByOpGroup,
   hasMysqlProceduralRisk,
   isCrossFlavorPair,
   isSafeAdditive,
   managedDatabasesToOptions,
+  opGroupObjectNames,
   pendingIndividualReviewIds,
   reconcileItemsToOptions,
   resolveDatabaseEngine,
   resolveEngineFamily,
   resolveShortcutSelection,
+  reviewBlockedIds,
+  toggleSelectionAtomic,
+  unsatisfiedDependencyWarnings,
   type DatabaseSideOption,
 } from './logic'
 
@@ -41,6 +46,7 @@ function item(
   objectName: string,
   changeType: SchemaChangeType,
   riskFlags: Partial<RiskFlags> = {},
+  grouping: { opGroup?: string | null; dependsOn?: string[] } = {},
 ): SchemaComparisonItemOut {
   return {
     id,
@@ -52,6 +58,8 @@ function item(
     phase: 1,
     sql: `-- sql ${id}`,
     risk_flags: { ...NO_RISK, ...riskFlags },
+    op_group: grouping.opGroup ?? null,
+    depends_on: grouping.dependsOn ?? [],
     down_sql: null,
     down_confirmed: false,
     execution_status: null,
@@ -182,10 +190,128 @@ describe('pendingIndividualReviewIds', () => {
   })
 })
 
+// ── Grupos atómicos por op_group (§10.3) ─────────────────────────────────────────
+/** Redefinición típica: DROP + CREATE de la misma vista comparten op_group. */
+const REDEFINITION = [
+  item(1, 'view', 'v_ventas', 'dropped', { destructive: true }, { opGroup: 'view:v_ventas' }),
+  item(2, 'view', 'v_ventas', 'new', {}, { opGroup: 'view:v_ventas' }),
+  item(3, 'table', 'clientes', 'new', {}, { opGroup: 'table:clientes' }),
+  item(4, 'column', 'productos.sku', 'new'),
+]
+
+describe('groupItemsByOpGroup / opGroupObjectNames', () => {
+  it('agrupa solo los ítems con op_group; los null quedan fuera del índice', () => {
+    const groups = groupItemsByOpGroup(REDEFINITION)
+    expect([...groups.keys()]).toEqual(['view:v_ventas', 'table:clientes'])
+    expect(groups.get('view:v_ventas')!.map((i) => i.id)).toEqual([1, 2])
+  })
+
+  it('resuelve un op_group a nombres de objeto únicos, con fallback al id crudo', () => {
+    expect(opGroupObjectNames(REDEFINITION, 'view:v_ventas')).toEqual(['v_ventas'])
+    expect(opGroupObjectNames(REDEFINITION, 'grupo:desconocido')).toEqual(['grupo:desconocido'])
+  })
+})
+
+describe('toggleSelectionAtomic', () => {
+  it('marcar un ítem de un grupo marca TODO el grupo (DROP + CREATE juntos)', () => {
+    expect(toggleSelectionAtomic(REDEFINITION, new Set(), 2)).toEqual(new Set([1, 2]))
+  })
+
+  it('desmarcar un ítem de un grupo desmarca TODO el grupo', () => {
+    expect(toggleSelectionAtomic(REDEFINITION, new Set([1, 2, 3]), 1)).toEqual(new Set([3]))
+  })
+
+  it('un ítem con op_group null se comporta como individual', () => {
+    expect(toggleSelectionAtomic(REDEFINITION, new Set(), 4)).toEqual(new Set([4]))
+    expect(toggleSelectionAtomic(REDEFINITION, new Set([4]), 4)).toEqual(new Set())
+  })
+
+  it('un grupo a medias (estado defensivo) converge al estado del ítem tocado', () => {
+    // El ítem 1 está desmarcado: tocarlo SELECCIONA el grupo completo, incluida la otra mitad.
+    expect(toggleSelectionAtomic(REDEFINITION, new Set([2]), 1)).toEqual(new Set([1, 2]))
+  })
+
+  it('un id fuera del conjunto cargado degrada al toggle individual', () => {
+    expect(toggleSelectionAtomic(REDEFINITION, new Set(), 99)).toEqual(new Set([99]))
+  })
+})
+
+describe('reviewBlockedIds', () => {
+  const proceduralGroup = [
+    item(1, 'routine', 'sp_x', 'dropped', { requires_individual_review: true }, { opGroup: 'routine:sp_x' }),
+    item(2, 'routine', 'sp_x', 'new', { requires_individual_review: true }, { opGroup: 'routine:sp_x' }),
+    item(3, 'table', 't', 'new', {}, { opGroup: 'table:t' }),
+    item(4, 'routine', 'sp_suelto', 'new', { requires_individual_review: true }),
+  ]
+
+  it('bloquea el grupo COMPLETO mientras algún miembro procedural siga sin revisar', () => {
+    expect(reviewBlockedIds(proceduralGroup, new Set())).toEqual(new Set([1, 2, 4]))
+    // Revisar solo una mitad del grupo NO lo desbloquea (media selección daría 422).
+    expect(reviewBlockedIds(proceduralGroup, new Set([1]))).toEqual(new Set([1, 2, 4]))
+    expect(reviewBlockedIds(proceduralGroup, new Set([1, 2]))).toEqual(new Set([4]))
+  })
+
+  it('para ítems sin grupo mantiene el gate individual original', () => {
+    expect(reviewBlockedIds(proceduralGroup, new Set([1, 2, 4]))).toEqual(new Set())
+  })
+})
+
+describe('resolveShortcutSelection respeta la atomicidad por op_group', () => {
+  it('"todo" excluye el grupo COMPLETO si algún miembro procedural no fue revisado', () => {
+    const items = [
+      item(1, 'routine', 'sp_x', 'dropped', { requires_individual_review: true }, { opGroup: 'g1' }),
+      item(2, 'routine', 'sp_x', 'new', {}, { opGroup: 'g1' }),
+      item(3, 'table', 't', 'new'),
+    ]
+    expect(resolveShortcutSelection(items, 'all')).toEqual(new Set([3]))
+    expect(resolveShortcutSelection(items, 'all', new Set([1]))).toEqual(new Set([1, 2, 3]))
+  })
+
+  it('"aditivos seguros" nunca incluye media redefinición (CREATE sin su DROP)', () => {
+    // El CREATE del grupo es aditivo seguro por sí solo, pero su DROP hermano no: incluirlo solo
+    // mandaría media selección (422). El grupo entero queda fuera.
+    expect(resolveShortcutSelection(REDEFINITION, 'safeAdditive')).toEqual(new Set([3, 4]))
+  })
+})
+
+describe('unsatisfiedDependencyWarnings', () => {
+  const items = [
+    item(1, 'table', 'clientes', 'new', {}, { opGroup: 'table:clientes' }),
+    item(2, 'foreign_key', 'ventas.fk_cliente', 'new', {}, { opGroup: 'fk:ventas', dependsOn: ['table:clientes'] }),
+    item(3, 'view', 'v_ventas', 'new', {}, { opGroup: 'view:v_ventas', dependsOn: ['fk:ventas'] }),
+  ]
+
+  it('avisa cuando un ítem seleccionado depende de un grupo NO seleccionado', () => {
+    const warnings = unsatisfiedDependencyWarnings(items, new Set([2]))
+    expect(warnings).toEqual([
+      {
+        missingOpGroup: 'table:clientes',
+        missingObjectNames: ['clientes'],
+        requiredBy: ['ventas.fk_cliente'],
+      },
+    ])
+  })
+
+  it('no avisa si la dependencia también está seleccionada', () => {
+    expect(unsatisfiedDependencyWarnings(items, new Set([1, 2]))).toEqual([])
+  })
+
+  it('ignora dependencias hacia grupos que no existen entre los ítems cargados', () => {
+    const external = [
+      item(9, 'view', 'v_x', 'new', {}, { opGroup: 'view:v_x', dependsOn: ['grupo:externo'] }),
+    ]
+    expect(unsatisfiedDependencyWarnings(external, new Set([9]))).toEqual([])
+  })
+
+  it('sin selección no hay avisos', () => {
+    expect(unsatisfiedDependencyWarnings(items, new Set())).toEqual([])
+  })
+})
+
 describe('buildAdoptBody / buildExecuteBody', () => {
   it('recorta nombre/descripción y omite description vacía', () => {
     const body = buildAdoptBody({
-      selectedItemIds: new Set([1, 2]),
+      selectedItemIds: [1, 2],
       name: '  Mi versión  ',
       description: '   ',
       executeImmediately: true,
@@ -195,6 +321,17 @@ describe('buildAdoptBody / buildExecuteBody', () => {
       name: 'Mi versión',
       execute_immediately: true,
     })
+  })
+
+  it('preserva el ORDEN de los ids (resolved_item_ids viene en orden de ejecución) y nunca manda auto_resolve_dependencies', () => {
+    const body = buildAdoptBody({
+      selectedItemIds: [9, 3, 7],
+      name: 'v2',
+      description: '',
+      executeImmediately: false,
+    })
+    expect(body.selected_item_ids).toEqual([9, 3, 7])
+    expect('auto_resolve_dependencies' in body).toBe(false)
   })
 
   it('en modo custom incluye selected_item_ids; en otros modos manda null', () => {
