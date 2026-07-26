@@ -61,6 +61,22 @@ export class ApiError extends Error {
    * de rollback). A diferencia de `context`, `public_context` viaja siempre, en cualquier entorno.
    */
   readonly missingDownSql?: string[]
+  /**
+   * Sentencias aplicadas sin reverso conocido (`public_context.unreversible_statements` del 409
+   * de `reconcile-partial`, §9). El backend valida `force` ANTES de `dry_run`: este 409 llega
+   * incluso en dry-run; la UI reintenta el dry-run con `force=true` para mostrar el plan.
+   */
+  readonly unreversibleStatements?: string[]
+  /**
+   * `op_group`s faltantes del 422 "la selección no cierra sus dependencias" de adopt/execute
+   * custom en schema-comparisons (`public_context.missing_dependencies`, §10.6).
+   */
+  readonly missingDependencies?: string[]
+  /**
+   * Ids de ítems sugeridos por el backend para cerrar la selección
+   * (`public_context.suggested_item_ids`, §10.6) — alimentan el CTA "Resolver automáticamente".
+   */
+  readonly suggestedItemIds?: number[]
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -72,6 +88,9 @@ export class ApiError extends Error {
     violations?: ManualLayoutViolation[]
     skippedTables?: ContextSkippedTable[]
     missingDownSql?: string[]
+    unreversibleStatements?: string[]
+    missingDependencies?: string[]
+    suggestedItemIds?: number[]
     requestId?: string
   }) {
     super(args.message)
@@ -82,6 +101,9 @@ export class ApiError extends Error {
     this.violations = args.violations
     this.skippedTables = args.skippedTables
     this.missingDownSql = args.missingDownSql
+    this.unreversibleStatements = args.unreversibleStatements
+    this.missingDependencies = args.missingDependencies
+    this.suggestedItemIds = args.suggestedItemIds
     this.requestId = args.requestId
   }
 
@@ -179,6 +201,46 @@ function extractMissingDownSql(publicContext: unknown): string[] | undefined {
   return versions.length > 0 ? versions : undefined
 }
 
+/**
+ * Extrae `public_context.unreversible_statements` (409 de `reconcile-partial`, §9): sentencias
+ * aplicadas de la migración parcial que no tienen reverso conocido (exigen `force=true`).
+ */
+function extractUnreversibleStatements(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.unreversible_statements)) {
+    return undefined
+  }
+  const statements = publicContext.unreversible_statements.filter(
+    (s): s is string => typeof s === 'string',
+  )
+  return statements.length > 0 ? statements : undefined
+}
+
+/**
+ * Extrae `public_context.missing_dependencies` (422 de adopt/execute custom en
+ * schema-comparisons, §10.6): `op_group`s de los que depende la selección y que no fueron
+ * incluidos.
+ */
+function extractMissingDependencies(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.missing_dependencies)) {
+    return undefined
+  }
+  const groups = publicContext.missing_dependencies.filter(
+    (g): g is string => typeof g === 'string',
+  )
+  return groups.length > 0 ? groups : undefined
+}
+
+/** Extrae `public_context.suggested_item_ids` (mismo 422 §10.6): ids que cierran la selección. */
+function extractSuggestedItemIds(publicContext: unknown): number[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.suggested_item_ids)) {
+    return undefined
+  }
+  const ids = publicContext.suggested_item_ids.filter(
+    (id): id is number => typeof id === 'number' && Number.isFinite(id),
+  )
+  return ids.length > 0 ? ids : undefined
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -200,6 +262,9 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         violations: extractViolations(d.context),
         skippedTables: extractSkippedTables(d.context),
         missingDownSql: extractMissingDownSql(d.public_context),
+        unreversibleStatements: extractUnreversibleStatements(d.public_context),
+        missingDependencies: extractMissingDependencies(d.public_context),
+        suggestedItemIds: extractSuggestedItemIds(d.public_context),
         requestId,
       })
     }

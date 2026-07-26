@@ -52,6 +52,8 @@ export const queryKeys = {
     migrationStatus: (id: number) => ['managed-databases', id, 'migrations', 'status'] as const,
     migrationHistory: (id: number, params: QueryParams) =>
       ['managed-databases', id, 'migrations', 'history', params] as const,
+    reconcilePreview: (id: number, version: string) =>
+      ['managed-databases', id, 'migrations', 'reconcile-preview', version] as const,
   },
   privileges: {
     all: ['privileges'] as const,
@@ -70,6 +72,8 @@ export const queryKeys = {
       ['schema-comparisons', id, 'items', 'all', filters] as const,
     preview: (id: number, mode: string, selectedItemIds: number[]) =>
       ['schema-comparisons', id, 'execute-preview', mode, selectedItemIds] as const,
+    resolveSelection: (id: number, selectedItemIds: number[]) =>
+      ['schema-comparisons', id, 'resolve-selection', selectedItemIds] as const,
   },
   databaseClones: {
     all: ['database-clones'] as const,
