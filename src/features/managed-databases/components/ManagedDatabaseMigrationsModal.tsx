@@ -21,8 +21,11 @@ import {
   type ManagedDatabaseOut,
   type MigrationApplyResult,
   type ModelMigrationSummary,
+  type OnFailureMode,
+  type PartialApplicationEntry,
 } from '@/lib/contracts'
 import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
+import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
 import {
   useApplyMigrations,
   useMigrationHistory,
@@ -31,6 +34,7 @@ import {
   useStampMigration,
 } from '../hooks/use-db-migrations'
 import { ProvisionStatusBadge } from './ProvisionStatusBadge'
+import { ReconcilePartialDialog } from './ReconcilePartialDialog'
 
 interface ManagedDatabaseMigrationsModalProps {
   database: ManagedDatabaseOut | null
@@ -65,15 +69,24 @@ export function ManagedDatabaseMigrationsModal({
 
   const [applyVersion, setApplyVersion] = useState('')
   const [force, setForce] = useState(false)
+  // `on_failure` (§9): compartido por "actualizar" e "ir a una versión" (solo MySQL/MariaDB).
+  const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
   const [preview, setPreview] = useState<MigrationApplyResult | null>(null)
+  // Resultado del último apply REAL (no dry-run): tabla de `results[]` + reconciliación.
+  const [lastRun, setLastRun] = useState<MigrationApplyResult | null>(null)
+  // Mensaje del 409 del gate R1 (baseline de snapshot sin revisar) para el CTA al blueprint.
+  const [baselineGateMsg, setBaselineGateMsg] = useState<string | null>(null)
   const [confirmVersion, setConfirmVersion] = useState('')
   const [rollbackTarget, setRollbackTarget] = useState('')
   // Versiones sin `down_sql` confirmado devueltas por el 409 (`public_context.missing_down_sql`).
   const [missingDownSql, setMissingDownSql] = useState<string[] | null>(null)
   const [stampVersion, setStampVersion] = useState('')
+  const [stampForce, setStampForce] = useState(false)
   const [stampOpen, setStampOpen] = useState(false)
   // Tras un 429 (rate limit 10/min) bloqueamos el botón de stamp unos segundos (Item 9).
   const [stampCooldown, setStampCooldown] = useState(false)
+  // Entrada de `partial_application[]` en reconciliación (monta el diálogo condicionalmente).
+  const [reconcileTarget, setReconcileTarget] = useState<PartialApplicationEntry | null>(null)
   // La BD llega como snapshot: tras un stamp exitoso reflejamos error→active localmente sin esperar
   // a que el padre recargue la lista (el estado real ya se invalidó/refetch-eó).
   const [recovered, setRecovered] = useState(false)
@@ -81,7 +94,13 @@ export function ManagedDatabaseMigrationsModal({
   const currentVersion = status.data?.current_version ?? null
   const latest = status.data?.latest_available ?? null
   const pendingCount = status.data?.pending_count ?? 0
-  const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion
+  // Aplicación parcial (§9): la versión más alta primero; se resuelven de mayor a menor.
+  const hasPartial = status.data?.has_partial_application ?? false
+  const partialEntries = [...(status.data?.partial_application ?? [])].sort(
+    (a, b) => Number(b.version) - Number(a.version),
+  )
+  const firstReconcilable = partialEntries.find((entry) => entry.reconcilable) ?? null
+  const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion && !hasPartial
 
   const isQuarantined = database?.status === 'error' && !recovered
   // Una BD archivada es de solo lectura: se ocultan las acciones que tocan el motor (Item 11).
@@ -93,32 +112,61 @@ export function ManagedDatabaseMigrationsModal({
 
   const openStamp = () => {
     setStampVersion('')
+    setStampForce(false)
     setStampOpen(true)
   }
 
   const confirmStamp = () => {
-    stamp.mutate(stampVersion.trim(), {
-      onSuccess: () => {
-        setStampOpen(false)
-        setStampVersion('')
-        // Un stamp saca a la BD de cuarentena (error→active); lo reflejamos en la UI.
-        if (database?.status === 'error') setRecovered(true)
+    stamp.mutate(
+      { version: stampVersion.trim(), force: stampForce || undefined },
+      {
+        onSuccess: () => {
+          setStampOpen(false)
+          setStampVersion('')
+          setStampForce(false)
+          // Un stamp saca a la BD de cuarentena (error→active); lo reflejamos en la UI.
+          if (database?.status === 'error') setRecovered(true)
+        },
+        onError: (err) => {
+          // 429: superó el límite de 10/min. Bloqueamos el botón unos segundos (el hook ya avisa).
+          if (toApiError(err).status === 429) {
+            setStampCooldown(true)
+            window.setTimeout(() => setStampCooldown(false), 15_000)
+          }
+        },
       },
-      onError: (err) => {
-        // 429: superó el límite de 10/min. Bloqueamos el botón unos segundos (el hook ya avisa).
-        if (toApiError(err).status === 429) {
-          setStampCooldown(true)
-          window.setTimeout(() => setStampCooldown(false), 15_000)
-        }
-      },
-    })
+    )
   }
 
-  const runApply = (options: { version?: string; dryRun: boolean }) => {
+  /** 409 del gate R1 (§9): el baseline de snapshot del blueprint aún no está revisado/aprobado. */
+  const isBaselineGate409 = (err: unknown): string | null => {
+    const apiError = toApiError(err)
+    return apiError.status === 409 &&
+      /baseline/i.test(apiError.message) &&
+      /revis|aprob/i.test(apiError.message)
+      ? apiError.message
+      : null
+  }
+
+  const runApply = (options: { version?: string; dryRun: boolean; force?: boolean }) => {
     apply.mutate(
-      { version: options.version, force, dryRun: options.dryRun },
       {
-        onSuccess: (result) => setPreview(isDryRunResult(result) ? result : null),
+        version: options.version,
+        force: options.force ?? force,
+        dryRun: options.dryRun,
+        onFailure,
+      },
+      {
+        onSuccess: (result) => {
+          setBaselineGateMsg(null)
+          if (isDryRunResult(result)) {
+            setPreview(result)
+          } else {
+            setPreview(null)
+            setLastRun(result)
+          }
+        },
+        onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
       },
     )
   }
@@ -193,13 +241,15 @@ export function ManagedDatabaseMigrationsModal({
                         isLoading={apply.isPending}
                         onClick={() =>
                           apply.mutate(
-                            { force: true, dryRun: false },
+                            { force: true, dryRun: false, onFailure },
                             {
                               onSuccess: (result) => {
                                 setPreview(null)
+                                setLastRun(result)
                                 // Si el apply forzado no falló, la BD sale de cuarentena (error→active).
                                 if (!result.failed && !result.quarantined) setRecovered(true)
                               },
+                              onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
                             },
                           )
                         }
@@ -239,6 +289,70 @@ export function ManagedDatabaseMigrationsModal({
                     )}
                   </div>
                 ) : null}
+
+                {/* Aplicación parcial (§9): sentencias ejecutadas sin registrar la versión */}
+                {hasPartial && partialEntries.length > 0 && (
+                  <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-3">
+                    <div className="flex flex-col gap-1">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Aplicación parcial detectada
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Una migración falló a mitad: hay sentencias ya ejecutadas en el motor sin
+                        que la versión quedara registrada. El rollback está bloqueado hasta
+                        resolverlo.
+                      </p>
+                      {partialEntries.length > 1 && (
+                        <p className="text-xs text-muted-foreground">
+                          Hay {partialEntries.length} aplicaciones parciales: se resuelven de la
+                          versión <strong>más alta a la más baja</strong>, una por llamada.
+                        </p>
+                      )}
+                    </div>
+                    <ul className="flex flex-col gap-2">
+                      {partialEntries.map((entry) => (
+                        <li
+                          key={entry.version}
+                          className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm text-foreground">
+                              Migración{' '}
+                              <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                                {entry.version}
+                              </code>
+                              : {entry.applied_statements} de {entry.total_statements} sentencias
+                              aplicadas
+                            </span>
+                            {entry.reconcilable ? (
+                              !isArchived && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setReconcileTarget(entry)}
+                                >
+                                  Reconciliar…
+                                </Button>
+                              )
+                            ) : (
+                              <Badge tone="warning">no reconciliable</Badge>
+                            )}
+                          </div>
+                          {!entry.reconcilable && (
+                            <div className="flex flex-col gap-1 text-xs">
+                              {entry.reason && <p className="text-foreground">{entry.reason}</p>}
+                              <p className="text-muted-foreground">
+                                Salidas: <strong>reintenta el apply</strong> (retoma del checkpoint,
+                                desde la sentencia {entry.applied_statements + 1}), o reconcilia el
+                                esquema a mano y usa <strong>stamp force</strong>.
+                              </p>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {isArchived && (
                   <div className="rounded-lg border border-border bg-surface-muted p-3 text-xs text-muted-foreground">
@@ -288,6 +402,13 @@ export function ManagedDatabaseMigrationsModal({
                           hint="Override de cuarentena."
                         />
                       </div>
+                      <div className="max-w-sm">
+                        <OnFailureSelect
+                          value={onFailure}
+                          onChange={setOnFailure}
+                          hint="Solo MySQL/MariaDB. Aplica también a «ir a una versión concreta»."
+                        />
+                      </div>
                       {preview && (
                         <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
                           Plan: {preview.pending_versions.length} pendiente(s)
@@ -324,11 +445,178 @@ export function ManagedDatabaseMigrationsModal({
                       </div>
                     </section>
 
+                    {/* Gate R1 (§9): 409 por baseline de snapshot sin revisar → CTA al blueprint */}
+                    {baselineGateMsg && (
+                      <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-3 text-xs">
+                        <p className="text-foreground">{baselineGateMsg}</p>
+                        {(status.data?.model_id ?? database?.model_id) != null && (
+                          <Link
+                            to={`/database-models/${status.data?.model_id ?? database?.model_id}/migrations`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            Ir al blueprint a revisar el baseline →
+                          </Link>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Resultado del último apply real: results[] + reconciliación (§9) */}
+                    {lastRun && (
+                      <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-foreground">
+                            Resultado del último apply
+                          </h3>
+                          <Button variant="ghost" size="sm" onClick={() => setLastRun(null)}>
+                            Descartar
+                          </Button>
+                        </div>
+                        {lastRun.results.length > 0 ? (
+                          <div className="overflow-x-auto rounded-lg border border-border">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-border text-muted-foreground">
+                                  <th className="px-2 py-1.5 font-medium">Versión</th>
+                                  <th className="px-2 py-1.5 font-medium">Estado</th>
+                                  <th className="px-2 py-1.5 font-medium">ms</th>
+                                  <th className="px-2 py-1.5 font-medium">Detalle</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {lastRun.results.map((item) => (
+                                  <tr key={item.migration_id}>
+                                    <td className="px-2 py-1.5">
+                                      <code className="rounded bg-surface-muted px-1.5 py-0.5">
+                                        {item.version}
+                                      </code>
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <Badge tone={item.status === 'applied' ? 'success' : 'error'}>
+                                        {item.status}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-muted-foreground">
+                                      {item.execution_ms ?? '—'}
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {item.resumed && (
+                                          <Badge tone="info">
+                                            retomada desde sentencia{' '}
+                                            {item.resumed_from_statement ?? '?'}
+                                          </Badge>
+                                        )}
+                                        {item.failed_at_statement_index != null && (
+                                          <Badge tone="error">
+                                            falló en sentencia {item.failed_at_statement_index}
+                                            {item.statement_total != null
+                                              ? ` de ${item.statement_total}`
+                                              : ''}
+                                          </Badge>
+                                        )}
+                                        {item.error && (
+                                          <span className="text-error">{item.error}</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Sin resultados por migración.
+                          </p>
+                        )}
+
+                        {lastRun.reconciliation?.fully_reconciled && (
+                          <p className="rounded-lg border border-success/40 bg-success/5 p-2 text-xs text-foreground">
+                            La migración {lastRun.reconciliation.version} falló, pero el sistema
+                            deshizo automáticamente los cambios aplicados (
+                            {lastRun.reconciliation.undone_count} sentencia(s)). La base volvió a la
+                            versión anterior sin intervención necesaria. Corrige la migración y
+                            reintenta.
+                          </p>
+                        )}
+                        {lastRun.reconciliation && !lastRun.reconciliation.fully_reconciled && (
+                          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
+                            <p className="text-foreground">
+                              {lastRun.reconciliation.attempted
+                                ? `La reconciliación automática de ${lastRun.reconciliation.version} deshizo ${lastRun.reconciliation.undone_count} de ${lastRun.reconciliation.statements_to_undo} sentencia(s), pero quedó incompleta.`
+                                : `La migración ${lastRun.reconciliation.version} falló y la reconciliación automática no se intentó.`}
+                            </p>
+                            {lastRun.reconciliation.error && (
+                              <p className="text-error">{lastRun.reconciliation.error}</p>
+                            )}
+                            {lastRun.reconciliation.unreversible_statements.length > 0 && (
+                              <p className="text-muted-foreground">
+                                Sin reverso conocido (quedaron aplicadas):{' '}
+                                <code className="break-all">
+                                  {lastRun.reconciliation.unreversible_statements.join(' · ')}
+                                </code>
+                              </p>
+                            )}
+                            {lastRun.reconciliation.unconfirmed_reverses.length > 0 && (
+                              <p className="text-muted-foreground">
+                                Aviso — reversos ejecutados no demostrablemente seguros:{' '}
+                                <code className="break-all">
+                                  {lastRun.reconciliation.unconfirmed_reverses.join(' · ')}
+                                </code>
+                              </p>
+                            )}
+                            <p className="text-muted-foreground">
+                              Revisa el aviso de aplicación parcial de arriba para reconciliar lo
+                              pendiente.
+                            </p>
+                          </div>
+                        )}
+                        {lastRun.failed &&
+                          !lastRun.reconciliation &&
+                          (status.isFetching ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Spinner className="h-3.5 w-3.5" /> Verificando si quedó una
+                              aplicación parcial…
+                            </div>
+                          ) : hasPartial ? (
+                            <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
+                              El apply falló y dejó una <strong>aplicación parcial</strong>: revisa
+                              el aviso de arriba para reconciliarla o retomar del checkpoint.
+                            </p>
+                          ) : (
+                            <p className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
+                              El apply falló sin dejar una aplicación parcial registrada; corrige la
+                              migración y reintenta.
+                            </p>
+                          ))}
+                      </section>
+                    )}
+
                     {/* Rollback secuencial */}
                     <section className="flex flex-col gap-3 rounded-lg border border-error/30 p-3">
                       <h3 className="text-sm font-semibold text-foreground">
                         Rollback (destructivo)
                       </h3>
+                      {hasPartial && (
+                        <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+                          <p className="text-foreground">
+                            Hay una <strong>aplicación parcial</strong> pendiente: el rollback está
+                            bloqueado (el backend respondería <code>409</code>) porque el estado
+                            físico no coincide con ninguna versión registrada.
+                          </p>
+                          {firstReconcilable && !isArchived && (
+                            <div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setReconcileTarget(firstReconcilable)}
+                              >
+                                Reconciliar primero…
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Input
                           label="Confirma la versión actual"
@@ -480,6 +768,25 @@ export function ManagedDatabaseMigrationsModal({
             El stamp <strong>no ejecuta SQL</strong>: solo marca la versión en el motor. Úsalo solo
             si el esquema de la BD ya coincide con esa versión.
           </p>
+          <Switch
+            checked={stampForce}
+            onCheckedChange={setStampForce}
+            label="Forzar (force)"
+            disabled={hasPartial}
+            hint={
+              hasPartial
+                ? 'Bloqueado: hay una aplicación parcial pendiente; usa primero «Reconciliar» (reconcile-partial).'
+                : 'Solo si ya reconciliaste el estado físico de la BD a mano.'
+            }
+          />
+          {stampForce && (
+            <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
+              <strong>stamp force NO arregla un apply fallido a mitad</strong>: afirmaría que la
+              migración corrió completa y un rollback posterior partiría de un estado que nunca
+              existió (un tercer estado inconsistente). Úsalo únicamente si ya reconciliaste el
+              estado físico a mano y la BD coincide de verdad con esa versión.
+            </p>
+          )}
           {stampCooldown && (
             <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-error">
               Has alcanzado el límite de 10/min. Espera unos segundos e inténtalo de nuevo.
@@ -487,6 +794,16 @@ export function ManagedDatabaseMigrationsModal({
           )}
         </div>
       </Modal>
+
+      {/* Flujo de reconciliación (§9): montado condicionalmente para estado fresco por entrada */}
+      {reconcileTarget && database && (
+        <ReconcilePartialDialog
+          dbId={dbId}
+          databaseName={database.name}
+          entry={reconcileTarget}
+          onClose={() => setReconcileTarget(null)}
+        />
+      )}
     </>
   )
 }

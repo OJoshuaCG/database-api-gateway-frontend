@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Badge, Button, Input, Modal, Switch } from '@/components/ui'
-import type { ApplyAllResult } from '@/lib/contracts'
+import type { ApplyAllResult, OnFailureMode } from '@/lib/contracts'
 import { useApplyAllMigrations } from '../hooks/use-model-migrations'
+import { OnFailureSelect } from './OnFailureSelect'
 
 interface ApplyAllDialogProps {
   modelId: number
@@ -14,6 +15,8 @@ interface ApplyAllDialogProps {
 export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDialogProps) {
   const [maxDatabases, setMaxDatabases] = useState(10)
   const [force, setForce] = useState(false)
+  // `on_failure` (§9): manejo del fallo a mitad de una migración multi-sentencia por BD.
+  const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
   const [result, setResult] = useState<ApplyAllResult | null>(null)
   const [wasDryRun, setWasDryRun] = useState(false)
   const applyAll = useApplyAllMigrations(modelId)
@@ -26,7 +29,7 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
   const run = (dryRun: boolean) => {
     setWasDryRun(dryRun)
     applyAll.mutate(
-      { maxDatabases, force, dryRun },
+      { maxDatabases, force, dryRun, onFailure },
       { onSuccess: (data) => setResult(data) },
     )
   }
@@ -64,6 +67,10 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
           </div>
         </div>
 
+        <div className="max-w-sm">
+          <OnFailureSelect value={onFailure} onChange={setOnFailure} />
+        </div>
+
         <div className="flex gap-2">
           <Button variant="outline" isLoading={applyAll.isPending} onClick={() => run(true)}>
             Previsualizar (dry-run)
@@ -90,7 +97,22 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
                   </div>
                   {item.applied && item.applied.length > 0 && (
                     <span className="text-xs text-muted-foreground">
-                      Aplicadas: {item.applied.map((a) => a.version).join(', ')}
+                      Aplicadas:{' '}
+                      {item.applied
+                        .map((a) => {
+                          // Detalle de checkpoint/reconciliación (§9), si el backend lo incluye.
+                          const resumed = a.resumed
+                            ? ` (retomada desde sentencia ${a.resumed_from_statement ?? '?'})`
+                            : ''
+                          const failedAt =
+                            a.failed_at_statement_index != null
+                              ? ` (falló en sentencia ${a.failed_at_statement_index}${
+                                  a.statement_total != null ? ` de ${a.statement_total}` : ''
+                                })`
+                              : ''
+                          return `${a.version}${resumed}${failedAt}`
+                        })
+                        .join(', ')}
                     </span>
                   )}
                   {item.pending_versions && item.pending_versions.length > 0 && (
