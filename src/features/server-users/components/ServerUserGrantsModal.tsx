@@ -37,10 +37,14 @@ export function ServerUserGrantsModal({ user, engine, onClose }: ServerUserGrant
   const database = useDebouncedValue(databaseDraft, 400)
   const isPg = engine === 'postgresql'
 
+  // PostgreSQL exige `?database=` para la introspección de grants: sin BD la query no se
+  // dispara (queda gateada en el hook) y en su lugar se muestra el hint de abajo.
+  const needsDatabase = isPg && !database.trim()
   const grants = useUserGrants(
     user?.id ?? 0,
     database.trim() || undefined,
     user !== null && tab === 'effective',
+    isPg,
   )
 
   return (
@@ -81,7 +85,12 @@ export function ServerUserGrantsModal({ user, engine, onClose }: ServerUserGrant
                 placeholder="app_prod"
               />
             )}
-            {grants.isLoading ? (
+            {needsDatabase ? (
+              <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-muted-foreground">
+                Indicá una base de datos para consultar los permisos (PostgreSQL la exige para los
+                grants de objeto).
+              </p>
+            ) : grants.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Spinner className="h-4 w-4" /> Cargando permisos…
               </div>
@@ -95,7 +104,10 @@ export function ServerUserGrantsModal({ user, engine, onClose }: ServerUserGrant
             ) : (
               <ul className="flex flex-col divide-y divide-border">
                 {grants.data?.map((grant, index) => (
-                  <li key={`${grant.level}-${grant.object ?? ''}-${index}`} className="flex flex-col gap-1 py-2">
+                  <li
+                    key={`${grant.level}-${grant.object ?? ''}-${index}`}
+                    className="flex flex-col gap-1 py-2"
+                  >
                     <div className="flex items-center gap-2">
                       <Badge tone="info">{grant.level}</Badge>
                       <span className="text-sm font-medium text-foreground">
@@ -117,6 +129,7 @@ export function ServerUserGrantsModal({ user, engine, onClose }: ServerUserGrant
                 size="sm"
                 onClick={() => void grants.refetch()}
                 isLoading={grants.isFetching}
+                disabled={needsDatabase}
               >
                 Actualizar
               </Button>

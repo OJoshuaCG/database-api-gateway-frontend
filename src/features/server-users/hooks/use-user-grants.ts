@@ -10,12 +10,21 @@ import {
   revokePrivileges,
 } from '../api/server-users.api'
 
-/** Permisos efectivos del usuario (introspección del motor) 🔌. PG: `database` obligatorio. */
-export function useUserGrants(id: number, database: string | undefined, enabled: boolean) {
+/**
+ * Permisos efectivos del usuario (introspección del motor) 🔌. En PostgreSQL el backend exige
+ * `?database=` (grants de objeto): con `requiresDatabase=true` la query no se dispara hasta
+ * que haya una BD indicada — la UI muestra el hint correspondiente en su lugar.
+ */
+export function useUserGrants(
+  id: number,
+  database: string | undefined,
+  enabled: boolean,
+  requiresDatabase = false,
+) {
   return useQuery({
     queryKey: queryKeys.serverUsers.grants(id, database ?? null),
     queryFn: ({ signal }) => listUserGrants(id, database, signal),
-    enabled,
+    enabled: enabled && (!requiresDatabase || Boolean(database)),
   })
 }
 
@@ -39,7 +48,8 @@ export function useGrantPrivileges(id: number) {
         `${result.privileges.join(', ')} a nivel ${result.level}`,
       )
     },
-    onError: (error) => toast.error('No se pudieron otorgar los privilegios', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudieron otorgar los privilegios', toApiError(error).message),
   })
 }
 
@@ -53,7 +63,8 @@ export function useRevokePrivileges(id: number) {
       void invalidateGrants(queryClient, id)
       toast.success('Privilegios revocados')
     },
-    onError: (error) => toast.error('No se pudieron revocar los privilegios', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudieron revocar los privilegios', toApiError(error).message),
   })
 }
 
