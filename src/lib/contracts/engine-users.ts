@@ -91,10 +91,7 @@ export const addHostInSchema = z
   .object({
     username: z.string().min(1, 'Requerido'),
     source_host: z.string().regex(HOST_PATTERN, 'Host inválido').optional(),
-    new_host: z
-      .string()
-      .min(1, 'Requerido')
-      .regex(HOST_PATTERN, 'Host inválido (`%` = wildcard)'),
+    new_host: z.string().min(1, 'Requerido').regex(HOST_PATTERN, 'Host inválido (`%` = wildcard)'),
     reuse_password: z.boolean().optional(),
     new_password: z.string().min(1).nullable().optional(),
     copy_grants: z.boolean().optional(),
@@ -123,6 +120,127 @@ export const addHostOutSchema = z.object({
   server_user_id: z.number().int().nullable().optional(),
 })
 export type AddHostOut = z.infer<typeof addHostOutSchema>
+
+// ── Operaciones batch por username (todos los hosts) 🔌 (§7.4) ──────────────
+// Fail-tolerant por host: responden 200/201 y el desenlace REAL de cada identidad vive en
+// `results[]`, no en el código HTTP. En PostgreSQL `results[].host` es `null` (rol sin host).
+
+/**
+ * `AdoptAllHostsIn` — `POST /servers/{id}/users/adopt-all-hosts`. Adopta TODAS las identidades
+ * en vivo de un username de una sola llamada; nunca ejecuta `CREATE USER`.
+ */
+export const adoptAllHostsInSchema = z.object({
+  username: z.string().min(1, 'Requerido'),
+  /** Si se envía, se cifra y guarda en TODAS las filas SIN ejecutar `ALTER USER` (no se verifica). */
+  known_password: z.string().min(1).nullable().optional(),
+  notes: z.string().nullable().optional(),
+})
+export type AdoptAllHostsIn = z.infer<typeof adoptAllHostsInSchema>
+
+/** `already_adopted` NO es error: un mix de ambos estados es un éxito normal. */
+export const batchAdoptStatusSchema = z.enum(['adopted', 'already_adopted'])
+export type BatchAdoptStatus = z.infer<typeof batchAdoptStatusSchema>
+
+export const batchAdoptResultSchema = z.object({
+  host: z.string().nullable().optional(),
+  status: batchAdoptStatusSchema,
+  server_user_id: z.number().int(),
+})
+export type BatchAdoptResult = z.infer<typeof batchAdoptResultSchema>
+
+/** `BatchAdoptOut` — respuesta 201 de `adopt-all-hosts`. */
+export const batchAdoptOutSchema = z.object({
+  username: z.string(),
+  dialect: engineTypeSchema,
+  total_hosts: z.number().int(),
+  adopted: z.number().int(),
+  results: z.array(batchAdoptResultSchema),
+})
+export type BatchAdoptOut = z.infer<typeof batchAdoptOutSchema>
+
+/** Alcance de `define-password`: una identidad concreta o todos los hosts en vivo. */
+export const definePasswordScopeSchema = z.enum(['host', 'all_hosts'])
+export type DefinePasswordScope = z.infer<typeof definePasswordScopeSchema>
+
+/**
+ * `DefineKnownPasswordIn` — `POST /servers/{id}/users/define-password`. DEFINIR ≠ ROTAR:
+ * cifra y guarda una contraseña que el admin YA conoce, sin tocar el motor (nunca `ALTER USER`).
+ * El gateway NO verifica que sea la vigente — si es incorrecta, `reveal-password` devolverá
+ * luego un valor erróneo sin que nadie lo detecte.
+ */
+export const defineKnownPasswordInSchema = z.object({
+  username: z.string().min(1, 'Requerido'),
+  scope: definePasswordScopeSchema,
+  /** Solo si `scope='host'`. OJO: `%` es un host REAL, no un atajo de "todos los hosts". */
+  host: z.string().regex(HOST_PATTERN, 'Host inválido').optional(),
+  known_password: z.string().min(1, 'Requerido'),
+  /** Crea la fila de inventario (adoptada) para hosts en vivo que aún no la tengan. */
+  adopt_if_missing: z.boolean().optional(),
+  /** OBLIGATORIO `true` para sobrescribir una identidad que ya tenía contraseña guardada. */
+  overwrite: z.boolean().optional(),
+})
+export type DefineKnownPasswordIn = z.infer<typeof defineKnownPasswordInSchema>
+
+/** `conflict_needs_overwrite` NO es error: la UI ofrece reenviar con `overwrite=true`. */
+export const knownPasswordSetStatusSchema = z.enum([
+  'updated',
+  'adopted',
+  'skipped_not_found',
+  'conflict_needs_overwrite',
+])
+export type KnownPasswordSetStatus = z.infer<typeof knownPasswordSetStatusSchema>
+
+export const knownPasswordSetResultSchema = z.object({
+  host: z.string().nullable().optional(),
+  status: knownPasswordSetStatusSchema,
+  server_user_id: z.number().int().nullable().optional(),
+})
+export type KnownPasswordSetResult = z.infer<typeof knownPasswordSetResultSchema>
+
+/** `KnownPasswordSetOut` — respuesta 200 de `define-password`. */
+export const knownPasswordSetOutSchema = z.object({
+  username: z.string(),
+  scope: definePasswordScopeSchema,
+  total_hosts: z.number().int(),
+  updated: z.number().int(),
+  results: z.array(knownPasswordSetResultSchema),
+})
+export type KnownPasswordSetOut = z.infer<typeof knownPasswordSetOutSchema>
+
+/**
+ * `EnginePasswordChangeAllHostsIn` — `PATCH /servers/{id}/users/password-all-hosts`.
+ * `ALTER USER/ROLE` REAL en todos los hosts en vivo. `confirm_username` debe coincidir
+ * EXACTO con `username` (doble intención).
+ */
+export const enginePasswordChangeAllHostsInSchema = z.object({
+  username: z.string().min(1, 'Requerido'),
+  new_password: z.string().min(1, 'Requerido'),
+  confirm_username: z.string().min(1, 'Requerido'),
+  adopt_if_missing: z.boolean().optional(),
+})
+export type EnginePasswordChangeAllHostsIn = z.infer<typeof enginePasswordChangeAllHostsInSchema>
+
+export const passwordChangeBatchStatusSchema = z.enum(['rotated', 'error'])
+export type PasswordChangeBatchStatus = z.infer<typeof passwordChangeBatchStatusSchema>
+
+/** ⚠️ Un host con `status='error'` CONSERVA la contraseña ANTERIOR en el motor. */
+export const passwordChangeBatchResultSchema = z.object({
+  host: z.string().nullable().optional(),
+  status: passwordChangeBatchStatusSchema,
+  server_user_id: z.number().int().nullable().optional(),
+  adopted: z.boolean(),
+  error: z.string().nullable().optional(),
+})
+export type PasswordChangeBatchResult = z.infer<typeof passwordChangeBatchResultSchema>
+
+/** `PasswordChangeBatchOut` — respuesta 200 de `password-all-hosts`. */
+export const passwordChangeBatchOutSchema = z.object({
+  username: z.string(),
+  total_hosts: z.number().int(),
+  updated: z.number().int(),
+  results: z.array(passwordChangeBatchResultSchema),
+})
+export type PasswordChangeBatchOut = z.infer<typeof passwordChangeBatchOutSchema>
 
 /** `EngineRevealPasswordIn` — `POST /servers/{id}/users/reveal-password`. */
 export const engineRevealPasswordInSchema = z.object({

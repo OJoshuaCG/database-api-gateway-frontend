@@ -9,18 +9,25 @@ import {
 } from '@/lib/api/client'
 import {
   addHostOutSchema,
+  batchAdoptOutSchema,
   connectionInfoSchema,
   engineRevealPasswordOutSchema,
   engineUserMutationOutSchema,
   grantableResultSchema,
   groupedEngineUsersOutSchema,
+  knownPasswordSetOutSchema,
+  passwordChangeBatchOutSchema,
   reconcileResultSchema,
   serverOutSchema,
   structureDumpSchema,
   tableSchemaSchema,
   type AddHostIn,
   type AddHostOut,
+  type AdoptAllHostsIn,
+  type BatchAdoptOut,
   type ConnectionInfo,
+  type DefineKnownPasswordIn,
+  type EnginePasswordChangeAllHostsIn,
   type EnginePasswordChangeIn,
   type EngineRevealPasswordIn,
   type EngineRevealPasswordOut,
@@ -29,7 +36,9 @@ import {
   type GrantableRequest,
   type GrantableResult,
   type GroupedEngineUsersOut,
+  type KnownPasswordSetOut,
   type Page,
+  type PasswordChangeBatchOut,
   type ReconcileResult,
   type ServerCreate,
   type ServerOut,
@@ -187,6 +196,50 @@ export function addEngineUserHost(id: number, body: AddHostIn): Promise<AddHostO
   return mutateData('POST', `${BASE}/${id}/users/add-host`, addHostOutSchema, { body })
 }
 
+// ── Operaciones batch por username (todos los hosts) 🔌 (§7.4) ──────────────
+// Fail-tolerant por host: 200/201 con `results[]` — el desenlace real vive AHÍ, no en el
+// código HTTP. En PostgreSQL `results[].host` es null.
+
+/**
+ * `POST /servers/{id}/users/adopt-all-hosts` 🔌 — adopta TODAS las identidades en vivo de un
+ * username (nunca `CREATE USER`). Con `known_password` guarda la contraseña cifrada en todas
+ * las filas SIN ejecutar `ALTER USER`.
+ */
+export function adoptAllHosts(id: number, body: AdoptAllHostsIn): Promise<BatchAdoptOut> {
+  return mutateData('POST', `${BASE}/${id}/users/adopt-all-hosts`, batchAdoptOutSchema, { body })
+}
+
+/**
+ * `POST /servers/{id}/users/define-password` — DEFINE (no rota) una contraseña ya conocida:
+ * la cifra y guarda sin tocar el motor. `overwrite=true` es obligatorio para sobrescribir una
+ * identidad que ya tenía contraseña guardada (`conflict_needs_overwrite` en `results[]`).
+ */
+export function defineKnownPassword(
+  id: number,
+  body: DefineKnownPasswordIn,
+): Promise<KnownPasswordSetOut> {
+  return mutateData('POST', `${BASE}/${id}/users/define-password`, knownPasswordSetOutSchema, {
+    body,
+  })
+}
+
+/**
+ * `PATCH /servers/{id}/users/password-all-hosts` 🔌 — `ALTER USER/ROLE` REAL en todos los
+ * hosts en vivo. Un host con `status='error'` conserva la contraseña ANTERIOR en el motor:
+ * el resultado siempre se comunica por host, nunca con un éxito genérico.
+ */
+export function changeEngineUserPasswordAllHosts(
+  id: number,
+  body: EnginePasswordChangeAllHostsIn,
+): Promise<PasswordChangeBatchOut> {
+  return mutateData(
+    'PATCH',
+    `${BASE}/${id}/users/password-all-hosts`,
+    passwordChangeBatchOutSchema,
+    { body },
+  )
+}
+
 /**
  * `POST /servers/{id}/users/reveal-password` — solo lectura, pero **auditada**: el gateway
  * únicamente puede revelar una contraseña que él mismo fijó (create/rotación vía gateway).
@@ -195,10 +248,7 @@ export function revealEngineUserPassword(
   id: number,
   body: EngineRevealPasswordIn,
 ): Promise<EngineRevealPasswordOut> {
-  return mutateData(
-    'POST',
-    `${BASE}/${id}/users/reveal-password`,
-    engineRevealPasswordOutSchema,
-    { body },
-  )
+  return mutateData('POST', `${BASE}/${id}/users/reveal-password`, engineRevealPasswordOutSchema, {
+    body,
+  })
 }
