@@ -1,11 +1,14 @@
 import { Input, Textarea } from '@/components/ui'
+import { toApiError } from '@/lib/api/errors'
 import { cn } from '@/lib/utils'
 import { hasMysqlProceduralRisk } from '../logic'
 import { ACTION_HINTS } from '../messages'
+import { DependencyClosureNotice } from '../DependencyClosureNotice'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
-/** Vista 4b (Opción A) — metadata de la versión + modo de creación (solo generar / generar y aplicar). */
+/** Vista 4b (Opción A) — cierre de dependencias de la selección + metadata de la versión + modo
+ * de creación (solo generar / generar y aplicar). */
 export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard }) {
   const proceduralRisk = hasMysqlProceduralRisk(
     wizard.allItems.data?.items ?? [],
@@ -22,6 +25,11 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
           Seleccionados: {wizard.selectedItemIds.size} ítem(s) que entrarán a la nueva versión.
         </p>
       </div>
+
+      <DependencyClosureNotice
+        resolve={wizard.resolveSelection}
+        items={wizard.allItems.data?.items ?? []}
+      />
 
       {proceduralRisk && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
@@ -111,6 +119,9 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
           title="No se pudo adoptar la versión"
           onRecalculate={wizard.recalculate}
           onSwitchToExecute={() => wizard.goToStep('executeSelect')}
+          onResolveDependencies={() =>
+            wizard.applySuggestedItemIds(toApiError(error).suggestedItemIds ?? [])
+          }
         />
       )}
     </div>

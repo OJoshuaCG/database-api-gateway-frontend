@@ -10,6 +10,9 @@ interface ErrorRecoveryPanelProps {
   onSwitchToExecute?: () => void
   onForceQuarantine?: () => void
   onRecomputeToken?: () => void
+  /** CTA "Resolver automáticamente" del 422 de dependencias (§10.6): el caller incorpora los
+   * `suggested_item_ids` del error a la selección y vuelve a confirmar. */
+  onResolveDependencies?: () => void
   /** Refleja el estado de carga de la acción de recuperación disparada (p. ej. recalcular). */
   isRecovering?: boolean
 }
@@ -28,15 +31,18 @@ export function ErrorRecoveryPanel({
   onSwitchToExecute,
   onForceQuarantine,
   onRecomputeToken,
+  onResolveDependencies,
   isRecovering = false,
 }: ErrorRecoveryPanelProps) {
-  const action = classifyComparisonError(toApiError(error))
+  const apiError = toApiError(error)
+  const action = classifyComparisonError(apiError)
   const handlers: Partial<Record<ComparisonErrorAction, () => void>> = {
     recalculate: onRecalculate,
     switchToAdopt: onSwitchToAdopt,
     switchToExecute: onSwitchToExecute,
     forceQuarantine: onForceQuarantine,
     recomputeToken: onRecomputeToken,
+    resolveDependencies: onResolveDependencies,
   }
   const handler = handlers[action]
   const label = ACTION_LABELS[action]
@@ -44,6 +50,22 @@ export function ErrorRecoveryPanel({
   return (
     <div className="flex flex-col gap-2">
       <ErrorState error={error} title={title} />
+      {action === 'resolveDependencies' &&
+        apiError.missingDependencies &&
+        apiError.missingDependencies.length > 0 && (
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface-muted p-3">
+            <p className="text-xs font-medium text-foreground">
+              Dependencias faltantes en la selección:
+            </p>
+            <ul className="list-inside list-disc text-xs text-muted-foreground">
+              {apiError.missingDependencies.map((opGroup) => (
+                <li key={opGroup}>
+                  <code className="font-mono">{opGroup}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       {handler && label && (
         <Button variant="outline" className="self-start" onClick={handler} isLoading={isRecovering}>
           {label}

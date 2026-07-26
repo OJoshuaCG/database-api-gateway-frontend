@@ -19,6 +19,7 @@ import {
 import {
   useAllSchemaComparisonItems,
   useExecutePreview,
+  useResolveComparisonSelection,
   useSchemaComparison,
   useSchemaComparisonItems,
 } from '../hooks/use-schema-comparisons'
@@ -40,6 +41,7 @@ import {
   resolveEngineFamily,
   resolveShortcutSelection,
   pendingIndividualReviewIds,
+  toggleSelectionAtomic,
   type DatabaseSideOption,
   type EngineFamily,
   type SelectionShortcut,
@@ -162,10 +164,22 @@ export interface SchemaComparisonWizard {
   allItems: ReturnType<typeof useAllSchemaComparisonItems>
   selectedItemIds: Set<number>
   reviewedItemIds: Set<number>
+  /** Marca/desmarca de forma ATÓMICA: arrastra todas las filas del mismo `op_group` (§10.3). */
   toggleItemSelection: (id: number) => void
   applyShortcut: (shortcut: SelectionShortcut) => void
   markReviewed: (id: number) => void
   pendingReviewIds: number[]
+  /**
+   * Cierre de dependencias de la selección (§10.6): activo en los pasos de confirmación (adopt
+   * siempre; execute solo en modo `custom`). Sus `resolved_item_ids` son la selección FINAL que
+   * viaja a adopt (y, vía preview, a execute) — el submit se bloquea hasta tenerlos frescos.
+   */
+  resolveSelection: ReturnType<typeof useResolveComparisonSelection>
+  /**
+   * CTA "Resolver automáticamente" del 422 de dependencias: incorpora los `suggested_item_ids`
+   * del backend a la selección y limpia el error de la mutación para volver a confirmar.
+   */
+  applySuggestedItemIds: (ids: readonly number[]) => void
 
   // ── Opción A (Vista 4b) ───────────────────────────────────────────────────────
   adoptName: string
@@ -557,14 +571,16 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     step === 'adoptSelect' || step === 'adoptConfirm' || step === 'executeSelect' || step === 'executeConfirm'
   const allItems = useAllSchemaComparisonItems(comparisonId ?? 0, {}, comparisonId != null && selectionActive)
 
-  const toggleItemSelection = useCallback((id: number) => {
-    setSelectedItemIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  // Selección ATÓMICA por op_group (§10.3): marcar/desmarcar una fila arrastra a TODAS las de su
+  // grupo (una redefinición = DROP + CREATE con el mismo op_group; enviar media selección da 422).
+  // Los ítems con op_group null (comparaciones viejas) se comportan como individuales.
+  const toggleItemSelection = useCallback(
+    (id: number) => {
+      const loadedItems = allItems.data?.items ?? []
+      setSelectedItemIds((prev) => toggleSelectionAtomic(loadedItems, prev, id))
+    },
+    [allItems.data],
+  )
   const applyShortcut = useCallback(
     (shortcut: SelectionShortcut) => {
       setSelectedItemIds(resolveShortcutSelection(allItems.data?.items ?? [], shortcut, reviewedItemIds))
@@ -577,6 +593,24 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   const pendingReviewIds = useMemo(
     () => pendingIndividualReviewIds(allItems.data?.items ?? [], selectedItemIds, reviewedItemIds),
     [allItems.data, selectedItemIds, reviewedItemIds],
+  )
+
+  // Identidad estable de la selección como array (el Set solo cambia de identidad al mutarse):
+  // alimenta las queries diferidas (resolve-selection / execute-preview) sin regenerar el array
+  // en cada render.
+  const selectedIdsArray = useMemo(() => [...selectedItemIds], [selectedItemIds])
+
+  // ── Cierre de dependencias (§10.6) — al pasar de la selección a la confirmación ──────────────
+  // Activo SOLO en los pasos de confirmación (adopt siempre — esa vía es selección explícita —,
+  // execute solo en modo custom: los modos masivos resuelven el conjunto en el propio backend y
+  // reportan `excluded_by_dependency` vía preview). Es de solo lectura y NO valida expiración:
+  // nunca sustituye a recalcular la comparación.
+  const resolveSelectionActive =
+    step === 'adoptConfirm' || (step === 'executeConfirm' && executeMode === 'custom')
+  const resolveSelection = useResolveComparisonSelection(
+    comparisonId ?? 0,
+    selectedIdsArray,
+    comparisonId != null && resolveSelectionActive && selectedIdsArray.length > 0,
   )
 
   // Referencia (no estado) porque solo se usa para cancelar/reprogramar el temporizador, nunca
@@ -602,8 +636,14 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   // ── Opción A ──────────────────────────────────────────────────────────────────
   const adopt = useAdoptComparison(comparisonId ?? 0)
   const submitAdopt = useCallback(() => {
+    // La selección final SIEMPRE sale de `resolve-selection` (ya cerrada y en orden de
+    // ejecución), nunca de la selección en vivo: mandar la selección cruda podría omitir
+    // dependencias (422) y, además, `resolved_item_ids` es lo que el usuario acaba de ver como
+    // "se agregaron N sentencias". El botón queda deshabilitado hasta tener el cierre fresco.
+    const resolvedIds = resolveSelection.data?.resolved_item_ids
+    if (!resolvedIds || resolvedIds.length === 0) return
     const body = buildAdoptBody({
-      selectedItemIds,
+      selectedItemIds: resolvedIds,
       name: adoptName,
       description: adoptDescription,
       executeImmediately: adoptExecuteImmediately,
@@ -615,15 +655,24 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
       },
       onError: handleActionError,
     })
-  }, [selectedItemIds, adoptName, adoptDescription, adoptExecuteImmediately, handleActionError, adopt])
+  }, [resolveSelection.data, adoptName, adoptDescription, adoptExecuteImmediately, handleActionError, adopt])
 
   // ── Opción B ──────────────────────────────────────────────────────────────────
   const previewActive = step === 'executeSelect' || step === 'executeConfirm'
+  // En la CONFIRMACIÓN del modo custom, la vista previa (y por tanto el `confirm_token`) se
+  // calcula sobre la selección YA CERRADA por resolve-selection — no sobre la cruda — y queda
+  // deshabilitada hasta tener ese cierre. En el paso de selección sigue usando la selección en
+  // vivo (feedback inmediato del conteo); si el cierre no agrega nada, la query key coincide y
+  // se reusa la caché.
+  const previewUsesResolved = step === 'executeConfirm' && executeMode === 'custom'
+  const previewIds = previewUsesResolved
+    ? (resolveSelection.data?.resolved_item_ids ?? [])
+    : selectedIdsArray
   const preview = useExecutePreview(
     comparisonId ?? 0,
     executeMode,
-    [...selectedItemIds],
-    comparisonId != null && previewActive,
+    previewIds,
+    comparisonId != null && previewActive && (!previewUsesResolved || resolveSelection.data != null),
   )
   const execute = useExecuteComparison(comparisonId ?? 0)
   const submitExecute = useCallback(() => {
@@ -652,6 +701,24 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
       },
     )
   }, [preview.data, selectedItemIds, confirmTargetName, force, handleActionError, execute])
+
+  // ── Red de seguridad del 422 de dependencias (§10.6) ─────────────────────────────
+  // CTA "Resolver automáticamente": suma los `suggested_item_ids` del backend a la selección
+  // (cambia la query key → resolve-selection y preview se recomputan solos) y limpia el error de
+  // ambas mutaciones para que el usuario vuelva a confirmar con el panel de error ya retirado.
+  const applySuggestedItemIds = useCallback(
+    (ids: readonly number[]) => {
+      if (ids.length === 0) return
+      setSelectedItemIds((prev) => {
+        const next = new Set(prev)
+        for (const id of ids) next.add(id)
+        return next
+      })
+      adopt.reset()
+      execute.reset()
+    },
+    [adopt, execute],
+  )
 
   // ── Navegación ────────────────────────────────────────────────────────────────
   const order = useMemo<WizardStep[]>(() => {
@@ -750,6 +817,8 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     applyShortcut,
     markReviewed,
     pendingReviewIds,
+    resolveSelection,
+    applySuggestedItemIds,
 
     adoptName,
     setAdoptName,

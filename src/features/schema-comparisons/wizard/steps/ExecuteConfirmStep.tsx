@@ -1,12 +1,18 @@
 import { Input, Switch } from '@/components/ui'
+import { toApiError } from '@/lib/api/errors'
+import { opGroupObjectNames } from '../logic'
 import { ACTION_HINTS } from '../messages'
+import { DependencyClosureNotice } from '../DependencyClosureNotice'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
+import { PlanWarningsList } from '../PlanWarningsList'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
 /**
  * Vista 5b (Opción B) — doble confirmación: reescribir el nombre exacto del target (mismo patrón
  * que `ConfirmDialog`'s `confirmWord`, pero inline por ser un paso de página) + el `confirm_token`
- * autoritativo de `execute-preview`, más el override de cuarentena si aplica.
+ * autoritativo de `execute-preview`, más el override de cuarentena si aplica. Antes del botón de
+ * confirmar se muestran el cierre de dependencias (modo custom), los `plan_warnings` y los grupos
+ * `excluded_by_dependency` del preview (§10.6): todo lo que cambia lo que realmente se ejecuta.
  */
 export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard }) {
   // SIEMPRE desde la respuesta de la comparación: `targetDetail` no existe para una BD cruda sin
@@ -14,6 +20,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
   const targetName = wizard.targetName ?? ''
   const isQuarantined = wizard.targetDetail.data?.status === 'error'
   const error = wizard.execute.error
+  const allItems = wizard.allItems.data?.items ?? []
 
   return (
     <div className="flex flex-col gap-5">
@@ -24,6 +31,10 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
           que un DROP DATABASE.
         </p>
       </div>
+
+      {wizard.executeMode === 'custom' && (
+        <DependencyClosureNotice resolve={wizard.resolveSelection} items={allItems} />
+      )}
 
       <Input
         label={`Escribe «${targetName}» para confirmar`}
@@ -52,6 +63,30 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
           </span>
         )}
       </div>
+
+      {wizard.preview.data && (
+        <PlanWarningsList warnings={wizard.preview.data.plan_warnings} items={allItems} />
+      )}
+
+      {wizard.preview.data && wizard.preview.data.excluded_by_dependency.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-warning/30 bg-warning/5 p-3">
+          <p className="text-sm font-medium text-foreground">
+            Excluidas por dependencia ({wizard.preview.data.excluded_by_dependency.length})
+          </p>
+          <p className="text-xs text-muted-foreground">
+            El filtro de riesgo del modo excluyó una dependencia y con ella quedaron fuera sus
+            dependientes. Estos cambios NO se ejecutarán:
+          </p>
+          <ul className="list-inside list-disc text-xs text-foreground">
+            {wizard.preview.data.excluded_by_dependency.map((opGroup) => (
+              <li key={opGroup}>{opGroupObjectNames(allItems, opGroup).join(', ')}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Si los necesitas, usa el modo personalizado y selecciónalos explícitamente.
+          </p>
+        </div>
+      )}
 
       {isQuarantined && (
         <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-3">
@@ -90,6 +125,9 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
           onSwitchToAdopt={() => wizard.goToStep('adoptSelect')}
           onForceQuarantine={() => wizard.setForce(true)}
           onRecomputeToken={() => void wizard.preview.refetch()}
+          onResolveDependencies={() =>
+            wizard.applySuggestedItemIds(toApiError(error).suggestedItemIds ?? [])
+          }
         />
       )}
     </div>

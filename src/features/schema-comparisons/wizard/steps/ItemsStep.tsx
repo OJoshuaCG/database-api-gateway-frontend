@@ -1,18 +1,24 @@
 import { useState } from 'react'
-import { Badge, EmptyState, ErrorState, Pagination, Spinner } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorState, Pagination, Spinner, Switch } from '@/components/ui'
 import { schemaChangeTypeSchema, schemaObjectTypeSchema, type SchemaChangeType, type SchemaObjectType } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { CHANGE_TYPE_LABELS, groupItemsByObjectName, OBJECT_TYPE_LABELS } from '../logic'
 import { RiskFlagsBadgeRow } from '../RiskFlagsBadgeRow'
 import { SqlStatementViewer } from '../SqlStatementViewer'
+import { useExportSchemaComparisonSql } from '../../hooks/use-schema-comparison-actions'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
 const CHANGE_TONE = { new: 'success', modified: 'warning', dropped: 'error' } as const
 
-/** Vista 3 — detalle paginado del diff con el DDL exacto por ítem, agrupado por `object_name`. */
+/** Vista 3 — detalle paginado del diff con el DDL exacto por ítem, agrupado por `object_name`,
+ * con descarga del `.sql` que respeta los filtros activos (§10.6: `/export` acepta `object_type`
+ * y `change_type`, los mismos de `/items`). */
 export function ItemsStep({ wizard }: { wizard: SchemaComparisonWizard }) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [includeRollback, setIncludeRollback] = useState(false)
+  const exportSql = useExportSchemaComparisonSql(wizard.comparisonId ?? 0)
   const { items } = wizard
+  const hasActiveFilters = wizard.itemsObjectType != null || wizard.itemsChangeType != null
 
   return (
     <div className="flex flex-col gap-5">
@@ -58,6 +64,29 @@ export function ItemsStep({ wizard }: { wizard: SchemaComparisonWizard }) {
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          isLoading={exportSql.isPending}
+          disabled={exportSql.isPending}
+          onClick={() =>
+            exportSql.mutate({
+              includeRollback,
+              objectType: wizard.itemsObjectType,
+              changeType: wizard.itemsChangeType,
+            })
+          }
+        >
+          {hasActiveFilters ? 'Descargar .sql (con los filtros activos)' : 'Descargar .sql (todo el diff)'}
+        </Button>
+        <Switch
+          checked={includeRollback}
+          onCheckedChange={setIncludeRollback}
+          label="Incluir rollback (comentado)"
+        />
       </div>
 
       {items.isLoading && !items.data ? (

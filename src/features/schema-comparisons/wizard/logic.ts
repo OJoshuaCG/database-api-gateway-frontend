@@ -237,6 +237,88 @@ export function groupItemsByObjectName(
   return order.map((objectName) => ({ objectName, items: groups.get(objectName)! }))
 }
 
+// ── Grupos atómicos (op_group, §10.3) ────────────────────────────────────────────
+/**
+ * Agrupa los ítems por `op_group` (solo los que lo tienen: `op_group: null` = ítem suelto de una
+ * comparación vieja, se trata como individual). Base de toda la selección atómica: un mismo
+ * `op_group` = un mismo cambio lógico (p. ej. redefinición: DROP + CREATE) que debe viajar
+ * completo a adopt/execute — media selección da 422.
+ */
+export function groupItemsByOpGroup(
+  items: SchemaComparisonItemOut[],
+): Map<string, SchemaComparisonItemOut[]> {
+  const groups = new Map<string, SchemaComparisonItemOut[]>()
+  for (const item of items) {
+    if (item.op_group == null) continue
+    const bucket = groups.get(item.op_group)
+    if (bucket) bucket.push(item)
+    else groups.set(item.op_group, [item])
+  }
+  return groups
+}
+
+/** Miembros del grupo atómico de un ítem (él mismo si no tiene `op_group`). */
+function atomicGroupMembers(
+  item: SchemaComparisonItemOut,
+  byOpGroup: Map<string, SchemaComparisonItemOut[]>,
+): SchemaComparisonItemOut[] {
+  return item.op_group != null ? (byOpGroup.get(item.op_group) ?? [item]) : [item]
+}
+
+/**
+ * Marca/desmarca un ítem de forma ATÓMICA: todas las filas de su `op_group` cambian juntas
+ * (los ítems con `op_group: null` se comportan como hoy: individuales). El sentido lo decide el
+ * ítem tocado: si estaba desmarcado se marca TODO el grupo, si estaba marcado se desmarca TODO
+ * — así un grupo a medias (imposible por UI, pero defensivo) converge a un estado consistente.
+ */
+export function toggleSelectionAtomic(
+  items: SchemaComparisonItemOut[],
+  selectedItemIds: ReadonlySet<number>,
+  itemId: number,
+): Set<number> {
+  const next = new Set(selectedItemIds)
+  const item = items.find((candidate) => candidate.id === itemId)
+  if (!item) {
+    // Ítem fuera del conjunto cargado (no debería pasar): degradar al toggle individual previo.
+    if (next.has(itemId)) next.delete(itemId)
+    else next.add(itemId)
+    return next
+  }
+  const members = atomicGroupMembers(item, groupItemsByOpGroup(items))
+  const willSelect = !selectedItemIds.has(itemId)
+  for (const member of members) {
+    if (willSelect) next.add(member.id)
+    else next.delete(member.id)
+  }
+  return next
+}
+
+/**
+ * Ids cuyo checkbox debe estar DESHABILITADO por el gate de revisión individual, extendido al
+ * grupo atómico: si CUALQUIER miembro del grupo es procedural y aún no fue revisado, se bloquea
+ * el grupo COMPLETO — permitir marcar solo la mitad revisada rompería la atomicidad (422).
+ * Para ítems sin grupo es el gate original (él mismo procedural y sin revisar).
+ */
+export function reviewBlockedIds(
+  items: SchemaComparisonItemOut[],
+  reviewedItemIds: ReadonlySet<number>,
+): Set<number> {
+  const byOpGroup = groupItemsByOpGroup(items)
+  const blocked = new Set<number>()
+  for (const item of items) {
+    const members = atomicGroupMembers(item, byOpGroup)
+    if (
+      members.some(
+        (member) =>
+          member.risk_flags.requires_individual_review && !reviewedItemIds.has(member.id),
+      )
+    ) {
+      blocked.add(item.id)
+    }
+  }
+  return blocked
+}
+
 // ── Selección (Vistas 4a/5a) ─────────────────────────────────────────────────────
 /**
  * "Aditivo seguro": objeto nuevo sin NINGUNA bandera de riesgo activa. Es solo un atajo de
@@ -259,9 +341,13 @@ export type SelectionShortcut = 'all' | 'safeAdditive' | 'none'
 
 /**
  * Resuelve el conjunto de ids resultante de aplicar un atajo sobre el conjunto completo de
- * ítems. El atajo "todo" NUNCA incluye un objeto `requires_individual_review` que aún no fue
- * revisado (su checkbox está deshabilitado hasta entonces): incluirlo igual produciría un
- * checkbox marcado-pero-bloqueado que el usuario no podría desmarcar por UI.
+ * ítems, respetando la atomicidad por `op_group`:
+ * - "todo" NUNCA incluye un grupo con algún procedural (`requires_individual_review`) aún sin
+ *   revisar (mismo criterio que `reviewBlockedIds`): incluirlo produciría un checkbox
+ *   marcado-pero-bloqueado que el usuario no podría desmarcar por UI.
+ * - "aditivos seguros" solo incluye grupos donde TODOS los miembros son aditivos seguros —
+ *   incluir solo el CREATE de una redefinición (dejando fuera su DROP) mandaría media selección
+ *   y el backend respondería 422.
  */
 export function resolveShortcutSelection(
   items: SchemaComparisonItemOut[],
@@ -270,13 +356,71 @@ export function resolveShortcutSelection(
 ): Set<number> {
   if (shortcut === 'none') return new Set()
   if (shortcut === 'all') {
-    return new Set(
-      items
-        .filter((item) => !item.risk_flags.requires_individual_review || reviewedItemIds.has(item.id))
-        .map((item) => item.id),
-    )
+    const blocked = reviewBlockedIds(items, reviewedItemIds)
+    return new Set(items.filter((item) => !blocked.has(item.id)).map((item) => item.id))
   }
-  return new Set(items.filter(isSafeAdditive).map((item) => item.id))
+  const byOpGroup = groupItemsByOpGroup(items)
+  return new Set(
+    items
+      .filter((item) => atomicGroupMembers(item, byOpGroup).every(isSafeAdditive))
+      .map((item) => item.id),
+  )
+}
+
+// ── Dependencias entre grupos (depends_on, §10.3) ────────────────────────────────
+export interface DependencyWarning {
+  /** `op_group` del que se depende y que NO está seleccionado. */
+  missingOpGroup: string
+  /** Nombre(s) de objeto del grupo faltante (para un texto legible). */
+  missingObjectNames: string[]
+  /** Nombre(s) de objeto de los ítems seleccionados que lo requieren. */
+  requiredBy: string[]
+}
+
+/** Nombres de objeto (únicos, en orden de aparición) de un `op_group`; cae al id crudo del
+ * grupo si ningún ítem cargado pertenece a él. */
+export function opGroupObjectNames(items: SchemaComparisonItemOut[], opGroup: string): string[] {
+  const names: string[] = []
+  for (const item of items) {
+    if (item.op_group === opGroup && !names.includes(item.object_name)) names.push(item.object_name)
+  }
+  return names.length > 0 ? names : [opGroup]
+}
+
+/**
+ * Advertencia (NO bloqueante) de selección con dependencias sin satisfacer: grupos de los que
+ * dependen ítems SELECCIONADOS (`depends_on`) y que no tienen ningún ítem seleccionado. Es solo
+ * el aviso pedagógico del paso de selección — el cierre REAL lo hace `resolve-selection` al
+ * pasar a confirmar (y el 422 del backend queda como red de seguridad final).
+ */
+export function unsatisfiedDependencyWarnings(
+  items: SchemaComparisonItemOut[],
+  selectedItemIds: ReadonlySet<number>,
+): DependencyWarning[] {
+  const byOpGroup = groupItemsByOpGroup(items)
+  const selectedOpGroups = new Set<string>()
+  for (const item of items) {
+    if (item.op_group != null && selectedItemIds.has(item.id)) selectedOpGroups.add(item.op_group)
+  }
+
+  const requiredByPerGroup = new Map<string, string[]>()
+  for (const item of items) {
+    if (!selectedItemIds.has(item.id)) continue
+    for (const dependency of item.depends_on) {
+      // Solo dependencias presentes en ESTA comparación (el contrato solo lista esas) y aún no
+      // seleccionadas. Si el grupo no aparece entre los ítems cargados, no hay nada que avisar.
+      if (selectedOpGroups.has(dependency) || !byOpGroup.has(dependency)) continue
+      const requiredBy = requiredByPerGroup.get(dependency) ?? []
+      if (!requiredBy.includes(item.object_name)) requiredBy.push(item.object_name)
+      requiredByPerGroup.set(dependency, requiredBy)
+    }
+  }
+
+  return [...requiredByPerGroup.entries()].map(([missingOpGroup, requiredBy]) => ({
+    missingOpGroup,
+    missingObjectNames: opGroupObjectNames(items, missingOpGroup),
+    requiredBy,
+  }))
 }
 
 /**
@@ -300,7 +444,12 @@ export function pendingIndividualReviewIds(
 
 // ── Construcción de cuerpos de request ──────────────────────────────────────────
 export interface AdoptBodyInput {
-  selectedItemIds: ReadonlySet<number>
+  /**
+   * Selección FINAL, ya cerrada por `resolve-selection`: sus `resolved_item_ids` vienen en orden
+   * de ejecución y se reenvían tal cual (por eso es un array ordenado y no un Set). NUNCA se
+   * manda `auto_resolve_dependencies: true`: el cierre es explícito y visible antes de confirmar.
+   */
+  selectedItemIds: readonly number[]
   name: string
   description: string
   executeImmediately: boolean

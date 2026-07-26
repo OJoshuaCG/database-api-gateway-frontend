@@ -1,7 +1,9 @@
 import type { ExecuteMode } from '@/lib/contracts'
 import { ErrorState, Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { opGroupObjectNames } from '../logic'
 import { ItemSelectionPanel } from '../ItemSelectionPanel'
+import { PlanWarningsList } from '../PlanWarningsList'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
 const MODE_OPTIONS: { value: ExecuteMode; label: string; hint: string }[] = [
@@ -95,10 +97,37 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
             title="No se pudo previsualizar la ejecución"
           />
         ) : wizard.preview.data ? (
-          <p className="text-sm text-foreground">
-            Se ejecutarán <strong>{wizard.preview.data.statements.length}</strong> sentencia(s) con
-            el modo actual (previsualización autoritativa del servidor).
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-foreground">
+              Se ejecutarán <strong>{wizard.preview.data.statements.length}</strong> sentencia(s) con
+              el modo actual (previsualización autoritativa del servidor).
+            </p>
+            <PlanWarningsList
+              warnings={wizard.preview.data.plan_warnings}
+              items={wizard.allItems.data?.items ?? []}
+            />
+            {wizard.preview.data.excluded_by_dependency.length > 0 && (
+              <div className="flex flex-col gap-1.5 rounded-lg border border-warning/30 bg-warning/5 p-3">
+                <p className="text-sm font-medium text-foreground">
+                  Excluidas por dependencia ({wizard.preview.data.excluded_by_dependency.length})
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  El filtro de riesgo del modo excluyó una dependencia y, con ella, a sus
+                  dependientes. Estos cambios NO se ejecutarán:
+                </p>
+                <ul className="list-inside list-disc text-xs text-foreground">
+                  {wizard.preview.data.excluded_by_dependency.map((opGroup) => (
+                    <li key={opGroup}>
+                      {opGroupObjectNames(wizard.allItems.data?.items ?? [], opGroup).join(', ')}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  Si los necesitas, usa el modo personalizado y selecciónalos explícitamente.
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             Elige un modo (y al menos un ítem, en personalizado) para ver la vista previa.

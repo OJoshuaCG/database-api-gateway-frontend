@@ -1,12 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button } from '@/components/ui'
 import { ExecutionResultTable } from '../ExecutionResultTable'
+import { PlanWarningsList } from '../PlanWarningsList'
+import { opGroupObjectNames } from '../logic'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
-/** Vista 6 — resultado de la adopción (6A) o de la ejecución (6B). */
+/** Vista 6 — resultado de la adopción (6A) o de la ejecución (6B), incluidos los avisos de plan
+ * (§10.6) que el backend adjunta a la respuesta. */
 export function ResultStep({ wizard }: { wizard: SchemaComparisonWizard }) {
   const navigate = useNavigate()
   const { result } = wizard
+  const allItems = wizard.allItems.data?.items ?? []
   if (!result) return null
 
   if (result.kind === 'adopt') {
@@ -21,7 +25,13 @@ export function ResultStep({ wizard }: { wizard: SchemaComparisonWizard }) {
             Versión {data.version} adoptada al blueprint #{data.model_id}
           </h2>
         </div>
-        <p className="text-sm text-muted-foreground">{data.statements} sentencia(s) incluida(s).</p>
+        <p className="text-sm text-muted-foreground">
+          {data.statements} sentencia(s) incluida(s).
+          {data.added_item_ids.length > 0 &&
+            ` ${data.added_item_ids.length} de ellas se agregaron por cierre de dependencias.`}
+        </p>
+
+        <PlanWarningsList warnings={data.plan_warnings} items={allItems} />
 
         {!data.executed ? (
           <div className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
@@ -87,6 +97,23 @@ export function ResultStep({ wizard }: { wizard: SchemaComparisonWizard }) {
           inténtalo de nuevo (quizá recalculando la comparación si el target quedó en estado
           parcial).
         </p>
+      )}
+      <PlanWarningsList warnings={data.plan_warnings} items={allItems} />
+      {data.excluded_by_dependency.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-warning/30 bg-warning/5 p-3">
+          <p className="text-sm font-medium text-foreground">
+            Excluidas por dependencia ({data.excluded_by_dependency.length})
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Estos cambios NO se ejecutaron: el filtro de riesgo del modo excluyó una dependencia
+            y, con ella, a sus dependientes.
+          </p>
+          <ul className="list-inside list-disc text-xs text-foreground">
+            {data.excluded_by_dependency.map((opGroup) => (
+              <li key={opGroup}>{opGroupObjectNames(allItems, opGroup).join(', ')}</li>
+            ))}
+          </ul>
+        </div>
       )}
       <ExecutionResultTable statements={data.statements} />
       <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-4">

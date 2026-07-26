@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react'
 import { type BadgeTone, Badge, Button, Checkbox, EmptyState, ErrorState, Spinner, Switch } from '@/components/ui'
 import type { EngineType, SchemaChangeType } from '@/lib/contracts'
-import { CHANGE_TYPE_LABELS, groupItemsByObjectName, hasMysqlProceduralRisk, OBJECT_TYPE_LABELS, type SelectionShortcut } from './logic'
+import {
+  CHANGE_TYPE_LABELS,
+  groupItemsByObjectName,
+  groupItemsByOpGroup,
+  hasMysqlProceduralRisk,
+  OBJECT_TYPE_LABELS,
+  opGroupObjectNames,
+  reviewBlockedIds,
+  unsatisfiedDependencyWarnings,
+  type SelectionShortcut,
+} from './logic'
 import { RiskFlagsBadgeRow } from './RiskFlagsBadgeRow'
 import { SqlStatementViewer } from './SqlStatementViewer'
 import type { useAllSchemaComparisonItems } from '../hooks/use-schema-comparisons'
@@ -58,6 +68,19 @@ export function ItemSelectionPanel({
   const proceduralRisk = useMemo(
     () => hasMysqlProceduralRisk(items, selectedItemIds, targetEngine),
     [items, selectedItemIds, targetEngine],
+  )
+  // Grupos atómicos por op_group (§10.3): tamaño de grupo para el indicador visual, gate de
+  // revisión extendido al grupo (media selección de un grupo = 422) y aviso NO bloqueante de
+  // dependencias sin satisfacer (el cierre real lo hace resolve-selection al confirmar).
+  const byOpGroup = useMemo(() => groupItemsByOpGroup(items), [items])
+  const blockedIds = useMemo(() => reviewBlockedIds(items, reviewedItemIds), [items, reviewedItemIds])
+  const dependencyWarnings = useMemo(
+    () => unsatisfiedDependencyWarnings(items, selectedItemIds),
+    [items, selectedItemIds],
+  )
+  const hasAtomicGroups = useMemo(
+    () => [...byOpGroup.values()].some((members) => members.length > 1),
+    [byOpGroup],
   )
 
   if (itemsQuery.isLoading && !itemsQuery.data) {
@@ -147,6 +170,33 @@ export function ItemSelectionPanel({
         </p>
       )}
 
+      {hasAtomicGroups && (
+        <p className="rounded-lg border border-border bg-surface-muted p-3 text-xs text-muted-foreground">
+          🔗 Las filas marcadas como <strong>atómico</strong> forman un mismo cambio lógico (p. ej.
+          una redefinición: DROP + CREATE del mismo objeto) y se seleccionan o deseleccionan
+          siempre juntas.
+        </p>
+      )}
+
+      {dependencyWarnings.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-warning/30 bg-warning/5 p-3">
+          <p className="text-xs font-medium text-foreground">
+            ⚠ Tu selección depende de cambios que no están seleccionados
+          </p>
+          {dependencyWarnings.map((warning) => (
+            <p key={warning.missingOpGroup} className="text-xs text-muted-foreground">
+              <strong className="text-foreground">{warning.requiredBy.join(', ')}</strong> depende de{' '}
+              <strong className="text-foreground">{warning.missingObjectNames.join(', ')}</strong>{' '}
+              (sin seleccionar).
+            </p>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            No bloquea: al pasar a confirmar, el cierre de dependencias agregará lo que falte y te
+            lo mostrará antes de enviar.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
         {groups.map((group) => (
           <div key={group.objectName} className="flex flex-col gap-1.5">
@@ -158,7 +208,10 @@ export function ItemSelectionPanel({
               const requiresReview = item.risk_flags.requires_individual_review
               const isReviewed = reviewedItemIds.has(item.id)
               const checked = selectedItemIds.has(item.id)
-              const checkboxDisabled = requiresReview && !isReviewed
+              // Gate de revisión a nivel de GRUPO atómico: si cualquier miembro del op_group es
+              // procedural y no fue revisado, se bloquea el grupo completo (media selección = 422).
+              const checkboxDisabled = blockedIds.has(item.id)
+              const groupSize = item.op_group != null ? (byOpGroup.get(item.op_group)?.length ?? 1) : 1
 
               return (
                 <div key={item.id} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
@@ -170,6 +223,7 @@ export function ItemSelectionPanel({
                       onChange={() => onToggle(item.id)}
                     />
                     <Badge tone={CHANGE_TONE[item.change_type]}>{CHANGE_TYPE_LABELS[item.change_type]}</Badge>
+                    {groupSize > 1 && <Badge tone="info">🔗 atómico ×{groupSize}</Badge>}
                     <code className="font-mono text-xs text-muted-foreground">#{item.id}</code>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
                       {requiresReview &&
@@ -194,10 +248,25 @@ export function ItemSelectionPanel({
                     </div>
                   </div>
                   <RiskFlagsBadgeRow riskFlags={item.risk_flags} className="pl-7" />
+                  {item.depends_on.length > 0 && (
+                    <p className="pl-7 text-xs text-muted-foreground">
+                      Depende de:{' '}
+                      {item.depends_on
+                        .map((dependency) => opGroupObjectNames(items, dependency).join(', '))
+                        .join(' · ')}{' '}
+                      — deben ejecutarse antes; el cierre de dependencias los agrega si faltan.
+                    </p>
+                  )}
                   {requiresReview && !isReviewed && (
                     <p className="pl-7 text-xs text-muted-foreground">
                       Objeto procedural: márcalo como revisado (revisa el SQL con «Ver SQL» si lo
                       necesitas) para poder seleccionarlo.
+                    </p>
+                  )}
+                  {checkboxDisabled && !(requiresReview && !isReviewed) && (
+                    <p className="pl-7 text-xs text-muted-foreground">
+                      Bloqueado: otra sentencia de su grupo atómico requiere revisión individual —
+                      el grupo se selecciona completo o no se selecciona.
                     </p>
                   )}
                   {isExpanded && (

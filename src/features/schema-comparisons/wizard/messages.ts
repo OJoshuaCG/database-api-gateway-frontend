@@ -16,6 +16,7 @@ export type ComparisonErrorAction =
   | 'forceQuarantine'
   | 'fixConfirmName'
   | 'recomputeToken'
+  | 'resolveDependencies'
   | 'rateLimited'
   | 'none'
 
@@ -36,6 +37,15 @@ const MESSAGE_PATTERNS: [RegExp, ComparisonErrorAction][] = [
 export function classifyComparisonError(error: ApiError): ComparisonErrorAction {
   if (error.status === 410) return 'recalculate'
   if (error.status === 429) return 'rateLimited'
+  // 422 "la selección no cierra sus dependencias" (§10.6): a diferencia del resto, este SÍ trae
+  // contexto estructurado (`public_context.missing_dependencies` / `suggested_item_ids`), así que
+  // se reconoce por dato y no por fragmento de texto.
+  if (
+    error.status === 422 &&
+    (error.suggestedItemIds?.length || error.missingDependencies?.length)
+  ) {
+    return 'resolveDependencies'
+  }
   for (const [pattern, action] of MESSAGE_PATTERNS) {
     if (pattern.test(error.message)) return action
   }
@@ -49,6 +59,7 @@ export const ACTION_LABELS: Record<ComparisonErrorAction, string | null> = {
   forceQuarantine: 'Reintentar con force',
   fixConfirmName: null,
   recomputeToken: 'Recomputar vista previa',
+  resolveDependencies: 'Resolver automáticamente',
   rateLimited: null,
   none: null,
 }
@@ -60,5 +71,7 @@ export const ACTION_HINTS: Partial<Record<ComparisonErrorAction, string>> = {
   switchToExecute: 'El target no tiene blueprint: ejecuta el diff directamente en vez de adoptarlo como versión.',
   forceQuarantine: 'El target está en cuarentena. Solo si ya lo inspeccionaste, reintenta forzando la operación.',
   recomputeToken: 'El conjunto de sentencias a ejecutar cambió desde la última vista previa; se recomputará automáticamente.',
+  resolveDependencies:
+    'Tu selección depende de sentencias que no incluiste. Se agregarán las sugeridas por el backend a la selección; revisa y vuelve a confirmar.',
   rateLimited: 'Se alcanzó el límite de solicitudes. Espera unos segundos e inténtalo de nuevo.',
 }

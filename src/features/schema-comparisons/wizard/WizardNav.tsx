@@ -57,11 +57,18 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
       break
 
     case 'adoptConfirm': {
+      // La selección final sale de resolve-selection (§10.6): sin un cierre FRESCO (ni stale ni
+      // refetching) no hay nada válido que enviar — mismo espíritu que el gate del confirm_token.
+      const closureReady =
+        wizard.resolveSelection.data != null &&
+        !wizard.resolveSelection.isFetching &&
+        !wizard.resolveSelection.isStale
       const disabled =
         busy ||
         wizard.actionCooldown ||
         wizard.adoptName.trim().length === 0 ||
-        wizard.pendingReviewIds.length > 0
+        wizard.pendingReviewIds.length > 0 ||
+        !closureReady
       left = <BackButton wizard={wizard} disabled={busy} />
       right = (
         <Button onClick={wizard.submitAdopt} isLoading={wizard.adopt.isPending} disabled={disabled}>
@@ -86,11 +93,20 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
     case 'executeConfirm': {
       const nameMatches =
         wizard.confirmTargetName.length > 0 && wizard.confirmTargetName === wizard.targetName
+      // En modo custom el preview (y su confirm_token) se calcula sobre la selección CERRADA por
+      // resolve-selection: si el cierre está stale/refetching (p. ej. tras "Resolver
+      // automáticamente"), el token vigente describe la selección anterior — no se puede enviar.
+      const closureReady =
+        wizard.executeMode !== 'custom' ||
+        (wizard.resolveSelection.data != null &&
+          !wizard.resolveSelection.isFetching &&
+          !wizard.resolveSelection.isStale)
       const disabled =
         busy ||
         wizard.actionCooldown ||
         !wizard.preview.data ||
         wizard.preview.isFetching ||
+        !closureReady ||
         !nameMatches ||
         wizard.pendingReviewIds.length > 0
       left = <BackButton wizard={wizard} disabled={busy} />
