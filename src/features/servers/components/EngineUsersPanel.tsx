@@ -3,7 +3,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, EmptyState, ErrorState, Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { queryKeys } from '@/lib/api/query-keys'
-import type { EngineType, EngineUserIdentity, EngineUserIdentityStatus } from '@/lib/contracts'
+import type {
+  EngineType,
+  EngineUserIdentity,
+  EngineUserIdentityStatus,
+  GroupedEngineUser,
+} from '@/lib/contracts'
 import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
 import { ServerUserGrantsModal } from '@/features/server-users/components/ServerUserGrantsModal'
 import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
@@ -14,8 +19,14 @@ import { ChangeEngineUserPasswordModal } from './ChangeEngineUserPasswordModal'
 import { DeleteEngineUserDialog } from './DeleteEngineUserDialog'
 import { AddEngineUserHostModal } from './AddEngineUserHostModal'
 import { RevealEngineUserPasswordModal } from './RevealEngineUserPasswordModal'
+import { AdoptAllHostsModal } from './AdoptAllHostsModal'
+import { DefineKnownPasswordModal } from './DefineKnownPasswordModal'
+import { RotatePasswordAllHostsModal } from './RotatePasswordAllHostsModal'
 
-const STATUS_BADGE: Record<EngineUserIdentityStatus, { tone: 'success' | 'warning' | 'error'; label: string }> = {
+const STATUS_BADGE: Record<
+  EngineUserIdentityStatus,
+  { tone: 'success' | 'warning' | 'error'; label: string }
+> = {
   adopted: { tone: 'success', label: '🟢 Adoptado' },
   unmanaged: { tone: 'warning', label: '🟡 Sin adoptar' },
   orphan: { tone: 'error', label: '🔴 Huérfano' },
@@ -48,6 +59,13 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
   } | null>(null)
   const [revealTarget, setRevealTarget] = useState<IdentityTarget | null>(null)
   const [adoptTarget, setAdoptTarget] = useState<IdentityTarget | null>(null)
+  // Acciones batch (§7.4) a nivel de username, no de identidad.
+  const [adoptAllTarget, setAdoptAllTarget] = useState<string | null>(null)
+  const [defineTarget, setDefineTarget] = useState<{
+    username: string
+    defaultHost?: string | null
+  } | null>(null)
+  const [rotateAllTarget, setRotateAllTarget] = useState<string | null>(null)
   const [grantsUserId, setGrantsUserId] = useState<number | null>(null)
   const [cleanupId, setCleanupId] = useState<number | null>(null)
 
@@ -144,11 +162,7 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
       case 'unmanaged':
         return (
           <div className="flex flex-wrap justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAdoptTarget({ username, host })}
-            >
+            <Button variant="outline" size="sm" onClick={() => setAdoptTarget({ username, host })}>
               Adoptar
             </Button>
             <Button
@@ -170,11 +184,7 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
       case 'orphan':
         return (
           <div className="flex flex-wrap justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCreateTarget({ username, host })}
-            >
+            <Button variant="outline" size="sm" onClick={() => setCreateTarget({ username, host })}>
               Recrear en el motor
             </Button>
             <Button
@@ -189,6 +199,46 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
         )
     }
   }
+
+  /**
+   * Acciones batch (§7.4) a nivel de FILA DE USERNAME (operan sobre todas sus identidades):
+   * - Adoptar todos los hosts: solo con hosts (en PostgreSQL la única identidad ya tiene su
+   *   "Adoptar" por identidad en esta misma fila) y con ≥1 identidad `unmanaged`.
+   * - Definir contraseña conocida: SIEMPRE disponible (flujo DEFINIR, distinto de ROTAR).
+   * - Rotar en todos los hosts: solo con hosts y >1 identidad (con una sola ya existe la
+   *   rotación individual).
+   */
+  const batchActions = (user: GroupedEngineUser) => {
+    const hasUnmanaged = user.identities.some((identity) => identity.status === 'unmanaged')
+    return (
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {supportsHosts && hasUnmanaged && (
+          <Button variant="outline" size="sm" onClick={() => setAdoptAllTarget(user.username)}>
+            Adoptar todos los hosts
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setDefineTarget({ username: user.username })}
+        >
+          Definir contraseña
+        </Button>
+        {supportsHosts && user.identity_count > 1 && (
+          <Button variant="ghost" size="sm" onClick={() => setRotateAllTarget(user.username)}>
+            Rotar en todos los hosts
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  /** Hosts en vivo (no `orphan`) de un username — opciones del alcance «una identidad». */
+  const liveHostsOf = (username: string): string[] =>
+    (data.users.find((user) => user.username === username)?.identities ?? [])
+      .filter((identity) => identity.status !== 'orphan')
+      .map((identity) => identity.host)
+      .filter((host): host is string => Boolean(host))
 
   return (
     <div className="flex flex-col gap-4">
@@ -284,9 +334,12 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
                         </td>
                       )}
                       <td className="px-3 py-2">
-                        {!supportsHosts && singleIdentity
-                          ? identityActions(user.username, singleIdentity)
-                          : null}
+                        <div className="flex flex-col items-end gap-1.5">
+                          {!supportsHosts && singleIdentity
+                            ? identityActions(user.username, singleIdentity)
+                            : null}
+                          {batchActions(user)}
+                        </div>
                       </td>
                     </tr>
 
@@ -359,7 +412,11 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
                                         </Badge>
                                       </td>
                                       <td className="px-3 py-1.5 text-muted-foreground">
-                                        {identity.is_active == null ? '—' : identity.is_active ? 'Sí' : 'No'}
+                                        {identity.is_active == null
+                                          ? '—'
+                                          : identity.is_active
+                                            ? 'Sí'
+                                            : 'No'}
                                       </td>
                                       <td className="px-3 py-1.5">
                                         {identityActions(user.username, identity)}
@@ -430,6 +487,36 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
           serverId={serverId}
           username={adoptTarget.username}
           host={adoptTarget.host}
+          onDefinePassword={() => {
+            // La identidad nace sin contraseña: encadena con «Definir contraseña conocida».
+            setDefineTarget({ username: adoptTarget.username, defaultHost: adoptTarget.host })
+            setAdoptTarget(null)
+          }}
+        />
+      )}
+      {adoptAllTarget && (
+        <AdoptAllHostsModal
+          onClose={() => setAdoptAllTarget(null)}
+          serverId={serverId}
+          username={adoptAllTarget}
+          supportsHosts={supportsHosts}
+        />
+      )}
+      {defineTarget && (
+        <DefineKnownPasswordModal
+          onClose={() => setDefineTarget(null)}
+          serverId={serverId}
+          username={defineTarget.username}
+          supportsHosts={supportsHosts}
+          hostOptions={liveHostsOf(defineTarget.username)}
+          defaultHost={defineTarget.defaultHost}
+        />
+      )}
+      {rotateAllTarget && (
+        <RotatePasswordAllHostsModal
+          onClose={() => setRotateAllTarget(null)}
+          serverId={serverId}
+          username={rotateAllTarget}
         />
       )}
       <ServerUserGrantsModal
