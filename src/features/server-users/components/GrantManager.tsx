@@ -4,23 +4,17 @@ import type { EngineType, GrantLevel, ObjectRef, ServerUserOut } from '@/lib/con
 import { PrivilegeMultiSelect, grantLevelsForEngine } from '@/features/privileges'
 import { useCheckGrantable } from '@/features/servers/hooks/use-grantable'
 import { useGrantPrivileges, useRevokePrivileges } from '../hooks/use-user-grants'
+import {
+  LEVELS_WITH_DATABASE,
+  LEVELS_WITH_SCHEMA,
+  LEVELS_WITH_TABLE,
+  ROUTINE_KINDS,
+} from './grant-object-levels'
 
 interface GrantManagerProps {
   user: ServerUserOut
   engine: EngineType | null
 }
-
-const LEVELS_WITH_DATABASE: GrantLevel[] = [
-  'database',
-  'schema',
-  'table',
-  'column',
-  'sequence',
-  'routine',
-]
-const LEVELS_WITH_SCHEMA: GrantLevel[] = ['schema', 'table', 'column', 'sequence', 'routine']
-const LEVELS_WITH_TABLE: GrantLevel[] = ['table', 'column']
-const ROUTINE_KINDS: ('FUNCTION' | 'PROCEDURE')[] = ['FUNCTION', 'PROCEDURE']
 
 /** Otorga o revoca privilegios de un usuario a un nivel/objeto (§7). Toca el motor 🔌. */
 export function GrantManager({ user, engine }: GrantManagerProps) {
@@ -134,11 +128,7 @@ export function GrantManager({ user, engine }: GrantManagerProps) {
           />
         )}
         {LEVELS_WITH_TABLE.includes(level) && (
-          <Input
-            label="Tabla"
-            value={table}
-            onChange={(event) => setTable(event.target.value)}
-          />
+          <Input label="Tabla" value={table} onChange={(event) => setTable(event.target.value)} />
         )}
         {level === 'column' && (
           <Input
@@ -191,15 +181,15 @@ export function GrantManager({ user, engine }: GrantManagerProps) {
               size="sm"
               isLoading={grantable.isPending}
               disabled={!hasPrivileges}
-              onClick={() =>
-                grantable.mutate({ level, object_ref: buildObjectRef(), privileges })
-              }
+              onClick={() => grantable.mutate({ level, object_ref: buildObjectRef(), privileges })}
             >
               Comprobar delegación
             </Button>
             {grantable.data && (
               <Badge tone={grantable.data.can_grant ? 'success' : 'error'}>
-                {grantable.data.can_grant ? 'El gateway puede delegar' : 'El gateway NO puede delegar'}
+                {grantable.data.can_grant
+                  ? 'El gateway puede delegar'
+                  : 'El gateway NO puede delegar'}
               </Badge>
             )}
           </div>

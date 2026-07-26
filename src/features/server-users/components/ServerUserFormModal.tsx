@@ -1,8 +1,10 @@
 import { Modal } from '@/components/ui'
-import type { ServerUserOut } from '@/lib/contracts'
+import type { EngineType, ServerUserOut } from '@/lib/contracts'
 import { useCreateServerUser, useUpdateServerUser } from '../hooks/use-server-user-mutations'
+import { useProvisionServerUser } from '../hooks/use-provision-server-user'
 import {
   ServerUserForm,
+  toInitialGrant,
   toServerUserCreate,
   toServerUserUpdate,
   type ServerUserFormValues,
@@ -25,17 +27,28 @@ export function ServerUserFormModal({
 }: ServerUserFormModalProps) {
   const create = useCreateServerUser()
   const update = useUpdateServerUser(user?.id ?? 0)
-  const isSubmitting = create.isPending || update.isPending
+  const provision = useProvisionServerUser()
+  const isSubmitting = create.isPending || update.isPending || provision.isPending
 
-  const handleSubmit = (values: ServerUserFormValues) => {
+  const handleSubmit = (values: ServerUserFormValues, engine: EngineType | null) => {
     if (user) {
       update.mutate(
         { body: toServerUserUpdate(values), provision: values.provision },
         { onSuccess: onClose },
       )
+      return
+    }
+    // Con permisos iniciales, `POST /server-users/provision` crea + aprovisiona + otorga en una
+    // sola llamada (§7); sin ellos se conserva el camino clásico `POST /server-users?provision=`.
+    const initialGrant = values.provision ? toInitialGrant(values, engine) : null
+    if (initialGrant) {
+      provision.mutate(
+        { ...toServerUserCreate(values, engine), initial_grants: [initialGrant] },
+        { onSuccess: onClose },
+      )
     } else {
       create.mutate(
-        { body: toServerUserCreate(values), provision: values.provision },
+        { body: toServerUserCreate(values, engine), provision: values.provision },
         { onSuccess: onClose },
       )
     }
