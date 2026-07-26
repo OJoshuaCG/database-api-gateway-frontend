@@ -63,4 +63,44 @@ describe('useProvisionServerUser', () => {
     expect(result.current.data?.grants_applied).toBe(1)
     expect(result.current.data?.user.username).toBe('app_user')
   })
+
+  it('los grants fallidos (best-effort) no convierten la mutación en error', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/server-users/provision', () =>
+        HttpResponse.json({
+          data: {
+            user: userFixture,
+            grants_applied: 0,
+            grant_results: [
+              {
+                level: 'database',
+                object: 'app_prod',
+                privileges: ['SELECT'],
+                success: false,
+                error: 'permiso denegado',
+              },
+            ],
+          },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(() => useProvisionServerUser(), { wrapper })
+
+    act(() => {
+      result.current.mutate({
+        server_id: 42,
+        username: 'app_user',
+        host: '%',
+        password: 'p@ss',
+        initial_grants: [
+          { level: 'database', object_ref: { database: 'app_prod' }, privileges: ['SELECT'] },
+        ],
+      })
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.grant_results[0]?.success).toBe(false)
+    expect(result.current.data?.grant_results[0]?.error).toBe('permiso denegado')
+  })
 })
