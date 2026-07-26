@@ -1,5 +1,15 @@
 # API Reference — Database API Gateway
 
+> ⚠️ **Copia parcial e histórica.** Este archivo y sus addenda
+> ([`-v3`](api-reference-v3.md), [`-v4`](api-reference-v4.md)) cubren hasta las
+> migraciones de blueprints (Plan 02). El backend consolidó después todo el contrato
+> —adopción/reconciliación/snapshot, usuarios agrupados y batch, comparación de
+> esquemas, reconciliación de aplicaciones parciales y clonado— en un único documento:
+> **`backend/docs/api-reference.md` es la fuente de verdad**. Modela los contratos Zod
+> desde ahí, no desde este archivo ([ADR-0001](adr/0001-contrato-zod-manual.md)).
+> Para saber qué está integrado en la UI y desde dónde, ver
+> [`api-coverage.md`](api-coverage.md).
+
 > Referencia completa para integrar el **Database API Gateway** en tu desarrollo.
 > Documenta cada endpoint, sus parámetros, tipos y valores permitidos, ejemplos de
 > uso (`curl` + JSON) y el orden en que deben consumirse para cumplir cada propósito.
