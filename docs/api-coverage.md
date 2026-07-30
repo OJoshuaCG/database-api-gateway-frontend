@@ -33,13 +33,25 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog` |
 | 11 | `POST /{id}/test-connection` 🔌 | ✅ | `ServerDetailPage` → "Probar conexión" (muestra `dialect` + `server_version`) |
-| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Introspección" + selectores de los asistentes |
+| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario) + tab "Introspección" + selectores de los asistentes |
 | 14 | `GET .../tables` 🔌 | ✅ | `IntrospectionExplorer` |
 | 15 | `GET .../tables/{t}/schema` 🔌 | ✅ | `IntrospectionExplorer` (columnas, PK, índices, FKs) |
 | 16 | `POST /{id}/grantable` 🔌 | ✅ | `GrantManager` (pre-chequeo antes de otorgar) |
 | 59 | `GET /{id}/reconcile` 🔌 | ✅ | Tab "Reconciliación" → `ServerReconcilePanel` (`managed`/`unmanaged`/`orphan`) |
 | 60 | `GET .../snapshot` 🔌 | ✅ | `SnapshotModal` ("Ver snapshot") + asistente de blueprint desde snapshot |
 | 13 | `GET /{id}/users` (plano) 🔌 | ⛔ | Legacy: el propio contrato recomienda la vista agrupada (#64), que sí está integrada. Repetiría un `user@host` por cuenta. |
+
+### Ciclo de vida de BDs a nivel servidor (`/servers/{id}/databases`, por identidad física)
+
+Opera sobre el par `(server_id, database)`, sin exigir que la BD esté adoptada en el inventario.
+Complementa —no reemplaza— al CRUD de `/managed-databases`.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| — | `POST /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → "Nueva base de datos" → `CreateServerDatabaseModal` (formulario adaptado al motor; `register` como `Switch` que revela el propietario) |
+| — | `GET .../{db}/users` 🔌 | ✅ | `ServerDatabaseDetailModal` → tab "Usuarios con permisos" → `DatabaseGranteesPanel` (consulta inversa; oculta `host` si `supports_hosts=false`) |
+| — | `POST .../{db}/drop-preview` 🔌 | ✅ | `DropDatabaseDialog`, paso 1: conexiones activas, cruce con inventario y `confirm_token` con cuenta atrás contra `expires_at` |
+| — | `DELETE .../{db}` 🔌 ⚠️ | ✅ | `DropDatabaseDialog`, paso 2: exige transcribir el nombre exacto + token vigente; `force_disconnect` como `Checkbox`. Sin reintento automático ni borrado en lote (§6.5/§6.6) |
 
 ## Usuarios del motor
 
