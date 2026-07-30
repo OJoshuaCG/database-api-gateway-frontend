@@ -18,8 +18,9 @@ import { ServerFormModal } from '../components/ServerFormModal'
 import { IntrospectionExplorer } from '../components/IntrospectionExplorer'
 import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
 import { EngineUsersPanel } from '../components/EngineUsersPanel'
+import { ServerDatabasesPanel } from '@/features/server-databases'
 
-type Tab = 'info' | 'introspection' | 'users' | 'reconcile'
+type Tab = 'info' | 'databases' | 'introspection' | 'users' | 'reconcile'
 
 export function ServerDetailPage() {
   const params = useParams()
@@ -90,6 +91,9 @@ export function ServerDetailPage() {
         <TabButton active={tab === 'info'} onClick={() => setTab('info')}>
           Información
         </TabButton>
+        <TabButton active={tab === 'databases'} onClick={() => setTab('databases')}>
+          Bases de datos
+        </TabButton>
         <TabButton active={tab === 'introspection'} onClick={() => setTab('introspection')}>
           Introspección
         </TabButton>
@@ -127,6 +131,9 @@ export function ServerDetailPage() {
             </dl>
           </CardContent>
         </Card>
+      )}
+      {tab === 'databases' && (
+        <ServerDatabasesPanel server={server} onGoToReconcile={() => setTab('reconcile')} />
       )}
       {tab === 'introspection' && <IntrospectionExplorer serverId={serverId} />}
       {tab === 'users' && <EngineUsersPanel serverId={serverId} engine={server.engine} />}
