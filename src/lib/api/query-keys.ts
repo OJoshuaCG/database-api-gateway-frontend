@@ -18,6 +18,9 @@ export const queryKeys = {
     detail: (id: number) => ['servers', 'detail', id] as const,
     databases: (id: number) => ['servers', id, 'databases'] as const,
     groupedUsers: (id: number) => ['servers', id, 'grouped-users'] as const,
+    /** Usuarios/roles del motor con permisos sobre UNA base de datos (consulta inversa). */
+    databaseGrantees: (id: number, database: string) =>
+      ['servers', id, 'databases', database, 'grantees'] as const,
     tables: (id: number, database: string) =>
       ['servers', id, 'databases', database, 'tables'] as const,
     tableSchema: (id: number, database: string, table: string) =>
