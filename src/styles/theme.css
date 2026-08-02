@@ -48,6 +48,22 @@
   --ring: #4f46e5;
   --overlay: rgb(15 23 42 / 0.45);
 
+  /* Resaltado de SQL — paleta de VSCode "Light+" (default light).
+     Se mantienen los valores literales del editor porque el objetivo es que el SQL se lea
+     igual que en el editor donde se escribe; solo el fondo se enfría un punto para no chocar
+     con la superficie de la tarjeta que lo contiene. */
+  --syntax-bg: #fbfcfe;
+  --syntax-plain: #1f2430;
+  --syntax-keyword: #0000ff;
+  --syntax-string: #a31515;
+  --syntax-number: #098658;
+  --syntax-comment: #008000;
+  --syntax-function: #795e26;
+  --syntax-identifier: #001080;
+  --syntax-operator: #1f2430;
+  --syntax-punctuation: #64748b;
+  --syntax-gutter: #94a3b8;
+
   /* Sombras de superficie (claymorphism suave) — NO se aplican a controles */
   --clay: 6px 6px 16px rgb(15 23 42 / 0.08), -6px -6px 16px rgb(255 255 255 / 0.9);
   --clay-inset:
@@ -81,6 +97,21 @@
   --ring: #818cf8;
   --overlay: rgb(2 6 16 / 0.6);
 
+  /* Resaltado de SQL — paleta de VSCode "Dark+" (default dark). El fondo se tiñe de azul
+     para integrarse con las superficies de la app en vez del gris neutro #1e1e1e del editor;
+     los colores de sintaxis sí son los literales de Dark+. */
+  --syntax-bg: #0d1424;
+  --syntax-plain: #d4d4d4;
+  --syntax-keyword: #569cd6;
+  --syntax-string: #ce9178;
+  --syntax-number: #b5cea8;
+  --syntax-comment: #6a9955;
+  --syntax-function: #dcdcaa;
+  --syntax-identifier: #9cdcfe;
+  --syntax-operator: #d4d4d4;
+  --syntax-punctuation: #8fa0bd;
+  --syntax-gutter: #5a6785;
+
   --clay: 6px 6px 18px rgb(2 6 16 / 0.55), -6px -6px 18px rgb(40 54 84 / 0.35);
   --clay-inset: inset 4px 4px 10px rgb(2 6 16 / 0.5), inset -4px -4px 10px rgb(40 54 84 / 0.3);
   --elevated: 0 1px 2px rgb(2 6 16 / 0.5), 0 8px 24px rgb(2 6 16 / 0.5);
@@ -111,6 +142,18 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);
+
+  --color-syntax-bg: var(--syntax-bg);
+  --color-syntax-plain: var(--syntax-plain);
+  --color-syntax-keyword: var(--syntax-keyword);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-comment: var(--syntax-comment);
+  --color-syntax-function: var(--syntax-function);
+  --color-syntax-identifier: var(--syntax-identifier);
+  --color-syntax-operator: var(--syntax-operator);
+  --color-syntax-punctuation: var(--syntax-punctuation);
+  --color-syntax-gutter: var(--syntax-gutter);
 
   --shadow-clay: var(--clay);
   --shadow-clay-inset: var(--clay-inset);

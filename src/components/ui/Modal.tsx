@@ -8,13 +8,15 @@ export interface ModalProps {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'full'
 }
 
 const SIZES = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  /** Visor a pantalla casi completa (`CodeBlock` expandido); el alto lo fija el contenido. */
+  full: 'max-w-[min(96rem,95vw)]',
 }
 
 /**
