@@ -1,26 +1,29 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, type ReactNode } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Card,
+  CardContent,
   Combobox,
   EmptyState,
   ErrorState,
+  FullPageSpinner,
   IconButton,
   Input,
   Modal,
+  PageHeader,
   Pagination,
   Spinner,
   Switch,
   XIcon,
 } from '@/components/ui'
-import { cn, formatDateTime } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import { toApiError } from '@/lib/api/errors'
 import {
   isDryRunResult,
   MIGRATION_VERSION_PATTERN,
   PAGINATION,
-  type ManagedDatabaseOut,
   type MigrationApplyResult,
   type ModelMigrationSummary,
   type OnFailureMode,
@@ -28,6 +31,7 @@ import {
 } from '@/lib/contracts'
 import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
+import { useManagedDatabase } from '../hooks/use-managed-databases'
 import {
   useApplyMigrations,
   useMigrationHistory,
@@ -35,39 +39,36 @@ import {
   useRollbackMigration,
   useStampMigration,
 } from '../hooks/use-db-migrations'
-import { ProvisionStatusBadge } from './ProvisionStatusBadge'
-import { ReconcilePartialDialog } from './ReconcilePartialDialog'
+import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
+import { ReconcilePartialSection } from '../components/ReconcilePartialSection'
 
-interface ManagedDatabaseMigrationsModalProps {
-  database: ManagedDatabaseOut | null
-  onClose: () => void
+const TABS = ['actions', 'history'] as const
+type Tab = (typeof TABS)[number]
+
+function isTab(value: string | null): value is Tab {
+  return value !== null && (TABS as readonly string[]).includes(value)
 }
-
-type Tab = 'actions' | 'history'
 
 /**
  * Migraciones sobre una BD gestionada (§9 / Plan 09 §7-bis): estado, actualizar a la última en un
- * clic, ir a una versión concreta, rollback secuencial e historial 🔌.
+ * clic, ir a una versión concreta, rollback secuencial, stamp, reconciliación de aplicaciones
+ * parciales e historial 🔌.
+ *
+ * Fue un modal hasta que el flujo creció a cuatro fases con diálogos apilados dentro de 672 px;
+ * como página a todo el ancho cada fase tiene sitio y el estado navegable (pestaña, versión en
+ * reconciliación) vive en la URL, así que se puede enlazar y recargar sin perderlo.
  */
-export function ManagedDatabaseMigrationsModal({
-  database,
-  onClose,
-}: ManagedDatabaseMigrationsModalProps) {
-  const [tab, setTab] = useState<Tab>('actions')
-  const dbId = database?.id ?? 0
-  const hasModel = Boolean(database?.model_id)
-  const open = database !== null
+export function ManagedDatabaseMigrationsPage() {
+  const params = useParams()
+  const databaseId = Number(params.databaseId)
+  const validId = Number.isFinite(databaseId) && databaseId > 0
 
-  const status = useMigrationStatus(dbId, open && hasModel)
-  const apply = useApplyMigrations(dbId)
-  const rollback = useRollbackMigration(dbId)
-  const stamp = useStampMigration(dbId)
-  // Catálogo de versiones del blueprint para poblar el selector del stamp (Cambio 4).
-  const versions = useModelMigrations(
-    database?.model_id ?? 0,
-    { page: 1, size: PAGINATION.maxSize },
-    open && hasModel,
-  )
+  // Pestaña y objetivo de reconciliación viven en la URL, no en estado local: así se enlaza
+  // directamente al historial o a una reconciliación concreta, y «cerrar» es quitar el parámetro.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: Tab = isTab(tabParam) ? tabParam : 'actions'
+  const reconcileVersion = searchParams.get('reconcile')
 
   const [applyVersion, setApplyVersion] = useState('')
   const [force, setForce] = useState(false)
@@ -87,12 +88,34 @@ export function ManagedDatabaseMigrationsModal({
   const [stampOpen, setStampOpen] = useState(false)
   // Tras un 429 (rate limit 10/min) bloqueamos el botón de stamp unos segundos (Item 9).
   const [stampCooldown, setStampCooldown] = useState(false)
-  // Entrada de `partial_application[]` en reconciliación (monta el diálogo condicionalmente).
-  const [reconcileTarget, setReconcileTarget] = useState<PartialApplicationEntry | null>(null)
+  // Última entrada parcial vista para el `?reconcile=` actual: al ejecutar la reconciliación el
+  // backend la borra de `partial_application[]`, y sin conservarla la sección se desmontaría justo
+  // al terminar, llevándose el resultado que el admin necesita leer.
+  const [seenEntry, setSeenEntry] = useState<PartialApplicationEntry | null>(null)
   // La BD llega como snapshot: tras un stamp exitoso reflejamos error→active localmente sin esperar
-  // a que el padre recargue la lista (el estado real ya se invalidó/refetch-eó).
+  // al refetch del detalle (el estado real ya se invalidó).
   const [recovered, setRecovered] = useState(false)
 
+  const db = useManagedDatabase(databaseId, validId)
+  const modelId = db.data?.model_id ?? 0
+  const hasModel = modelId > 0
+
+  const status = useMigrationStatus(databaseId, validId && hasModel)
+  const apply = useApplyMigrations(databaseId)
+  const rollback = useRollbackMigration(databaseId)
+  const stamp = useStampMigration(databaseId)
+  // Catálogo de versiones del blueprint para poblar el selector del stamp (Cambio 4).
+  const versions = useModelMigrations(modelId, { page: 1, size: PAGINATION.maxSize }, hasModel)
+
+  if (!validId) {
+    return <ErrorState error={new Error('Identificador de base de datos inválido.')} />
+  }
+  if (db.isLoading) return <FullPageSpinner label="Cargando base de datos" />
+  if (db.isError || !db.data) {
+    return <ErrorState error={db.error} onRetry={() => void db.refetch()} />
+  }
+
+  const database = db.data
   const currentVersion = status.data?.current_version ?? null
   const latest = status.data?.latest_available ?? null
   const pendingCount = status.data?.pending_count ?? 0
@@ -104,13 +127,36 @@ export function ManagedDatabaseMigrationsModal({
   const firstReconcilable = partialEntries.find((entry) => entry.reconcilable) ?? null
   const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion && !hasPartial
 
-  const isQuarantined = database?.status === 'error' && !recovered
+  const isQuarantined = database.status === 'error' && !recovered
   // Una BD archivada es de solo lectura: se ocultan las acciones que tocan el motor (Item 11).
-  const isArchived = database?.status === 'archived'
-  const effectiveStatus = recovered ? 'active' : (database?.status ?? 'pending')
+  const isArchived = database.status === 'archived'
+  const effectiveStatus = recovered ? 'active' : database.status
   const versionItems = versions.data?.items ?? []
   const selectedStampVersion = versionItems.find((m) => m.version === stampVersion) ?? null
   const stampValid = MIGRATION_VERSION_PATTERN.test(stampVersion.trim())
+
+  // Ajuste de estado en render (no en efecto): memoriza la entrada mientras siga en el estado.
+  const matchedEntry = reconcileVersion
+    ? (partialEntries.find((entry) => entry.version === reconcileVersion) ?? null)
+    : null
+  if (matchedEntry && matchedEntry !== seenEntry) setSeenEntry(matchedEntry)
+  const reconcileEntry = reconcileVersion
+    ? (matchedEntry ?? (seenEntry?.version === reconcileVersion ? seenEntry : null))
+    : null
+
+  const updateParams = (mutate: (next: URLSearchParams) => void) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous)
+      mutate(next)
+      return next
+    })
+  }
+  const setTab = (value: Tab) => updateParams((next) => next.set('tab', value))
+  const openReconcile = (version: string) => updateParams((next) => next.set('reconcile', version))
+  const closeReconcile = () => {
+    setSeenEntry(null)
+    updateParams((next) => next.delete('reconcile'))
+  }
 
   const openStamp = () => {
     setStampVersion('')
@@ -127,7 +173,7 @@ export function ManagedDatabaseMigrationsModal({
           setStampVersion('')
           setStampForce(false)
           // Un stamp saca a la BD de cuarentena (error→active); lo reflejamos en la UI.
-          if (database?.status === 'error') setRecovered(true)
+          if (database.status === 'error') setRecovered(true)
         },
         onError: (err) => {
           // 429: superó el límite de 10/min. Bloqueamos el botón unos segundos (el hook ya avisa).
@@ -174,111 +220,129 @@ export function ManagedDatabaseMigrationsModal({
   }
 
   return (
-    <>
-      <Modal
-        open={open}
-        onClose={() => {
-          setMissingDownSql(null)
-          onClose()
-        }}
-        title="Migraciones de la base de datos"
-        description={database ? `«${database.name}» (#${database.id})` : undefined}
-        size="lg"
-      >
-        {!hasModel ? (
-          <EmptyState
-            title="Sin blueprint asignado"
-            description="Asigna un blueprint (model_id) a esta base de datos para gestionar sus migraciones."
-          />
-        ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-1 border-b border-border">
-              <button
-                type="button"
-                onClick={() => setTab('actions')}
-                className={cn(
-                  '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-                  tab === 'actions'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Estado y acciones
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('history')}
-                className={cn(
-                  '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-                  tab === 'history'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Historial
-              </button>
-            </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <Link
+          to="/managed-databases"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          ← Bases de datos
+        </Link>
+        <PageHeader
+          title={database.name}
+          description="Aplica, revierte y marca versiones del blueprint sobre esta base de datos real. Las acciones marcadas con 🔌 ejecutan SQL en el motor."
+          actions={
+            hasModel && !isArchived ? (
+              <>
+                <Button variant="outline" onClick={openStamp} disabled={stamp.isPending}>
+                  Marcar versión (stamp)…
+                </Button>
+                <Button
+                  isLoading={apply.isPending}
+                  disabled={pendingCount === 0}
+                  onClick={() => runApply({ dryRun: false })}
+                >
+                  {/* En la cabecera el botón se lee antes que el estado: mientras se carga no
+                      puede afirmar «ya está al día», que aún no se sabe. */}
+                  {status.isLoading
+                    ? 'Comprobando estado…'
+                    : pendingCount === 0
+                      ? 'Ya está al día'
+                      : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
+                </Button>
+              </>
+            ) : undefined
+          }
+        />
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <ProvisionStatusBadge status={effectiveStatus} />
+          <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            #{database.id}
+          </code>
+          {hasModel && (
+            <Link
+              to={`/database-models/${modelId}/migrations`}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Ver el blueprint →
+            </Link>
+          )}
+        </div>
+      </div>
 
-            {tab === 'actions' && (
-              <div className="flex flex-col gap-5">
-                {/* Estado de la BD + recuperación de cuarentena (Cambio 4) */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Estado de la BD:</span>
-                  <ProvisionStatusBadge status={effectiveStatus} />
-                </div>
-                {isQuarantined && (
-                  <div className="flex flex-col gap-3 rounded-lg border border-error/40 bg-error/5 p-3">
-                    <div className="flex flex-col gap-1">
-                      <h3 className="text-sm font-semibold text-foreground">En cuarentena</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Esta base quedó en cuarentena por un apply fallido. Si el esquema ya
-                        coincide con el baseline, márcala con un stamp para recuperarla; si no,
-                        reintenta el apply forzando la cuarentena.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        isLoading={apply.isPending}
-                        onClick={() =>
-                          apply.mutate(
-                            { force: true, dryRun: false, onFailure },
-                            {
-                              onSuccess: (result) => {
-                                setPreview(null)
-                                setLastRun(result)
-                                // Si el apply forzado no falló, la BD sale de cuarentena (error→active).
-                                if (!result.failed && !result.quarantined) setRecovered(true)
-                              },
-                              onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
+      {!hasModel ? (
+        <EmptyState
+          title="Sin blueprint asignado"
+          description="Asigna un blueprint (model_id) a esta base de datos para gestionar sus migraciones."
+        />
+      ) : (
+        <>
+          <div className="flex gap-1 border-b border-border" role="tablist">
+            <TabButton active={tab === 'actions'} onClick={() => setTab('actions')}>
+              Estado y acciones
+            </TabButton>
+            <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
+              Historial
+            </TabButton>
+          </div>
+
+          {tab === 'actions' && (
+            <div className="flex flex-col gap-6">
+              {/* Recuperación de cuarentena (Cambio 4) */}
+              {isQuarantined && (
+                <div className="flex flex-col gap-3 rounded-lg border border-error/40 bg-error/5 p-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-sm font-semibold text-foreground">En cuarentena</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Esta base quedó en cuarentena por un apply fallido. Si el esquema ya coincide
+                      con el baseline, márcala con un stamp para recuperarla; si no, reintenta el
+                      apply forzando la cuarentena.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      isLoading={apply.isPending}
+                      onClick={() =>
+                        apply.mutate(
+                          { force: true, dryRun: false, onFailure },
+                          {
+                            onSuccess: (result) => {
+                              setPreview(null)
+                              setLastRun(result)
+                              // Si el apply forzado no falló, la BD sale de cuarentena (error→active).
+                              if (!result.failed && !result.quarantined) setRecovered(true)
                             },
-                          )
-                        }
-                      >
-                        Reintentar apply (force) 🔌
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={openStamp}
-                        disabled={stamp.isPending}
-                      >
-                        Marcar versión (stamp) para recuperar
-                      </Button>
-                    </div>
+                            onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
+                          },
+                        )
+                      }
+                    >
+                      Reintentar apply (force) 🔌
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={openStamp}
+                      disabled={stamp.isPending}
+                    >
+                      Marcar versión (stamp) para recuperar
+                    </Button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Estado */}
-                {status.isLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Spinner className="h-4 w-4" /> Cargando estado…
-                  </div>
-                ) : status.isError ? (
-                  <ErrorState error={status.error} onRetry={() => void status.refetch()} />
-                ) : status.data ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
+              {/* Estado */}
+              {status.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Spinner className="h-4 w-4" /> Cargando estado…
+                </div>
+              ) : status.isError ? (
+                <ErrorState error={status.error} onRetry={() => void status.refetch()} />
+              ) : status.data ? (
+                <Card>
+                  <CardContent className="flex flex-wrap items-center gap-2 p-4">
                     <Badge tone="info">actual: {currentVersion ?? 'ninguna'}</Badge>
                     <Badge tone="neutral">última: {latest ?? '—'}</Badge>
                     <Badge tone={pendingCount > 0 ? 'warning' : 'success'}>
@@ -289,186 +353,198 @@ export function ManagedDatabaseMigrationsModal({
                         {status.data.pending_versions.join(', ')}
                       </span>
                     )}
-                  </div>
-                ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
 
-                {/* Aplicación parcial (§9): sentencias ejecutadas sin registrar la versión */}
-                {hasPartial && partialEntries.length > 0 && (
-                  <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-3">
-                    <div className="flex flex-col gap-1">
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Aplicación parcial detectada
-                      </h3>
+              {/* Aplicación parcial (§9): sentencias ejecutadas sin registrar la versión */}
+              {hasPartial && partialEntries.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Aplicación parcial detectada
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Una migración falló a mitad: hay sentencias ya ejecutadas en el motor sin que
+                      la versión quedara registrada. El rollback está bloqueado hasta resolverlo.
+                    </p>
+                    {partialEntries.length > 1 && (
                       <p className="text-xs text-muted-foreground">
-                        Una migración falló a mitad: hay sentencias ya ejecutadas en el motor sin
-                        que la versión quedara registrada. El rollback está bloqueado hasta
-                        resolverlo.
+                        Hay {partialEntries.length} aplicaciones parciales: se resuelven de la
+                        versión <strong>más alta a la más baja</strong>, una por llamada.
                       </p>
-                      {partialEntries.length > 1 && (
-                        <p className="text-xs text-muted-foreground">
-                          Hay {partialEntries.length} aplicaciones parciales: se resuelven de la
-                          versión <strong>más alta a la más baja</strong>, una por llamada.
-                        </p>
-                      )}
-                    </div>
-                    <ul className="flex flex-col gap-2">
-                      {partialEntries.map((entry) => (
-                        <li
-                          key={entry.version}
-                          className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-2"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm text-foreground">
-                              Migración{' '}
-                              <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
-                                {entry.version}
-                              </code>
-                              : {entry.applied_statements} de {entry.total_statements} sentencias
-                              aplicadas
-                            </span>
-                            {entry.reconcilable ? (
-                              !isArchived && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setReconcileTarget(entry)}
-                                >
-                                  Reconciliar…
-                                </Button>
-                              )
-                            ) : (
-                              <Badge tone="warning">no reconciliable</Badge>
-                            )}
-                          </div>
-                          {!entry.reconcilable && (
-                            <div className="flex flex-col gap-1 text-xs">
-                              {entry.reason && <p className="text-foreground">{entry.reason}</p>}
-                              <p className="text-muted-foreground">
-                                Salidas: <strong>reintenta el apply</strong> (retoma del checkpoint,
-                                desde la sentencia {entry.applied_statements + 1}), o reconcilia el
-                                esquema a mano y usa <strong>stamp force</strong>.
-                              </p>
-                            </div>
+                    )}
+                  </div>
+                  <ul className="flex flex-col gap-2">
+                    {partialEntries.map((entry) => (
+                      <li
+                        key={entry.version}
+                        className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm text-foreground">
+                            Migración{' '}
+                            <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                              {entry.version}
+                            </code>
+                            : {entry.applied_statements} de {entry.total_statements} sentencias
+                            aplicadas
+                          </span>
+                          {entry.reconcilable ? (
+                            !isArchived && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={reconcileVersion === entry.version}
+                                onClick={() => openReconcile(entry.version)}
+                              >
+                                Reconciliar…
+                              </Button>
+                            )
+                          ) : (
+                            <Badge tone="warning">no reconciliable</Badge>
                           )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {isArchived && (
-                  <div className="rounded-lg border border-border bg-surface-muted p-3 text-xs text-muted-foreground">
-                    Esta base de datos está <strong>archivada</strong>: es de solo lectura. Puedes
-                    consultar el estado y el historial, pero las acciones sobre el motor
-                    (actualizar, revertir, stamp) están deshabilitadas.
-                  </div>
-                )}
-
-                {!isArchived && (
-                  <>
-                    {/* Actualizar a la última — acción de un clic (Plan 09 §7-bis) */}
-                    <section className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-                      <div className="flex flex-col gap-1">
-                        <h3 className="text-sm font-semibold text-foreground">Actualizar</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Aplica <strong>todas</strong> las migraciones pendientes en orden, en una
-                          sola operación. No necesitas elegir la versión: el gateway llega hasta la
-                          última
-                          {latest ? ` (${latest})` : ''}.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          size="sm"
-                          isLoading={apply.isPending}
-                          disabled={pendingCount === 0}
-                          onClick={() => runApply({ dryRun: false })}
-                        >
-                          {pendingCount === 0
-                            ? 'Ya está al día'
-                            : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          isLoading={apply.isPending}
-                          disabled={pendingCount === 0}
-                          onClick={() => runApply({ dryRun: true })}
-                        >
-                          Previsualizar (dry-run)
-                        </Button>
-                        <Switch
-                          checked={force}
-                          onCheckedChange={setForce}
-                          label="Forzar"
-                          hint="Override de cuarentena."
-                        />
-                      </div>
-                      <div className="max-w-sm">
-                        <OnFailureSelect
-                          value={onFailure}
-                          onChange={setOnFailure}
-                          hint="Solo MySQL/MariaDB. Aplica también a «ir a una versión concreta»."
-                        />
-                      </div>
-                      {preview && (
-                        <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
-                          Plan: {preview.pending_versions.length} pendiente(s)
-                          {preview.pending_versions.length > 0
-                            ? ` · ${preview.pending_versions.join(', ')}`
-                            : ' · nada que aplicar'}
                         </div>
-                      )}
-                    </section>
+                        {!entry.reconcilable && (
+                          <div className="flex flex-col gap-1 text-xs">
+                            {entry.reason && <p className="text-foreground">{entry.reason}</p>}
+                            <p className="text-muted-foreground">
+                              Salidas: <strong>reintenta el apply</strong> (retoma del checkpoint,
+                              desde la sentencia {entry.applied_statements + 1}), o reconcilia el
+                              esquema a mano y usa <strong>stamp force</strong>.
+                            </p>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-                    {/* Ir a una versión concreta (avanzado) */}
-                    <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Ir a una versión concreta
-                      </h3>
-                      <div className="flex flex-wrap items-end gap-3">
-                        <div className="min-w-[12rem] flex-1">
-                          <Input
-                            label="Versión objetivo"
-                            placeholder="p. ej. 0003"
-                            value={applyVersion}
-                            onChange={(event) => setApplyVersion(event.target.value)}
-                            hint="Aplica desde la actual+1 hasta esta versión (inclusive). Forward-only."
+              {/* Reconciliación (§9): `key` por versión para arrancar con estado fresco por entrada */}
+              {reconcileEntry && (
+                <ReconcilePartialSection
+                  key={reconcileEntry.version}
+                  dbId={databaseId}
+                  entry={reconcileEntry}
+                  onClose={closeReconcile}
+                />
+              )}
+
+              {isArchived && (
+                <div className="rounded-lg border border-border bg-surface-muted p-4 text-xs text-muted-foreground">
+                  Esta base de datos está <strong>archivada</strong>: es de solo lectura. Puedes
+                  consultar el estado y el historial, pero las acciones sobre el motor (actualizar,
+                  revertir, stamp) están deshabilitadas.
+                </div>
+              )}
+
+              {!isArchived && (
+                <>
+                  <div className="grid items-start gap-6 lg:grid-cols-2">
+                    {/* Opciones del apply — el disparador vive en la cabecera (Plan 09 §7-bis) */}
+                    <Card className="border-primary/30">
+                      <CardContent className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                          <h2 className="text-sm font-semibold text-foreground">
+                            Actualizar a la última
+                          </h2>
+                          <p className="text-xs text-muted-foreground">
+                            <strong>Actualizar a la última{latest ? ` (${latest})` : ''}</strong>,
+                            en la cabecera, aplica <strong>todas</strong> las migraciones pendientes
+                            en orden y en una sola operación. Aquí se ajusta cómo se ejecuta y se
+                            previsualiza el plan antes de tocar el motor.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            isLoading={apply.isPending}
+                            disabled={pendingCount === 0}
+                            onClick={() => runApply({ dryRun: true })}
+                          >
+                            Previsualizar (dry-run)
+                          </Button>
+                          <Switch
+                            checked={force}
+                            onCheckedChange={setForce}
+                            label="Forzar"
+                            hint="Override de cuarentena."
                           />
                         </div>
-                        <Button
-                          size="sm"
-                          isLoading={apply.isPending}
-                          disabled={applyVersion.trim().length === 0}
-                          onClick={() => runApply({ version: applyVersion.trim(), dryRun: false })}
-                        >
-                          Aplicar hasta esa versión 🔌
-                        </Button>
-                      </div>
-                    </section>
-
-                    {/* Gate R1 (§9): 409 por baseline de snapshot sin revisar → CTA al blueprint */}
-                    {baselineGateMsg && (
-                      <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-3 text-xs">
-                        <p className="text-foreground">{baselineGateMsg}</p>
-                        {(status.data?.model_id ?? database?.model_id) != null && (
-                          <Link
-                            to={`/database-models/${status.data?.model_id ?? database?.model_id}/migrations`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            Ir al blueprint a revisar el baseline →
-                          </Link>
+                        <div className="max-w-sm">
+                          <OnFailureSelect
+                            value={onFailure}
+                            onChange={setOnFailure}
+                            hint="Solo MySQL/MariaDB. Aplica también a «ir a una versión concreta»."
+                          />
+                        </div>
+                        {preview && (
+                          <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
+                            Plan: {preview.pending_versions.length} pendiente(s)
+                            {preview.pending_versions.length > 0
+                              ? ` · ${preview.pending_versions.join(', ')}`
+                              : ' · nada que aplicar'}
+                          </div>
                         )}
-                      </div>
-                    )}
+                      </CardContent>
+                    </Card>
 
-                    {/* Resultado del último apply real: results[] + reconciliación (§9) */}
-                    {lastRun && (
-                      <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
+                    {/* Ir a una versión concreta (avanzado) */}
+                    <Card>
+                      <CardContent className="flex flex-col gap-3">
+                        <h2 className="text-sm font-semibold text-foreground">
+                          Ir a una versión concreta
+                        </h2>
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div className="min-w-[12rem] flex-1">
+                            <Input
+                              label="Versión objetivo"
+                              placeholder="p. ej. 0003"
+                              value={applyVersion}
+                              onChange={(event) => setApplyVersion(event.target.value)}
+                              hint="Aplica desde la actual+1 hasta esta versión (inclusive). Forward-only."
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            isLoading={apply.isPending}
+                            disabled={applyVersion.trim().length === 0}
+                            onClick={() =>
+                              runApply({ version: applyVersion.trim(), dryRun: false })
+                            }
+                          >
+                            Aplicar hasta esa versión 🔌
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Gate R1 (§9): 409 por baseline de snapshot sin revisar → CTA al blueprint */}
+                  {baselineGateMsg && (
+                    <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs">
+                      <p className="text-foreground">{baselineGateMsg}</p>
+                      {(status.data?.model_id ?? database.model_id) != null && (
+                        <Link
+                          to={`/database-models/${status.data?.model_id ?? database.model_id}/migrations`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Ir al blueprint a revisar el baseline →
+                        </Link>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Resultado del último apply real: results[] + reconciliación (§9) */}
+                  {lastRun && (
+                    <Card>
+                      <CardContent className="flex flex-col gap-3">
                         <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">
+                          <h2 className="text-sm font-semibold text-foreground">
                             Resultado del último apply
-                          </h3>
+                          </h2>
                           <IconButton
                             label="Descartar"
                             icon={<XIcon />}
@@ -595,14 +671,16 @@ export function ManagedDatabaseMigrationsModal({
                               migración y reintenta.
                             </p>
                           ))}
-                      </section>
-                    )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                    {/* Rollback secuencial */}
-                    <section className="flex flex-col gap-3 rounded-lg border border-error/30 p-3">
-                      <h3 className="text-sm font-semibold text-foreground">
+                  {/* Rollback secuencial */}
+                  <Card className="border-error/30">
+                    <CardContent className="flex flex-col gap-3">
+                      <h2 className="text-sm font-semibold text-foreground">
                         Rollback (destructivo)
-                      </h3>
+                      </h2>
                       {hasPartial && (
                         <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
                           <p className="text-foreground">
@@ -615,7 +693,8 @@ export function ManagedDatabaseMigrationsModal({
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setReconcileTarget(firstReconcilable)}
+                                disabled={reconcileVersion === firstReconcilable.version}
+                                onClick={() => openReconcile(firstReconcilable.version)}
                               >
                                 Reconciliar primero…
                               </Button>
@@ -649,7 +728,7 @@ export function ManagedDatabaseMigrationsModal({
                             Falta confirmar el <code>down_sql</code> de la(s) versión(es){' '}
                             <strong>{missingDownSql.join(', ')}</strong> antes de poder revertir.
                           </p>
-                          {database?.model_id && (
+                          {database.model_id && (
                             <Link
                               to={`/database-models/${database.model_id}/migrations`}
                               className="font-medium text-primary hover:underline"
@@ -692,46 +771,25 @@ export function ManagedDatabaseMigrationsModal({
                           Revertir
                         </Button>
                       </div>
-                    </section>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+          )}
 
-                    {/* Stamp (marca una versión sin ejecutar SQL) */}
-                    <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Marcar versión (stamp)
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        Marca la BD en una versión del blueprint <strong>sin ejecutar SQL</strong>.
-                        Útil para una BD pre-existente cuyo esquema ya coincide con esa versión.
-                      </p>
-                      <div className="flex justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={openStamp}
-                          disabled={stamp.isPending}
-                        >
-                          Marcar versión (stamp)…
-                        </Button>
-                      </div>
-                    </section>
-                  </>
-                )}
-              </div>
-            )}
+          {tab === 'history' && <MigrationHistoryPanel dbId={databaseId} />}
+        </>
+      )}
 
-            {tab === 'history' && <MigrationHistoryPanel dbId={dbId} enabled={open} />}
-          </div>
-        )}
-      </Modal>
-
-      {/* Diálogo de stamp (Cambio 4): selector de versión + confirmación con aviso */}
+      {/* Stamp (Cambio 4): sigue siendo modal — es una acción corta con doble confirmación */}
       <Modal
         open={stampOpen}
         onClose={() => {
           if (!stamp.isPending) setStampOpen(false)
         }}
         title="Marcar versión (stamp)"
-        description={database ? `«${database.name}» (#${database.id})` : undefined}
+        description={`«${database.name}» (#${database.id})`}
         size="sm"
         footer={
           <>
@@ -800,26 +858,43 @@ export function ManagedDatabaseMigrationsModal({
           )}
         </div>
       </Modal>
-
-      {/* Flujo de reconciliación (§9): montado condicionalmente para estado fresco por entrada */}
-      {reconcileTarget && database && (
-        <ReconcilePartialDialog
-          dbId={dbId}
-          databaseName={database.name}
-          entry={reconcileTarget}
-          onClose={() => setReconcileTarget(null)}
-        />
-      )}
-    </>
+    </div>
   )
 }
 
-function MigrationHistoryPanel({ dbId, enabled }: { dbId: number; enabled: boolean }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={
+        active
+          ? 'border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary'
+          : 'border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground'
+      }
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Historial de aplicaciones paginado (server-side): la página vive en estado local. */
+function MigrationHistoryPanel({ dbId }: { dbId: number }) {
   const [page, setPage] = useState(1)
   const { data, isLoading, isError, error, refetch } = useMigrationHistory(
     dbId,
     { page, size: 10 },
-    enabled,
+    true,
   )
 
   if (isLoading) {
