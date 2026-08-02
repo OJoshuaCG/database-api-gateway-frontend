@@ -1,4 +1,12 @@
-import { Badge, Button, Card, CardContent, Combobox } from '@/components/ui'
+import {
+  Badge,
+  Card,
+  CardContent,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Combobox,
+  IconButton,
+} from '@/components/ui'
 import type { ModelMigrationSummary } from '@/lib/contracts'
 import { versionNeighbors } from '../version-nav'
 
@@ -57,40 +65,22 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
             {/* Las flechas recorren la secuencia sin abrir el desplegable, que es el gesto
                 natural para ir comparando versiones contiguas. */}
             <div className="flex shrink-0 gap-1">
-              <Button
+              <IconButton
+                label="Versión anterior"
+                icon={<ChevronLeftIcon />}
                 variant="outline"
                 size="icon"
-                aria-label="Versión anterior"
-                title="Versión anterior"
                 disabled={previous === null}
                 onClick={() => previous && onSelect(previous)}
-              >
-                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor">
-                  <path
-                    d="M12 4l-6 6 6 6"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Button>
-              <Button
+              />
+              <IconButton
+                label="Versión siguiente"
+                icon={<ChevronRightIcon />}
                 variant="outline"
                 size="icon"
-                aria-label="Versión siguiente"
-                title="Versión siguiente"
                 disabled={next === null}
                 onClick={() => next && onSelect(next)}
-              >
-                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor">
-                  <path
-                    d="M8 4l6 6-6 6"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Button>
+              />
             </div>
           </div>
 

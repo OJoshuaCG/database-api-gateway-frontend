@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/lib/toast/use-toast'
 import { countLines, SQL_TOKEN_CLASS, tokenizeSql } from '@/lib/syntax/sql-highlight'
+import { CopyIcon, ExpandIcon } from './icons'
 import { Modal } from './Modal'
 
 export interface CodeBlockProps {
@@ -123,21 +124,11 @@ function CodeSurface({
             <span className="mr-1 text-xs text-muted-foreground">{lineCount} línea(s)</span>
           )}
           <ToolbarButton label="Copiar SQL" onClick={handleCopy}>
-            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor">
-              <rect x="7" y="7" width="9" height="9" rx="1.5" strokeWidth="1.5" />
-              <path d="M13 7V5.5A1.5 1.5 0 0011.5 4h-6A1.5 1.5 0 004 5.5v6A1.5 1.5 0 005.5 13H7" strokeWidth="1.5" />
-            </svg>
+            <CopyIcon />
           </ToolbarButton>
           {onExpand && (
             <ToolbarButton label="Ver a pantalla completa" onClick={onExpand}>
-              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor">
-                <path
-                  d="M8 3H3v5M12 3h5v5M8 17H3v-5M12 17h5v-5"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <ExpandIcon />
             </ToolbarButton>
           )}
         </span>

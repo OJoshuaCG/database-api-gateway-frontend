@@ -10,7 +10,7 @@ export type ButtonVariant =
   | 'ghost'
   | 'danger'
   | 'danger-soft'
-export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
+export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -27,7 +27,12 @@ const SIZES: Record<ButtonSize, string> = {
   md: 'min-h-10 gap-2 px-4 py-2 text-sm',
   lg: 'min-h-11 gap-2 px-5 py-2.5 text-base',
   icon: 'h-10 w-10',
+  /** Alto de `sm` (32 px) en formato cuadrado: para acciones de fila, que no deben engordarla. */
+  'icon-sm': 'h-8 w-8',
 }
+
+/** Tamaños sin texto: el spinner de carga los SUSTITUYE en vez de sumarse (no cabrían los dos). */
+const ICON_ONLY_SIZES = new Set<ButtonSize>(['icon', 'icon-sm'])
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
@@ -43,6 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   { variant = 'primary', size = 'md', isLoading = false, disabled, className, children, ...props },
   ref,
 ) {
+  const iconOnly = ICON_ONLY_SIZES.has(size)
   return (
     <button
       ref={ref}
@@ -58,8 +64,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       )}
       {...props}
     >
-      {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-      {children}
+      {isLoading && <Spinner className={cn('h-4 w-4', !iconOnly && 'mr-2')} />}
+      {!(iconOnly && isLoading) && children}
     </button>
   )
 })
