@@ -210,7 +210,9 @@ export function ModelMigrationForm({
         registration={register('up_sql')}
         required={mode === 'create'}
         readOnly={upSqlReadOnly}
-        rows={6}
+        // Es el campo protagonista del formulario —el DDL que se va a ejecutar— y el único que
+        // suele pasar de unas pocas líneas, así que arranca con bastante más altura que el resto.
+        rows={16}
         emptyLabel="Sin SQL base."
         hint={
           mode === 'create'
@@ -236,7 +238,7 @@ export function ModelMigrationForm({
         label="down_sql (rollback confirmado)"
         value={currentDownSql}
         registration={register('down_sql')}
-        rows={4}
+        rows={8}
         emptyLabel="Sin rollback confirmado."
         hint="Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí."
         error={errors.down_sql?.message}
