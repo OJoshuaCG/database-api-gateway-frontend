@@ -4,7 +4,9 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
+  CloneIcon,
   Combobox,
+  CompareIcon,
   DataTable,
   EmptyState,
   ErrorState,
@@ -141,11 +143,14 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            {/* Mismo icono que su entrada del menú lateral: el botón de fila y la sección a la
+                que lleva se reconocen como lo mismo. */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
             >
+              <CompareIcon />
               Comparar esquema
             </Button>
             <Button
@@ -153,6 +158,7 @@ export function ManagedDatabasesPage() {
               size="sm"
               onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
             >
+              <CloneIcon />
               Clonar
             </Button>
             <Button
@@ -199,6 +205,7 @@ export function ManagedDatabasesPage() {
         actions={
           <>
             <Button variant="outline" onClick={() => navigate('/schema-comparisons')}>
+              <CompareIcon />
               Comparar esquemas
             </Button>
             <Button

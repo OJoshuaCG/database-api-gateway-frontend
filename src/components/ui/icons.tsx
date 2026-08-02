@@ -138,6 +138,28 @@ export function ArrowDownIcon({ className }: IconProps) {
   )
 }
 
+/** Comparar esquemas. Misma figura que su entrada del menú lateral, reescalada a 20×20. */
+export function CompareIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <rect x="1.8" y="4.4" width="6.6" height="11.2" rx="1.2" />
+      <rect x="11.6" y="4.4" width="6.6" height="11.2" rx="1.2" />
+      <path d="M8.4 10h3.2M10 8.4l1.6 1.6L10 11.6" />
+    </Glyph>
+  )
+}
+
+/** Clonar base de datos. Misma figura que su entrada del menú lateral, reescalada a 20×20. */
+export function CloneIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <ellipse cx="6.6" cy="4.6" rx="4.2" ry="1.7" />
+      <path d="M2.4 4.6v7.5c0 .9 1.9 1.7 4.2 1.7s4.2-.8 4.2-1.7v-7.5" />
+      <path d="M12.6 8.4l3.4 3.4-3.4 3.4M16 11.8H8.4" />
+    </Glyph>
+  )
+}
+
 export function ExpandIcon({ className }: IconProps) {
   return (
     <Glyph className={className}>
