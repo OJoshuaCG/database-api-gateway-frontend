@@ -19,6 +19,8 @@ export interface CodeBlockProps {
   hideLineNumbers?: boolean
   /** Texto alternativo cuando `code` está vacío. */
   emptyLabel?: string
+  /** Oculta el botón de expandir: para cuando ya se está dentro de un visor a pantalla completa. */
+  hideFullscreen?: boolean
 }
 
 /**
@@ -38,6 +40,7 @@ export function CodeBlock({
   maxHeightClass = 'max-h-80',
   hideLineNumbers,
   emptyLabel = 'Sin contenido.',
+  hideFullscreen,
 }: CodeBlockProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -50,7 +53,7 @@ export function CodeBlock({
         maxHeightClass={maxHeightClass}
         hideLineNumbers={hideLineNumbers}
         emptyLabel={emptyLabel}
-        onExpand={() => setExpanded(true)}
+        onExpand={hideFullscreen ? undefined : () => setExpanded(true)}
       />
 
       {/* Montaje condicional: al cerrar y reabrir, el visor nace limpio (posición de scroll

@@ -1,36 +1,34 @@
 import { useId, useState } from 'react'
 import type { UseFormRegisterReturn } from 'react-hook-form'
-import { Button, CodeBlock, CodeIcon, PencilIcon, Textarea } from '@/components/ui'
+import { CodeBlock, ExpandIcon, IconButton, Modal, SqlEditor } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 interface SqlFieldProps {
   /** Opcional: si el contenedor ya pone su propia etiqueta, se omite para no duplicarla. */
   label?: string
-  /** Valor actual del campo (vía `watch`): es lo que se resalta en la vista con formato. */
+  /** Valor actual del campo (vía `watch`): es lo que se resalta. */
   value: string
   /** El `{...register('campo')}` del formulario. */
   registration: UseFormRegisterReturn
   hint?: string
   error?: string
   required?: boolean
-  /** Sin edición posible: se muestra siempre con formato y sin conmutador. */
+  /** Sin edición posible: se muestra con el visor de solo lectura. */
   readOnly?: boolean
   rows?: number
   emptyLabel?: string
 }
 
 /**
- * Campo de SQL editable que se puede ver **con formato**.
+ * Campo de SQL de un formulario, **resaltado también mientras se edita**.
  *
- * El SQL de una versión de blueprint se escribe en un `<textarea>`, así que era lo único del
- * módulo que se leía en gris plano: los bloques traducidos por motor, justo debajo, ya salían
- * resaltados y con copiar y pantalla completa. Aquí se conmuta entre las dos vistas en vez de
- * elegir una: editar necesita un textarea de verdad, y leer necesita colores, numeración de
- * líneas y poder ampliar.
+ * No hay modo «editar» y modo «ver»: se escribe sobre el propio SQL coloreado (`SqlEditor`
+ * superpone el textarea real, transparente, sobre la capa resaltada). Alternar entre dos vistas
+ * obligaba a perder el color justo cuando más se necesita —al escribir es cuando se cometen los
+ * errores de sintaxis—, así que se eliminó el conmutador.
  *
- * Arranca en la vista con formato cuando ya hay SQL —el caso normal al abrir una versión— y en
- * edición cuando está vacío, que es cuando se está creando. Al conmutar se desmonta el textarea,
- * pero el valor sobrevive: el formulario no usa `shouldUnregister`.
+ * Cuando el campo es de solo lectura se usa directamente el visor `CodeBlock`, que ya trae
+ * copiar y pantalla completa: si no se puede editar, no hay motivo para montar un textarea.
  */
 export function SqlField({
   label,
@@ -43,9 +41,21 @@ export function SqlField({
   rows = 6,
   emptyLabel,
 }: SqlFieldProps) {
-  const [editing, setEditing] = useState(() => !readOnly && value.trim().length === 0)
+  const [expanded, setExpanded] = useState(false)
   const id = useId()
-  const showEditor = editing && !readOnly
+
+  if (readOnly) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <CodeBlock title={label} code={value} emptyLabel={emptyLabel ?? 'Sin SQL.'} />
+        {error ? (
+          <p className="text-xs text-error">{error}</p>
+        ) : (
+          hint && <p className="text-xs text-muted-foreground">{hint}</p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -56,30 +66,39 @@ export function SqlField({
             {required && <span className="ml-0.5 text-error">*</span>}
           </label>
         )}
-        {!readOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={() => setEditing((previous) => !previous)}
-          >
-            {showEditor ? <CodeIcon /> : <PencilIcon />}
-            {showEditor ? 'Ver con formato' : 'Editar'}
-          </Button>
-        )}
+        <IconButton
+          label="Ver a pantalla completa"
+          icon={<ExpandIcon />}
+          className="ml-auto"
+          onClick={() => setExpanded(true)}
+        />
       </div>
 
-      {showEditor ? (
-        <Textarea id={id} rows={rows} className="font-mono text-xs" {...registration} />
-      ) : (
-        <CodeBlock code={value} emptyLabel={emptyLabel ?? 'Sin SQL.'} maxHeightClass="max-h-96" />
-      )}
+      <SqlEditor id={id} value={value} rows={rows} {...registration} />
 
       {error ? (
         <p className="text-xs text-error">{error}</p>
       ) : (
         hint && <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
+
+      {/* A pantalla completa se muestra en modo lectura: montar un segundo textarea registrado
+          al mismo campo dejaría a react-hook-form con dos referencias para un solo valor. */}
+      {expanded && (
+        <Modal
+          open
+          onClose={() => setExpanded(false)}
+          title={label ?? 'SQL'}
+          description="Solo lectura. Para editar, cierra y vuelve al formulario."
+          size="full"
+        >
+          <CodeBlock
+            code={value}
+            emptyLabel={emptyLabel ?? 'Sin SQL.'}
+            maxHeightClass="max-h-[calc(100dvh-16rem)]"
+            hideFullscreen
+          />
+        </Modal>
       )}
     </div>
   )
