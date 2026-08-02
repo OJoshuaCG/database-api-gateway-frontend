@@ -262,11 +262,16 @@ Cómo lo consume la UI:
 
 ## Escenario I — Gestión de permisos de un usuario (grants 🔌)
 
-Desde la tabla de usuarios del motor, el botón "Permisos" abre un modal con tres pestañas.
+Desde la tabla de usuarios del motor, el botón "Permisos" **navega a una página** con tres
+pestañas. Fue un modal hasta que creció a ~500 líneas efectivas entre sus tres paneles; como
+página, además, cada pestaña es enlazable y desapareció el `key={user.id}` que hacía falta para
+no arrastrar estado entre filas (el remonte lo da ahora la ruta).
 
 ```
-ServerUsersPage: clic "Permisos" → setGrantsTarget(user)
-  └─ <ServerUserGrantsModal user engine key={user.id} … />   features/server-users/components/ServerUserGrantsModal.tsx
+ServerUsersPage: clic "Permisos" → navigate(/server-users/{id}/grants?from=…)
+  └─ ServerUserGrantsPage (?tab=effective|manage|profile)   features/server-users/pages/ServerUserGrantsPage.tsx
+       (`?from=` decide el enlace de vuelta: /server-users o /servers/{id}?tab=users;
+        solo se acepta si empieza por «/» y no por «//» ni «/\», para no abrir un redirect externo)
        ├─ Pestaña "Permisos efectivos"
        │    └─ useUserGrants(id, database?, enabled)          features/server-users/hooks/use-user-grants.ts
        │         └─ listUserGrants(id, database)              → GET /server-users/{id}/grants 🔌
@@ -296,7 +301,7 @@ Dos niveles: **definir** los deltas SQL en el blueprint (inventario) y **aplicar
 
 ```
 # Definir (no toca motores)
-DatabaseModelsPage: "Migraciones" → ModelMigrationsModal(model)       features/database-models/components/ModelMigrationsModal.tsx
+DatabaseModelsPage: "Versiones" → /database-models/{modelId}/migrations   features/database-models/pages/BlueprintMigrationsPage.tsx
   ├─ useModelMigrations(modelId, {page,size})  → GET  .../migrations            (resúmenes paginados)
   ├─ Nueva migración → useCreateModelMigration → POST .../migrations
   │     (la respuesta trae `translated` {mysql,postgresql} + `down_sql_suggested`; se muestran para revisión)
@@ -304,7 +309,8 @@ DatabaseModelsPage: "Migraciones" → ModelMigrationsModal(model)       features
   └─ Aplicar a todas → ApplyAllDialog → useApplyAllMigrations → POST .../migrations/apply-all 🔌 (dry-run/force/max_databases)
 
 # Aplicar sobre UNA BD (🔌)
-ManagedDatabasesPage: "Migraciones" → ManagedDatabaseMigrationsModal(db)  features/managed-databases/components/ManagedDatabaseMigrationsModal.tsx
+ManagedDatabasesPage: "Migraciones" → /managed-databases/{databaseId}/migrations   features/managed-databases/pages/ManagedDatabaseMigrationsPage.tsx
+  (?tab=actions|history · ?reconcile=<version> abre la sección de reconciliación parcial)
   ├─ useMigrationStatus(dbId)            → GET  .../migrations/status         (actual vs. pendientes)
   ├─ Aplicar → useApplyMigrations(dbId)  → POST .../migrations/apply          (dry-run = previsualización; isDryRunResult discrimina)
   ├─ Rollback → useRollbackMigration     → POST .../migrations/rollback?confirm_version=…  (destructivo, doble confirmación)
@@ -348,7 +354,7 @@ ServerDetailPage (tab "Usuarios")                 features/servers/pages/ServerD
        │     │     → POST /servers/{id}/users/reveal-password 🔌  (secreto NUNCA cacheado; solo estado local del modal)
        │     ├─ ChangeEngineUserPasswordModal → useChangeEngineUserPassword(serverId)
        │     │     → PATCH /servers/{id}/users/password 🔌
-       │     ├─ "Ver grants" → useServerUser(server_user_id) → <ServerUserGrantsModal>  (reusa features/server-users)
+       │     ├─ "Ver grants" → /server-users/{server_user_id}/grants?from=/servers/{id}?tab=users
        │     └─ DeleteEngineUserDialog → useDeleteEngineUser(serverId)
        │           → DELETE /servers/{id}/users 🔌 (confirm_username exacto; 409 si posee BDs gestionadas)
        ├─ unmanaged → Adoptar (reusa <AdoptUserModal> de features/server-users) · Rotar (adopt=true) · Eliminar · Agregar host

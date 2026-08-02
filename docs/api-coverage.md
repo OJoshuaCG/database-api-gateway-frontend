@@ -49,7 +49,7 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | — | `POST /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → "Nueva base de datos" → `CreateServerDatabaseModal` (formulario adaptado al motor; `register` como `Switch` que revela el propietario) |
-| — | `GET .../{db}/users` 🔌 | ✅ | `ServerDatabaseDetailModal` → tab "Usuarios con permisos" → `DatabaseGranteesPanel` (consulta inversa; oculta `host` si `supports_hosts=false`) |
+| — | `GET .../{db}/users` 🔌 | ✅ | `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`) → pestaña "Usuarios con permisos" → `DatabaseGranteesPanel` (consulta inversa; oculta `host` si `supports_hosts=false`) |
 | — | `POST .../{db}/drop-preview` 🔌 | ✅ | `DropDatabaseDialog`, paso 1: conexiones activas, cruce con inventario y `confirm_token` con cuenta atrás contra `expires_at` |
 | — | `DELETE .../{db}` 🔌 ⚠️ | ✅ | `DropDatabaseDialog`, paso 2: exige transcribir el nombre exacto + token vigente; `force_disconnect` como `Checkbox`. Sin reintento automático ni borrado en lote (§6.5/§6.6) |
 
@@ -61,7 +61,7 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 |---|---|---|---|
 | 17–21 | CRUD de `/server-users` | ✅ | `ServerUsersPage` (`/server-users`); `?provision` y `?drop_remote` como `Switch`; borrado remoto exige reescribir el username |
 | 22 | `GET /{id}/databases` | ✅ | "Ver BDs" → `OwnedDatabasesModal` |
-| 23 | `GET /{id}/grants` 🔌 | ✅ | `ServerUserGrantsModal` → tab "Permisos efectivos" (en PostgreSQL espera que se indique la BD antes de consultar) |
+| 23 | `GET /{id}/grants` 🔌 | ✅ | `ServerUserGrantsPage` (`/server-users/:userId/grants`) → pestaña "Permisos efectivos" (en PostgreSQL espera que se indique la BD antes de consultar) |
 | 24 | `POST /{id}/grants` 🔌 | ✅ | `GrantManager` → tab "Otorgar" |
 | 25 | `DELETE /{id}/grants` 🔌 | ✅ | `GrantManager` → revocar (`cascade` solo PostgreSQL, con confirmación del grantee) |
 | 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | `ApplyProfilePanel` (errores parciales enumerados) |
@@ -103,11 +103,11 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 |---|---|---|---|
 | 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint y estado; borrado remoto exige reescribir el nombre |
 | 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal` (incluye *stamp-on-adopt*: blueprint + versión de partida) |
-| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsModal` (versión actual, pendientes y **banner de aplicación parcial**) |
+| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) (versión actual, pendientes y **banner de aplicación parcial**) |
 | 55 | `POST .../migrations/apply` 🔌 | ✅ | Previsualizar (dry-run) + aplicar; selector `on_failure`; resultado por versión con retomas y sentencia de fallo; mensaje de auto-reconciliación |
 | 56 | `POST .../migrations/rollback` 🔌 | ✅ | Doble confirmación de la versión actual; el 409 por `down_sql` faltante enlaza al blueprint |
 | 57 | `POST .../migrations/stamp` 🔌 | ✅ | Con `force` y la advertencia del anti-patrón (no arregla un apply a medias) |
-| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialDialog`: previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
+| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de esa misma página, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
 | 58 | `GET .../migrations/history` 🔌 | ✅ | Tab "Historial" (paginado) |
 
 ## Comparación de esquemas

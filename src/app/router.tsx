@@ -21,7 +21,15 @@ const lazyPage = <M, K extends keyof M>(load: () => Promise<M>, name: K) =>
 
 const ServersPage = lazyPage(() => import('@/features/servers'), 'ServersPage')
 const ServerDetailPage = lazyPage(() => import('@/features/servers'), 'ServerDetailPage')
+const ServerDatabaseDetailPage = lazyPage(
+  () => import('@/features/server-databases'),
+  'ServerDatabaseDetailPage',
+)
 const ServerUsersPage = lazyPage(() => import('@/features/server-users'), 'ServerUsersPage')
+const ServerUserGrantsPage = lazyPage(
+  () => import('@/features/server-users'),
+  'ServerUserGrantsPage',
+)
 const DatabaseModelsPage = lazyPage(() => import('@/features/database-models'), 'DatabaseModelsPage')
 const SnapshotWizardPage = lazyPage(() => import('@/features/database-models'), 'SnapshotWizardPage')
 const BlueprintMigrationsPage = lazyPage(
@@ -31,6 +39,10 @@ const BlueprintMigrationsPage = lazyPage(
 const ManagedDatabasesPage = lazyPage(
   () => import('@/features/managed-databases'),
   'ManagedDatabasesPage',
+)
+const ManagedDatabaseMigrationsPage = lazyPage(
+  () => import('@/features/managed-databases'),
+  'ManagedDatabaseMigrationsPage',
 )
 const SchemaComparisonWizardPage = lazyPage(
   () => import('@/features/schema-comparisons'),
@@ -58,11 +70,18 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/servers" replace /> },
           { path: 'servers', element: <ServersPage /> },
           { path: 'servers/:serverId', element: <ServerDetailPage /> },
+          // El nombre de la BD viaja codificado: puede llevar `.`, `-` o `$` (nombres legados).
+          { path: 'servers/:serverId/databases/:database', element: <ServerDatabaseDetailPage /> },
           { path: 'server-users', element: <ServerUsersPage /> },
+          { path: 'server-users/:userId/grants', element: <ServerUserGrantsPage /> },
           { path: 'database-models', element: <DatabaseModelsPage /> },
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
+          {
+            path: 'managed-databases/:databaseId/migrations',
+            element: <ManagedDatabaseMigrationsPage />,
+          },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
