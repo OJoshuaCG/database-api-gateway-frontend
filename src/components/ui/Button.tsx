@@ -28,16 +28,19 @@ const SIZES: Record<ButtonSize, string> = {
   md: 'min-h-10 gap-2 px-4 py-2 text-sm',
   lg: 'min-h-11 gap-2 px-5 py-2.5 text-base',
   /*
-   * Los tamaños de icono fijan el ANCHO pero solo un alto MÍNIMO, a propósito.
+   * Los tamaños de icono NO fijan alto ni ancho: declaran el mismo alto mínimo y el mismo
+   * relleno horizontal que su equivalente con texto (`icon`↔`md`, `icon-sm`↔`sm`).
    *
-   * Un botón de texto con borde (`ghost`/`outline`) mide 2 px más que su `min-h` —la caja
-   * incluye el borde—, así que con una altura fija (`h-8`) los iconos quedaban 2 px más bajos
-   * que los botones de texto de su misma fila. Con `min-h`, el `align-items: stretch` que traen
-   * por defecto los contenedores flex los iguala a sus vecinos sin depender de aritmética; y
-   * donde no hay estirado, caen al mínimo, que es el alto de `sm`/`md`.
+   * Del alto: un botón de texto con borde (`ghost`/`outline`) mide 2 px más que su `min-h`
+   * —la caja incluye el borde—, así que con una altura fija los iconos quedaban más bajos que
+   * sus vecinos. Con `min-h`, el `align-items: stretch` de los contenedores flex los iguala sin
+   * depender de aritmética; donde no hay estirado, caen al mínimo.
+   *
+   * Del ancho: con un ancho fijo y estrecho parecían rendijas al lado de botones con palabras.
+   * Compartiendo el `px` la fila entera lleva el mismo ritmo horizontal.
    */
-  icon: 'min-h-10 w-10',
-  'icon-sm': 'min-h-8 w-8',
+  icon: 'min-h-10 px-4',
+  'icon-sm': 'min-h-8 px-3',
 }
 
 /** Tamaños sin texto: el spinner de carga los SUSTITUYE en vez de sumarse (no cabrían los dos). */

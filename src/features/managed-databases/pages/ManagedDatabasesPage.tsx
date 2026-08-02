@@ -143,24 +143,19 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
-            {/* Mismo icono que su entrada del menú lateral: el botón de fila y la sección a la
-                que lleva se reconocen como lo mismo. */}
-            <Button
-              variant="ghost"
-              size="sm"
+            {/* Solo el icono, el mismo que su entrada del menú lateral: el botón de fila y la
+                sección a la que lleva se reconocen como lo mismo, y la fila deja de alargarse
+                con dos etiquetas que se repiten en cada BD. El nombre sigue en el tooltip. */}
+            <IconButton
+              label="Comparar esquema"
+              icon={<CompareIcon />}
               onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
-            >
-              <CompareIcon />
-              Comparar esquema
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+            />
+            <IconButton
+              label="Clonar"
+              icon={<CloneIcon />}
               onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
-            >
-              <CloneIcon />
-              Clonar
-            </Button>
+            />
             <Button
               variant="ghost"
               size="sm"
