@@ -21,6 +21,12 @@
 
 /* ── Tema CLARO (valores por defecto) ───────────────────────────────────────── */
 :root {
+  /* Fija el esquema de los controles NATIVOS (radio, casilla, select, barras de scroll) al
+     tema elegido en la app. Antes valía `light dark`, que solo declara «admito ambos» y deja
+     que el navegador decida SEGÚN EL SISTEMA OPERATIVO: con el SO en oscuro y la app en claro,
+     un radio sin marcar se pintaba con fondo oscuro sobre una página blanca. */
+  color-scheme: light;
+
   /* Marca (estables entre temas para garantizar contraste constante en controles) */
   --primary: #4f46e5;
   --primary-foreground: #ffffff;
@@ -73,6 +79,8 @@
 
 /* ── Tema OSCURO (redefine las MISMAS variables raw) ─────────────────────────── */
 [data-theme='dark'] {
+  color-scheme: dark;
+
   --primary: #6366f1;
   --primary-foreground: #0b1120;
   --secondary: #a78bfa;

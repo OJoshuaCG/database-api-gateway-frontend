@@ -4,9 +4,8 @@
 @import './syntax-themes.css';
 
 @layer base {
-  html {
-    color-scheme: light dark;
-  }
+  /* `color-scheme` lo fija `theme.css` junto al resto del tema, para que siga al tema ELEGIDO
+     en la app y no a la preferencia del sistema operativo. */
 
   body {
     margin: 0;
