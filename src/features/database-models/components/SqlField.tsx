@@ -1,9 +1,11 @@
 import { useId, useState } from 'react'
 import type { UseFormRegisterReturn } from 'react-hook-form'
 import { Button, CodeBlock, CodeIcon, PencilIcon, Textarea } from '@/components/ui'
+import { cn } from '@/lib/utils'
 
 interface SqlFieldProps {
-  label: string
+  /** Opcional: si el contenedor ya pone su propia etiqueta, se omite para no duplicarla. */
+  label?: string
   /** Valor actual del campo (vía `watch`): es lo que se resalta en la vista con formato. */
   value: string
   /** El `{...register('campo')}` del formulario. */
@@ -47,11 +49,13 @@ export function SqlField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={id} className="text-sm font-medium text-foreground">
-          {label}
-          {required && <span className="ml-0.5 text-error">*</span>}
-        </label>
+      <div className={cn('flex flex-wrap items-center gap-2', !label && 'justify-end')}>
+        {label && (
+          <label htmlFor={id} className="text-sm font-medium text-foreground">
+            {label}
+            {required && <span className="ml-0.5 text-error">*</span>}
+          </label>
+        )}
         {!readOnly && (
           <Button
             type="button"
