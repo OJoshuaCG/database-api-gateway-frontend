@@ -6,6 +6,7 @@ import { MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
 import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
 import { Button, Input, Textarea } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { SqlField } from './SqlField'
 
 const SQL_MAX = 262144
 
@@ -118,6 +119,7 @@ export function ModelMigrationForm({
 
   // ¿Se tocó el SQL base? (solo relevante en edit; en create no hay "original").
   const currentUpSql = watch('up_sql')
+  const currentDownSql = watch('down_sql')
   const upSqlChanged = mode === 'edit' && currentUpSql !== originalUpSql
 
   // Resolución de overrides al cambiar up_sql: cada override existente debe reenviarse o limpiarse.
@@ -202,12 +204,14 @@ export function ModelMigrationForm({
         </div>
       )}
 
-      <Textarea
+      <SqlField
         label="up_sql (delta base, estilo MySQL)"
+        value={currentUpSql}
+        registration={register('up_sql')}
         required={mode === 'create'}
         readOnly={upSqlReadOnly}
         rows={6}
-        className={monospace}
+        emptyLabel="Sin SQL base."
         hint={
           mode === 'create'
             ? 'Se auto-traduce a PostgreSQL con sqlglot.'
@@ -217,7 +221,6 @@ export function ModelMigrationForm({
           errors.up_sql?.message ??
           (upSqlEmptyAfterChange ? 'El SQL base no puede quedar vacío.' : undefined)
         }
-        {...register('up_sql')}
       />
 
       {upSqlChanged && (
@@ -229,13 +232,14 @@ export function ModelMigrationForm({
         </div>
       )}
 
-      <Textarea
+      <SqlField
         label="down_sql (rollback confirmado)"
+        value={currentDownSql}
+        registration={register('down_sql')}
         rows={4}
-        className={monospace}
+        emptyLabel="Sin rollback confirmado."
         hint="Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí."
         error={errors.down_sql?.message}
-        {...register('down_sql')}
       />
 
       {needMysqlResolution || needPostgresqlResolution ? (
