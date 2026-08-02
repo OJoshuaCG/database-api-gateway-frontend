@@ -57,8 +57,11 @@ editar, eliminar, actualizar, copiar, navegar, ver/ocultar. Conserva el texto en
 dominio («Adoptar», «Reconciliar», «Aplicar a todas 🔌»), en los botones primarios de página, en
 las confirmaciones destructivas finales y cuando el texto lleva un contador. Color: rojo solo en
 dos intensidades — `danger-soft` para eliminar en fila, `danger` para la confirmación final; el
-resto `ghost` u `outline`. En filas usa `size="icon-sm"` (32 px): `icon` mide 40 px y engordaría
-la fila. Iconos, siempre del set compartido `components/ui/icons.tsx`.
+resto `ghost` u `outline`. En filas usa `size="icon-sm"`, que comparte alto y relleno con `sm`.
+Iconos, siempre del set compartido `components/ui/icons.tsx`. **Ningún hover de un control puede
+usar `bg-surface-muted`**: ese es el tinte con el que las filas de tabla se resaltan, y un botón
+que lo repita se vuelve invisible dentro de una fila apuntada. Los controles se resaltan con
+tinte de acento (`bg-primary/10`), que es otro tono y por eso nunca colisiona.
 
 ⚠️ **Ruido de fin de línea:** el árbol de trabajo tiene decenas de archivos marcados como
 modificados que solo cambian CRLF↔LF, sin cambio real de contenido. Antes de commitear, comprueba

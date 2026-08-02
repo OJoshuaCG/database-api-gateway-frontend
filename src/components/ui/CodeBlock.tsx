@@ -194,13 +194,15 @@ function ToolbarButton({
   onClick: () => void
   children: ReactNode
 }) {
+  // Se resalta con tinte de ACENTO, no neutro, como el resto de controles: ver la regla y su
+  // porqué en `Button.tsx`.
   return (
     <button
       type="button"
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </button>
