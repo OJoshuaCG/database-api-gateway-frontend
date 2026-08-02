@@ -23,13 +23,13 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-20 flex h-[var(--topbar-h)] items-center justify-between gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur sm:px-6">
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onMenuClick}
           aria-label="Abrir menú"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         >
           <svg
             viewBox="0 0 24 24"
@@ -49,7 +49,7 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
             aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Comprimir menú lateral'}
             aria-pressed={sidebarCollapsed}
             title={sidebarCollapsed ? 'Expandir menú lateral' : 'Comprimir menú lateral'}
-            className="hidden h-10 w-10 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex"
+            className="hidden h-9 w-9 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex"
           >
             <svg
               viewBox="0 0 24 24"

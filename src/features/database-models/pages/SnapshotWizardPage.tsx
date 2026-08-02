@@ -32,10 +32,10 @@ export function SnapshotWizardPage() {
   const wizard = useSnapshotWizard(preset)
 
   return (
-    // Alto mínimo = viewport menos topbar (4rem) y padding de main (3rem): así la barra de
+    // Alto mínimo = viewport menos la barra superior (`--topbar-h`) y el padding de `main` (3rem):
     // navegación (con `mt-auto`) queda anclada al pie en una posición ESTABLE en todos los pasos,
     // sin importar la altura del contenido del card.
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col gap-6">
+    <div className="flex min-h-[calc(100dvh-var(--topbar-h)-3rem)] flex-col gap-6">
       <PageHeader
         title="Crear blueprint desde snapshot 🔌"
         description="Convierte una BD existente en un blueprint versionado. Solo lee el motor; no ejecuta DDL."

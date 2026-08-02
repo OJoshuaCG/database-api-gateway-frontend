@@ -27,6 +27,12 @@
      un radio sin marcar se pintaba con fondo oscuro sobre una página blanca. */
   color-scheme: light;
 
+  /* Alto de la barra superior. Vive aquí porque no solo lo usa el `Topbar`: el selector de
+     versiones se ancla justo debajo con `sticky`, y los tres asistentes calculan su alto mínimo
+     restándolo al viewport. Con el número repetido en cuatro sitios, tocarlo dejaba a los otros
+     tres desalineados. */
+  --topbar-h: 3.5rem;
+
   /* Marca (estables entre temas para garantizar contraste constante en controles) */
   --primary: #4f46e5;
   --primary-foreground: #ffffff;

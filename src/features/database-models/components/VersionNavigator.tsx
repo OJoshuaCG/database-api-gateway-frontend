@@ -23,7 +23,7 @@ interface VersionNavigatorProps {
 /**
  * Selector de versión del blueprint: desplegable + flechas de anterior/siguiente.
  *
- * Va `sticky` bajo el `Topbar` (que mide `h-16`) porque el panel de detalle es largo —formulario
+ * Va `sticky` bajo el `Topbar` (cuyo alto es `--topbar-h`) porque el panel de detalle es largo —formulario
  * de SQL más los bloques traducidos— y al hacer scroll se perdía de vista cuál de las versiones
  * se estaba mirando. Necesita `z-30` y no un valor menor: al ser sticky crea contexto de
  * apilamiento propio, así que con un z por debajo del `Topbar` (z-20) el desplegable del
@@ -34,7 +34,7 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
   const { previous, next, position, isLatest } = versionNeighbors(sorted, index)
 
   return (
-    <Card className="sticky top-16 z-30">
+    <Card className="sticky top-[var(--topbar-h)] z-30">
       <CardContent className="py-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-end gap-2">

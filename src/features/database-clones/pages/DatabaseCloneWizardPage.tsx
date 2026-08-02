@@ -44,7 +44,8 @@ function DatabaseCloneWizardContent({
   const presetSourceDatabaseId = presetSourceIdRaw ? Number(presetSourceIdRaw) : undefined
 
   const wizard = useDatabaseCloneWizard({
-    presetJobId: presetJobId !== undefined && Number.isFinite(presetJobId) ? presetJobId : undefined,
+    presetJobId:
+      presetJobId !== undefined && Number.isFinite(presetJobId) ? presetJobId : undefined,
     presetSourceDatabaseId:
       presetSourceDatabaseId !== undefined && Number.isFinite(presetSourceDatabaseId)
         ? presetSourceDatabaseId
@@ -52,7 +53,7 @@ function DatabaseCloneWizardContent({
   })
 
   return (
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col gap-6">
+    <div className="flex min-h-[calc(100dvh-var(--topbar-h)-3rem)] flex-col gap-6">
       <PageHeader
         title="Clonar base de datos"
         description="Copia estructura y, opcionalmente, todos los datos a cualquier servidor."
