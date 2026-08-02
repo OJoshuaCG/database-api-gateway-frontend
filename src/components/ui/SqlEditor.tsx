@@ -58,13 +58,30 @@ export function SqlEditor({
   // Tipografía y caja compartidas por las dos capas: cualquier diferencia aquí las desalinea.
   const shared = 'font-mono text-xs leading-5 whitespace-pre px-3 py-3'
 
+  /*
+   * La altura la fija el CONTENEDOR, no sus hijos.
+   *
+   * La columna de números va en el flujo normal y pinta un `div` por línea, así que con una
+   * consulta larga medía lo que midiera el SQL entero y estiraba el contenedor flex a esa
+   * altura: la capa resaltada (`absolute inset-0`) se estiraba con él y mostraba la consulta
+   * completa, mientras el textarea conservaba su alto de `rows` y solo dejaba editar la parte
+   * de arriba. Con el alto fijado aquí y `overflow-hidden`, ningún hijo puede desplegarlo.
+   *
+   * El cálculo sale de las mismas clases que ya usan las capas: `leading-5` = 1.25rem por
+   * línea, `py-3` = 0.75rem arriba y abajo.
+   */
+  const height = `calc(${rows} * 1.25rem + 1.5rem)`
+
   return (
-    <div className="flex overflow-hidden rounded-lg border border-border bg-syntax-bg focus-within:ring-2 focus-within:ring-ring">
+    <div
+      style={{ height }}
+      className="flex overflow-hidden rounded-lg border border-border bg-syntax-bg focus-within:ring-2 focus-within:ring-ring"
+    >
       {showGutter && (
         <div
           ref={gutterRef}
           aria-hidden
-          className="shrink-0 select-none overflow-hidden border-r border-border px-2 py-3 text-right font-mono text-xs leading-5 text-syntax-gutter"
+          className="h-full shrink-0 select-none overflow-hidden border-r border-border px-2 py-3 text-right font-mono text-xs leading-5 text-syntax-gutter"
         >
           {Array.from({ length: lineCount }, (_, index) => (
             <div key={index}>{index + 1}</div>
@@ -72,7 +89,7 @@ export function SqlEditor({
         </div>
       )}
 
-      <div className="relative min-w-0 flex-1">
+      <div className="relative h-full min-w-0 flex-1">
         <pre
           ref={preRef}
           aria-hidden
@@ -91,14 +108,13 @@ export function SqlEditor({
         </pre>
 
         <textarea
-          rows={rows}
           wrap="off"
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
           onScroll={syncScroll}
           className={cn(
-            'relative block w-full resize-none overflow-auto border-0 bg-transparent',
+            'relative block h-full w-full resize-none overflow-auto border-0 bg-transparent',
             'text-transparent caret-syntax-plain outline-none',
             shared,
             className,
