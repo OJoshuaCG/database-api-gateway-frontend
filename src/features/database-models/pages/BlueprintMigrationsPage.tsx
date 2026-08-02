@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -16,7 +16,6 @@ import { PAGINATION, type ModelMigrationSummary } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
 import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-migrations'
-import { ModelMigrationFormModal } from '../components/ModelMigrationFormModal'
 import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPanel'
 import { ApplyAllDialog } from '../components/ApplyAllDialog'
 import { VersionNavigator } from '../components/VersionNavigator'
@@ -30,9 +29,10 @@ import { latestVersionOf, resolveVersionIndex, sortVersionsAscending } from '../
 export function BlueprintMigrationsPage() {
   const params = useParams()
   const modelId = Number(params.modelId)
+  const navigate = useNavigate()
+  const newVersionPath = `/database-models/${modelId}/migrations/new`
 
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
   const [applyAllOpen, setApplyAllOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ModelMigrationSummary | null>(null)
 
@@ -88,7 +88,7 @@ export function BlueprintMigrationsPage() {
               <Button variant="outline" onClick={() => setApplyAllOpen(true)}>
                 Aplicar a todas 🔌
               </Button>
-              <Button onClick={() => setCreateOpen(true)}>Nueva migración</Button>
+              <Button onClick={() => void navigate(newVersionPath)}>Nueva versión</Button>
             </>
           }
         />
@@ -138,15 +138,10 @@ export function BlueprintMigrationsPage() {
           version={selected?.version ?? null}
           latestVersion={latestVersion}
           onRequestDelete={setDeleteTarget}
-          onCreateNewVersion={() => setCreateOpen(true)}
+          onCreateNewVersion={() => void navigate(newVersionPath)}
         />
       )}
 
-      <ModelMigrationFormModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        modelId={modelId}
-      />
       <ApplyAllDialog
         modelId={modelId}
         modelName={model.data.name}

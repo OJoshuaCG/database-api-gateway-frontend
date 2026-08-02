@@ -30,11 +30,21 @@ const ServerUserGrantsPage = lazyPage(
   () => import('@/features/server-users'),
   'ServerUserGrantsPage',
 )
-const DatabaseModelsPage = lazyPage(() => import('@/features/database-models'), 'DatabaseModelsPage')
-const SnapshotWizardPage = lazyPage(() => import('@/features/database-models'), 'SnapshotWizardPage')
+const DatabaseModelsPage = lazyPage(
+  () => import('@/features/database-models'),
+  'DatabaseModelsPage',
+)
+const SnapshotWizardPage = lazyPage(
+  () => import('@/features/database-models'),
+  'SnapshotWizardPage',
+)
 const BlueprintMigrationsPage = lazyPage(
   () => import('@/features/database-models'),
   'BlueprintMigrationsPage',
+)
+const NewModelMigrationPage = lazyPage(
+  () => import('@/features/database-models'),
+  'NewModelMigrationPage',
 )
 const ManagedDatabasesPage = lazyPage(
   () => import('@/features/managed-databases'),
@@ -77,6 +87,10 @@ export const router = createBrowserRouter([
           { path: 'database-models', element: <DatabaseModelsPage /> },
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
+          {
+            path: 'database-models/:modelId/migrations/new',
+            element: <NewModelMigrationPage />,
+          },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
           {
             path: 'managed-databases/:databaseId/migrations',
