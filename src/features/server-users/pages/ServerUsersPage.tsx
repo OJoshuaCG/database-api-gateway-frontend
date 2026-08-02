@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -14,15 +15,18 @@ import {
   TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
-import type { EngineType, ServerOut, ServerUserOut } from '@/lib/contracts'
+import type { ServerOut, ServerUserOut } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUsers } from '../hooks/use-server-users'
 import { ServerUserFormModal } from '../components/ServerUserFormModal'
 import { DeleteServerUserDialog } from '../components/DeleteServerUserDialog'
 import { OwnedDatabasesModal } from '../components/OwnedDatabasesModal'
-import { ServerUserGrantsModal } from '../components/ServerUserGrantsModal'
+
+/** Origen que se pasa a la página de permisos para que su enlace «volver» regrese a esta lista. */
+const GRANTS_FROM = encodeURIComponent('/server-users')
 
 export function ServerUsersPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [serverFilter, setServerFilter] = useState<ServerOut | null>(null)
@@ -30,7 +34,6 @@ export function ServerUsersPage() {
   const [editing, setEditing] = useState<ServerUserOut | undefined>(undefined)
   const [deleteTarget, setDeleteTarget] = useState<ServerUserOut | null>(null)
   const [ownedTarget, setOwnedTarget] = useState<ServerUserOut | null>(null)
-  const [grantsTarget, setGrantsTarget] = useState<ServerUserOut | null>(null)
 
   const servers = useServerOptions()
   const serverNameById = useMemo(() => {
@@ -38,12 +41,6 @@ export function ServerUsersPage() {
     for (const server of servers.data ?? []) map.set(server.id, server.name)
     return map
   }, [servers.data])
-  const serverEngineById = useMemo(() => {
-    const map = new Map<number, EngineType>()
-    for (const server of servers.data ?? []) map.set(server.id, server.engine)
-    return map
-  }, [servers.data])
-
   const { data, isLoading, isFetching, isError, error, refetch } = useServerUsers({
     page,
     size,
@@ -102,7 +99,13 @@ export function ServerUsersPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
-            <Button variant="ghost" size="sm" onClick={() => setGrantsTarget(row.original)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                navigate(`/server-users/${row.original.id}/grants?from=${GRANTS_FROM}`)
+              }
+            >
               Permisos
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setOwnedTarget(row.original)}>
@@ -129,7 +132,7 @@ export function ServerUsersPage() {
         ),
       },
     ],
-    [serverNameById],
+    [navigate, serverNameById],
   )
 
   return (
@@ -214,12 +217,6 @@ export function ServerUsersPage() {
         <DeleteServerUserDialog user={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
       <OwnedDatabasesModal user={ownedTarget} onClose={() => setOwnedTarget(null)} />
-      <ServerUserGrantsModal
-        key={grantsTarget?.id ?? 'closed'}
-        user={grantsTarget}
-        engine={grantsTarget ? (serverEngineById.get(grantsTarget.server_id) ?? null) : null}
-        onClose={() => setGrantsTarget(null)}
-      />
     </div>
   )
 }
