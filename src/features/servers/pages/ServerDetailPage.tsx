@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -20,13 +20,30 @@ import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
 import { EngineUsersPanel } from '../components/EngineUsersPanel'
 import { ServerDatabasesPanel } from '@/features/server-databases'
 
-type Tab = 'info' | 'databases' | 'introspection' | 'users' | 'reconcile'
+const TABS = ['info', 'databases', 'introspection', 'users', 'reconcile'] as const
+type Tab = (typeof TABS)[number]
+
+function isTab(value: string | null): value is Tab {
+  return value !== null && (TABS as readonly string[]).includes(value)
+}
 
 export function ServerDetailPage() {
   const params = useParams()
   const serverId = Number(params.serverId)
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('info')
+  // La pestaña vive en la URL (`?tab=`), no en estado local: es lo que permite enlazar a una
+  // pestaña concreta y, sobre todo, que las vistas que salen de aquí puedan VOLVER a la que
+  // estaba abierta. Un valor desconocido cae en `info` en vez de dejar la página en blanco.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: Tab = isTab(tabParam) ? tabParam : 'info'
+  const setTab = (next: Tab) => {
+    setSearchParams((previous) => {
+      const updated = new URLSearchParams(previous)
+      updated.set('tab', next)
+      return updated
+    })
+  }
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
