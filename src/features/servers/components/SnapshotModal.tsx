@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Badge, Button, ErrorState, Modal, Spinner } from '@/components/ui'
+import { Badge, Button, CodeBlock, ErrorState, Modal, Spinner } from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
 import { useDatabaseSnapshot } from '../hooks/use-snapshot'
 
@@ -85,12 +85,12 @@ export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProp
                   </summary>
                   <div className="mt-3 flex flex-col gap-3">
                     {statements.map((stmt) => (
-                      <div key={`${type}:${stmt.name}`} className="flex flex-col gap-1">
-                        <code className="text-xs text-muted-foreground">{stmt.name}</code>
-                        <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-surface-muted p-3 font-mono text-xs text-foreground">
-                          {stmt.ddl}
-                        </pre>
-                      </div>
+                      <CodeBlock
+                        key={`${type}:${stmt.name}`}
+                        title={stmt.name}
+                        code={stmt.ddl}
+                        maxHeightClass="max-h-48"
+                      />
                     ))}
                   </div>
                 </details>

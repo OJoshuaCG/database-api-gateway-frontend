@@ -1,4 +1,4 @@
-import { Badge, Input, Spinner, Switch } from '@/components/ui'
+import { Badge, CodeBlock, Input, Spinner, Switch } from '@/components/ui'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import { CLONE_ACTION_HINTS } from '../messages'
 import type { DatabaseCloneWizard } from '../use-database-clone-wizard'
@@ -46,12 +46,13 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
               <p className="text-sm font-semibold text-foreground">
                 🔴 Limpieza del destino ({preview.data.clean_statements.length})
               </p>
-              <div className="flex flex-col gap-1 rounded-lg border border-error/30 bg-error/5 p-3">
-                {preview.data.clean_statements.map((statement, index) => (
-                  <code key={index} className="overflow-x-auto whitespace-pre text-xs text-foreground">
-                    {statement.sql}
-                  </code>
-                ))}
+              {/* El marco de error se conserva alrededor del visor: es lo único que distingue
+                  visualmente estas sentencias destructivas de las de estructura. */}
+              <div className="rounded-lg border border-error/30 bg-error/5 p-3">
+                <CodeBlock
+                  code={preview.data.clean_statements.map((statement) => statement.sql).join('\n')}
+                  maxHeightClass="max-h-64"
+                />
               </div>
             </div>
           )}
@@ -60,16 +61,11 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
             <p className="text-sm font-semibold text-foreground">
               Estructura ({preview.data.structure_statements.length} sentencia(s))
             </p>
-            <div className="flex max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-border bg-surface-muted p-3">
-              {preview.data.structure_statements.map((statement, index) => (
-                <code key={index} className="overflow-x-auto whitespace-pre text-xs text-foreground">
-                  {statement.sql}
-                </code>
-              ))}
-              {preview.data.structure_statements.length === 0 && (
-                <p className="text-xs text-muted-foreground">Sin sentencias de estructura.</p>
-              )}
-            </div>
+            <CodeBlock
+              code={preview.data.structure_statements.map((statement) => statement.sql).join('\n')}
+              maxHeightClass="max-h-64"
+              emptyLabel="Sin sentencias de estructura."
+            />
           </div>
 
           {preview.data.data_tables.length > 0 && (
@@ -102,8 +98,12 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
                 {preview.data.skipped.length} objeto(s) NO se clonarán (no portables)
               </p>
               {preview.data.skipped.map((object) => (
-                <p key={`${object.object_type}:${object.name}`} className="text-xs text-muted-foreground">
-                  <strong>{object.name}</strong> ({object.object_type}) — {object.portability_reason}
+                <p
+                  key={`${object.object_type}:${object.name}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  <strong>{object.name}</strong> ({object.object_type}) —{' '}
+                  {object.portability_reason}
                 </p>
               ))}
             </div>
@@ -116,7 +116,10 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
           )}
 
           {preview.data.warnings.map((warning, index) => (
-            <p key={index} className="rounded-lg bg-surface-muted p-3 text-xs text-muted-foreground">
+            <p
+              key={index}
+              className="rounded-lg bg-surface-muted p-3 text-xs text-muted-foreground"
+            >
               {warning}
             </p>
           ))}

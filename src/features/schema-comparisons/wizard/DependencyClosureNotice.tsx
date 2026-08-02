@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { type BadgeTone, Badge, Button, ErrorState, Spinner } from '@/components/ui'
+import { type BadgeTone, Badge, Button, CodeBlock, ErrorState, Spinner } from '@/components/ui'
 import type { SchemaChangeType, SchemaComparisonItemOut } from '@/lib/contracts'
 import { CHANGE_TYPE_LABELS, OBJECT_TYPE_LABELS, opGroupObjectNames } from './logic'
 import type { useResolveComparisonSelection } from '../hooks/use-schema-comparisons'
@@ -76,9 +76,14 @@ export function DependencyClosureNotice({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
       <p className="text-sm font-medium text-foreground">
-        Se {added_item_ids.length === 1 ? 'agregó 1 sentencia' : `agregaron ${added_item_ids.length} sentencia(s)`}{' '}
+        Se{' '}
+        {added_item_ids.length === 1
+          ? 'agregó 1 sentencia'
+          : `agregaron ${added_item_ids.length} sentencia(s)`}{' '}
         porque tu selección depende de ellas
-        {refreshing && <span className="font-normal text-muted-foreground"> · ⏳ actualizando…</span>}
+        {refreshing && (
+          <span className="font-normal text-muted-foreground"> · ⏳ actualizando…</span>
+        )}
       </p>
       <div className="flex flex-col gap-2">
         {added.map((addedItem) => {
@@ -97,7 +102,9 @@ export function DependencyClosureNotice({
                 <span className="truncate text-xs font-medium text-foreground">
                   {addedItem.object_name}
                 </span>
-                <code className="font-mono text-xs text-muted-foreground">#{addedItem.item_id}</code>
+                <code className="font-mono text-xs text-muted-foreground">
+                  #{addedItem.item_id}
+                </code>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -112,11 +119,7 @@ export function DependencyClosureNotice({
                   Requerida por: <strong>{reason}</strong>
                 </p>
               )}
-              {isExpanded && (
-                <pre className="max-h-56 overflow-auto rounded-lg border border-border bg-surface-muted p-3 font-mono text-xs text-foreground">
-                  {addedItem.sql}
-                </pre>
-              )}
+              {isExpanded && <CodeBlock code={addedItem.sql} maxHeightClass="max-h-56" />}
             </div>
           )
         })}

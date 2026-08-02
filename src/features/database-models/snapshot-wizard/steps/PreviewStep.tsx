@@ -1,10 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, ErrorState, Modal, Spinner, Switch } from '@/components/ui'
-import {
-  NON_PORTABLE_OBJECT_TYPES,
-  type DumpObjectType,
-  type DumpStatement,
-} from '@/lib/contracts'
+import { Badge, Button, CodeBlock, ErrorState, Modal, Spinner, Switch } from '@/components/ui'
+import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
 import { OBJECT_TYPE_LABELS, snapshotObjectCounts, summarizeCounts, TYPE_ORDER } from '../logic'
 import { ObjectCompositionChart } from '../ObjectCompositionChart'
 import type { SnapshotWizard } from '../use-snapshot-wizard'
@@ -80,13 +76,17 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
           checked={wizard.includeDataStats}
           onCheckedChange={wizard.setIncludeDataStats}
           label="Incluir estadísticas de datos"
-          hint={snapshot.isFetching && wizard.includeDataStats ? 'Cargando…' : 'Para elegir catálogos'}
+          hint={
+            snapshot.isFetching && wizard.includeDataStats ? 'Cargando…' : 'Para elegir catálogos'
+          }
         />
       </div>
 
       {isEmpty ? (
         <div className="rounded-card border border-warning/30 bg-warning/5 p-6 text-center">
-          <p className="text-sm font-semibold text-foreground">Esta base de datos no tiene objetos</p>
+          <p className="text-sm font-semibold text-foreground">
+            Esta base de datos no tiene objetos
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             No hay estructura que capturar. Elige otro origen.
           </p>
@@ -100,7 +100,9 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
         <>
           <div className="grid gap-6 md:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-foreground">Composición ({summarizeCounts(counts)})</p>
+              <p className="text-sm font-medium text-foreground">
+                Composición ({summarizeCounts(counts)})
+              </p>
               <ObjectCompositionChart counts={counts} />
             </div>
             <div className="flex flex-col gap-2">
@@ -116,7 +118,9 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
                   <details key={type} className="rounded-lg border border-border p-2">
                     <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
                       {OBJECT_TYPE_LABELS[type]} ({statements.length})
-                      {NON_PORTABLE_OBJECT_TYPES.has(type) && <Badge tone="warning">no portable</Badge>}
+                      {NON_PORTABLE_OBJECT_TYPES.has(type) && (
+                        <Badge tone="warning">no portable</Badge>
+                      )}
                     </summary>
                     <ul className="mt-2 flex flex-col gap-1">
                       {statements.map((stmt) => (
@@ -161,9 +165,7 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
         description="Solo lectura. El SQL de las versiones creadas se revisa en la vista de migraciones."
         size="lg"
       >
-        <pre className="max-h-[60vh] overflow-auto rounded-lg border border-border bg-surface-muted p-3 font-mono text-xs text-foreground">
-          {ddlOf?.ddl}
-        </pre>
+        <CodeBlock code={ddlOf?.ddl ?? ''} maxHeightClass="max-h-[60vh]" />
       </Modal>
     </div>
   )

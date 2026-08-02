@@ -1,20 +1,5 @@
-import type { ReactNode } from 'react'
-import { Badge } from '@/components/ui'
+import { Badge, CodeBlock } from '@/components/ui'
 import type { ModelMigrationOut } from '@/lib/contracts'
-
-function SqlBlock({ title, sql, extra }: { title: string; sql: string; extra?: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">{title}</span>
-        {extra}
-      </div>
-      <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-surface-muted p-3 font-mono text-xs text-foreground">
-        {sql}
-      </pre>
-    </div>
-  )
-}
 
 /** Vista de solo lectura del SQL traducido y el rollback de una migración (§8). */
 export function MigrationSqlView({ migration }: { migration: ModelMigrationOut }) {
@@ -23,29 +8,27 @@ export function MigrationSqlView({ migration }: { migration: ModelMigrationOut }
   return (
     <div className="flex flex-col gap-4">
       {migration.translated.mysql ? (
-        <SqlBlock
+        <CodeBlock
           title="MySQL / MariaDB"
-          sql={migration.translated.mysql}
+          code={migration.translated.mysql}
           extra={migration.up_sql_mysql ? <Badge tone="warning">override manual</Badge> : null}
         />
       ) : (
         <p className="text-xs text-muted-foreground">Sin traducción para MySQL/MariaDB.</p>
       )}
       {migration.translated.postgresql ? (
-        <SqlBlock
+        <CodeBlock
           title="PostgreSQL"
-          sql={migration.translated.postgresql}
-          extra={
-            migration.up_sql_postgresql ? <Badge tone="warning">override manual</Badge> : null
-          }
+          code={migration.translated.postgresql}
+          extra={migration.up_sql_postgresql ? <Badge tone="warning">override manual</Badge> : null}
         />
       ) : (
         <p className="text-xs text-muted-foreground">Sin traducción para PostgreSQL.</p>
       )}
       {rollback ? (
-        <SqlBlock
+        <CodeBlock
           title="Rollback (down_sql)"
-          sql={rollback}
+          code={rollback}
           extra={
             migration.down_sql ? (
               <Badge tone="success">confirmado</Badge>

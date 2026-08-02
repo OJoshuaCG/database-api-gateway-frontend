@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { Badge, Button, ErrorState, Input, Modal, Spinner, Switch } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  CodeBlock,
+  ErrorState,
+  Input,
+  Modal,
+  Spinner,
+  Switch,
+} from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import type { PartialApplicationEntry, ReconcilePartialResult } from '@/lib/contracts'
 import { useReconcilePartial, useReconcilePreview } from '../hooks/use-db-migrations'
@@ -122,15 +131,10 @@ export function ReconcilePartialDialog({
                     reconciliación requiere <code>force</code>.
                   </p>
                   {plan.unreversible_statements.length > 0 && (
-                    <ul className="flex flex-col gap-1">
-                      {plan.unreversible_statements.map((sql) => (
-                        <li key={sql}>
-                          <code className="break-all whitespace-pre-wrap text-muted-foreground">
-                            {sql}
-                          </code>
-                        </li>
-                      ))}
-                    </ul>
+                    <CodeBlock
+                      code={plan.unreversible_statements.join('\n')}
+                      maxHeightClass="max-h-48"
+                    />
                   )}
                 </div>
               )}
@@ -141,15 +145,10 @@ export function ReconcilePartialDialog({
                     Aviso: estos reversos <strong>sí se ejecutan</strong>, pero no son
                     demostrablemente seguros (revísalos antes de continuar):
                   </p>
-                  <ul className="flex flex-col gap-1">
-                    {plan.unconfirmed_reverses.map((sql) => (
-                      <li key={sql}>
-                        <code className="break-all whitespace-pre-wrap text-muted-foreground">
-                          {sql}
-                        </code>
-                      </li>
-                    ))}
-                  </ul>
+                  <CodeBlock
+                    code={plan.unconfirmed_reverses.join('\n')}
+                    maxHeightClass="max-h-48"
+                  />
                 </div>
               )}
 
@@ -173,7 +172,9 @@ export function ReconcilePartialDialog({
                               {statement.seq}
                             </td>
                             <td className="px-2 py-1.5">
-                              <code className="break-all whitespace-pre-wrap">{statement.sql}</code>
+                              {/* Sin `break-all`: partir un identificador SQL a mitad cambia lo
+                                  que se lee. Se envuelve por palabra y se conserva el formato. */}
+                              <code className="font-mono whitespace-pre-wrap">{statement.sql}</code>
                             </td>
                           </tr>
                         ))}
@@ -256,13 +257,7 @@ function ReconcileResultView({ result }: { result: ReconcilePartialResult }) {
       {result.unreversible_statements.length > 0 && (
         <div className="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
           <p className="text-foreground">Quedaron aplicadas (sin reverso conocido):</p>
-          <ul className="flex flex-col gap-1">
-            {result.unreversible_statements.map((sql) => (
-              <li key={sql}>
-                <code className="break-all whitespace-pre-wrap text-muted-foreground">{sql}</code>
-              </li>
-            ))}
-          </ul>
+          <CodeBlock code={result.unreversible_statements.join('\n')} maxHeightClass="max-h-48" />
         </div>
       )}
 
@@ -271,13 +266,7 @@ function ReconcileResultView({ result }: { result: ReconcilePartialResult }) {
           <p className="text-foreground">
             Se ejecutaron reversos no demostrablemente seguros (verifica el resultado):
           </p>
-          <ul className="flex flex-col gap-1">
-            {result.unconfirmed_reverses.map((sql) => (
-              <li key={sql}>
-                <code className="break-all whitespace-pre-wrap text-muted-foreground">{sql}</code>
-              </li>
-            ))}
-          </ul>
+          <CodeBlock code={result.unconfirmed_reverses.join('\n')} maxHeightClass="max-h-48" />
         </div>
       )}
 
@@ -296,8 +285,10 @@ function ReconcileResultView({ result }: { result: ReconcilePartialResult }) {
                   </Badge>
                 </div>
               </div>
+              {/* Una sentencia por fila junto a su seq/estado: un CodeBlock por fila metería
+                  una barra de herramientas por sentencia. Solo se quita `break-all`. */}
               {item.sql && (
-                <code className="break-all whitespace-pre-wrap text-muted-foreground">
+                <code className="font-mono whitespace-pre-wrap text-muted-foreground">
                   {item.sql}
                 </code>
               )}
