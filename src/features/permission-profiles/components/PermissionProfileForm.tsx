@@ -9,7 +9,16 @@ import {
   type PermissionProfileCreate,
   type PermissionProfileUpdate,
 } from '@/lib/contracts'
-import { Button, Checkbox, Combobox, Input, Switch, Textarea } from '@/components/ui'
+import {
+  Button,
+  Checkbox,
+  Combobox,
+  IconButton,
+  Input,
+  Switch,
+  Textarea,
+  XIcon,
+} from '@/components/ui'
 import { PrivilegeMultiSelect, grantLevelsForEngine } from '@/features/privileges'
 
 interface EngineOption {
@@ -149,7 +158,10 @@ export function PermissionProfileForm({
         {errors.items?.root && <p className="text-xs text-error">{errors.items.root.message}</p>}
 
         {fields.map((fieldItem, index) => (
-          <div key={fieldItem.id} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+          <div
+            key={fieldItem.id}
+            className="flex flex-col gap-3 rounded-lg border border-border p-3"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="w-full sm:max-w-xs">
                 <Controller
@@ -168,15 +180,15 @@ export function PermissionProfileForm({
                 />
               </div>
               {fields.length > 1 && (
-                <Button
+                <IconButton
                   type="button"
+                  label="Quitar"
+                  icon={<XIcon />}
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   className="mt-7"
                   onClick={() => remove(index)}
-                >
-                  Quitar
-                </Button>
+                />
               )}
             </div>
             <Controller

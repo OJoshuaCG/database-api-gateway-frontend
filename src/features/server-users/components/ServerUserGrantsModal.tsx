@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Badge, Button, EmptyState, ErrorState, Input, Modal, Spinner } from '@/components/ui'
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  Input,
+  Modal,
+  RefreshIcon,
+  Spinner,
+} from '@/components/ui'
 import { cn } from '@/lib/utils'
 import type { EngineType, ServerUserOut } from '@/lib/contracts'
 import { useUserGrants } from '../hooks/use-user-grants'
@@ -123,16 +132,27 @@ export function ServerUserGrantsModal({ user, engine, onClose }: ServerUserGrant
               </ul>
             )}
             <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void grants.refetch()}
-                isLoading={grants.isFetching}
-                disabled={needsDatabase}
+              {/* Un botón `disabled` no dispara el tooltip nativo, así que sin este `span` el
+                  icono quedaría gris y mudo cuando falta la BD en PostgreSQL. Mismo recurso que
+                  usa `ModelMigrationDetailPanel` para explicar por qué no se puede pulsar. */}
+              <span
+                title={
+                  needsDatabase
+                    ? 'Indicá una base de datos para poder actualizar los permisos.'
+                    : undefined
+                }
               >
-                Actualizar
-              </Button>
+                <IconButton
+                  type="button"
+                  label="Actualizar"
+                  icon={<RefreshIcon />}
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => void grants.refetch()}
+                  isLoading={grants.isFetching}
+                  disabled={needsDatabase}
+                />
+              </span>
             </div>
           </div>
         )}

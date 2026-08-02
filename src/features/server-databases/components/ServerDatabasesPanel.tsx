@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Button, DataTable, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  RefreshIcon,
+  Spinner,
+  TrashIcon,
+} from '@/components/ui'
 import { cn } from '@/lib/utils'
 import type { ServerOut } from '@/lib/contracts'
 import { ProvisionStatusBadge } from '@/features/managed-databases/components/ProvisionStatusBadge'
@@ -134,13 +144,13 @@ export function ServerDatabasesPanel({
                 </Button>
               </Link>
             )}
-            <Button
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
               variant="danger-soft"
-              size="sm"
+              size="icon-sm"
               onClick={() => setDropTarget(row.original.name)}
-            >
-              Eliminar
-            </Button>
+            />
           </div>
         ),
       },
@@ -168,9 +178,14 @@ export function ServerDatabasesPanel({
         </p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setCreateOpen(true)}>Nueva base de datos 🔌</Button>
-          <Button variant="outline" onClick={() => refetch()} isLoading={physical.isFetching}>
-            Actualizar
-          </Button>
+          <IconButton
+            label="Actualizar"
+            icon={<RefreshIcon />}
+            variant="outline"
+            size="icon"
+            onClick={() => refetch()}
+            isLoading={physical.isFetching}
+          />
           {onGoToReconcile && (
             <Button variant="ghost" onClick={onGoToReconcile}>
               Ver reconciliación del servidor →
@@ -187,12 +202,20 @@ export function ServerDatabasesPanel({
 
       {/* Fallo parcial: la tabla sigue siendo útil sin el cruce, pero hay que decirlo. */}
       {inventory.isError && (
-        <p className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-          No se pudo cargar el cruce con el inventario: la columna «Inventario» puede no ser fiable.{' '}
-          <button type="button" onClick={() => void inventory.refetch()} className="underline">
-            Reintentar
-          </button>
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-card border border-warning/30 bg-warning/10 px-4 py-3">
+          {/* El reintento sale del párrafo: un icono a mitad de frase cortaría la lectura. */}
+          <p className="min-w-0 flex-1 text-sm text-warning">
+            No se pudo cargar el cruce con el inventario: la columna «Inventario» puede no ser
+            fiable.
+          </p>
+          <IconButton
+            label="Reintentar"
+            icon={<RefreshIcon />}
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => void inventory.refetch()}
+          />
+        </div>
       )}
       {inventoryTruncated && (
         <p className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">

@@ -1,6 +1,15 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  RefreshIcon,
+  Spinner,
+  TrashIcon,
+} from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { queryKeys } from '@/lib/api/query-keys'
 import type {
@@ -146,13 +155,13 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
               >
                 Ver grants
               </Button>
-              <Button
+              <IconButton
+                label="Eliminar"
+                icon={<TrashIcon />}
                 variant="danger-soft"
-                size="sm"
+                size="icon-sm"
                 onClick={() => setDeleteTarget({ username, host })}
-              >
-                Eliminar
-              </Button>
+              />
             </div>
             {grantsUserId === identity.server_user_id && grantsUser.isError && (
               <p className="text-xs text-error">No se pudo cargar el usuario para ver permisos.</p>
@@ -172,13 +181,13 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
             >
               Rotar contraseña
             </Button>
-            <Button
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
               variant="danger-soft"
-              size="sm"
+              size="icon-sm"
               onClick={() => setDeleteTarget({ username, host })}
-            >
-              Eliminar
-            </Button>
+            />
           </div>
         )
       case 'orphan':
@@ -248,9 +257,14 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
           huérfano(s)
         </p>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => void refetch()} isLoading={isFetching}>
-            Actualizar
-          </Button>
+          <IconButton
+            label="Actualizar"
+            icon={<RefreshIcon />}
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => void refetch()}
+            isLoading={isFetching}
+          />
           <Button size="sm" onClick={() => setCreateTarget('new')}>
             Crear usuario
           </Button>

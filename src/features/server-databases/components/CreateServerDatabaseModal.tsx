@@ -1,7 +1,16 @@
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import { Button, Combobox, Input, Modal, Switch, Textarea } from '@/components/ui'
+import {
+  Button,
+  Combobox,
+  IconButton,
+  Input,
+  Modal,
+  RefreshIcon,
+  Switch,
+  Textarea,
+} from '@/components/ui'
 import { toApiError, type ApiError } from '@/lib/api/errors'
 import { MAX_DATABASE_NAME_LENGTH, type EngineType, type ServerUserOut } from '@/lib/contracts'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
@@ -327,15 +336,15 @@ export function CreateServerDatabaseModal({
 
             {failureInfo.retryable && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
+                <IconButton
                   type="button"
+                  label="Reintentar"
+                  icon={<RefreshIcon />}
                   variant="outline"
-                  size="sm"
+                  size="icon-sm"
                   disabled={isPending}
                   onClick={() => void handleSubmit(submit)()}
-                >
-                  Reintentar
-                </Button>
+                />
                 <span className="text-muted-foreground">
                   Si vuelve a fallar, probá la conexión de «{serverName}» desde la pantalla de
                   servidores.

@@ -10,6 +10,8 @@ import {
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table'
+import { IconButton } from './IconButton'
+import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { Input } from './Input'
 import { MultiCombobox } from './MultiCombobox'
 
@@ -211,25 +213,25 @@ export function DataTable<T>({
             {isFetching && ' · actualizando…'}
           </p>
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
+            <IconButton
+              label="Anterior"
+              icon={<ChevronLeftIcon />}
+              variant="outline"
+              size="icon-sm"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="rounded-lg border border-input bg-surface px-3 py-1.5 text-sm text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Anterior
-            </button>
+            />
             <span className="px-2 text-sm text-muted-foreground">
               {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
             </span>
-            <button
-              type="button"
+            <IconButton
+              label="Siguiente"
+              icon={<ChevronRightIcon />}
+              variant="outline"
+              size="icon-sm"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="rounded-lg border border-input bg-surface px-3 py-1.5 text-sm text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Siguiente
-            </button>
+            />
           </div>
         </div>
       )}

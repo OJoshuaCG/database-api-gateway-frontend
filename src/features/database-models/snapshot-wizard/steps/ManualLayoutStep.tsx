@@ -1,5 +1,13 @@
 import { useMemo } from 'react'
-import { Badge, Button, Input } from '@/components/ui'
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  Badge,
+  Button,
+  IconButton,
+  Input,
+  XIcon,
+} from '@/components/ui'
 import type { DumpObjectType } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { objectKey, OBJECT_TYPE_LABELS, TYPE_ORDER } from '../logic'
@@ -42,7 +50,9 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Panel izquierdo: objetos disponibles */}
         <div className="flex max-h-[28rem] flex-col gap-3 overflow-auto rounded-lg border border-border p-3">
-          <p className="text-sm font-medium text-foreground">Objetos ({wizard.selectedStatements.length})</p>
+          <p className="text-sm font-medium text-foreground">
+            Objetos ({wizard.selectedStatements.length})
+          </p>
           {grouped.map(([type, list]) => (
             <div key={type} className="flex flex-col gap-1.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -60,7 +70,9 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
                     )}
                   >
                     <span className="flex min-w-0 flex-col">
-                      <code className="truncate font-mono text-xs text-foreground">{stmt.name}</code>
+                      <code className="truncate font-mono text-xs text-foreground">
+                        {stmt.name}
+                      </code>
                       {stmt.depends_on.length > 0 && (
                         <span className="truncate text-xs text-muted-foreground">
                           ← {stmt.depends_on.join(', ')}
@@ -93,14 +105,19 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
 
         {/* Panel derecho: versiones (buckets) */}
         <div className="flex max-h-[28rem] flex-col gap-3 overflow-auto rounded-lg border border-border p-3">
-          <p className="text-sm font-medium text-foreground">Versiones ({wizard.manualBuckets.length})</p>
+          <p className="text-sm font-medium text-foreground">
+            Versiones ({wizard.manualBuckets.length})
+          </p>
           {wizard.manualBuckets.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Añade una versión para empezar a asignar objetos.
             </p>
           )}
           {wizard.manualBuckets.map((bucket, index) => (
-            <div key={bucket.id} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
+            <div
+              key={bucket.id}
+              className="flex flex-col gap-2 rounded-lg border border-border p-2.5"
+            >
               <div className="flex items-center gap-2">
                 <code className="font-mono text-xs text-muted-foreground">v{index + 1}</code>
                 <Input
@@ -109,32 +126,32 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
                   onChange={(event) => wizard.renameBucket(bucket.id, event.target.value)}
                   placeholder="Nombre de la versión"
                 />
-                <Button
+                <IconButton
+                  label="Subir versión"
+                  icon={<ArrowUpIcon />}
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
+                  className="shrink-0"
                   onClick={() => wizard.moveBucket(bucket.id, -1)}
                   disabled={index === 0}
-                  aria-label="Subir versión"
-                >
-                  ↑
-                </Button>
-                <Button
+                />
+                <IconButton
+                  label="Bajar versión"
+                  icon={<ArrowDownIcon />}
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
+                  className="shrink-0"
                   onClick={() => wizard.moveBucket(bucket.id, 1)}
                   disabled={index === wizard.manualBuckets.length - 1}
-                  aria-label="Bajar versión"
-                >
-                  ↓
-                </Button>
-                <Button
+                />
+                <IconButton
+                  label="Eliminar versión"
+                  icon={<XIcon />}
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
+                  className="shrink-0"
                   onClick={() => wizard.removeBucket(bucket.id)}
-                  aria-label="Eliminar versión"
-                >
-                  ✕
-                </Button>
+                />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {bucket.objectKeys.length === 0 ? (

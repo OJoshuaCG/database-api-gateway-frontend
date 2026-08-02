@@ -8,8 +8,11 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  IconButton,
   PageHeader,
   Pagination,
+  PencilIcon,
+  TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import type { DatabaseModelOut } from '@/lib/contracts'
@@ -83,19 +86,23 @@ export function DatabaseModelsPage() {
             <Button variant="ghost" size="sm" onClick={() => setDatabasesTarget(row.original)}>
               Ver BDs
             </Button>
-            <Button
+            <IconButton
+              label="Editar"
+              icon={<PencilIcon />}
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => {
                 setEditing(row.original)
                 setFormOpen(true)
               }}
-            >
-              Editar
-            </Button>
-            <Button variant="danger-soft" size="sm" onClick={() => setDeleteTarget(row.original)}>
-              Eliminar
-            </Button>
+            />
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
+              variant="danger-soft"
+              size="icon-sm"
+              onClick={() => setDeleteTarget(row.original)}
+            />
           </div>
         ),
       },

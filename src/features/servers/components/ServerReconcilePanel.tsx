@@ -1,6 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Badge, Button, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  RefreshIcon,
+  Spinner,
+} from '@/components/ui'
 import { cn } from '@/lib/utils'
 import type { ReconcileState } from '@/lib/contracts'
 import { AdoptDatabaseModal } from '@/features/managed-databases/components/AdoptDatabaseModal'
@@ -10,12 +18,14 @@ import { SnapshotModal } from './SnapshotModal'
 
 type SubTab = 'databases' | 'users'
 
-const STATE_BADGE: Record<ReconcileState, { tone: 'success' | 'warning' | 'error'; label: string }> =
-  {
-    managed: { tone: 'success', label: '🟢 Gestionada' },
-    unmanaged: { tone: 'warning', label: '🟡 Sin gestionar' },
-    orphan: { tone: 'error', label: '🔴 Huérfana' },
-  }
+const STATE_BADGE: Record<
+  ReconcileState,
+  { tone: 'success' | 'warning' | 'error'; label: string }
+> = {
+  managed: { tone: 'success', label: '🟢 Gestionada' },
+  unmanaged: { tone: 'warning', label: '🟡 Sin gestionar' },
+  orphan: { tone: 'error', label: '🔴 Huérfana' },
+}
 
 /**
  * Panel de reconciliación de un servidor (Plan 09 §2): cruza el motor en vivo con el inventario y
@@ -56,9 +66,13 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
             Usuarios
           </SubTabButton>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void refetch()}>
-          Re-escanear
-        </Button>
+        <IconButton
+          label="Re-escanear"
+          icon={<RefreshIcon />}
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => void refetch()}
+        />
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -140,7 +154,10 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
             </thead>
             <tbody>
               {data.users.map((user) => (
-                <tr key={`${user.username}@${user.host ?? ''}`} className="border-b border-border last:border-0">
+                <tr
+                  key={`${user.username}@${user.host ?? ''}`}
+                  className="border-b border-border last:border-0"
+                >
                   <td className="px-3 py-2 font-medium text-foreground">{user.username}</td>
                   <td className="px-3 py-2 text-muted-foreground">{user.host ?? '—'}</td>
                   <td className="px-3 py-2">
@@ -185,7 +202,11 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
           host={adoptUser.host}
         />
       )}
-      <SnapshotModal serverId={serverId} database={snapshotDb} onClose={() => setSnapshotDb(null)} />
+      <SnapshotModal
+        serverId={serverId}
+        database={snapshotDb}
+        onClose={() => setSnapshotDb(null)}
+      />
     </div>
   )
 }

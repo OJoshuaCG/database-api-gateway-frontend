@@ -6,11 +6,13 @@ import {
   Combobox,
   EmptyState,
   ErrorState,
+  IconButton,
   Input,
   Modal,
   Pagination,
   Spinner,
   Switch,
+  XIcon,
 } from '@/components/ui'
 import { cn, formatDateTime } from '@/lib/utils'
 import { toApiError } from '@/lib/api/errors'
@@ -467,9 +469,13 @@ export function ManagedDatabaseMigrationsModal({
                           <h3 className="text-sm font-semibold text-foreground">
                             Resultado del último apply
                           </h3>
-                          <Button variant="ghost" size="sm" onClick={() => setLastRun(null)}>
-                            Descartar
-                          </Button>
+                          <IconButton
+                            label="Descartar"
+                            icon={<XIcon />}
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setLastRun(null)}
+                          />
                         </div>
                         {lastRun.results.length > 0 ? (
                           <div className="overflow-x-auto rounded-lg border border-border">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Modal } from '@/components/ui'
+import { Button, CopyIcon, IconButton, Modal } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import { useRevealEngineUserPassword } from '../hooks/use-engine-users'
@@ -57,15 +57,22 @@ export function RevealEngineUserPasswordModal({
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2">
               <code className="flex-1 select-all break-all font-mono text-sm text-foreground">
-                {visible ? reveal.data.password : '•'.repeat(Math.min(reveal.data.password.length, 24))}
+                {visible
+                  ? reveal.data.password
+                  : '•'.repeat(Math.min(reveal.data.password.length, 24))}
               </code>
               <Button type="button" variant="ghost" size="sm" onClick={() => setVisible((v) => !v)}>
                 {visible ? 'Ocultar' : 'Mostrar'}
               </Button>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void handleCopy()}>
-              Copiar al portapapeles
-            </Button>
+            <IconButton
+              type="button"
+              label="Copiar al portapapeles"
+              icon={<CopyIcon />}
+              variant="outline"
+              size="icon-sm"
+              onClick={() => void handleCopy()}
+            />
           </div>
         ) : (
           <Button

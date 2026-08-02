@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { type BadgeTone, Badge, Button, CodeBlock, ErrorState, Spinner } from '@/components/ui'
+import {
+  type BadgeTone,
+  Badge,
+  CodeBlock,
+  ErrorState,
+  EyeIcon,
+  EyeOffIcon,
+  IconButton,
+  Spinner,
+} from '@/components/ui'
 import type { SchemaChangeType, SchemaComparisonItemOut } from '@/lib/contracts'
 import { CHANGE_TYPE_LABELS, OBJECT_TYPE_LABELS, opGroupObjectNames } from './logic'
 import type { useResolveComparisonSelection } from '../hooks/use-schema-comparisons'
@@ -105,14 +114,14 @@ export function DependencyClosureNotice({
                 <code className="font-mono text-xs text-muted-foreground">
                   #{addedItem.item_id}
                 </code>
-                <Button
+                <IconButton
+                  label={isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
+                  icon={isExpanded ? <EyeOffIcon /> : <EyeIcon />}
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   className="ml-auto"
                   onClick={() => setExpandedItemId(isExpanded ? null : addedItem.item_id)}
-                >
-                  {isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
-                </Button>
+                />
               </div>
               {reason && (
                 <p className="text-xs text-muted-foreground">

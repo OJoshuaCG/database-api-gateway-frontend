@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Badge, Button, Checkbox, Input, Modal, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  Checkbox,
+  CopyIcon,
+  IconButton,
+  Input,
+  Modal,
+  Spinner,
+} from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import type { DropPreviewOut, EngineType } from '@/lib/contracts'
 import { useToast } from '@/lib/toast/use-toast'
@@ -403,9 +412,14 @@ export function DropDatabaseDialog({
                 <code className="flex-1 break-all font-mono text-sm text-foreground select-all">
                   {database}
                 </code>
-                <Button type="button" variant="ghost" size="sm" onClick={handleCopyName}>
-                  Copiar
-                </Button>
+                <IconButton
+                  type="button"
+                  label="Copiar"
+                  icon={<CopyIcon />}
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={handleCopyName}
+                />
               </div>
               <Input
                 value={typedName}

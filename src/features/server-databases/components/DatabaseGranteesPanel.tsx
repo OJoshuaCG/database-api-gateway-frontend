@@ -1,6 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Button, Checkbox, EmptyState, ErrorState, Input, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  Input,
+  RefreshIcon,
+  Spinner,
+} from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import type { DatabaseGrantee, EngineType } from '@/lib/contracts'
 import { filterGrantees, isDangerousPrivilege, type GranteeScope } from '../logic'
@@ -62,9 +72,14 @@ export function DatabaseGranteesPanel({ serverId, database }: DatabaseGranteesPa
   }
 
   const refreshButton = (
-    <Button variant="outline" size="sm" onClick={() => void refetch()} isLoading={isFetching}>
-      Actualizar
-    </Button>
+    <IconButton
+      label="Actualizar"
+      icon={<RefreshIcon />}
+      variant="outline"
+      size="icon-sm"
+      onClick={() => void refetch()}
+      isLoading={isFetching}
+    />
   )
 
   const renderContent = () => {

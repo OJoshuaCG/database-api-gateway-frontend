@@ -1,5 +1,15 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, CodeBlock, ErrorState, Modal, Spinner, Switch } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  CodeBlock,
+  CodeIcon,
+  ErrorState,
+  IconButton,
+  Modal,
+  Spinner,
+  Switch,
+} from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
 import { OBJECT_TYPE_LABELS, snapshotObjectCounts, summarizeCounts, TYPE_ORDER } from '../logic'
 import { ObjectCompositionChart } from '../ObjectCompositionChart'
@@ -136,9 +146,13 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
                               </span>
                             )}
                           </span>
-                          <Button variant="ghost" size="sm" onClick={() => setDdlOf(stmt)}>
-                            Ver DDL
-                          </Button>
+                          <IconButton
+                            label="Ver DDL"
+                            icon={<CodeIcon />}
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setDdlOf(stmt)}
+                          />
                         </li>
                       ))}
                     </ul>

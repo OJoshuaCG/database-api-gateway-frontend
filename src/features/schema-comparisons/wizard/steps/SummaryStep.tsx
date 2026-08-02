@@ -1,4 +1,4 @@
-import { Badge, Button, Spinner } from '@/components/ui'
+import { Badge, Button, IconButton, RefreshIcon, Spinner } from '@/components/ui'
 import { compositionRows } from '../logic'
 import { DiffCompositionChart } from '../DiffCompositionChart'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
@@ -63,7 +63,8 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
           Motor: {data.source_engine} → {data.target_engine}
         </p>
         <p className="rounded-lg bg-surface-muted p-3 text-sm text-foreground">
-          DDL = qué correr en <strong>TARGET</strong> ({targetName}) para igualar <strong>SOURCE</strong>.
+          DDL = qué correr en <strong>TARGET</strong> ({targetName}) para igualar{' '}
+          <strong>SOURCE</strong>.
         </p>
         <div className="flex flex-wrap gap-2">
           {data.cross_flavor_warning && <Badge tone="warning">⚠ Cross-flavor MySQL↔MariaDB</Badge>}
@@ -82,9 +83,14 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
           <p className="text-sm text-foreground">
             La comparación expiró; vuelve a calcularla para obtener el estado actual del target.
           </p>
-          <Button onClick={wizard.recalculate} isLoading={wizard.createComparisonState.isPending}>
-            Recalcular
-          </Button>
+          <IconButton
+            label="Recalcular"
+            icon={<RefreshIcon />}
+            variant="ghost"
+            size="icon-sm"
+            onClick={wizard.recalculate}
+            isLoading={wizard.createComparisonState.isPending}
+          />
         </div>
       ) : (
         <>
@@ -115,12 +121,17 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
             </div>
             <p className="text-xs text-muted-foreground">
               Total de sentencias: <strong>{data.item_count}</strong>. La tabla cuenta OBJETOS; un
-              mismo objeto puede generar varias sentencias (p. ej. varios <code>ALTER COLUMN</code>).
+              mismo objeto puede generar varias sentencias (p. ej. varios <code>ALTER COLUMN</code>
+              ).
             </p>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <Button variant="outline" className="self-start" onClick={() => wizard.goToStep('items')}>
+            <Button
+              variant="outline"
+              className="self-start"
+              onClick={() => wizard.goToStep('items')}
+            >
               Ver detalle del DDL →
             </Button>
 
@@ -162,4 +173,3 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
     </div>
   )
 }
-
