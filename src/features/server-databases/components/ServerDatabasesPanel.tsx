@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -19,7 +19,6 @@ import { useServerUserOptions } from '@/features/server-users/hooks/use-server-u
 import { useServerDatabases } from '../hooks/use-server-databases'
 import { filterDatabaseRows, type InventoryScope, type ServerDatabaseRow } from '../logic'
 import { CreateServerDatabaseModal } from './CreateServerDatabaseModal'
-import { ServerDatabaseDetailModal } from './ServerDatabaseDetailModal'
 import { DropDatabaseDialog } from './DropDatabaseDialog'
 
 const SCOPES: { id: InventoryScope; label: string }[] = [
@@ -27,6 +26,14 @@ const SCOPES: { id: InventoryScope; label: string }[] = [
   { id: 'managed', label: 'Gestionadas' },
   { id: 'unmanaged', label: 'No gestionadas' },
 ]
+
+/**
+ * Ruta de la ficha de una base de datos. El nombre se codifica porque las bases legadas pueden
+ * llevar «.», «-» o «$», que de otro modo romperían el segmento de la URL.
+ */
+function detailPath(serverId: number, database: string): string {
+  return `/servers/${serverId}/databases/${encodeURIComponent(database)}`
+}
 
 /**
  * Vista 1 — bases de datos que existen FÍSICAMENTE en el servidor, cruzadas con el inventario
@@ -48,12 +55,12 @@ export function ServerDatabasesPanel({
   onGoToReconcile?: () => void
 }) {
   const serverId = server.id
+  const navigate = useNavigate()
   const { rows, physical, inventory, inventoryTruncated, refetch } = useServerDatabases(serverId)
 
   const [search, setSearch] = useState('')
   const [scope, setScope] = useState<InventoryScope>('all')
   const [createOpen, setCreateOpen] = useState(false)
-  const [detailTarget, setDetailTarget] = useState<ServerDatabaseRow | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
 
   // Resuelve `owner_id` → username. Es una consulta ya cacheada por otros módulos y degrada
@@ -79,13 +86,12 @@ export function ServerDatabasesPanel({
         header: 'Nombre',
         accessorFn: (row) => row.name,
         cell: ({ row }) => (
-          <button
-            type="button"
-            onClick={() => setDetailTarget(row.original)}
+          <Link
+            to={detailPath(serverId, row.original.name)}
             className="font-mono text-sm text-primary hover:underline"
           >
             {row.original.name}
-          </button>
+          </Link>
         ),
       },
       {
@@ -134,9 +140,11 @@ export function ServerDatabasesPanel({
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setDetailTarget(row.original)}>
-              Ver usuarios
-            </Button>
+            <Link to={detailPath(serverId, row.original.name)}>
+              <Button variant="ghost" size="sm">
+                Ver usuarios
+              </Button>
+            </Link>
             {!row.original.isManaged && (
               <Link to="/managed-databases">
                 <Button variant="ghost" size="sm">
@@ -155,7 +163,7 @@ export function ServerDatabasesPanel({
         ),
       },
     ],
-    [inventory.isPending, ownerNames],
+    [inventory.isPending, ownerNames, serverId],
   )
 
   if (physical.isLoading) {
@@ -282,20 +290,6 @@ export function ServerDatabasesPanel({
       />
 
       {/* Montaje condicional: cada apertura nace con estado fresco, sin resetear por efectos. */}
-      {detailTarget && (
-        <ServerDatabaseDetailModal
-          open
-          onClose={() => setDetailTarget(null)}
-          serverId={serverId}
-          engine={server.engine}
-          row={detailTarget}
-          onRequestDelete={() => {
-            setDropTarget(detailTarget.name)
-            setDetailTarget(null)
-          }}
-        />
-      )}
-
       {dropTarget && (
         <DropDatabaseDialog
           serverId={serverId}
@@ -308,11 +302,11 @@ export function ServerDatabasesPanel({
             setDropTarget(null)
             refetch()
           }}
+          // Los grantees ya no viven en un modal hermano: son una pestaña de la ficha, así que
+          // esta salida deja el borrado y navega a ella.
           onShowGrantees={() => {
-            const row = rows.find((candidate) => candidate.name === dropTarget)
-            if (!row) return
             setDropTarget(null)
-            setDetailTarget(row)
+            void navigate(detailPath(serverId, dropTarget))
           }}
         />
       )}
