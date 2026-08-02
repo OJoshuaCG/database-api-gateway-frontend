@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui'
+import { Button, SqlThemeSelect } from '@/components/ui'
 import { useSession } from '@/features/auth/hooks/use-session'
 import { useLogout } from '@/features/auth/hooks/use-logout'
 import { HealthBadge } from '@/features/health/components/HealthBadge'
@@ -31,7 +31,13 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
           aria-label="Abrir menú"
           className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" aria-hidden>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            aria-hidden
+          >
             <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
@@ -67,6 +73,10 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
 
       <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
         <HealthBadge />
+        {/* Junto al conmutador de tema: las dos son preferencias de apariencia y se buscan en
+            el mismo sitio. Se oculta en pantallas estrechas, donde el selector a pantalla
+            completa del propio visor de SQL cubre el caso. */}
+        <SqlThemeSelect className="hidden lg:flex" hideLabel />
         <ThemeToggle />
         {admin && (
           <span className="hidden text-sm text-muted-foreground sm:inline">{admin.username}</span>

@@ -4,6 +4,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import { countLines, SQL_TOKEN_CLASS, tokenizeSql } from '@/lib/syntax/sql-highlight'
 import { CopyIcon, ExpandIcon } from './icons'
 import { Modal } from './Modal'
+import { SqlThemeSelect } from './SqlThemeSelect'
 
 export interface CodeBlockProps {
   /** El SQL a mostrar. Se resalta con la gramática SQL de Prism. */
@@ -62,9 +63,14 @@ export function CodeBlock({
           description={`${countLines(code)} línea(s)`}
           size="full"
         >
+          {/* La paleta se ofrece aquí y no en el bloque embebido: es donde de verdad se lee SQL
+              a fondo, y repetir el control en cada bloque de la página sería puro ruido. */}
+          <div className="mb-2 flex justify-end">
+            <SqlThemeSelect />
+          </div>
           <CodeSurface
             code={code}
-            maxHeightClass="max-h-[calc(100dvh-14rem)]"
+            maxHeightClass="max-h-[calc(100dvh-16rem)]"
             hideLineNumbers={hideLineNumbers}
             emptyLabel={emptyLabel}
           />
