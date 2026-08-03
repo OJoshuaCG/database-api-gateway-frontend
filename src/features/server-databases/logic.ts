@@ -69,12 +69,8 @@ export function engineCopy(engine: EngineType): EngineCopy {
   return engine === 'postgresql' ? POSTGRES_COPY : MYSQL_COPY
 }
 
-/** Nombre legible del motor para cabeceras y etiquetas. */
-export function engineLabel(engine: EngineType): string {
-  if (engine === 'postgresql') return 'PostgreSQL'
-  if (engine === 'mariadb') return 'MariaDB'
-  return 'MySQL'
-}
+/** Vive en `lib/utils/format` desde que la consola SQL necesita la misma etiqueta. */
+export { engineLabel } from '@/lib/utils/format'
 
 // ── Validación del nombre a crear (§2.10, §2.11) ────────────────────────────
 
@@ -252,26 +248,11 @@ export function isDangerousPrivilege(privilege: string): boolean {
 // ── Caducidad del `confirm_token` (§3.2, [SUPUESTO S2]) ─────────────────────
 
 /**
- * Margen de seguridad contra el desfase de reloj del cliente: la validación real la hace el
- * servidor comparando epoch, así que la UI se adelanta un poco para no mandar un DELETE que ya
- * nació muerto. Si aun así llega un 410, ese es el mecanismo de recuperación definitivo.
+ * La cuenta atrás vive en `lib/utils/countdown` desde que la consola SQL pasó a necesitar el
+ * mismo mecanismo (`confirm_token` firmado con TTL). Se reexporta para no tocar los
+ * consumidores ni los tests de esta feature.
  */
-export const CLOCK_SKEW_MARGIN_MS = 2_000
-
-/** Milisegundos restantes de vigencia del token, nunca negativo. `expiresAt` es ISO 8601 UTC. */
-export function remainingMs(expiresAt: string, now: number): number {
-  const deadline = Date.parse(expiresAt)
-  if (Number.isNaN(deadline)) return 0
-  return Math.max(0, deadline - CLOCK_SKEW_MARGIN_MS - now)
-}
-
-/** `mm:ss` para la cuenta atrás del diálogo de borrado. */
-export function formatCountdown(ms: number): string {
-  const totalSeconds = Math.ceil(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
+export { CLOCK_SKEW_MARGIN_MS, formatCountdown, remainingMs } from '@/lib/utils/countdown'
 
 // ── Composición de mensajes de resultado (§4.5) ─────────────────────────────
 

@@ -13,7 +13,7 @@ import { toApiError } from '@/lib/api/errors'
 import type { DropPreviewOut, EngineType } from '@/lib/contracts'
 import { useToast } from '@/lib/toast/use-toast'
 import { cn } from '@/lib/utils'
-import { useCountdown } from '../hooks/use-countdown'
+import { useCountdown } from '@/lib/utils/use-countdown'
 import {
   useDropDatabasePreview,
   useDropServerDatabase,
