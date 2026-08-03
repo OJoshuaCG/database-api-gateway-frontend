@@ -70,6 +70,11 @@ export function ServerDetailPage() {
           description={`${server.host}:${server.port} · ${server.engine}`}
           actions={
             <>
+              {/* Atajo al sitio donde se comprueba que los permisos que se acaban de tocar
+                  hacen lo que se espera, sin tener que volver a elegir el servidor. */}
+              <Link to={`/sql-console?server=${server.id}`}>
+                <Button variant="outline">Consola SQL</Button>
+              </Link>
               <Button
                 variant="outline"
                 onClick={() => testConnection.mutate()}

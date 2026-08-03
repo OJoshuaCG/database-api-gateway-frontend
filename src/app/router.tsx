@@ -62,6 +62,7 @@ const DatabaseCloneWizardPage = lazyPage(
   () => import('@/features/database-clones'),
   'DatabaseCloneWizardPage',
 )
+const SqlConsolePage = lazyPage(() => import('@/features/sql-console'), 'SqlConsolePage')
 const PrivilegesPage = lazyPage(() => import('@/features/privileges'), 'PrivilegesPage')
 const PermissionProfilesPage = lazyPage(
   () => import('@/features/permission-profiles'),
@@ -98,6 +99,9 @@ export const router = createBrowserRouter([
           },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
+          // El servidor y la pestaña viajan como query params (`?server=2&tab=history`) para
+          // poder enlazar la consola desde el detalle de un servidor.
+          { path: 'sql-console', element: <SqlConsolePage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },
           { path: 'admin', element: <AdminPage /> },
