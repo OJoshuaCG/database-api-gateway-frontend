@@ -160,6 +160,56 @@ export function CloneIcon({ className }: IconProps) {
   )
 }
 
+/** Ejecutar la consulta. Triángulo sólido: es la única acción de "arrancar algo" del set. */
+export function PlayIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M6.6 4.4l8.4 5.6-8.4 5.6z" />
+    </Glyph>
+  )
+}
+
+/** Historial / bitácora: reloj con la manecilla hacia atrás. */
+export function HistoryIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M3.6 10a6.4 6.4 0 106.4-6.4A6.4 6.4 0 004.6 6.2" />
+      <path d="M3.4 3.4v3h3" />
+      <path d="M10 6.6V10l2.4 1.6" />
+    </Glyph>
+  )
+}
+
+/** Advertencia. No confundir con `BanIcon`: esto pide atención, no anuncia una prohibición. */
+export function AlertIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M10 3.6l7 12.2H3z" />
+      <path d="M10 8.2v3.4M10 13.8h.01" />
+    </Glyph>
+  )
+}
+
+/** Prohibido: la operación no se ofrece nunca desde aquí, no es un fallo transitorio. */
+export function BanIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <circle cx="10" cy="10" r="6.6" />
+      <path d="M5.3 5.3l9.4 9.4" />
+    </Glyph>
+  )
+}
+
+/** Descargar el resultado (CSV): el historial no guarda filas, exportar es la única copia. */
+export function DownloadIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M10 3.4v8.4M6.4 8.6L10 12.2l3.6-3.6" />
+      <path d="M3.8 14.2v1.2a1.2 1.2 0 001.2 1.2h10a1.2 1.2 0 001.2-1.2v-1.2" />
+    </Glyph>
+  )
+}
+
 export function ExpandIcon({ className }: IconProps) {
   return (
     <Glyph className={className}>
