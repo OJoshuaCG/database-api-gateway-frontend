@@ -12,6 +12,7 @@ profundidad. Rutas de código (`src/...`) relativas a `frontend/`.
 | [`architecture.md`](architecture.md) | Capas, dependencias entre módulos, mapa de carpetas, árbol de providers y relación con el backend. | …quieres el panorama del frontend. |
 | [`data-flow.md`](data-flow.md) | Recorrido de una solicitud archivo por archivo y los escenarios más comunes (con diagramas). | …necesitas entender o depurar **cómo viaja un dato** desde un clic hasta el backend y de vuelta. |
 | [`api-coverage.md`](api-coverage.md) | Mapa endpoint → botón/pantalla que lo dispara, y qué falta por validar contra el backend real. | …quieres saber si un endpoint ya está integrado y desde dónde. |
+| [`sql-console.md`](sql-console.md) | Flujo de la Consola SQL: identidad de ejecución, ciclo de vida del `confirm_token` y por qué un rechazo del motor no es un error. | …vas a tocar `/sql-console` o el contrato v6. |
 | [`ui-components.md`](ui-components.md) | Catálogo de los componentes de `components/ui` y cómo usarlos. | …vas a construir o modificar una vista/formulario. |
 | [`theming.md`](theming.md) | Tokens de color, tema claro/oscuro, cómo cambiar o añadir un color, accesibilidad. | …vas a tocar estilos o el sistema de temas. |
 | [`testing.md`](testing.md) | Stack de tests (Vitest + RTL + MSW), utilidades y cómo escribir un test. | …vas a escribir o arreglar tests. |

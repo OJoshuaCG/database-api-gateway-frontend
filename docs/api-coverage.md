@@ -152,6 +152,30 @@ a partir de `backend/docs/features/database-clone.md`.
 | `GET /database-clones/{id}/items` | ✅ | Monitor de pasos ejecutados |
 | `POST /database-clones/{id}/cancel` | ✅ | Cancelación cooperativa |
 
+## Consola SQL
+
+Módulo de `api-reference-v6.md`: ejecutar SQL ad-hoc eligiendo **con qué usuario del motor**
+se conecta, para verificar en la práctica que un permiso quedó como se esperaba. Vive en
+`/sql-console` (`?server=<id>&tab=console|history`), no en el detalle del servidor, porque
+opera sobre cualquier base de cualquier servidor del inventario. Numeración propia del
+contrato v6.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `POST /servers/{id}/query/preview` 🔌 | ✅ | Botón "Analizar y ejecutar" / "Solo analizar" → `ClassificationPanel`. Emite el `confirm_token` y estima el impacto. Nunca se dispara por pulsación: el rate limit es 30/min y el preview abre conexión al motor para los `COUNT`. |
+| `POST /servers/{id}/query/execute` 🔌 ⚠️ | ✅ | Directo si el nivel es `read`; con `ConfirmExecutionDialog` (tipeo del nombre de la base + token) si es `write`/`ddl`. Resultado en `ResultsPanel`. |
+| `GET /servers/{id}/query/history` | ✅ | Pestaña "Historial" → `QueryHistoryPanel`, con filtro por base y "Cargar en el editor" |
+
+Tres cosas que no se leen en la tabla y condicionan el código:
+
+- **`success: false` no es un error.** Un rechazo del motor llega con **HTTP 200** y es el
+  resultado que el admin fue a buscar: se pinta en tono neutro. El rojo queda para
+  `ddl_persisted`, `policy_miss` y los 5xx.
+- **`blocked` manda sobre `requires_confirmation`.** Un lote prohibido vuelve con los dos en
+  `true` y el token en `null`; `decidePath` los evalúa en el orden correcto.
+- **El historial guarda metadatos, no filas.** No hay forma de volver a ver un resultado: se
+  recarga el SQL en el editor y se ejecuta de nuevo.
+
 ## Pendiente de verificar contra el backend real
 
 Los contratos Zod se escriben a mano desde la documentación del backend
@@ -166,5 +190,12 @@ documento y todavía no se han ejercitado contra una instancia real:
 - `#54`/`#55` — `has_partial_application`/`partial_application[]` y el bloque
   `reconciliation`, más los campos de checkpoint de `results[]`.
 - `#77` — `resolve-selection` y los campos `op_group`/`depends_on` de los ítems.
+- **Consola SQL entera** (`query/preview`, `query/execute`, `query/history`): el propio
+  contrato v6 (§2.8) avisa de que el backend todavía no se validó contra motores
+  MySQL/MariaDB/PostgreSQL reales y de que puede haber ajustes menores. Por eso todo el
+  mapeo de la respuesta está concentrado en `lib/contracts/sql-console.ts` y
+  `features/sql-console/logic.ts`. Punto concreto a confirmar: la paginación del historial
+  (§7 la documenta con la clave `meta`, el resto de la API usa `pagination`); el servicio
+  acepta las dos formas a propósito.
 
 Ver el checklist de [`deployment.md`](deployment.md#checklist-de-endurecimiento-para-producción).
