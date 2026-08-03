@@ -134,6 +134,20 @@ async function apiRequest<S extends z.ZodTypeAny>(
   return result.data
 }
 
+/**
+ * Escape hatch: petición JSON validada contra un schema ARBITRARIO (envelope incluido), para
+ * el endpoint raro cuya respuesta no encaja en los helpers de abajo. Documenta siempre el
+ * motivo en el llamador; si el shape es el estándar, usa `fetchData`/`fetchPage`/`fetchList`.
+ */
+export function requestJson<S extends z.ZodTypeAny>(
+  method: HttpMethod,
+  path: string,
+  schema: S,
+  options?: RequestOptions,
+): Promise<z.output<S>> {
+  return apiRequest(method, path, schema, options)
+}
+
 const DEFAULT_DOWNLOAD_FILENAME = 'export.sql'
 
 /** Extrae `filename="..."` de `Content-Disposition`; cae al nombre por defecto si no viene. */
