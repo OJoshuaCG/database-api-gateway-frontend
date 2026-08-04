@@ -62,25 +62,28 @@ export interface ModeOption {
  * (un usuario que el gateway no administra), y `admin` último porque es el que NO prueba nada.
  */
 export const MODE_OPTIONS: readonly ModeOption[] = [
+  // Los `hint` son deliberadamente cortos: van dentro de tarjetas angostas, en una fila, y su
+  // trabajo es hacer distinguibles las opciones de un vistazo. El detalle completo de cada
+  // modo vive en el panel que aparece al elegirlo, donde hay sitio para explicarlo.
   {
     mode: 'provided',
     label: 'Usuario con contraseña',
-    hint: 'Conecta como ese usuario usando la contraseña que escribas aquí. No se guarda en ningún lado.',
+    hint: 'Cualquier usuario del motor, con su contraseña. El caso más común.',
   },
   {
     mode: 'stored',
     label: 'Usuario del inventario',
-    hint: 'Usa la contraseña que el gateway fijó al crear o rotar ese usuario.',
+    hint: 'Una cuenta que el gateway administra y cuya contraseña ya fijó.',
   },
   {
     mode: 'impersonate',
-    label: 'Adoptar un rol (SET ROLE)',
-    hint: 'Solo PostgreSQL: prueba un rol sin conocer su contraseña. Es una herramienta de prueba, no una frontera de seguridad.',
+    label: 'Adoptar un rol',
+    hint: 'Prueba un rol sin conocer su contraseña. Solo PostgreSQL.',
   },
   {
     mode: 'admin',
     label: 'Credencial pseudo-root',
-    hint: 'Administra el servidor entero. Con esta credencial los permisos no se prueban: se evitan.',
+    hint: 'Administra el servidor entero: los permisos no se prueban, se evitan.',
   },
 ]
 
@@ -351,6 +354,24 @@ export function exceedsSqlLimit(sql: string): boolean {
 export function isSystemDatabase(engine: EngineType | null, database: string): boolean {
   if (!engine || database.length === 0) return false
   return SYSTEM_DATABASES[engine].includes(database.toLowerCase())
+}
+
+/**
+ * La única base de datos «de trabajo» del servidor, o `null` si hay varias (o ninguna).
+ *
+ * El contrato exige `database` en el preview y en el execute —la conexión se abre contra una
+ * base concreta—, así que no se puede omitir. Lo que sí se puede es no hacer elegir cuando no
+ * hay nada que elegir: si el servidor tiene una sola base que no sea del sistema, esa es. Con
+ * dos o más NO se adivina: la confirmación por tipeo del nombre protege de un destino
+ * equivocado, pero una lectura sobre la base errónea daría un resultado engañoso en silencio.
+ */
+export function soleUsableDatabase(
+  databases: readonly string[] | undefined,
+  engine: EngineType | null,
+): string | null {
+  if (!databases) return null
+  const usable = databases.filter((database) => !isSystemDatabase(engine, database))
+  return usable.length === 1 ? (usable[0] ?? null) : null
 }
 
 /**

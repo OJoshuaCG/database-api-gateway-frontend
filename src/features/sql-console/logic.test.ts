@@ -24,6 +24,7 @@ import {
   modeOptionsFor,
   requestFingerprint,
   safeFilenamePart,
+  soleUsableDatabase,
   sqlByteLength,
   statementOutcome,
   toCsv,
@@ -660,6 +661,34 @@ describe('clampTimeoutMs', () => {
 
   it('cae al default si el valor no es un número', () => {
     expect(clampTimeoutMs(Number.NaN)).toBe(QUERY_LIMITS.defaultTimeoutMs)
+  })
+})
+
+// ── soleUsableDatabase ────────────────────────────────────────────────────────
+
+describe('soleUsableDatabase', () => {
+  it('devuelve la única base que no es del sistema', () => {
+    // El contrato exige `database`, pero no hay que hacer elegir cuando no hay opción.
+    expect(
+      soleUsableDatabase(
+        ['information_schema', 'mysql', 'performance_schema', 'sys', 'tienda'],
+        'mysql',
+      ),
+    ).toBe('tienda')
+    expect(soleUsableDatabase(['postgres', 'template0', 'template1', 'tienda'], 'postgresql')).toBe(
+      'tienda',
+    )
+  })
+
+  it('no adivina cuando hay más de una', () => {
+    // Una lectura contra la base equivocada daría un resultado engañoso sin avisar.
+    expect(soleUsableDatabase(['tienda', 'analitica'], 'mysql')).toBeNull()
+  })
+
+  it('devuelve null si no hay ninguna utilizable o la lista no llegó', () => {
+    expect(soleUsableDatabase(['mysql', 'sys'], 'mysql')).toBeNull()
+    expect(soleUsableDatabase([], 'mysql')).toBeNull()
+    expect(soleUsableDatabase(undefined, 'mysql')).toBeNull()
   })
 })
 

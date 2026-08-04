@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useIsMutating } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -30,11 +30,18 @@ import { BlockedNotice } from '../components/BlockedNotice'
 import { ClassificationPanel } from '../components/ClassificationPanel'
 import { ConfirmExecutionDialog } from '../components/ConfirmExecutionDialog'
 import { IdentityBanner } from '../components/IdentityBanner'
-import { IdentitySelector } from '../components/IdentitySelector'
+import { IdentitySelector, type StoredUserOption } from '../components/IdentitySelector'
 import { QueryHistoryPanel } from '../components/QueryHistoryPanel'
 import { ResultsPanel } from '../components/ResultsPanel'
 import { useSqlConsole } from '../hooks/use-sql-console'
-import { clampMaxRows, clampTimeoutMs, dangerCopy, identityLabel, quickActions } from '../logic'
+import {
+  clampMaxRows,
+  clampTimeoutMs,
+  dangerCopy,
+  identityLabel,
+  quickActions,
+  soleUsableDatabase,
+} from '../logic'
 import { QUERY_ACTION_HINTS, isSystemFailure, suggestsProvidedMode } from '../messages'
 
 /**
@@ -188,6 +195,34 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
   const storedUsers = useServerUserOptions(server.id)
 
   const [showOptions, setShowOptions] = useState(false)
+  const [autoPickedDatabase, setAutoPickedDatabase] = useState<string | null>(null)
+
+  /**
+   * Cuentas del inventario para el modo `stored`. `has_password` es el dato que decide: sin
+   * contraseña guardada ese modo responde 409, así que el selector las excluye en vez de
+   * ofrecer un camino que no lleva a ninguna parte.
+   */
+  const storedUserOptions = useMemo<StoredUserOption[]>(
+    () =>
+      (storedUsers.data ?? []).map((user) => ({
+        username: user.username,
+        host: user.host,
+        hasPassword: user.has_password,
+      })),
+    [storedUsers.data],
+  )
+
+  /**
+   * El contrato exige `database`, pero no hay que hacer elegir cuando no hay nada que elegir:
+   * con una sola base que no sea del sistema, se preselecciona. Es un ajuste de estado en
+   * render —el patrón de este repo—, no un efecto, y el testigo evita volver a aplicarlo si
+   * el admin la borra a mano.
+   */
+  const soleDatabase = soleUsableDatabase(databases.data, server.engine)
+  if (soleDatabase !== null && autoPickedDatabase !== soleDatabase && sqlConsole.database === '') {
+    setAutoPickedDatabase(soleDatabase)
+    sqlConsole.setDatabase(soleDatabase)
+  }
 
   const { preview, path, options } = sqlConsole
   const danger = preview ? dangerCopy(preview.danger) : null
@@ -267,7 +302,7 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
             engine={server.engine}
             error={sqlConsole.identityError}
             disabled={busy}
-            storedUsers={storedUsers.data ?? []}
+            storedUsers={storedUserOptions}
             storedUsersLoading={storedUsers.isLoading}
           />
         </CardContent>
