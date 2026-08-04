@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button } from '@/components/ui'
+import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
 import type { DatabaseCloneWizard } from './use-database-clone-wizard'
 
 /**
@@ -19,9 +19,16 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
       return null
 
     case 'plan':
-      if (wizard.jobId != null) left = <BackButton wizard={wizard} disabled={busy} onClick={() => wizard.goToStep('summary')} />
+      if (wizard.jobId != null)
+        left = (
+          <BackButton wizard={wizard} disabled={busy} onClick={() => wizard.goToStep('summary')} />
+        )
       right = (
-        <Button onClick={wizard.createPlan} isLoading={wizard.createClone.isPending} disabled={wizard.createPlanDisabled}>
+        <Button
+          onClick={wizard.createPlan}
+          isLoading={wizard.createClone.isPending}
+          disabled={wizard.createPlanDisabled}
+        >
           {wizard.createClone.isPending ? 'Creando plan…' : 'Crear plan →'}
         </Button>
       )
@@ -41,7 +48,8 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
 
     case 'preview': {
       const nameMatches =
-        wizard.confirmTargetName.length > 0 && wizard.confirmTargetName === wizard.job.data?.target_database_name
+        wizard.confirmTargetName.length > 0 &&
+        wizard.confirmTargetName === wizard.job.data?.target_database_name
       const disabled =
         busy ||
         wizard.actionCooldown ||
@@ -56,7 +64,11 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
         />
       )
       right = (
-        <Button onClick={wizard.submitExecute} isLoading={wizard.execute.isPending} disabled={disabled}>
+        <Button
+          onClick={wizard.submitExecute}
+          isLoading={wizard.execute.isPending}
+          disabled={disabled}
+        >
           Ejecutar clonación 🔌
         </Button>
       )
@@ -86,8 +98,13 @@ function BackButton({
   onClick?: () => void
 }) {
   return (
-    <Button variant="ghost" onClick={onClick ?? wizard.back} disabled={disabled}>
-      ← Atrás
-    </Button>
+    <IconButton
+      label="Atrás"
+      icon={<ChevronLeftIcon />}
+      variant="ghost"
+      size="icon"
+      onClick={onClick ?? wizard.back}
+      disabled={disabled}
+    />
   )
 }

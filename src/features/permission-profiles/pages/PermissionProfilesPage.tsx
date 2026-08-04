@@ -8,14 +8,14 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  IconButton,
   PageHeader,
+  PencilIcon,
+  TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import type { EngineType, PermissionProfileOut } from '@/lib/contracts'
-import {
-  usePermissionProfiles,
-  useDeletePermissionProfile,
-} from '../hooks/use-permission-profiles'
+import { usePermissionProfiles, useDeletePermissionProfile } from '../hooks/use-permission-profiles'
 import { PermissionProfileFormModal } from '../components/PermissionProfileFormModal'
 
 interface EngineFilter {
@@ -84,20 +84,24 @@ export function PermissionProfilesPage() {
         enableSorting: false,
         enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1.5">
-            <Button
+          <div className="flex justify-end gap-1">
+            <IconButton
+              label="Editar"
+              icon={<PencilIcon />}
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => {
                 setEditing(row.original)
                 setFormOpen(true)
               }}
-            >
-              Editar
-            </Button>
-            <Button variant="danger-soft" size="sm" onClick={() => setDeleteTarget(row.original)}>
-              Eliminar
-            </Button>
+            />
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
+              variant="danger-soft"
+              size="icon-sm"
+              onClick={() => setDeleteTarget(row.original)}
+            />
           </div>
         ),
       },

@@ -8,13 +8,15 @@ export interface ModalProps {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'full'
 }
 
 const SIZES = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  /** Visor a pantalla casi completa (`CodeBlock` expandido); el alto lo fija el contenido. */
+  full: 'max-w-[min(96rem,95vw)]',
 }
 
 /**
@@ -46,7 +48,15 @@ export function Modal({
       ref={ref}
       aria-labelledby="modal-title"
       onClose={onClose}
-      onCancel={onClose}
+      onCancel={(event) => {
+        // El `<dialog>` nativo se cierra solo al recibir `cancel` (Esc). Eso saltaría por
+        // encima de React: si el padre ignora `onClose` —p. ej. mientras hay una operación
+        // irreversible en vuelo—, la prop `open` seguiría en `true`, el efecto de arriba no
+        // volvería a ejecutarse y el diálogo quedaría cerrado en el DOM e inalcanzable.
+        // Cancelando el evento, quien decide si se cierra es siempre el padre.
+        event.preventDefault()
+        onClose()
+      }}
       onClick={(event) => {
         // Cerrar al hacer clic en el backdrop (fuera del contenido).
         if (event.target === ref.current) onClose()

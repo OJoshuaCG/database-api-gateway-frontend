@@ -14,6 +14,22 @@ export interface FieldError {
 }
 
 /**
+ * Motivo estable por el que la política de la consola SQL clasificó o rechazó una sentencia
+ * (`public_context.reasons` del 403, api-reference-v6 §8). Mismo shape que `QueryReasonOut`
+ * del contrato Zod, redeclarado aquí para que `lib/api` no dependa de `lib/contracts`.
+ */
+export interface ApiReason {
+  code: string
+  message: string
+}
+
+/** Sentencia concreta del lote que la política bloqueó (`public_context.blocked_statements`). */
+export interface BlockedStatement {
+  seq: number
+  sql: string
+}
+
+/**
  * Violación del layout manual de un snapshot (Plan 09 §3/§6). El backend solo la incluye en
  * `detail.context.violations` cuando corre en `APP_ENV=development`; en producción la UI se apoya
  * en su validación en cliente + `detail.msg`. `version` es 1-based (posición del bucket). Los
@@ -77,6 +93,14 @@ export class ApiError extends Error {
    * (`public_context.suggested_item_ids`, §10.6) — alimentan el CTA "Resolver automáticamente".
    */
   readonly suggestedItemIds?: number[]
+  /**
+   * Motivos de la política de la consola SQL (`public_context.reasons` del 403, v6 §9.2).
+   * Idealmente este 403 nunca se ve —el preview ya devolvió `blocked: true`—, pero es la
+   * segunda barrera y la ÚNICA que detecta `system_database_write`.
+   */
+  readonly reasons?: ApiReason[]
+  /** Sentencias bloqueadas del lote (`public_context.blocked_statements`, v6 §9.2). */
+  readonly blockedStatements?: BlockedStatement[]
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -91,6 +115,8 @@ export class ApiError extends Error {
     unreversibleStatements?: string[]
     missingDependencies?: string[]
     suggestedItemIds?: number[]
+    reasons?: ApiReason[]
+    blockedStatements?: BlockedStatement[]
     requestId?: string
   }) {
     super(args.message)
@@ -104,6 +130,8 @@ export class ApiError extends Error {
     this.unreversibleStatements = args.unreversibleStatements
     this.missingDependencies = args.missingDependencies
     this.suggestedItemIds = args.suggestedItemIds
+    this.reasons = args.reasons
+    this.blockedStatements = args.blockedStatements
     this.requestId = args.requestId
   }
 
@@ -195,9 +223,7 @@ function extractSkippedTables(context: unknown): ContextSkippedTable[] | undefin
  */
 function extractMissingDownSql(publicContext: unknown): string[] | undefined {
   if (!isRecord(publicContext) || !Array.isArray(publicContext.missing_down_sql)) return undefined
-  const versions = publicContext.missing_down_sql.filter(
-    (v): v is string => typeof v === 'string',
-  )
+  const versions = publicContext.missing_down_sql.filter((v): v is string => typeof v === 'string')
   return versions.length > 0 ? versions : undefined
 }
 
@@ -241,6 +267,35 @@ function extractSuggestedItemIds(publicContext: unknown): number[] | undefined {
   return ids.length > 0 ? ids : undefined
 }
 
+/**
+ * Extrae `public_context.reasons` (403 de la consola SQL, v6 §9.2). El `code` es estable y
+ * la UI lo mapea a tono y enlace; el `message` ya viene redactado en español.
+ */
+function extractReasons(publicContext: unknown): ApiReason[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.reasons)) return undefined
+  const reasons: ApiReason[] = []
+  for (const entry of publicContext.reasons) {
+    if (isRecord(entry) && typeof entry.code === 'string' && typeof entry.message === 'string') {
+      reasons.push({ code: entry.code, message: entry.message })
+    }
+  }
+  return reasons.length > 0 ? reasons : undefined
+}
+
+/** Extrae `public_context.blocked_statements` (403 de la consola SQL, v6 §9.2). */
+function extractBlockedStatements(publicContext: unknown): BlockedStatement[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.blocked_statements)) {
+    return undefined
+  }
+  const statements: BlockedStatement[] = []
+  for (const entry of publicContext.blocked_statements) {
+    if (isRecord(entry) && typeof entry.seq === 'number' && typeof entry.sql === 'string') {
+      statements.push({ seq: entry.seq, sql: entry.sql })
+    }
+  }
+  return statements.length > 0 ? statements : undefined
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -265,6 +320,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         unreversibleStatements: extractUnreversibleStatements(d.public_context),
         missingDependencies: extractMissingDependencies(d.public_context),
         suggestedItemIds: extractSuggestedItemIds(d.public_context),
+        reasons: extractReasons(d.public_context),
+        blockedStatements: extractBlockedStatements(d.public_context),
         requestId,
       })
     }

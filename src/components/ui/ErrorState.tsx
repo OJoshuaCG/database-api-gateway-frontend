@@ -1,5 +1,6 @@
 import { toApiError } from '@/lib/api/errors'
 import { Button } from './Button'
+import { RefreshIcon } from './icons'
 
 interface ErrorStateProps {
   error: unknown
@@ -34,8 +35,15 @@ export function ErrorState({
           </p>
         )}
       </div>
+      {/*
+        Sigue con texto a propósito: es la ÚNICA acción de un bloque de error centrado, sin más
+        controles alrededor que le den contexto. Un icono suelto bajo un mensaje de fallo no dice
+        qué se reintenta —¿recargar la página, reenviar el formulario?— y el tooltip solo aparece
+        al pasar el ratón. El icono acompaña al texto para compartir el lenguaje visual del resto.
+      */}
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
+          <RefreshIcon />
           Reintentar
         </Button>
       )}

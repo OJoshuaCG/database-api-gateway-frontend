@@ -3,6 +3,7 @@ import { render, type RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '@/lib/theme/ThemeProvider'
+import { SqlThemeProvider } from '@/lib/theme/SqlThemeProvider'
 import { ToastProvider } from '@/lib/toast/ToastProvider'
 
 /** QueryClient para tests: sin reintentos para que los errores se propaguen al instante. */
@@ -30,11 +31,13 @@ export function AllProviders({
   const client = queryClient ?? createTestQueryClient()
   return (
     <ThemeProvider>
-      <QueryClientProvider client={client}>
-        <ToastProvider>
-          <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
-        </ToastProvider>
-      </QueryClientProvider>
+      <SqlThemeProvider>
+        <QueryClientProvider client={client}>
+          <ToastProvider>
+            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+          </ToastProvider>
+        </QueryClientProvider>
+      </SqlThemeProvider>
     </ThemeProvider>
   )
 }

@@ -1,5 +1,17 @@
 import { useMemo, useState } from 'react'
-import { type BadgeTone, Badge, Button, Checkbox, EmptyState, ErrorState, Spinner, Switch } from '@/components/ui'
+import {
+  type BadgeTone,
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  ErrorState,
+  EyeIcon,
+  EyeOffIcon,
+  IconButton,
+  Spinner,
+  Switch,
+} from '@/components/ui'
 import type { EngineType, SchemaChangeType } from '@/lib/contracts'
 import {
   CHANGE_TYPE_LABELS,
@@ -73,7 +85,10 @@ export function ItemSelectionPanel({
   // revisión extendido al grupo (media selección de un grupo = 422) y aviso NO bloqueante de
   // dependencias sin satisfacer (el cierre real lo hace resolve-selection al confirmar).
   const byOpGroup = useMemo(() => groupItemsByOpGroup(items), [items])
-  const blockedIds = useMemo(() => reviewBlockedIds(items, reviewedItemIds), [items, reviewedItemIds])
+  const blockedIds = useMemo(
+    () => reviewBlockedIds(items, reviewedItemIds),
+    [items, reviewedItemIds],
+  )
   const dependencyWarnings = useMemo(
     () => unsatisfiedDependencyWarnings(items, selectedItemIds),
     [items, selectedItemIds],
@@ -173,8 +188,8 @@ export function ItemSelectionPanel({
       {hasAtomicGroups && (
         <p className="rounded-lg border border-border bg-surface-muted p-3 text-xs text-muted-foreground">
           🔗 Las filas marcadas como <strong>atómico</strong> forman un mismo cambio lógico (p. ej.
-          una redefinición: DROP + CREATE del mismo objeto) y se seleccionan o deseleccionan
-          siempre juntas.
+          una redefinición: DROP + CREATE del mismo objeto) y se seleccionan o deseleccionan siempre
+          juntas.
         </p>
       )}
 
@@ -185,7 +200,8 @@ export function ItemSelectionPanel({
           </p>
           {dependencyWarnings.map((warning) => (
             <p key={warning.missingOpGroup} className="text-xs text-muted-foreground">
-              <strong className="text-foreground">{warning.requiredBy.join(', ')}</strong> depende de{' '}
+              <strong className="text-foreground">{warning.requiredBy.join(', ')}</strong> depende
+              de{' '}
               <strong className="text-foreground">{warning.missingObjectNames.join(', ')}</strong>{' '}
               (sin seleccionar).
             </p>
@@ -211,10 +227,14 @@ export function ItemSelectionPanel({
               // Gate de revisión a nivel de GRUPO atómico: si cualquier miembro del op_group es
               // procedural y no fue revisado, se bloquea el grupo completo (media selección = 422).
               const checkboxDisabled = blockedIds.has(item.id)
-              const groupSize = item.op_group != null ? (byOpGroup.get(item.op_group)?.length ?? 1) : 1
+              const groupSize =
+                item.op_group != null ? (byOpGroup.get(item.op_group)?.length ?? 1) : 1
 
               return (
-                <div key={item.id} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-2 rounded-lg border border-border p-2.5"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <Checkbox
                       label={`${OBJECT_TYPE_LABELS[item.object_type]} · ${item.object_name}`}
@@ -222,7 +242,9 @@ export function ItemSelectionPanel({
                       disabled={checkboxDisabled}
                       onChange={() => onToggle(item.id)}
                     />
-                    <Badge tone={CHANGE_TONE[item.change_type]}>{CHANGE_TYPE_LABELS[item.change_type]}</Badge>
+                    <Badge tone={CHANGE_TONE[item.change_type]}>
+                      {CHANGE_TYPE_LABELS[item.change_type]}
+                    </Badge>
                     {groupSize > 1 && <Badge tone="info">🔗 atómico ×{groupSize}</Badge>}
                     <code className="font-mono text-xs text-muted-foreground">#{item.id}</code>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -238,13 +260,13 @@ export function ItemSelectionPanel({
                             Marcar como revisado
                           </Button>
                         ))}
-                      <Button
+                      <IconButton
+                        label={isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
+                        icon={isExpanded ? <EyeOffIcon /> : <EyeIcon />}
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                      >
-                        {isExpanded ? 'Ocultar SQL' : 'Ver SQL'}
-                      </Button>
+                      />
                     </div>
                   </div>
                   <RiskFlagsBadgeRow riskFlags={item.risk_flags} className="pl-7" />

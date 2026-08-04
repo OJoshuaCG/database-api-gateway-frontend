@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import {
   flexRender,
   getCoreRowModel,
@@ -10,8 +10,11 @@ import {
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table'
+import { Button } from './Button'
+import { Checkbox } from './Checkbox'
+import { IconButton } from './IconButton'
+import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { Input } from './Input'
-import { MultiCombobox } from './MultiCombobox'
 
 interface ColumnOption {
   id: string
@@ -57,6 +60,8 @@ export function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const columnsPanelId = useId()
 
   const table = useReactTable({
     data,
@@ -110,22 +115,59 @@ export function DataTable<T>({
             {toolbar}
           </div>
           {enableColumnVisibility && hideableColumns.length > 0 && (
-            <div className="w-full sm:max-w-xs">
-              <MultiCombobox<ColumnOption>
-                items={hideableColumns}
-                selectedItems={visibleColumnOptions}
-                onChange={(selected) => {
-                  const visibleIds = new Set(selected.map((option) => option.id))
-                  const next: VisibilityState = {}
-                  for (const option of hideableColumns) next[option.id] = visibleIds.has(option.id)
-                  setColumnVisibility(next)
-                }}
-                itemToString={(option) => option.label}
-                itemToKey={(option) => option.id}
-                placeholder="Columnas visibles"
-              />
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              aria-expanded={columnsOpen}
+              aria-controls={columnsPanelId}
+              onClick={() => setColumnsOpen((open) => !open)}
+            >
+              Columnas ({visibleColumnOptions.length}/{hideableColumns.length})
+            </Button>
           )}
+        </div>
+      )}
+
+      {/* Panel a todo el ancho y solo mientras está abierto: la visibilidad de columnas se
+          ajusta una vez y casi nunca se retoca, así que no debe robar sitio —ni horizontal ni
+          vertical— a los filtros de datos, que sí se usan continuamente. Abierto, en cambio,
+          dispone de toda la anchura de la tabla, que es donde una lista de columnas se lee de
+          un vistazo. */}
+      {enableColumnVisibility && columnsOpen && hideableColumns.length > 0 && (
+        <div id={columnsPanelId} className="rounded-card border border-border bg-surface-muted p-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-foreground">Columnas visibles</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={visibleColumnOptions.length === hideableColumns.length}
+              onClick={() => setColumnVisibility({})}
+            >
+              Mostrar todas
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {hideableColumns.map((option) => {
+              const isVisible = table.getColumn(option.id)?.getIsVisible() ?? true
+              return (
+                <Checkbox
+                  key={option.id}
+                  label={option.label}
+                  checked={isVisible}
+                  // Ocultar la última dejaría una tabla en blanco, sin forma evidente de
+                  // recuperarla salvo dando con este mismo panel.
+                  disabled={isVisible && visibleColumnOptions.length === 1}
+                  onChange={(event) =>
+                    setColumnVisibility((previous) => ({
+                      ...previous,
+                      [option.id]: event.target.checked,
+                    }))
+                  }
+                />
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -211,25 +253,25 @@ export function DataTable<T>({
             {isFetching && ' · actualizando…'}
           </p>
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
+            <IconButton
+              label="Anterior"
+              icon={<ChevronLeftIcon />}
+              variant="outline"
+              size="icon-sm"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="rounded-lg border border-input bg-surface px-3 py-1.5 text-sm text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Anterior
-            </button>
+            />
             <span className="px-2 text-sm text-muted-foreground">
               {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
             </span>
-            <button
-              type="button"
+            <IconButton
+              label="Siguiente"
+              icon={<ChevronRightIcon />}
+              variant="outline"
+              size="icon-sm"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="rounded-lg border border-input bg-surface px-3 py-1.5 text-sm text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Siguiente
-            </button>
+            />
           </div>
         </div>
       )}

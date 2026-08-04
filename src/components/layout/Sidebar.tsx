@@ -68,7 +68,12 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <rect x="2" y="5" width="8" height="14" rx="1.5" strokeWidth="1.6" />
         <rect x="14" y="5" width="8" height="14" rx="1.5" strokeWidth="1.6" />
-        <path d="M10 12h4M12 10l2 2-2 2" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M10 12h4M12 10l2 2-2 2"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -79,7 +84,27 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <ellipse cx="8" cy="5.5" rx="5" ry="2" strokeWidth="1.6" />
         <path d="M3 5.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9" strokeWidth="1.6" />
-        <path d="M15 10l4 4m0 0l-4 4m4-4H10" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M15 10l4 4m0 0l-4 4m4-4H10"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    to: '/sql-console',
+    label: 'Consola SQL',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <rect x="3" y="4" width="18" height="16" rx="2" strokeWidth="1.6" />
+        <path
+          d="M7 9.5l2.5 2.5L7 14.5M12.5 15H17"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button } from '@/components/ui'
+import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
 import type { SchemaComparisonWizard } from './use-schema-comparison-wizard'
 
 /**
@@ -10,7 +10,8 @@ import type { SchemaComparisonWizard } from './use-schema-comparison-wizard'
  * explicación contextual que no cabe en esta barra genérica.
  */
 export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
-  const busy = wizard.createComparisonState.isPending || wizard.adopt.isPending || wizard.execute.isPending
+  const busy =
+    wizard.createComparisonState.isPending || wizard.adopt.isPending || wizard.execute.isPending
 
   let left: ReactNode = null
   let right: ReactNode = null
@@ -27,7 +28,9 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
             wizard.createComparisonState.isPending
           }
         >
-          {wizard.createComparisonState.isPending ? 'Calculando diferencias…' : 'Calcular diferencias →'}
+          {wizard.createComparisonState.isPending
+            ? 'Calculando diferencias…'
+            : 'Calcular diferencias →'}
         </Button>
       )
       break
@@ -43,7 +46,9 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
         </Button>
       )
       right = wizard.actionEntryStep && (
-        <Button onClick={() => wizard.goToStep(wizard.actionEntryStep!)}>Continuar a la acción →</Button>
+        <Button onClick={() => wizard.goToStep(wizard.actionEntryStep!)}>
+          Continuar a la acción →
+        </Button>
       )
       break
 
@@ -111,7 +116,11 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
         wizard.pendingReviewIds.length > 0
       left = <BackButton wizard={wizard} disabled={busy} />
       right = (
-        <Button onClick={wizard.submitExecute} isLoading={wizard.execute.isPending} disabled={disabled}>
+        <Button
+          onClick={wizard.submitExecute}
+          isLoading={wizard.execute.isPending}
+          disabled={disabled}
+        >
           Ejecutar sobre el target 🔌
         </Button>
       )
@@ -133,8 +142,13 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
 
 function BackButton({ wizard, disabled }: { wizard: SchemaComparisonWizard; disabled?: boolean }) {
   return (
-    <Button variant="ghost" onClick={wizard.back} disabled={disabled}>
-      ← Atrás
-    </Button>
+    <IconButton
+      label="Atrás"
+      icon={<ChevronLeftIcon />}
+      variant="ghost"
+      size="icon"
+      onClick={wizard.back}
+      disabled={disabled}
+    />
   )
 }

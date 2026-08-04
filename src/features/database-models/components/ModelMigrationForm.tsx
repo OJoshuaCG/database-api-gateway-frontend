@@ -4,8 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
 import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
-import { Button, Input, Textarea } from '@/components/ui'
+import { Button, Input } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { SqlField } from './SqlField'
 
 const SQL_MAX = 262144
 
@@ -67,8 +68,6 @@ export function toCreate(values: ModelMigrationFormValues): ModelMigrationCreate
 /** Cómo resolver un override cuando se corrige el `up_sql` base (Cambio 2). */
 type OverrideChoice = 'resend' | 'clear'
 
-const monospace = 'font-mono text-xs'
-
 interface ModelMigrationFormProps {
   mode: 'create' | 'edit'
   defaultValues?: Partial<ModelMigrationFormValues>
@@ -118,6 +117,9 @@ export function ModelMigrationForm({
 
   // ¿Se tocó el SQL base? (solo relevante en edit; en create no hay "original").
   const currentUpSql = watch('up_sql')
+  const currentDownSql = watch('down_sql')
+  const currentMysqlOverride = watch('up_sql_mysql')
+  const currentPostgresqlOverride = watch('up_sql_postgresql')
   const upSqlChanged = mode === 'edit' && currentUpSql !== originalUpSql
 
   // Resolución de overrides al cambiar up_sql: cada override existente debe reenviarse o limpiarse.
@@ -202,12 +204,16 @@ export function ModelMigrationForm({
         </div>
       )}
 
-      <Textarea
+      <SqlField
         label="up_sql (delta base, estilo MySQL)"
+        value={currentUpSql}
+        registration={register('up_sql')}
         required={mode === 'create'}
         readOnly={upSqlReadOnly}
-        rows={6}
-        className={monospace}
+        // Es el campo protagonista del formulario —el DDL que se va a ejecutar— y el único que
+        // suele pasar de unas pocas líneas, así que arranca con bastante más altura que el resto.
+        rows={16}
+        emptyLabel="Sin SQL base."
         hint={
           mode === 'create'
             ? 'Se auto-traduce a PostgreSQL con sqlglot.'
@@ -217,7 +223,6 @@ export function ModelMigrationForm({
           errors.up_sql?.message ??
           (upSqlEmptyAfterChange ? 'El SQL base no puede quedar vacío.' : undefined)
         }
-        {...register('up_sql')}
       />
 
       {upSqlChanged && (
@@ -229,13 +234,14 @@ export function ModelMigrationForm({
         </div>
       )}
 
-      <Textarea
+      <SqlField
         label="down_sql (rollback confirmado)"
-        rows={4}
-        className={monospace}
+        value={currentDownSql}
+        registration={register('down_sql')}
+        rows={8}
+        emptyLabel="Sin rollback confirmado."
         hint="Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí."
         error={errors.down_sql?.message}
-        {...register('down_sql')}
       />
 
       {needMysqlResolution || needPostgresqlResolution ? (
@@ -250,13 +256,14 @@ export function ModelMigrationForm({
                 setMysqlChoice('clear')
                 setValue('up_sql_mysql', '')
               }}
-              textarea={
-                <Textarea
+              field={
+                <SqlField
+                  value={currentMysqlOverride}
+                  registration={register('up_sql_mysql')}
                   rows={4}
-                  className={monospace}
                   readOnly={mysqlChoice !== 'resend'}
+                  emptyLabel="Sin override para MySQL/MariaDB."
                   error={errors.up_sql_mysql?.message}
-                  {...register('up_sql_mysql')}
                 />
               }
             />
@@ -270,13 +277,14 @@ export function ModelMigrationForm({
                 setPostgresqlChoice('clear')
                 setValue('up_sql_postgresql', '')
               }}
-              textarea={
-                <Textarea
+              field={
+                <SqlField
+                  value={currentPostgresqlOverride}
+                  registration={register('up_sql_postgresql')}
                   rows={4}
-                  className={monospace}
                   readOnly={postgresqlChoice !== 'resend'}
+                  emptyLabel="Sin override para PostgreSQL."
                   error={errors.up_sql_postgresql?.message}
-                  {...register('up_sql_postgresql')}
                 />
               }
             />
@@ -288,20 +296,22 @@ export function ModelMigrationForm({
             Overrides manuales por motor (opcional)
           </summary>
           <div className="mt-3 flex flex-col gap-4">
-            <Textarea
+            <SqlField
               label="up_sql_mysql (override MySQL/MariaDB)"
+              value={currentMysqlOverride}
+              registration={register('up_sql_mysql')}
               rows={4}
-              className={monospace}
+              emptyLabel="Sin override para MySQL/MariaDB."
               error={errors.up_sql_mysql?.message}
-              {...register('up_sql_mysql')}
             />
-            <Textarea
+            <SqlField
               label="up_sql_postgresql (override PostgreSQL)"
+              value={currentPostgresqlOverride}
+              registration={register('up_sql_postgresql')}
               rows={4}
-              className={monospace}
+              emptyLabel="Sin override para PostgreSQL."
               hint="Útil para ENUM inline, ON UPDATE CURRENT_TIMESTAMP, UNSIGNED, rutinas BEGIN…END."
               error={errors.up_sql_postgresql?.message}
-              {...register('up_sql_postgresql')}
             />
           </div>
         </details>
@@ -331,13 +341,13 @@ function OverrideResolution({
   choice,
   onResend,
   onClear,
-  textarea,
+  field,
 }: {
   label: string
   choice: OverrideChoice | null
   onResend: () => void
   onClear: () => void
-  textarea: ReactNode
+  field: ReactNode
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -357,7 +367,7 @@ function OverrideResolution({
           El override se eliminará: el motor usará la traducción automática del nuevo SQL base.
         </p>
       ) : (
-        textarea
+        field
       )}
     </div>
   )

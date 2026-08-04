@@ -1,6 +1,16 @@
 import { Fragment, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, EmptyState, ErrorState, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  RefreshIcon,
+  Spinner,
+  TrashIcon,
+} from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { queryKeys } from '@/lib/api/query-keys'
 import type {
@@ -10,9 +20,7 @@ import type {
   GroupedEngineUser,
 } from '@/lib/contracts'
 import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
-import { ServerUserGrantsModal } from '@/features/server-users/components/ServerUserGrantsModal'
 import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
-import { useServerUser } from '@/features/server-users/hooks/use-server-users'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
 import { CreateEngineUserModal } from './CreateEngineUserModal'
 import { ChangeEngineUserPasswordModal } from './ChangeEngineUserPasswordModal'
@@ -41,8 +49,12 @@ interface IdentityTarget {
  * Usuarios del motor agrupados por identidad física (docs/features/engine-users-management.md).
  * Reemplaza el listado plano de introspección: una fila por username, expandible a sus
  * identidades (hosts en MySQL/MariaDB; una sola en PostgreSQL, que no tiene host).
+ *
+ * `engine` ya no se consume aquí —la página de permisos resuelve el motor por su cuenta desde el
+ * usuario—, pero sigue en las props porque el detalle de servidor lo pasa.
  */
-export function EngineUsersPanel({ serverId, engine }: { serverId: number; engine: EngineType }) {
+export function EngineUsersPanel({ serverId }: { serverId: number; engine: EngineType }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data, isLoading, isError, error, refetch, isFetching } = useGroupedEngineUsers(serverId)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -66,11 +78,17 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
     defaultHost?: string | null
   } | null>(null)
   const [rotateAllTarget, setRotateAllTarget] = useState<string | null>(null)
-  const [grantsUserId, setGrantsUserId] = useState<number | null>(null)
   const [cleanupId, setCleanupId] = useState<number | null>(null)
 
-  const grantsUser = useServerUser(grantsUserId ?? 0, grantsUserId !== null)
   const deleteServerUser = useDeleteServerUser()
+
+  // Los permisos son una página propia: se navega con `from` para que su enlace «volver» regrese
+  // a ESTA pestaña del detalle de servidor y no a la lista general de usuarios.
+  const goToGrants = (serverUserId: number) => {
+    void navigate(
+      `/server-users/${serverUserId}/grants?from=${encodeURIComponent(`/servers/${serverId}?tab=users`)}`,
+    )
+  }
 
   const counts = useMemo(() => {
     const acc = { adopted: 0, unmanaged: 0, orphan: 0 }
@@ -120,43 +138,38 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
     switch (identity.status) {
       case 'adopted':
         return (
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex flex-wrap justify-end gap-1.5">
-              {identity.has_password ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setRevealTarget({ username, host })}
-                >
-                  Revelar
-                </Button>
-              ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPasswordTarget({ username, host, alreadyAdopted: true })}
-              >
-                Rotar contraseña
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {identity.has_password ? (
+              <Button variant="ghost" size="sm" onClick={() => setRevealTarget({ username, host })}>
+                Revelar
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                isLoading={grantsUserId === identity.server_user_id && grantsUser.isLoading}
-                onClick={() => setGrantsUserId(identity.server_user_id ?? null)}
-              >
-                Ver grants
-              </Button>
-              <Button
-                variant="danger-soft"
-                size="sm"
-                onClick={() => setDeleteTarget({ username, host })}
-              >
-                Eliminar
-              </Button>
-            </div>
-            {grantsUserId === identity.server_user_id && grantsUser.isError && (
-              <p className="text-xs text-error">No se pudo cargar el usuario para ver permisos.</p>
-            )}
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPasswordTarget({ username, host, alreadyAdopted: true })}
+            >
+              Rotar contraseña
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              // Una identidad adoptada siempre tiene registro en el inventario; si por lo que
+              // fuera faltara, no hay página a la que ir.
+              disabled={identity.server_user_id == null}
+              onClick={() => {
+                if (identity.server_user_id != null) goToGrants(identity.server_user_id)
+              }}
+            >
+              Ver grants
+            </Button>
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
+              variant="danger-soft"
+              size="icon-sm"
+              onClick={() => setDeleteTarget({ username, host })}
+            />
           </div>
         )
       case 'unmanaged':
@@ -172,13 +185,13 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
             >
               Rotar contraseña
             </Button>
-            <Button
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
               variant="danger-soft"
-              size="sm"
+              size="icon-sm"
               onClick={() => setDeleteTarget({ username, host })}
-            >
-              Eliminar
-            </Button>
+            />
           </div>
         )
       case 'orphan':
@@ -248,9 +261,14 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
           huérfano(s)
         </p>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => void refetch()} isLoading={isFetching}>
-            Actualizar
-          </Button>
+          <IconButton
+            label="Actualizar"
+            icon={<RefreshIcon />}
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => void refetch()}
+            isLoading={isFetching}
+          />
           <Button size="sm" onClick={() => setCreateTarget('new')}>
             Crear usuario
           </Button>
@@ -519,12 +537,6 @@ export function EngineUsersPanel({ serverId, engine }: { serverId: number; engin
           username={rotateAllTarget}
         />
       )}
-      <ServerUserGrantsModal
-        key={grantsUserId ?? 'closed'}
-        user={grantsUser.data ?? null}
-        engine={engine}
-        onClose={() => setGrantsUserId(null)}
-      />
     </div>
   )
 }

@@ -33,13 +33,25 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog` |
 | 11 | `POST /{id}/test-connection` 🔌 | ✅ | `ServerDetailPage` → "Probar conexión" (muestra `dialect` + `server_version`) |
-| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Introspección" + selectores de los asistentes |
+| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario) + tab "Introspección" + selectores de los asistentes |
 | 14 | `GET .../tables` 🔌 | ✅ | `IntrospectionExplorer` |
 | 15 | `GET .../tables/{t}/schema` 🔌 | ✅ | `IntrospectionExplorer` (columnas, PK, índices, FKs) |
 | 16 | `POST /{id}/grantable` 🔌 | ✅ | `GrantManager` (pre-chequeo antes de otorgar) |
 | 59 | `GET /{id}/reconcile` 🔌 | ✅ | Tab "Reconciliación" → `ServerReconcilePanel` (`managed`/`unmanaged`/`orphan`) |
 | 60 | `GET .../snapshot` 🔌 | ✅ | `SnapshotModal` ("Ver snapshot") + asistente de blueprint desde snapshot |
 | 13 | `GET /{id}/users` (plano) 🔌 | ⛔ | Legacy: el propio contrato recomienda la vista agrupada (#64), que sí está integrada. Repetiría un `user@host` por cuenta. |
+
+### Ciclo de vida de BDs a nivel servidor (`/servers/{id}/databases`, por identidad física)
+
+Opera sobre el par `(server_id, database)`, sin exigir que la BD esté adoptada en el inventario.
+Complementa —no reemplaza— al CRUD de `/managed-databases`.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| — | `POST /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → "Nueva base de datos" → `CreateServerDatabaseModal` (formulario adaptado al motor; `register` como `Switch` que revela el propietario) |
+| — | `GET .../{db}/users` 🔌 | ✅ | `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`) → pestaña "Usuarios con permisos" → `DatabaseGranteesPanel` (consulta inversa; oculta `host` si `supports_hosts=false`) |
+| — | `POST .../{db}/drop-preview` 🔌 | ✅ | `DropDatabaseDialog`, paso 1: conexiones activas, cruce con inventario y `confirm_token` con cuenta atrás contra `expires_at` |
+| — | `DELETE .../{db}` 🔌 ⚠️ | ✅ | `DropDatabaseDialog`, paso 2: exige transcribir el nombre exacto + token vigente; `force_disconnect` como `Checkbox`. Sin reintento automático ni borrado en lote (§6.5/§6.6) |
 
 ## Usuarios del motor
 
@@ -49,7 +61,7 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 17–21 | CRUD de `/server-users` | ✅ | `ServerUsersPage` (`/server-users`); `?provision` y `?drop_remote` como `Switch`; borrado remoto exige reescribir el username |
 | 22 | `GET /{id}/databases` | ✅ | "Ver BDs" → `OwnedDatabasesModal` |
-| 23 | `GET /{id}/grants` 🔌 | ✅ | `ServerUserGrantsModal` → tab "Permisos efectivos" (en PostgreSQL espera que se indique la BD antes de consultar) |
+| 23 | `GET /{id}/grants` 🔌 | ✅ | `ServerUserGrantsPage` (`/server-users/:userId/grants`) → pestaña "Permisos efectivos" (en PostgreSQL espera que se indique la BD antes de consultar) |
 | 24 | `POST /{id}/grants` 🔌 | ✅ | `GrantManager` → tab "Otorgar" |
 | 25 | `DELETE /{id}/grants` 🔌 | ✅ | `GrantManager` → revocar (`cascade` solo PostgreSQL, con confirmación del grantee) |
 | 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | `ApplyProfilePanel` (errores parciales enumerados) |
@@ -91,11 +103,11 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint y estado; borrado remoto exige reescribir el nombre |
 | 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal` (incluye *stamp-on-adopt*: blueprint + versión de partida) |
-| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsModal` (versión actual, pendientes y **banner de aplicación parcial**) |
+| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) (versión actual, pendientes y **banner de aplicación parcial**) |
 | 55 | `POST .../migrations/apply` 🔌 | ✅ | Previsualizar (dry-run) + aplicar; selector `on_failure`; resultado por versión con retomas y sentencia de fallo; mensaje de auto-reconciliación |
 | 56 | `POST .../migrations/rollback` 🔌 | ✅ | Doble confirmación de la versión actual; el 409 por `down_sql` faltante enlaza al blueprint |
 | 57 | `POST .../migrations/stamp` 🔌 | ✅ | Con `force` y la advertencia del anti-patrón (no arregla un apply a medias) |
-| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialDialog`: previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
+| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de esa misma página, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
 | 58 | `GET .../migrations/history` 🔌 | ✅ | Tab "Historial" (paginado) |
 
 ## Comparación de esquemas
@@ -140,6 +152,30 @@ a partir de `backend/docs/features/database-clone.md`.
 | `GET /database-clones/{id}/items` | ✅ | Monitor de pasos ejecutados |
 | `POST /database-clones/{id}/cancel` | ✅ | Cancelación cooperativa |
 
+## Consola SQL
+
+Módulo de `api-reference-v6.md`: ejecutar SQL ad-hoc eligiendo **con qué usuario del motor**
+se conecta, para verificar en la práctica que un permiso quedó como se esperaba. Vive en
+`/sql-console` (`?server=<id>&tab=console|history`), no en el detalle del servidor, porque
+opera sobre cualquier base de cualquier servidor del inventario. Numeración propia del
+contrato v6.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `POST /servers/{id}/query/preview` 🔌 | ✅ | Botón "Analizar y ejecutar" / "Solo analizar" → `ClassificationPanel`. Emite el `confirm_token` y estima el impacto. Nunca se dispara por pulsación: el rate limit es 30/min y el preview abre conexión al motor para los `COUNT`. |
+| `POST /servers/{id}/query/execute` 🔌 ⚠️ | ✅ | Directo si el nivel es `read`; con `ConfirmExecutionDialog` (tipeo del nombre de la base + token) si es `write`/`ddl`. Resultado en `ResultsPanel`. |
+| `GET /servers/{id}/query/history` | ✅ | Pestaña "Historial" → `QueryHistoryPanel`, con filtro por base y "Cargar en el editor" |
+
+Tres cosas que no se leen en la tabla y condicionan el código:
+
+- **`success: false` no es un error.** Un rechazo del motor llega con **HTTP 200** y es el
+  resultado que el admin fue a buscar: se pinta en tono neutro. El rojo queda para
+  `ddl_persisted`, `policy_miss` y los 5xx.
+- **`blocked` manda sobre `requires_confirmation`.** Un lote prohibido vuelve con los dos en
+  `true` y el token en `null`; `decidePath` los evalúa en el orden correcto.
+- **El historial guarda metadatos, no filas.** No hay forma de volver a ver un resultado: se
+  recarga el SQL en el editor y se ejecuta de nuevo.
+
 ## Pendiente de verificar contra el backend real
 
 Los contratos Zod se escriben a mano desde la documentación del backend
@@ -154,5 +190,12 @@ documento y todavía no se han ejercitado contra una instancia real:
 - `#54`/`#55` — `has_partial_application`/`partial_application[]` y el bloque
   `reconciliation`, más los campos de checkpoint de `results[]`.
 - `#77` — `resolve-selection` y los campos `op_group`/`depends_on` de los ítems.
+- **Consola SQL entera** (`query/preview`, `query/execute`, `query/history`): el propio
+  contrato v6 (§2.8) avisa de que el backend todavía no se validó contra motores
+  MySQL/MariaDB/PostgreSQL reales y de que puede haber ajustes menores. Por eso todo el
+  mapeo de la respuesta está concentrado en `lib/contracts/sql-console.ts` y
+  `features/sql-console/logic.ts`. Punto concreto a confirmar: la paginación del historial
+  (§7 la documenta con la clave `meta`, el resto de la API usa `pagination`); el servicio
+  acepta las dos formas a propósito.
 
 Ver el checklist de [`deployment.md`](deployment.md#checklist-de-endurecimiento-para-producción).

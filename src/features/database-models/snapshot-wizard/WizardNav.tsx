@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button } from '@/components/ui'
+import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
 import type { SnapshotWizard } from './use-snapshot-wizard'
 
 /**
@@ -25,7 +25,8 @@ export function WizardNav({ wizard }: { wizard: SnapshotWizard }) {
 
     case 'preview': {
       // La barra solo aplica al estado con datos; carga/error/vacío se resuelven en el cuerpo.
-      const ready = Boolean(wizard.snapshot.data) && (wizard.snapshot.data?.statements.length ?? 0) > 0
+      const ready =
+        Boolean(wizard.snapshot.data) && (wizard.snapshot.data?.statements.length ?? 0) > 0
       if (!ready) return null
       left = (
         <Button variant="ghost" onClick={wizard.back} disabled={busy}>
@@ -107,8 +108,13 @@ export function WizardNav({ wizard }: { wizard: SnapshotWizard }) {
 
 function BackButton({ wizard }: { wizard: SnapshotWizard }) {
   return (
-    <Button variant="ghost" onClick={wizard.back} disabled={wizard.create.isPending}>
-      ← Atrás
-    </Button>
+    <IconButton
+      label="Atrás"
+      icon={<ChevronLeftIcon />}
+      variant="ghost"
+      size="icon"
+      onClick={wizard.back}
+      disabled={wizard.create.isPending}
+    />
   )
 }

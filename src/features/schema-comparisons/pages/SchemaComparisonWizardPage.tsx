@@ -27,10 +27,19 @@ export function SchemaComparisonWizardPage() {
   // `key`, navegar aquí de nuevo (p. ej. el ítem del sidebar) mientras el asistente ya está a
   // mitad de flujo no hace nada visible: el estado viejo del asistente sigue intacto bajo la URL
   // nueva. La `key` fuerza un remount (asistente en blanco) cada vez que cambia el prellenado.
-  return <SchemaComparisonWizardContent key={presetTargetIdRaw ?? 'blank'} presetTargetIdRaw={presetTargetIdRaw} />
+  return (
+    <SchemaComparisonWizardContent
+      key={presetTargetIdRaw ?? 'blank'}
+      presetTargetIdRaw={presetTargetIdRaw}
+    />
+  )
 }
 
-function SchemaComparisonWizardContent({ presetTargetIdRaw }: { presetTargetIdRaw: string | null }) {
+function SchemaComparisonWizardContent({
+  presetTargetIdRaw,
+}: {
+  presetTargetIdRaw: string | null
+}) {
   const navigate = useNavigate()
 
   const presetTargetId = presetTargetIdRaw ? Number(presetTargetIdRaw) : undefined
@@ -42,7 +51,7 @@ function SchemaComparisonWizardContent({ presetTargetIdRaw }: { presetTargetIdRa
   return (
     // Alto mínimo = viewport menos topbar/padding: la barra de navegación (con `mt-auto`) queda
     // anclada al pie en una posición ESTABLE en todos los pasos, sin importar la altura del card.
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col gap-6">
+    <div className="flex min-h-[calc(100dvh-var(--topbar-h)-3rem)] flex-col gap-6">
       <PageHeader
         title="Comparar esquemas"
         description="Compara la estructura de dos bases de datos del mismo motor y actúa sobre el diff."

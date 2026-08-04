@@ -21,16 +21,38 @@ const lazyPage = <M, K extends keyof M>(load: () => Promise<M>, name: K) =>
 
 const ServersPage = lazyPage(() => import('@/features/servers'), 'ServersPage')
 const ServerDetailPage = lazyPage(() => import('@/features/servers'), 'ServerDetailPage')
+const ServerDatabaseDetailPage = lazyPage(
+  () => import('@/features/server-databases'),
+  'ServerDatabaseDetailPage',
+)
 const ServerUsersPage = lazyPage(() => import('@/features/server-users'), 'ServerUsersPage')
-const DatabaseModelsPage = lazyPage(() => import('@/features/database-models'), 'DatabaseModelsPage')
-const SnapshotWizardPage = lazyPage(() => import('@/features/database-models'), 'SnapshotWizardPage')
+const ServerUserGrantsPage = lazyPage(
+  () => import('@/features/server-users'),
+  'ServerUserGrantsPage',
+)
+const DatabaseModelsPage = lazyPage(
+  () => import('@/features/database-models'),
+  'DatabaseModelsPage',
+)
+const SnapshotWizardPage = lazyPage(
+  () => import('@/features/database-models'),
+  'SnapshotWizardPage',
+)
 const BlueprintMigrationsPage = lazyPage(
   () => import('@/features/database-models'),
   'BlueprintMigrationsPage',
 )
+const NewModelMigrationPage = lazyPage(
+  () => import('@/features/database-models'),
+  'NewModelMigrationPage',
+)
 const ManagedDatabasesPage = lazyPage(
   () => import('@/features/managed-databases'),
   'ManagedDatabasesPage',
+)
+const ManagedDatabaseMigrationsPage = lazyPage(
+  () => import('@/features/managed-databases'),
+  'ManagedDatabaseMigrationsPage',
 )
 const SchemaComparisonWizardPage = lazyPage(
   () => import('@/features/schema-comparisons'),
@@ -40,6 +62,7 @@ const DatabaseCloneWizardPage = lazyPage(
   () => import('@/features/database-clones'),
   'DatabaseCloneWizardPage',
 )
+const SqlConsolePage = lazyPage(() => import('@/features/sql-console'), 'SqlConsolePage')
 const PrivilegesPage = lazyPage(() => import('@/features/privileges'), 'PrivilegesPage')
 const PermissionProfilesPage = lazyPage(
   () => import('@/features/permission-profiles'),
@@ -58,13 +81,27 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/servers" replace /> },
           { path: 'servers', element: <ServersPage /> },
           { path: 'servers/:serverId', element: <ServerDetailPage /> },
+          // El nombre de la BD viaja codificado: puede llevar `.`, `-` o `$` (nombres legados).
+          { path: 'servers/:serverId/databases/:database', element: <ServerDatabaseDetailPage /> },
           { path: 'server-users', element: <ServerUsersPage /> },
+          { path: 'server-users/:userId/grants', element: <ServerUserGrantsPage /> },
           { path: 'database-models', element: <DatabaseModelsPage /> },
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
+          {
+            path: 'database-models/:modelId/migrations/new',
+            element: <NewModelMigrationPage />,
+          },
           { path: 'managed-databases', element: <ManagedDatabasesPage /> },
+          {
+            path: 'managed-databases/:databaseId/migrations',
+            element: <ManagedDatabaseMigrationsPage />,
+          },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
+          // El servidor y la pestaña viajan como query params (`?server=2&tab=history`) para
+          // poder enlazar la consola desde el detalle de un servidor.
+          { path: 'sql-console', element: <SqlConsolePage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },
           { path: 'admin', element: <AdminPage /> },

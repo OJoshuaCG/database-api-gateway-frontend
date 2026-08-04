@@ -157,7 +157,7 @@ lib/contracts/engine-users.ts
 ```
 
 Reutiliza deliberadamente dos componentes de `features/server-users` en vez de duplicarlos:
-`AdoptUserModal` (adoptar un `unmanaged`) y `ServerUserGrantsModal` (ver grants de un `adopted`,
+`AdoptUserModal` (adoptar un `unmanaged`) y la página `/server-users/:userId/grants` (ver grants de un `adopted`,
 resuelto vía `server_user_id` → `useServerUser`). Ver Escenario L de
 [`data-flow.md`](data-flow.md) para el flujo completo.
 

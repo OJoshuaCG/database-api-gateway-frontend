@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/lib/theme/ThemeProvider'
+import { SqlThemeProvider } from '@/lib/theme/SqlThemeProvider'
 import { ToastProvider } from '@/lib/toast/ToastProvider'
 import { createQueryClient } from '@/lib/api/query-client'
 import { SessionProvider } from '@/features/auth'
@@ -11,11 +12,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <SessionProvider>{children}</SessionProvider>
-        </ToastProvider>
-      </QueryClientProvider>
+      <SqlThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <SessionProvider>{children}</SessionProvider>
+          </ToastProvider>
+        </QueryClientProvider>
+      </SqlThemeProvider>
     </ThemeProvider>
   )
 }

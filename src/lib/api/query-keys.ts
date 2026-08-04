@@ -18,6 +18,9 @@ export const queryKeys = {
     detail: (id: number) => ['servers', 'detail', id] as const,
     databases: (id: number) => ['servers', id, 'databases'] as const,
     groupedUsers: (id: number) => ['servers', id, 'grouped-users'] as const,
+    /** Usuarios/roles del motor con permisos sobre UNA base de datos (consulta inversa). */
+    databaseGrantees: (id: number, database: string) =>
+      ['servers', id, 'databases', database, 'grantees'] as const,
     tables: (id: number, database: string) =>
       ['servers', id, 'databases', database, 'tables'] as const,
     tableSchema: (id: number, database: string, table: string) =>
@@ -67,13 +70,23 @@ export const queryKeys = {
   schemaComparisons: {
     all: ['schema-comparisons'] as const,
     detail: (id: number) => ['schema-comparisons', 'detail', id] as const,
-    items: (id: number, params: QueryParams) => ['schema-comparisons', id, 'items', params] as const,
+    items: (id: number, params: QueryParams) =>
+      ['schema-comparisons', id, 'items', params] as const,
     itemsAll: (id: number, filters: QueryParams) =>
       ['schema-comparisons', id, 'items', 'all', filters] as const,
     preview: (id: number, mode: string, selectedItemIds: number[]) =>
       ['schema-comparisons', id, 'execute-preview', mode, selectedItemIds] as const,
     resolveSelection: (id: number, selectedItemIds: number[]) =>
       ['schema-comparisons', id, 'resolve-selection', selectedItemIds] as const,
+  },
+  sqlConsole: {
+    all: ['sql-console'] as const,
+    /**
+     * Historial de ejecuciones de UN servidor. El preview y el execute NO tienen key: son
+     * mutaciones (efecto en el motor, token de un solo uso) y nunca deben refetchearse.
+     */
+    history: (serverId: number, params: QueryParams) =>
+      ['sql-console', serverId, 'history', params] as const,
   },
   databaseClones: {
     all: ['database-clones'] as const,

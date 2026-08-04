@@ -1,6 +1,7 @@
 import { PAGINATION } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
-import { Button } from './Button'
+import { IconButton } from './IconButton'
+import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 
 /**
  * Opciones de "por página" recortadas al `size` máximo que admite la API
@@ -64,22 +65,22 @@ export function Pagination({
           </label>
         )}
         <div className="flex items-center gap-1.5">
-          <Button
+          <IconButton
+            label="Anterior"
+            icon={<ChevronLeftIcon />}
             variant="outline"
-            size="sm"
+            size="icon-sm"
             onClick={() => onPageChange(page - 1)}
             disabled={!hasPrev}
-          >
-            Anterior
-          </Button>
-          <Button
+          />
+          <IconButton
+            label="Siguiente"
+            icon={<ChevronRightIcon />}
             variant="outline"
-            size="sm"
+            size="icon-sm"
             onClick={() => onPageChange(page + 1)}
             disabled={!hasNext}
-          >
-            Siguiente
-          </Button>
+          />
         </div>
       </div>
     </div>

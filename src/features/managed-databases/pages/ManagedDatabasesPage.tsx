@@ -4,12 +4,17 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
+  CloneIcon,
   Combobox,
+  CompareIcon,
   DataTable,
   EmptyState,
   ErrorState,
+  IconButton,
   PageHeader,
   Pagination,
+  PencilIcon,
+  TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import {
@@ -28,7 +33,6 @@ import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
 import { ManagedDatabaseFormModal } from '../components/ManagedDatabaseFormModal'
 import { ReassignOwnerModal } from '../components/ReassignOwnerModal'
 import { DeleteManagedDatabaseDialog } from '../components/DeleteManagedDatabaseDialog'
-import { ManagedDatabaseMigrationsModal } from '../components/ManagedDatabaseMigrationsModal'
 
 interface StatusOption {
   value: ProvisionStatus
@@ -60,7 +64,6 @@ export function ManagedDatabasesPage() {
   const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
   const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedDatabaseOut | null>(null)
-  const [migrationsTarget, setMigrationsTarget] = useState<ManagedDatabaseOut | null>(null)
 
   const servers = useServerOptions()
   const models = useDatabaseModelOptions()
@@ -140,39 +143,46 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
+            {/* Solo el icono, el mismo que su entrada del menú lateral: el botón de fila y la
+                sección a la que lleva se reconocen como lo mismo, y la fila deja de alargarse
+                con dos etiquetas que se repiten en cada BD. El nombre sigue en el tooltip. */}
+            <IconButton
+              label="Comparar esquema"
+              icon={<CompareIcon />}
               onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
-            >
-              Comparar esquema
-            </Button>
+            />
+            <IconButton
+              label="Clonar"
+              icon={<CloneIcon />}
+              onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
+            />
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
+              onClick={() => navigate(`/managed-databases/${row.original.id}/migrations`)}
             >
-              Clonar
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setMigrationsTarget(row.original)}>
               Migraciones
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setReassignTarget(row.original)}>
               Reasignar
             </Button>
-            <Button
+            <IconButton
+              label="Editar"
+              icon={<PencilIcon />}
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => {
                 setEditing(row.original)
                 setFormOpen(true)
               }}
-            >
-              Editar
-            </Button>
-            <Button variant="danger-soft" size="sm" onClick={() => setDeleteTarget(row.original)}>
-              Eliminar
-            </Button>
+            />
+            <IconButton
+              label="Eliminar"
+              icon={<TrashIcon />}
+              variant="danger-soft"
+              size="icon-sm"
+              onClick={() => setDeleteTarget(row.original)}
+            />
           </div>
         ),
       },
@@ -190,6 +200,7 @@ export function ManagedDatabasesPage() {
         actions={
           <>
             <Button variant="outline" onClick={() => navigate('/schema-comparisons')}>
+              <CompareIcon />
               Comparar esquemas
             </Button>
             <Button
@@ -317,11 +328,6 @@ export function ManagedDatabasesPage() {
           onClose={() => setDeleteTarget(null)}
         />
       )}
-      <ManagedDatabaseMigrationsModal
-        key={migrationsTarget?.id ?? 'closed'}
-        database={migrationsTarget}
-        onClose={() => setMigrationsTarget(null)}
-      />
     </div>
   )
 }

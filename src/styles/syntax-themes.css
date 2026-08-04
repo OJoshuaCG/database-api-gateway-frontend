@@ -1,0 +1,165 @@
+/**
+ * syntax-themes.css — paletas de resaltado de SQL.
+ *
+ * Cómo funciona: los componentes usan siempre las utilidades `text-syntax-*`, que en
+ * `theme.css` apuntan a las variables raw `--syntax-*`. Aquí se REDEFINEN esas variables por
+ * tema, así que cambiar de paleta no toca ni un componente ni provoca re-render: es CSS puro.
+ *
+ * Dos ejes independientes:
+ *   - `[data-theme]`      claro/oscuro de la app (lo escribe `ThemeProvider`).
+ *   - `[data-sql-theme]`  paleta de código elegida (lo escribe `SqlThemeProvider`).
+ *
+ * Cada tema define SIEMPRE sus dos variantes. El selector oscuro lleva los dos atributos, así
+ * que tiene más especificidad que el claro y gana sin depender del orden del archivo; sin esa
+ * pareja, un tema claro se filtraría al modo oscuro. Sin `data-sql-theme` (o con `vscode`) no
+ * casa ningún bloque de aquí y quedan los valores por omisión de `theme.css`.
+ *
+ * Los colores son los canónicos de cada paleta. Donde un tema solo existe en una variante
+ * —Hack The Box es oscuro por naturaleza— la otra se construye conservando su color de firma y
+ * oscureciéndolo lo suficiente para que se lea sobre fondo claro.
+ */
+
+/* ── Dracula · claro = Alucard, su contraparte oficial ───────────────────────── */
+[data-sql-theme='dracula'] {
+  --syntax-bg: #fffbeb;
+  --syntax-plain: #1f1f1f;
+  --syntax-keyword: #a3144d;
+  --syntax-string: #846e15;
+  --syntax-number: #644ac9;
+  --syntax-comment: #6c664b;
+  --syntax-function: #14710a;
+  --syntax-identifier: #036a96;
+  --syntax-operator: #a3144d;
+  --syntax-punctuation: #6c664b;
+  --syntax-gutter: #a19a7a;
+}
+[data-theme='dark'][data-sql-theme='dracula'] {
+  --syntax-bg: #282a36;
+  --syntax-plain: #f8f8f2;
+  --syntax-keyword: #ff79c6;
+  --syntax-string: #f1fa8c;
+  --syntax-number: #bd93f9;
+  --syntax-comment: #6272a4;
+  --syntax-function: #50fa7b;
+  --syntax-identifier: #8be9fd;
+  --syntax-operator: #ff79c6;
+  --syntax-punctuation: #f8f8f2;
+  --syntax-gutter: #6272a4;
+}
+
+/* ── Tokyo Night · claro = Tokyo Night Day ──────────────────────────────────── */
+[data-sql-theme='tokyo-night'] {
+  --syntax-bg: #e9e9ed;
+  --syntax-plain: #3760bf;
+  --syntax-keyword: #9854f1;
+  --syntax-string: #587539;
+  --syntax-number: #b15c00;
+  --syntax-comment: #848cb5;
+  --syntax-function: #2e7de9;
+  --syntax-identifier: #007197;
+  --syntax-operator: #006c86;
+  --syntax-punctuation: #6172b0;
+  --syntax-gutter: #a1a6c5;
+}
+[data-theme='dark'][data-sql-theme='tokyo-night'] {
+  --syntax-bg: #1a1b26;
+  --syntax-plain: #a9b1d6;
+  --syntax-keyword: #bb9af7;
+  --syntax-string: #9ece6a;
+  --syntax-number: #ff9e64;
+  --syntax-comment: #565f89;
+  --syntax-function: #7aa2f7;
+  --syntax-identifier: #7dcfff;
+  --syntax-operator: #89ddff;
+  --syntax-punctuation: #a9b1d6;
+  --syntax-gutter: #3b4261;
+}
+
+/* ── Hack The Box · el claro se construye aquí, conservando su verde de firma ── */
+[data-sql-theme='hack-the-box'] {
+  --syntax-bg: #f4f7fb;
+  --syntax-plain: #1a2332;
+  --syntax-keyword: #4b7a00;
+  --syntax-string: #8a5a00;
+  --syntax-number: #6b00b3;
+  --syntax-comment: #6b7a94;
+  --syntax-function: #0057a8;
+  --syntax-identifier: #00806a;
+  --syntax-operator: #4b7a00;
+  --syntax-punctuation: #59677f;
+  --syntax-gutter: #9aa8bd;
+}
+[data-theme='dark'][data-sql-theme='hack-the-box'] {
+  --syntax-bg: #141d2b;
+  --syntax-plain: #a4b1cd;
+  --syntax-keyword: #9fef00;
+  --syntax-string: #ffaf00;
+  --syntax-number: #9f00ff;
+  --syntax-comment: #5c6b8a;
+  --syntax-function: #0086ff;
+  --syntax-identifier: #2ee7b6;
+  --syntax-operator: #9fef00;
+  --syntax-punctuation: #7086a8;
+  --syntax-gutter: #3d4d68;
+}
+
+/* ── GitHub · ambas variantes son oficiales ─────────────────────────────────── */
+[data-sql-theme='github'] {
+  --syntax-bg: #ffffff;
+  --syntax-plain: #24292f;
+  --syntax-keyword: #cf222e;
+  --syntax-string: #0a3069;
+  --syntax-number: #0550ae;
+  --syntax-comment: #6e7781;
+  --syntax-function: #8250df;
+  --syntax-identifier: #953800;
+  --syntax-operator: #cf222e;
+  --syntax-punctuation: #24292f;
+  --syntax-gutter: #8c959f;
+}
+[data-theme='dark'][data-sql-theme='github'] {
+  --syntax-bg: #0d1117;
+  --syntax-plain: #c9d1d9;
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-number: #79c0ff;
+  --syntax-comment: #8b949e;
+  --syntax-function: #d2a8ff;
+  --syntax-identifier: #ffa657;
+  --syntax-operator: #ff7b72;
+  --syntax-punctuation: #c9d1d9;
+  --syntax-gutter: #6e7681;
+}
+
+/* ── Catppuccin · Latte (claro) y Mocha (oscuro) ─────────────────────────────
+   La elección propia. Se diseñó como PAREJA claro/oscuro desde el principio —no como un tema
+   oscuro con una variante clara improvisada—, que es justo el requisito aquí. Y separa palabra
+   clave, cadena y número en familias de tono claramente distintas (morado / verde / naranja),
+   que es lo que más ayuda leyendo SQL: las palabras clave son constantes y muy repetidas, y hay
+   que poder saltárselas de un vistazo para ver los literales y los identificadores. */
+[data-sql-theme='catppuccin'] {
+  --syntax-bg: #eff1f5;
+  --syntax-plain: #4c4f69;
+  --syntax-keyword: #8839ef;
+  --syntax-string: #40a02b;
+  --syntax-number: #fe640b;
+  --syntax-comment: #8c8fa1;
+  --syntax-function: #1e66f5;
+  --syntax-identifier: #179299;
+  --syntax-operator: #04a5e5;
+  --syntax-punctuation: #6c6f85;
+  --syntax-gutter: #9ca0b0;
+}
+[data-theme='dark'][data-sql-theme='catppuccin'] {
+  --syntax-bg: #1e1e2e;
+  --syntax-plain: #cdd6f4;
+  --syntax-keyword: #cba6f7;
+  --syntax-string: #a6e3a1;
+  --syntax-number: #fab387;
+  --syntax-comment: #6c7086;
+  --syntax-function: #89b4fa;
+  --syntax-identifier: #94e2d5;
+  --syntax-operator: #89dceb;
+  --syntax-punctuation: #9399b2;
+  --syntax-gutter: #585b70;
+}
