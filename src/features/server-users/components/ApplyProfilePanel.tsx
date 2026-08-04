@@ -7,11 +7,89 @@ import type {
   ServerUserOut,
 } from '@/lib/contracts'
 import { usePermissionProfileOptions } from '@/features/permission-profiles'
+import { useServerDatabases } from '@/features/servers/hooks/use-introspection'
 import { useApplyProfile } from '../hooks/use-user-grants'
 
 interface ApplyProfilePanelProps {
   user: ServerUserOut
   engine: EngineType | null
+}
+
+/**
+ * Base de datos objetivo: se elige de las BDs que reporta el servidor en vivo 🔌 para no teclear
+ * el nombre a ciegas. Si la introspección falla o el motor no devuelve ninguna BD, cae a captura
+ * manual: un servidor inalcanzable no debe bloquear la aplicación del perfil.
+ */
+function TargetDatabaseField({
+  serverId,
+  value,
+  onChange,
+}: {
+  serverId: number
+  value: string
+  onChange: (database: string) => void
+}) {
+  // El padre solo monta este campo cuando el perfil tiene items no globales: la llamada al motor
+  // es perezosa por construcción.
+  const databases = useServerDatabases(serverId, true)
+  const options = databases.data ?? []
+
+  if (databases.isLoading) {
+    return (
+      <Combobox<string>
+        items={[]}
+        value={null}
+        onChange={() => {}}
+        itemToString={(item) => item}
+        itemToKey={(item) => item}
+        label="Base de datos objetivo"
+        placeholder="Cargando bases de datos…"
+        isLoading
+        required
+      />
+    )
+  }
+
+  if (databases.isError || options.length === 0) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Input
+          label="Base de datos objetivo"
+          required
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {databases.isError
+            ? 'No se pudo consultar las bases de datos del servidor; escribe el nombre a mano.'
+            : 'El servidor no reportó bases de datos; escribe el nombre a mano.'}
+          <button
+            type="button"
+            className="font-medium text-primary underline-offset-2 hover:underline"
+            onClick={() => void databases.refetch()}
+          >
+            Reintentar
+          </button>
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <Combobox<string>
+      items={options}
+      value={value ? value : null}
+      onChange={(database) => onChange(database ?? '')}
+      itemToString={(item) => item}
+      itemToKey={(item) => item}
+      label="Base de datos objetivo"
+      placeholder="Selecciona una base de datos"
+      clearable
+      required
+    />
+  )
 }
 
 /**
@@ -81,12 +159,7 @@ export function ApplyProfilePanel({ user, engine }: ApplyProfilePanelProps) {
 
       {needsDatabase && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Base de datos objetivo"
-            required
-            value={database}
-            onChange={(event) => setDatabase(event.target.value)}
-          />
+          <TargetDatabaseField serverId={user.server_id} value={database} onChange={setDatabase} />
           {isPg && (
             <Input
               label="Esquema"
