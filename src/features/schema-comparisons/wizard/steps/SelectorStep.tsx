@@ -1,10 +1,16 @@
-import { Badge, Combobox, EmptyState, ErrorState } from '@/components/ui'
+import {
+  Badge,
+  Combobox,
+  EmptyState,
+  ErrorState,
+  RadioCardGroup,
+  type RadioCardOption,
+} from '@/components/ui'
 import type { ServerOut } from '@/lib/contracts'
-import { cn } from '@/lib/utils'
 import { ENGINE_FAMILY_LABELS, type DatabaseSideOption, type EngineFamily } from '../logic'
 import type { SchemaComparisonWizard, SelectionMode } from '../use-schema-comparison-wizard'
 
-const SELECTION_MODES: { value: SelectionMode; label: string; hint: string }[] = [
+const SELECTION_MODES: readonly RadioCardOption<SelectionMode>[] = [
   {
     value: 'family',
     label: 'Por motor (BDs adoptadas)',
@@ -17,7 +23,22 @@ const SELECTION_MODES: { value: SelectionMode; label: string; hint: string }[] =
   },
 ]
 
-const FAMILIES: EngineFamily[] = ['mysql_mariadb', 'postgresql']
+const ENGINE_FAMILY_OPTIONS: readonly RadioCardOption<EngineFamily>[] = [
+  {
+    value: 'mysql_mariadb',
+    label: ENGINE_FAMILY_LABELS.mysql_mariadb,
+    hint: 'Misma familia: se permite comparar una BD MySQL contra una MariaDB.',
+  },
+  {
+    value: 'postgresql',
+    label: ENGINE_FAMILY_LABELS.postgresql,
+    hint: (
+      <>
+        La comparación cubre únicamente el schema <code className="font-mono">public</code>.
+      </>
+    ),
+  },
+]
 
 function DatabasePicker({
   options,
@@ -168,6 +189,11 @@ function ServerScopedPanel({
  * principal). Ambos modos alimentan el mismo `sourceSelection`/`targetSelection` del wizard.
  */
 export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
+  const isFamilyMode = wizard.selectionMode === 'family'
+  // El bloque del motor solo existe en modo "por motor": el número del último bloque se recalcula
+  // para que la secuencia nunca quede con un hueco (1 → 2 → 3 en family, 1 → 2 en server).
+  const databasesGroupNumber = isFamilyMode ? 3 : 2
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -175,127 +201,108 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
         <p className="text-sm text-muted-foreground">
           Solo estructura, nunca datos. Solo el mismo motor (se permite MySQL↔MariaDB).
         </p>
+        <p className="text-sm text-muted-foreground">
+          Completa los bloques numerados en orden: hay que elegir{' '}
+          <strong className="font-semibold text-foreground">una opción en cada bloque</strong>.
+        </p>
       </div>
 
-      <fieldset className="grid gap-2 sm:grid-cols-2">
-        {SELECTION_MODES.map((mode) => (
-          <label
-            key={mode.value}
-            className={cn(
-              'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors',
-              wizard.selectionMode === mode.value
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:bg-surface-muted',
-            )}
-          >
-            <span className="flex items-center gap-2 font-medium text-foreground">
-              <input
-                type="radio"
-                name="selection-mode"
-                className="accent-primary"
-                checked={wizard.selectionMode === mode.value}
-                onChange={() => wizard.setSelectionMode(mode.value)}
-              />
-              {mode.label}
-            </span>
-            <span className="text-xs text-muted-foreground">{mode.hint}</span>
-          </label>
-        ))}
-      </fieldset>
+      <RadioCardGroup<SelectionMode>
+        title="1. Cómo eliges las bases de datos"
+        description="Elige una de estas dos formas de localizar las BDs que vas a comparar."
+        options={SELECTION_MODES}
+        value={wizard.selectionMode}
+        onChange={wizard.setSelectionMode}
+      />
 
-      {wizard.selectionMode === 'family' ? (
-        <>
-          <fieldset className="grid gap-2 sm:grid-cols-2">
-            {FAMILIES.map((family) => (
-              <label
-                key={family}
-                className={cn(
-                  'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors',
-                  wizard.family === family
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:bg-surface-muted',
-                )}
-              >
-                <span className="flex items-center gap-2 font-medium text-foreground">
-                  <input
-                    type="radio"
-                    name="engine-family"
-                    className="accent-primary"
-                    checked={wizard.family === family}
-                    onChange={() => wizard.setFamily(family)}
-                  />
-                  {ENGINE_FAMILY_LABELS[family]}
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          {wizard.family === 'postgresql' && (
-            <p className="rounded-lg border border-border bg-surface-muted p-3 text-xs text-muted-foreground">
-              En PostgreSQL la comparación cubre únicamente el schema <code className="font-mono">public</code>.
-            </p>
-          )}
-
-          {wizard.family &&
-            (wizard.sourceOptionsError ? (
-              <ErrorState
-                error={wizard.sourceOptionsError}
-                onRetry={wizard.refetchSourceOptions}
-                title="No se pudieron cargar las bases de datos"
-              />
-            ) : !wizard.sourceOptionsLoading && wizard.sourceOptions.length === 0 && wizard.targetOptions.length === 0 ? (
-              <EmptyState
-                title="Sin bases de datos"
-                description="No hay bases de datos gestionadas de este motor en el inventario."
-              />
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FamilyModePanel
-                  label="SOURCE — referencia / estado deseado"
-                  options={wizard.sourceOptions}
-                  value={wizard.sourceSelection}
-                  onChange={wizard.setSourceSelection}
-                  isLoading={wizard.sourceOptionsLoading}
-                />
-                <FamilyModePanel
-                  label="TARGET — la BD que se modificaría"
-                  options={wizard.targetOptions}
-                  value={wizard.targetSelection}
-                  onChange={wizard.setTargetSelection}
-                  isLoading={wizard.targetOptionsLoading}
-                />
-              </div>
-            ))}
-        </>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ServerScopedPanel
-            label="SOURCE — referencia / estado deseado"
-            servers={wizard.sourceServerChoices}
-            serversLoading={wizard.serverOptions.isLoading}
-            pickerServerId={wizard.sourcePickerServerId}
-            onServerChange={wizard.setSourcePickerServerId}
-            databaseOptions={wizard.sourceOptions}
-            databaseValue={wizard.sourceSelection}
-            onDatabaseChange={wizard.setSourceSelection}
-            databaseLoading={wizard.sourceOptionsLoading}
-            databaseError={wizard.sourceOptionsError}
-            onRetryDatabases={wizard.refetchSourceOptions}
-          />
-          <ServerScopedPanel
-            label="TARGET — la BD que se modificaría"
-            servers={wizard.targetServerChoices}
-            serversLoading={wizard.serverOptions.isLoading}
-            pickerServerId={wizard.targetPickerServerId}
-            onServerChange={wizard.setTargetPickerServerId}
-            databaseOptions={wizard.targetOptions}
-            databaseValue={wizard.targetSelection}
-            onDatabaseChange={wizard.setTargetSelection}
-            databaseLoading={wizard.targetOptionsLoading}
-            databaseError={wizard.targetOptionsError}
-            onRetryDatabases={wizard.refetchTargetOptions}
-          />
-        </div>
+      {isFamilyMode && (
+        <RadioCardGroup<EngineFamily>
+          title="2. Motor de las dos bases de datos"
+          description="Ambas BDs tienen que ser del mismo motor. Elige de qué motor son."
+          options={ENGINE_FAMILY_OPTIONS}
+          value={wizard.family}
+          onChange={wizard.setFamily}
+        />
       )}
+
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {databasesGroupNumber}. Las dos bases de datos a comparar
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Elige una en cada lado: SOURCE es la referencia (estado deseado) y TARGET es la que se
+            modificaría.
+          </p>
+        </div>
+
+        {isFamilyMode ? (
+          wizard.family == null ? (
+            <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+              Elige primero el motor en el bloque 2 para ver las bases de datos disponibles.
+            </p>
+          ) : wizard.sourceOptionsError ? (
+            <ErrorState
+              error={wizard.sourceOptionsError}
+              onRetry={wizard.refetchSourceOptions}
+              title="No se pudieron cargar las bases de datos"
+            />
+          ) : !wizard.sourceOptionsLoading &&
+            wizard.sourceOptions.length === 0 &&
+            wizard.targetOptions.length === 0 ? (
+            <EmptyState
+              title="Sin bases de datos"
+              description="No hay bases de datos gestionadas de este motor en el inventario."
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FamilyModePanel
+                label="SOURCE — referencia / estado deseado"
+                options={wizard.sourceOptions}
+                value={wizard.sourceSelection}
+                onChange={wizard.setSourceSelection}
+                isLoading={wizard.sourceOptionsLoading}
+              />
+              <FamilyModePanel
+                label="TARGET — la BD que se modificaría"
+                options={wizard.targetOptions}
+                value={wizard.targetSelection}
+                onChange={wizard.setTargetSelection}
+                isLoading={wizard.targetOptionsLoading}
+              />
+            </div>
+          )
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ServerScopedPanel
+              label="SOURCE — referencia / estado deseado"
+              servers={wizard.sourceServerChoices}
+              serversLoading={wizard.serverOptions.isLoading}
+              pickerServerId={wizard.sourcePickerServerId}
+              onServerChange={wizard.setSourcePickerServerId}
+              databaseOptions={wizard.sourceOptions}
+              databaseValue={wizard.sourceSelection}
+              onDatabaseChange={wizard.setSourceSelection}
+              databaseLoading={wizard.sourceOptionsLoading}
+              databaseError={wizard.sourceOptionsError}
+              onRetryDatabases={wizard.refetchSourceOptions}
+            />
+            <ServerScopedPanel
+              label="TARGET — la BD que se modificaría"
+              servers={wizard.targetServerChoices}
+              serversLoading={wizard.serverOptions.isLoading}
+              pickerServerId={wizard.targetPickerServerId}
+              onServerChange={wizard.setTargetPickerServerId}
+              databaseOptions={wizard.targetOptions}
+              databaseValue={wizard.targetSelection}
+              onDatabaseChange={wizard.setTargetSelection}
+              databaseLoading={wizard.targetOptionsLoading}
+              databaseError={wizard.targetOptionsError}
+              onRetryDatabases={wizard.refetchTargetOptions}
+            />
+          </div>
+        )}
+      </section>
 
       <p className="rounded-lg bg-surface-muted p-3 text-sm text-foreground">
         Todo el DDL será: qué correr en <strong>TARGET</strong> para que quede como{' '}
