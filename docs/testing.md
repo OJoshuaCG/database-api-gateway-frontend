@@ -32,6 +32,7 @@ pnpm test:coverage   # con cobertura (v8)
 |---|---|
 | `src/lib/api/errors.test.ts` | Normalización de errores: `detail` como string y como objeto, `fieldErrors` de 422, fallbacks, 502/504. |
 | `src/components/ui/ConfirmDialog.test.tsx` | Doble confirmación: el botón se habilita solo al teclear la palabra exacta. |
+| `src/components/ui/RadioCardGroup.test.tsx` | Grupos independientes (el `legend` nombra cada grupo y seleccionar en uno no afecta al otro), toda la tarjeta clicable y `aria-describedby` del hint. |
 | `src/features/servers/hooks/use-servers.test.tsx` | Mapeo del envelope paginado y propagación de `ApiError` (con MSW). |
 | `src/features/auth/components/ProtectedRoute.test.tsx` | Render autenticado vs. redirección a `/login` ante 401. |
 

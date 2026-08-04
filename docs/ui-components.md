@@ -70,6 +70,27 @@ Interruptor accesible (`role="switch"`) **controlado**: `checked` + `onCheckedCh
 <Switch checked={provision} onCheckedChange={setProvision} label="Aprovisionar 🔌" />
 ```
 
+### `RadioCardGroup<T>`
+Grupo de radio-cards (**una opción por grupo**) dentro de un `<fieldset>` con `<legend>` visible y
+borde propio. Úsalo **siempre que haya más de un grupo de radios en la misma pantalla**: el borde y
+el título por grupo son lo que evita que se lean como una sola lista de opciones entre las que hay
+que elegir una. Cuando los grupos son secuenciales, numera el `title` (`"1. …"`, `"2. …"`).
+
+Props: `title`, `description?`, `options` (`{ value, label, hint?, disabled? }`), `value` (`T | null`,
+`null` = nada marcado), `onChange`, `columns?` (`1 | 2 | 3`, por defecto `2`), `name?`, `className?`.
+El `hint` acepta `ReactNode` (puede llevar `<code>` o datos interpolados) y queda ligado al radio por
+`aria-describedby`. Usa `columns={1}` cuando los hints sean largos.
+
+```tsx
+<RadioCardGroup<SelectionMode>
+  title="1. Cómo eliges las bases de datos"
+  description="Elige una de estas dos formas de localizar las BDs que vas a comparar."
+  options={SELECTION_MODES}
+  value={wizard.selectionMode}
+  onChange={wizard.setSelectionMode}
+/>
+```
+
 ### `Combobox<T>`
 Select **con búsqueda** accesible (Downshift). Filtrado client-side sobre `items`.
 
