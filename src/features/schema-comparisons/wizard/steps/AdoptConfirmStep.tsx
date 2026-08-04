@@ -1,11 +1,13 @@
-import { Input, Textarea } from '@/components/ui'
+import { Input, RadioCardGroup, Textarea, type RadioCardOption } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import { cn } from '@/lib/utils'
 import { hasMysqlProceduralRisk } from '../logic'
 import { ACTION_HINTS } from '../messages'
 import { DependencyClosureNotice } from '../DependencyClosureNotice'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
+
+/** El wizard guarda un boolean; el grupo de radios necesita un `value` string (acaba en el DOM). */
+type AdoptMode = 'only_generate' | 'apply_now'
 
 /** Vista 4b (Opción A) — cierre de dependencias de la selección + metadata de la versión + modo
  * de creación (solo generar / generar y aplicar). */
@@ -16,6 +18,25 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
     wizard.targetEngine,
   )
   const error = wizard.adopt.error
+
+  // Dentro del componente: el hint del segundo modo interpola el nombre del target.
+  const adoptModeOptions: readonly RadioCardOption<AdoptMode>[] = [
+    {
+      value: 'only_generate',
+      label: 'Solo generar la versión',
+      hint: (
+        <>
+          Nace SIN aprobar (<code>reviewed=false</code>). Deberás revisarla y aprobarla antes de
+          aplicarla (gate R1).
+        </>
+      ),
+    },
+    {
+      value: 'apply_now',
+      label: 'Generar y aplicar de inmediato',
+      hint: `Se ejecutará DDL sobre ${wizard.targetDetail.data?.name ?? 'el target'} ahora mismo. Operación real sobre el motor.`,
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-5">
@@ -55,50 +76,13 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
         />
       </div>
 
-      <fieldset className="grid gap-2 sm:grid-cols-2">
-        <label
-          className={cn(
-            'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors',
-            !wizard.adoptExecuteImmediately ? 'border-primary bg-primary/5' : 'border-border hover:bg-surface-muted',
-          )}
-        >
-          <span className="flex items-center gap-2 font-medium text-foreground">
-            <input
-              type="radio"
-              name="adopt-mode"
-              className="accent-primary"
-              checked={!wizard.adoptExecuteImmediately}
-              onChange={() => wizard.setAdoptExecuteImmediately(false)}
-            />
-            Solo generar la versión
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Nace SIN aprobar (<code>reviewed=false</code>). Deberás revisarla y aprobarla antes de
-            aplicarla (gate R1).
-          </span>
-        </label>
-        <label
-          className={cn(
-            'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors',
-            wizard.adoptExecuteImmediately ? 'border-primary bg-primary/5' : 'border-border hover:bg-surface-muted',
-          )}
-        >
-          <span className="flex items-center gap-2 font-medium text-foreground">
-            <input
-              type="radio"
-              name="adopt-mode"
-              className="accent-primary"
-              checked={wizard.adoptExecuteImmediately}
-              onChange={() => wizard.setAdoptExecuteImmediately(true)}
-            />
-            Generar y aplicar de inmediato
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Se ejecutará DDL sobre {wizard.targetDetail.data?.name ?? 'el target'} ahora mismo.
-            Operación real sobre el motor.
-          </span>
-        </label>
-      </fieldset>
+      <RadioCardGroup<AdoptMode>
+        title="Qué hacer con la versión"
+        description="Elige una: solo crear la versión, o crearla y aplicarla al target en el mismo paso."
+        options={adoptModeOptions}
+        value={wizard.adoptExecuteImmediately ? 'apply_now' : 'only_generate'}
+        onChange={(mode) => wizard.setAdoptExecuteImmediately(mode === 'apply_now')}
+      />
 
       {wizard.pendingReviewIds.length > 0 && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">

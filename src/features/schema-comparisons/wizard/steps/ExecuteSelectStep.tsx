@@ -1,12 +1,11 @@
 import type { ExecuteMode } from '@/lib/contracts'
-import { ErrorState, Spinner } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { ErrorState, RadioCardGroup, Spinner, type RadioCardOption } from '@/components/ui'
 import { opGroupObjectNames } from '../logic'
 import { ItemSelectionPanel } from '../ItemSelectionPanel'
 import { PlanWarningsList } from '../PlanWarningsList'
 import type { SchemaComparisonWizard } from '../use-schema-comparison-wizard'
 
-const MODE_OPTIONS: { value: ExecuteMode; label: string; hint: string }[] = [
+const MODE_OPTIONS: readonly RadioCardOption<ExecuteMode>[] = [
   {
     value: 'all',
     label: 'Ejecutar todo',
@@ -45,31 +44,14 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
         </p>
       </div>
 
-      <fieldset className="flex flex-col gap-2">
-        {MODE_OPTIONS.map((option) => (
-          <label
-            key={option.value}
-            className={cn(
-              'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors',
-              wizard.executeMode === option.value
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:bg-surface-muted',
-            )}
-          >
-            <span className="flex items-center gap-2 font-medium text-foreground">
-              <input
-                type="radio"
-                name="execute-mode"
-                className="accent-primary"
-                checked={wizard.executeMode === option.value}
-                onChange={() => wizard.setExecuteMode(option.value)}
-              />
-              {option.label}
-            </span>
-            <span className="text-xs text-muted-foreground">{option.hint}</span>
-          </label>
-        ))}
-      </fieldset>
+      <RadioCardGroup<ExecuteMode>
+        title="Modo de ejecución"
+        description={`Elige qué parte del diff se ejecutará sobre ${targetName}.`}
+        options={MODE_OPTIONS}
+        value={wizard.executeMode}
+        onChange={wizard.setExecuteMode}
+        columns={1}
+      />
 
       {wizard.executeMode === 'custom' && (
         <ItemSelectionPanel
