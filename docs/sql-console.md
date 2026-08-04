@@ -113,6 +113,45 @@ así el execute responde 403 (`system_database_write`). `blocksSystemDatabaseWri
 en el cliente para no llevar al usuario a tipear el nombre de la base y chocarse con un muro.
 Leer esas bases sigue permitido.
 
+## Elegir la identidad: los cuatro modos no se piden igual
+
+Los modos se presentan como tarjetas en una fila (3, o 4 en PostgreSQL, que añade el rol
+adoptado), angostas y altas: el `hint` es lo que hace elegible una opción, así que necesita
+alto y no ancho. Ninguna viene marcada.
+
+Lo que se pide después **depende del modo**, y no por comodidad:
+
+| Modo | Cómo se pide | Por qué así |
+|---|---|---|
+| `stored` | **Lista de cuentas del inventario** (`Combobox`) | Por definición tiene que ser una cuenta que el gateway administra: un campo de texto libre solo podía producir 404 («no está en el inventario») y 409 («nunca fijé su contraseña»). El **host viene con la cuenta**, que es lo que evita apuntar a `app@%` creyendo que es `app@localhost`. |
+| `provided` | Campo libre + sugerencias | El caso más común es probar un usuario que el gateway **no** administra, así que el inventario es un atajo, no un límite. |
+| `impersonate` | Campo libre | El rol es del motor y el gateway no lo inventaría. |
+| `admin` | Nada | No hay identidad que elegir; hay un aviso de que con esa credencial los permisos no se prueban. |
+
+**La lista de `stored` filtra por `has_password`.** `ServerUserOut.has_password` dice si el
+gateway fijó la contraseña de esa cuenta; si no lo hizo (la cuenta fue *adoptada*, y el motor
+solo guarda un hash irreversible), el modo `stored` responde **409 sin remedio**. Ofrecerla
+sería un callejón sin salida, así que se excluye y se dice cuántas quedaron fuera, empujando a
+`provided`. Es la única forma de que ese 409 no llegue nunca.
+
+> ⚠️ **Límite conocido:** la lista sale de `useServerUserOptions`, que pide una sola página de
+> `PAGINATION.maxSize` (50 por defecto, `VITE_MAX_PAGE_SIZE`). Un servidor con más de 50
+> cuentas en el inventario vería la lista recortada **en silencio**. Para eso hace falta o
+> paginar el selector o un endpoint de opciones sin paginar.
+
+## La base de datos es obligatoria, y no es una decisión de la UI
+
+`database` es requerido (`1..128`) tanto en `query/preview` como en `query/execute` (§5, §6,
+§12): la conexión se abre contra una base concreta, la confirmación de doble factor se tipea
+sobre su nombre y el guard de BD de sistema opera sobre ella. **No se puede omitir desde el
+cliente**: el backend responde 422.
+
+Lo que sí hace la pantalla es no preguntar cuando no hay nada que preguntar:
+`soleUsableDatabase` preselecciona la base si el servidor tiene **una sola** que no sea del
+sistema. Con dos o más no se adivina — la confirmación por tipeo protege de escribir en el
+destino equivocado, pero una *lectura* contra la base errónea daría un resultado engañoso sin
+avisar de nada.
+
 ## Detalles de la interfaz que no son cosméticos
 
 - **`estimated_rows: null` nunca se muestra como "0 filas".** Significa "no hay cifra exacta
@@ -153,6 +192,24 @@ estado `blocked` significa que la política lo rechazó y **nunca se tocó el mo
 > gateway usa `pagination` con seis campos. `listQueryHistory` acepta **las dos formas** y
 > deriva lo que falte. Es la única concesión defensiva del módulo, y está ahí porque fallar
 > por un nombre de clave dejaría la pantalla inservible.
+
+## Pendiente del lado del backend
+
+Nada de esto bloquea el módulo, pero son los cambios que harían falta para cerrar huecos que
+hoy son del contrato, no de la interfaz:
+
+1. **`database` opcional en lotes de solo lectura.** Un `SHOW GRANTS FOR 'app_ro'@'%'` o un
+   `SELECT * FROM mysql.db` no necesitan base: en MySQL/MariaDB se puede conectar sin esquema
+   por defecto. Haría falta: aceptar `database: null` cuando el lote clasifica como `read`,
+   conectar sin esquema en MySQL/MariaDB y a una base de mantenimiento en PostgreSQL (que no
+   admite conexión sin base), y volver `database_name` nullable en el historial. Para
+   `write`/`ddl` debe seguir siendo obligatoria: es lo que se tipea en la confirmación y lo que
+   mira el guard de BD de sistema.
+2. **Opciones de usuarios sin paginar** (o un `size` mayor) para poblar el selector de cuentas
+   del inventario sin recortar en silencio — ver el límite de arriba.
+
+Lo que **no** hace falta pedir: `has_password` ya viaja en `ServerUserOut`, así que el filtro
+que evita el 409 del modo `stored` se resuelve entero en el cliente.
 
 ## Piezas compartidas que salieron de este módulo
 
