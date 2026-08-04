@@ -1,0 +1,3 @@
+# Fin de línea normalizado a LF en el repositorio y en el working tree.
+# Evita que un checkout en Windows/WSL marque todo el árbol como modificado por CRLF.
+* text=auto eol=lf
