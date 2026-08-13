@@ -2,7 +2,6 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  CHARSET_PATTERN,
   IDENTIFIER_PATTERN,
   type DatabaseModelOut,
   type ManagedDatabaseCreate,
@@ -14,6 +13,11 @@ import { Button, Combobox, Input, Switch, Textarea } from '@/components/ui'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
+import {
+  CharsetCollationSelector,
+  engineToFamily,
+  type CharsetCollationValue,
+} from '@/features/charset-collation-options'
 
 export interface ManagedDatabaseFormValues {
   name: string
@@ -21,8 +25,7 @@ export interface ManagedDatabaseFormValues {
   owner_id: number
   model_id: number | null
   model_version: string
-  charset: string
-  collation: string
+  charsetCollation: CharsetCollationValue | null | undefined
   notes: string
   provision: boolean
 }
@@ -33,13 +36,10 @@ const DEFAULTS: ManagedDatabaseFormValues = {
   owner_id: 0,
   model_id: null,
   model_version: '',
-  charset: '',
-  collation: '',
+  charsetCollation: undefined,
   notes: '',
   provision: false,
 }
-
-const optionalCharset = z.union([z.string().regex(CHARSET_PATTERN, 'Inválido'), z.literal('')])
 
 function buildSchema(mode: 'create' | 'edit') {
   return z.object({
@@ -53,8 +53,9 @@ function buildSchema(mode: 'create' | 'edit') {
       mode === 'create' ? z.number().int().min(1, 'Selecciona un propietario') : z.number().int(),
     model_id: z.number().int().min(1).nullable(),
     model_version: z.string().max(50),
-    charset: optionalCharset,
-    collation: optionalCharset,
+    // Sin validación propia: el selector solo produce valores válidos del catálogo, y en modo
+    // `edit` ni se muestra ni se envía.
+    charsetCollation: z.custom<CharsetCollationValue | null | undefined>(),
     notes: z.string(),
     provision: z.boolean(),
   })
@@ -67,8 +68,8 @@ export function toManagedDatabaseCreate(values: ManagedDatabaseFormValues): Mana
     owner_id: values.owner_id,
     model_id: values.model_id,
     model_version: values.model_version.trim() ? values.model_version.trim() : null,
-    charset: values.charset.trim() ? values.charset.trim() : null,
-    collation: values.collation.trim() ? values.collation.trim() : null,
+    charset: values.charsetCollation ? values.charsetCollation.charset : null,
+    collation: values.charsetCollation ? values.charsetCollation.collation : null,
     notes: values.notes.trim() ? values.notes.trim() : null,
   }
 }
@@ -77,8 +78,6 @@ export function toManagedDatabaseUpdate(values: ManagedDatabaseFormValues): Mana
   return {
     model_id: values.model_id,
     model_version: values.model_version.trim() ? values.model_version.trim() : null,
-    charset: values.charset.trim() ? values.charset.trim() : null,
-    collation: values.collation.trim() ? values.collation.trim() : null,
     notes: values.notes.trim() ? values.notes.trim() : null,
   }
 }
@@ -87,6 +86,7 @@ interface ManagedDatabaseFormProps {
   mode: 'create' | 'edit'
   defaultValues?: Partial<ManagedDatabaseFormValues>
   readonlyIdentity?: { name: string; serverName?: string }
+  readonlyCharsetCollation?: { charset: string | null; collation: string | null }
   isSubmitting?: boolean
   onSubmit: (values: ManagedDatabaseFormValues) => void
   onCancel: () => void
@@ -96,6 +96,7 @@ export function ManagedDatabaseForm({
   mode,
   defaultValues,
   readonlyIdentity,
+  readonlyCharsetCollation,
   isSubmitting,
   onSubmit,
   onCancel,
@@ -116,6 +117,8 @@ export function ManagedDatabaseForm({
   const selectedServerId = watch('server_id')
   const owners = useServerUserOptions(selectedServerId || null)
   const models = useDatabaseModelOptions()
+  const selectedServer = servers.data?.find((s) => s.id === selectedServerId)
+  const engineFamily = selectedServerId ? engineToFamily(selectedServer?.engine ?? 'mysql') : null
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
@@ -136,8 +139,16 @@ export function ManagedDatabaseForm({
                   items={servers.data ?? []}
                   value={servers.data?.find((s) => s.id === field.value) ?? null}
                   onChange={(server) => {
+                    const previousServer = servers.data?.find((s) => s.id === field.value)
+                    const previousFamily = previousServer
+                      ? engineToFamily(previousServer.engine)
+                      : null
+                    const nextFamily = server ? engineToFamily(server.engine) : null
                     field.onChange(server?.id ?? 0)
                     setValue('owner_id', 0) // el owner debe ser del mismo servidor
+                    if (previousFamily !== nextFamily) {
+                      setValue('charsetCollation', undefined) // cambió la familia de motor
+                    }
                   }}
                   itemToString={(s) => `${s.name} (${s.engine})`}
                   itemToKey={(s) => s.id}
@@ -207,19 +218,36 @@ export function ManagedDatabaseForm({
           error={errors.model_version?.message}
           {...register('model_version')}
         />
-        <Input
-          label="Charset"
-          hint="MySQL/MariaDB"
-          error={errors.charset?.message}
-          {...register('charset')}
-        />
-        <Input
-          label="Collation"
-          hint="MySQL/MariaDB"
-          error={errors.collation?.message}
-          {...register('collation')}
-        />
+        {mode === 'create' && (
+          <Controller
+            control={control}
+            name="charsetCollation"
+            render={({ field, fieldState }) => (
+              <CharsetCollationSelector
+                engineFamily={engineFamily}
+                value={field.value}
+                onChange={field.onChange}
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+        )}
       </div>
+
+      {mode === 'edit' && (
+        <div className="rounded-lg border border-border bg-surface-muted p-3 text-sm">
+          <p className="text-foreground">
+            Charset: {readonlyCharsetCollation?.charset ?? 'no se especificó (la definió el motor)'}
+          </p>
+          <p className="text-foreground">
+            Collation:{' '}
+            {readonlyCharsetCollation?.collation ?? 'no se especificó (la definió el motor)'}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Metadata del inventario. Editar esto no modifica la base de datos en el servidor.
+          </p>
+        </div>
+      )}
 
       <Textarea label="Notas" rows={2} {...register('notes')} />
 

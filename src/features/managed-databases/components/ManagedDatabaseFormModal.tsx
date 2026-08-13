@@ -57,13 +57,16 @@ export function ManagedDatabaseFormModal({
             ? {
                 model_id: database.model_id ?? null,
                 model_version: database.model_version ?? '',
-                charset: database.charset ?? '',
-                collation: database.collation ?? '',
                 notes: database.notes ?? '',
               }
             : { server_id: defaultServerId ?? 0 }
         }
         readonlyIdentity={database ? { name: database.name, serverName } : undefined}
+        readonlyCharsetCollation={
+          database
+            ? { charset: database.charset ?? null, collation: database.collation ?? null }
+            : undefined
+        }
         isSubmitting={isSubmitting}
         onSubmit={handleSubmit}
         onCancel={onClose}
