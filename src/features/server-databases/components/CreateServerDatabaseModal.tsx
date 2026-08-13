@@ -14,6 +14,11 @@ import {
 import { toApiError, type ApiError } from '@/lib/api/errors'
 import { MAX_DATABASE_NAME_LENGTH, type EngineType, type ServerUserOut } from '@/lib/contracts'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
+import {
+  CharsetCollationSelector,
+  engineToFamily,
+  type CharsetCollationOverrideOption,
+} from '@/features/charset-collation-options'
 import { useCreateServerDatabase } from '../hooks/use-server-database-mutations'
 import {
   buildCreateBody,
@@ -47,6 +52,13 @@ interface CreateFailure {
   sentCollation: boolean
 }
 
+/** Repueble el selector de charset/collation cuando el 422 de catálogo trae alternativas. */
+interface CatalogFailure {
+  options: CharsetCollationOverrideOption[]
+  message: string
+  truncated: boolean
+}
+
 const NAME_RULES = `Debe empezar con letra o «_» y contener solo letras, dígitos y «_». Sin espacios, guiones, puntos ni acentos. Máx. ${MAX_DATABASE_NAME_LENGTH} caracteres.`
 
 /** El backend no valida el locale: lo delega al motor, que falla con un 500 opaco (§S1). */
@@ -64,6 +76,9 @@ const REGISTER_HINT_OFF =
   'Solo se creará en el motor. No quedará registrada en el gateway; podrás adoptarla más tarde.'
 const REGISTER_HINT_ON =
   'Además quedará registrada como base gestionada (origen: aprovisionada), apta para blueprints y migraciones.'
+
+/** El 422 de catálogo trunca `allowed` a 50 opciones (§8.3 de la API). */
+const CATALOG_TRUNCATED_NOTE = 'Se muestran las primeras 50 opciones; hay más disponibles.'
 
 /**
  * Creación de una base de datos EN EL MOTOR (🔌 `POST /servers/{id}/databases`), con registro
@@ -84,12 +99,11 @@ export function CreateServerDatabaseModal({
   const isPostgres = engine === 'postgresql'
   const create = useCreateServerDatabase(serverId)
   const [failure, setFailure] = useState<CreateFailure | null>(null)
+  const [catalogFailure, setCatalogFailure] = useState<CatalogFailure | null>(null)
 
   const uid = useId()
   const nameId = `${uid}-name`
   const nameRulesId = `${uid}-name-rules`
-  const charsetListId = `${uid}-charset-list`
-  const collationListId = `${uid}-collation-list`
 
   const {
     control,
@@ -102,7 +116,8 @@ export function CreateServerDatabaseModal({
   } = useForm<CreateFormValues>({ defaultValues: CREATE_FORM_DEFAULTS })
 
   const name = watch('name')
-  const collation = watch('collation')
+  const charsetCollation = watch('charsetCollation')
+  const hasCollation = charsetCollation != null && charsetCollation.collation != null
   const registerInventory = watch('register')
 
   // Carga DIFERIDA: con el interruptor apagado no se piden usuarios que nadie va a elegir.
@@ -127,11 +142,13 @@ export function CreateServerDatabaseModal({
   const handleClose = () => {
     reset(CREATE_FORM_DEFAULTS)
     setFailure(null)
+    setCatalogFailure(null)
     onClose()
   }
 
   const submit = (values: CreateFormValues) => {
     setFailure(null)
+    setCatalogFailure(null)
     create.mutate(buildCreateBody(values, engine), {
       // El toast de éxito lo emite el hook; aquí solo se cierra y se limpia el formulario.
       onSuccess: () => {
@@ -139,6 +156,16 @@ export function CreateServerDatabaseModal({
       },
       onError: (err) => {
         const apiError = toApiError(err)
+        // El 422 de catálogo se resuelve ANTES de clasificar name/ownerId: no es un error de esos
+        // dos campos, sino de la combinación charset/collation contra el catálogo del gateway.
+        if (apiError.charsetRejected) {
+          setCatalogFailure({
+            options: apiError.charsetRejected.allowed,
+            message: apiError.message,
+            truncated: apiError.charsetRejected.truncated,
+          })
+          return
+        }
         const info = classifyCreateError(apiError)
         const detail = info.hint ? `${apiError.message} ${info.hint}` : apiError.message
         if (info.field === 'name') setError('name', { message: detail })
@@ -150,7 +177,8 @@ export function CreateServerDatabaseModal({
         setFailure({
           error: apiError,
           registered: values.register,
-          sentCollation: values.collation.trim().length > 0,
+          sentCollation:
+            values.charsetCollation != null && values.charsetCollation.collation != null,
         })
       },
     })
@@ -203,38 +231,32 @@ export function CreateServerDatabaseModal({
 
         <section className="flex flex-col gap-4">
           <h3 className="text-sm font-semibold text-foreground">Configuración del motor</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* Texto libre + datalist: un selector cerrado excluiría valores válidos de ESTE
-                servidor concreto, que la UI no puede enumerar. */}
-            <Input
-              label={copy.charsetLabel}
-              hint={copy.charsetHint}
-              list={charsetListId}
-              autoComplete="off"
-              disabled={isPending}
-              {...register('charset')}
+          <div className="flex flex-col gap-1.5">
+            <Controller
+              control={control}
+              name="charsetCollation"
+              render={({ field }) => (
+                <CharsetCollationSelector
+                  engineFamily={engineToFamily(engine)}
+                  value={field.value}
+                  onChange={field.onChange}
+                  label={copy.combinedLabel}
+                  overrideOptions={catalogFailure?.options}
+                  disabled={isPending}
+                />
+              )}
             />
-            <datalist id={charsetListId}>
-              {copy.charsetSuggestions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-            <Input
-              label={copy.collationLabel}
-              hint={copy.collationHint}
-              list={collationListId}
-              autoComplete="off"
-              disabled={isPending}
-              {...register('collation')}
-            />
-            <datalist id={collationListId}>
-              {copy.collationSuggestions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
+            {catalogFailure && (
+              <div className="rounded-lg border border-error/30 bg-error/5 p-2 text-xs text-foreground">
+                <p>{catalogFailure.message}</p>
+                {catalogFailure.truncated && (
+                  <p className="text-muted-foreground">{CATALOG_TRUNCATED_NOTE}</p>
+                )}
+              </div>
+            )}
           </div>
 
-          {isPostgres && collation.trim().length > 0 && (
+          {isPostgres && hasCollation && (
             <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
               {LOCALE_WARNING}
             </p>

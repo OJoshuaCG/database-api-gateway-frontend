@@ -8,6 +8,7 @@ import {
   type EngineType,
   type ManagedDatabaseOut,
 } from '@/lib/contracts'
+import type { CharsetCollationValue } from '@/features/charset-collation-options'
 
 /**
  * Lógica pura del módulo de ciclo de vida de BDs a nivel servidor: adaptación por motor,
@@ -18,14 +19,8 @@ import {
 // ── Adaptación por motor (§6.4) ─────────────────────────────────────────────
 
 export interface EngineCopy {
-  /** Etiqueta del campo de API `charset`. */
-  charsetLabel: string
-  charsetHint: string
-  charsetSuggestions: readonly string[]
-  /** Etiqueta del campo de API `collation`. */
-  collationLabel: string
-  collationHint: string
-  collationSuggestions: readonly string[]
+  /** Etiqueta combinada para el selector cerrado de charset/collation del catálogo (§9.1). */
+  combinedLabel: string
   /** El campo `owner` (rol nativo) solo existe en PostgreSQL; en MySQL el backend lo ignora. */
   showOwner: boolean
   /** En MySQL/MariaDB `force_disconnect` se acepta por paridad de contrato pero es un no-op. */
@@ -35,17 +30,7 @@ export interface EngineCopy {
 }
 
 const MYSQL_COPY: EngineCopy = {
-  charsetLabel: 'Character set',
-  charsetHint: 'Si se deja vacío, se usa el valor por omisión del servidor.',
-  charsetSuggestions: ['utf8mb4', 'utf8mb3', 'latin1', 'ascii'],
-  collationLabel: 'Collation',
-  collationHint: 'Debe ser compatible con el character set elegido.',
-  collationSuggestions: [
-    'utf8mb4_general_ci',
-    'utf8mb4_unicode_ci',
-    'utf8mb4_0900_ai_ci',
-    'utf8mb4_bin',
-  ],
+  combinedLabel: 'Juego de caracteres y ordenamiento',
   showOwner: false,
   forceDisconnectHint:
     'En MySQL/MariaDB no tiene efecto: el motor no bloquea el borrado por conexiones abiertas.',
@@ -53,12 +38,7 @@ const MYSQL_COPY: EngineCopy = {
 }
 
 const POSTGRES_COPY: EngineCopy = {
-  charsetLabel: 'Encoding',
-  charsetHint: 'Si se deja vacío se usa UTF8. La base se crea siempre desde template0.',
-  charsetSuggestions: ['UTF8', 'LATIN1', 'SQL_ASCII'],
-  collationLabel: 'Locale',
-  collationHint: 'Fija LC_COLLATE y LC_CTYPE (por ejemplo en_US.UTF-8).',
-  collationSuggestions: ['en_US.UTF-8', 'es_ES.UTF-8', 'C', 'C.UTF-8'],
+  combinedLabel: 'Codificación y locale',
   showOwner: true,
   forceDisconnectHint:
     'En PostgreSQL es OBLIGATORIO si hay conexiones: sin esto el borrado falla porque la base está en uso.',
@@ -118,8 +98,12 @@ export function warnDuplicateDatabaseName(
 
 export interface CreateFormValues {
   name: string
-  charset: string
-  collation: string
+  /**
+   * `undefined` = sin decidir todavía (el selector se autopreselecciona); `null` = usar el
+   * valor por defecto del motor (no se envía nada); un objeto = combinación concreta del
+   * catálogo de charset/collation.
+   */
+  charsetCollation: CharsetCollationValue | null | undefined
   owner: string
   register: boolean
   ownerId: number | null
@@ -128,8 +112,7 @@ export interface CreateFormValues {
 
 export const CREATE_FORM_DEFAULTS: CreateFormValues = {
   name: '',
-  charset: '',
-  collation: '',
+  charsetCollation: undefined,
   owner: '',
   register: false,
   ownerId: null,
@@ -149,8 +132,8 @@ function emptyToNull(value: string): string | null {
 export function buildCreateBody(values: CreateFormValues, engine: EngineType): DatabaseCreateIn {
   const body: DatabaseCreateIn = {
     name: values.name.trim(),
-    charset: emptyToNull(values.charset),
-    collation: emptyToNull(values.collation),
+    charset: values.charsetCollation?.charset ?? null,
+    collation: values.charsetCollation?.collation ?? null,
     register: values.register,
   }
   if (engineCopy(engine).showOwner && !values.register) {

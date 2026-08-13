@@ -50,8 +50,7 @@ describe('adaptación por motor', () => {
   it('usa la terminología de MySQL en mysql y mariadb', () => {
     for (const engine of ['mysql', 'mariadb'] as const) {
       const copy = engineCopy(engine)
-      expect(copy.charsetLabel).toBe('Character set')
-      expect(copy.collationLabel).toBe('Collation')
+      expect(copy.combinedLabel).toBe('Juego de caracteres y ordenamiento')
       expect(copy.showOwner).toBe(false)
       // Las conexiones abiertas no bloquean el DROP en MySQL/MariaDB.
       expect(copy.connectionsBlockDrop).toBe(false)
@@ -60,8 +59,7 @@ describe('adaptación por motor', () => {
 
   it('usa la terminología de PostgreSQL y expone el campo owner', () => {
     const copy = engineCopy('postgresql')
-    expect(copy.charsetLabel).toBe('Encoding')
-    expect(copy.collationLabel).toBe('Locale')
+    expect(copy.combinedLabel).toBe('Codificación y locale')
     expect(copy.showOwner).toBe(true)
     expect(copy.connectionsBlockDrop).toBe(true)
   })
@@ -134,12 +132,27 @@ describe('warnDuplicateDatabaseName', () => {
 describe('buildCreateBody', () => {
   const base: CreateFormValues = { ...CREATE_FORM_DEFAULTS, name: '  ventas  ' }
 
-  it('recorta el nombre y convierte los opcionales vacíos en null', () => {
+  it('recorta el nombre y usa el valor por defecto del motor sin charsetCollation', () => {
     const body = buildCreateBody(base, 'mysql')
     expect(body.name).toBe('ventas')
     expect(body.charset).toBeNull()
     expect(body.collation).toBeNull()
     expect(body.register).toBe(false)
+  })
+
+  it('vuelca charset/collation de la combinación elegida en el selector', () => {
+    const body = buildCreateBody(
+      { ...base, charsetCollation: { charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' } },
+      'mysql',
+    )
+    expect(body.charset).toBe('utf8mb4')
+    expect(body.collation).toBe('utf8mb4_unicode_ci')
+  })
+
+  it('usa el valor por defecto del motor con charsetCollation en null', () => {
+    const body = buildCreateBody({ ...base, charsetCollation: null }, 'mysql')
+    expect(body.charset).toBeNull()
+    expect(body.collation).toBeNull()
   })
 
   it('omite `owner` en MySQL/MariaDB porque el backend lo ignora', () => {
