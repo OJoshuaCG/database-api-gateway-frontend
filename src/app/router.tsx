@@ -68,6 +68,10 @@ const PermissionProfilesPage = lazyPage(
   () => import('@/features/permission-profiles'),
   'PermissionProfilesPage',
 )
+const CharsetCollationOptionsPage = lazyPage(
+  () => import('@/features/charset-collation-options'),
+  'CharsetCollationOptionsPage',
+)
 const AdminPage = lazyPage(() => import('@/features/admin'), 'AdminPage')
 
 export const router = createBrowserRouter([
@@ -104,6 +108,7 @@ export const router = createBrowserRouter([
           { path: 'sql-console', element: <SqlConsolePage /> },
           { path: 'privileges', element: <PrivilegesPage /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },
+          { path: 'charset-collation-options', element: <CharsetCollationOptionsPage /> },
           { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],

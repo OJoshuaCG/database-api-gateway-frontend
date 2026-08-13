@@ -133,6 +133,23 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: '/charset-collation-options',
+    label: 'Charsets y collations',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <path d="M4 19V6.5a2.5 2.5 0 0 1 2.5-2.5H9" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M4 15h5" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M9 19V4" strokeWidth="1.6" strokeLinecap="round" />
+        <path
+          d="M14 10h6M17 10v9M14 19h6"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
     to: '/admin',
     label: 'Administración',
     icon: (

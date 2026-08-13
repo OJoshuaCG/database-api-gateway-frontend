@@ -135,6 +135,27 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 | 44 | `GET /permission-profiles/{id}` | 🧩 | El modal de edición reutiliza los datos de la fila; el hook queda disponible por si hace falta una vista de detalle. |
 | 47 | `POST /admin/crypto/rotate` | ✅ | `AdminPage` (`/admin`), con confirmación |
 
+## Catálogo de charset/collation
+
+Módulo de `api-reference-v7.md`: catálogo global (no por servidor) de combinaciones
+charset/collation habilitadas para crear bases de datos. No aparece en el apéndice
+numerado del contrato original; su contrato está modelado en
+`lib/contracts/charset-collation-options.ts`. Reemplaza el texto libre que tenían
+`CreateServerDatabaseModal` (`POST /servers/{id}/databases`) y `ManagedDatabaseForm` en
+modo alta (`POST /managed-databases`) — los dos ahora validan contra este catálogo y
+repueblan el selector con `public_context.allowed` si llega un 422 de combinación no
+habilitada, sin pedirlo de nuevo.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `GET /charset-collation-options` | ✅ | `CharsetCollationOptionsPage` (`/charset-collation-options`, sin filtros) para administrar; `CharsetCollationSelector` (`?engine_family=&only_enabled=true`) para el selector de creación |
+| `POST /charset-collation-options` | ✅ | `AddCharsetCollationOptionModal`; el 409 de duplicada ofrece habilitar la fila existente en vez de un error genérico |
+| `PATCH /charset-collation-options/{id}` | ✅ | `CharsetCollationOptionsPage`: `Switch` de habilitada, botón "Marcar sugerida", y `DisableDefaultOptionDialog` para el invariante "la sugerida debe estar habilitada" |
+
+> **No hay `DELETE`, y no es un olvido** (§5.4 del doc): deshabilitar ya saca la
+> combinación del selector; conservar la fila mantiene legible el histórico de las bases
+> creadas con ella. La pantalla de administración no tiene botón de eliminar a propósito.
+
 ## Clonado de bases de datos
 
 El asistente `/database-clones` consume un módulo que **no aparece en el apéndice de
@@ -190,6 +211,11 @@ documento y todavía no se han ejercitado contra una instancia real:
 - `#54`/`#55` — `has_partial_application`/`partial_application[]` y el bloque
   `reconciliation`, más los campos de checkpoint de `results[]`.
 - `#77` — `resolve-selection` y los campos `op_group`/`depends_on` de los ítems.
+- **Catálogo de charset/collation** (`/charset-collation-options` completo): según el
+  propio addendum v7, el backend todavía no corrió `utf8mb4_0900_ai_ci` habilitada contra
+  un MariaDB real ni verificó que los locales sembrados de PostgreSQL existan en el SO del
+  servidor destino. El contrato puede tener ajustes menores; el mapeo de `charsetRejected`/
+  `charsetDuplicate` está concentrado en `lib/api/errors.ts`.
 - **Consola SQL entera** (`query/preview`, `query/execute`, `query/history`): el propio
   contrato v6 (§2.8) avisa de que el backend todavía no se validó contra motores
   MySQL/MariaDB/PostgreSQL reales y de que puede haber ajustes menores. Por eso todo el
