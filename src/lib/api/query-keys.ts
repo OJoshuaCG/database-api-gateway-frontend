@@ -67,6 +67,10 @@ export const queryKeys = {
     list: (params: QueryParams) => ['permission-profiles', 'list', params] as const,
     detail: (id: number) => ['permission-profiles', 'detail', id] as const,
   },
+  charsetCollationOptions: {
+    all: ['charset-collation-options'] as const,
+    list: (params: QueryParams) => ['charset-collation-options', 'list', params] as const,
+  },
   schemaComparisons: {
     all: ['schema-comparisons'] as const,
     detail: (id: number) => ['schema-comparisons', 'detail', id] as const,

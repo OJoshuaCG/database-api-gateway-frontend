@@ -61,6 +61,40 @@ export interface ContextSkippedTable {
   reason: string
 }
 
+/**
+ * Opción permitida que el backend sugiere en el 422 "combinación no habilitada"
+ * (`public_context.allowed`) del catálogo de charset/collation.
+ */
+export interface CharsetRejectedAllowedOption {
+  charset: string
+  collation: string | null
+  isDefault: boolean
+}
+
+/**
+ * Contexto del 422 "combinación no habilitada" al crear/usar una base con un charset/collation
+ * que no está en el catálogo (`public_context` de `POST /charset-collation-options` y de la
+ * creación de bases que valida contra él).
+ */
+export interface CharsetRejectedContext {
+  engineFamily: string
+  requested: { charset: string | null; collation: string | null }
+  allowed: CharsetRejectedAllowedOption[]
+  truncated: boolean
+}
+
+/**
+ * Contexto del 409 "la combinación ya existe" al crear una entrada duplicada en el catálogo de
+ * charset/collation (`public_context` de `POST /charset-collation-options`).
+ */
+export interface CharsetDuplicateContext {
+  id: number
+  engineFamily: string
+  charset: string
+  collation: string | null
+  enabled: boolean
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -101,6 +135,16 @@ export class ApiError extends Error {
   readonly reasons?: ApiReason[]
   /** Sentencias bloqueadas del lote (`public_context.blocked_statements`, v6 §9.2). */
   readonly blockedStatements?: BlockedStatement[]
+  /**
+   * 422 "combinación no habilitada" del catálogo de charset/collation: la combinación pedida no
+   * está en `charset-collation-options`; trae las alternativas permitidas para esa familia.
+   */
+  readonly charsetRejected?: CharsetRejectedContext
+  /**
+   * 409 "la combinación ya existe" al crear una entrada duplicada en el catálogo de
+   * charset/collation (`POST /charset-collation-options`).
+   */
+  readonly charsetDuplicate?: CharsetDuplicateContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -117,6 +161,8 @@ export class ApiError extends Error {
     suggestedItemIds?: number[]
     reasons?: ApiReason[]
     blockedStatements?: BlockedStatement[]
+    charsetRejected?: CharsetRejectedContext
+    charsetDuplicate?: CharsetDuplicateContext
     requestId?: string
   }) {
     super(args.message)
@@ -132,6 +178,8 @@ export class ApiError extends Error {
     this.suggestedItemIds = args.suggestedItemIds
     this.reasons = args.reasons
     this.blockedStatements = args.blockedStatements
+    this.charsetRejected = args.charsetRejected
+    this.charsetDuplicate = args.charsetDuplicate
     this.requestId = args.requestId
   }
 
@@ -296,6 +344,68 @@ function extractBlockedStatements(publicContext: unknown): BlockedStatement[] | 
   return statements.length > 0 ? statements : undefined
 }
 
+/**
+ * Extrae `public_context.allowed` (422 "combinación no habilitada" del catálogo de
+ * charset/collation): alternativas permitidas para la familia de motor pedida.
+ */
+function extractCharsetRejectedAllowed(allowed: unknown): CharsetRejectedAllowedOption[] {
+  if (!Array.isArray(allowed)) return []
+  const options: CharsetRejectedAllowedOption[] = []
+  for (const entry of allowed) {
+    if (isRecord(entry) && typeof entry.charset === 'string') {
+      options.push({
+        charset: entry.charset,
+        collation: typeof entry.collation === 'string' ? entry.collation : null,
+        isDefault: entry.is_default === true,
+      })
+    }
+  }
+  return options
+}
+
+/**
+ * Extrae `public_context` del 422 "combinación no habilitada" al crear/usar una base con un
+ * charset/collation que no está en el catálogo (`charset-collation-options`).
+ */
+function extractCharsetRejected(publicContext: unknown): CharsetRejectedContext | undefined {
+  if (!isRecord(publicContext)) return undefined
+  if (typeof publicContext.engine_family !== 'string') return undefined
+  const requested = publicContext.requested
+  if (!isRecord(requested)) return undefined
+  return {
+    engineFamily: publicContext.engine_family,
+    requested: {
+      charset: typeof requested.charset === 'string' ? requested.charset : null,
+      collation: typeof requested.collation === 'string' ? requested.collation : null,
+    },
+    allowed: extractCharsetRejectedAllowed(publicContext.allowed),
+    truncated: publicContext.truncated === true,
+  }
+}
+
+/**
+ * Extrae `public_context` del 409 "la combinación ya existe" al crear una entrada duplicada en
+ * el catálogo de charset/collation (`POST /charset-collation-options`).
+ */
+function extractCharsetDuplicate(publicContext: unknown): CharsetDuplicateContext | undefined {
+  if (!isRecord(publicContext)) return undefined
+  if (
+    typeof publicContext.id !== 'number' ||
+    typeof publicContext.engine_family !== 'string' ||
+    typeof publicContext.charset !== 'string' ||
+    typeof publicContext.enabled !== 'boolean'
+  ) {
+    return undefined
+  }
+  return {
+    id: publicContext.id,
+    engineFamily: publicContext.engine_family,
+    charset: publicContext.charset,
+    collation: typeof publicContext.collation === 'string' ? publicContext.collation : null,
+    enabled: publicContext.enabled,
+  }
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -322,6 +432,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         suggestedItemIds: extractSuggestedItemIds(d.public_context),
         reasons: extractReasons(d.public_context),
         blockedStatements: extractBlockedStatements(d.public_context),
+        charsetRejected: extractCharsetRejected(d.public_context),
+        charsetDuplicate: extractCharsetDuplicate(d.public_context),
         requestId,
       })
     }
