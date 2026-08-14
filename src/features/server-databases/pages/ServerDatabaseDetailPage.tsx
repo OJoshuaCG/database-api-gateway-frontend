@@ -159,6 +159,18 @@ export function ServerDatabaseDetailPage() {
       {tab === 'summary' && (
         <Card>
           <CardContent>
+            <div className="mb-4 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate(
+                    `/collation-conversions?serverId=${serverId}&database=${encodeURIComponent(row.name)}`,
+                  )
+                }
+              >
+                Convertir collation 🔌
+              </Button>
+            </div>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Fact label="Nombre">
                 <span className="font-mono text-xs">{row.name}</span>
