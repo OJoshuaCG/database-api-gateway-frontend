@@ -109,20 +109,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    to: '/privileges',
-    label: 'Privilegios',
-    icon: (
-      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
-        <path
-          d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        <path d="M9 12l2 2 4-4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
     to: '/permission-profiles',
     label: 'Perfiles de permisos',
     icon: (
@@ -141,23 +127,6 @@ const NAV_ITEMS: NavItem[] = [
         <path d="M5 5.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6" strokeWidth="1.6" />
         <path
           d="M8 16l3 3-3 3M16 16l-3 3 3 3"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    to: '/charset-collation-options',
-    label: 'Charsets y collations',
-    icon: (
-      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
-        <path d="M4 19V6.5a2.5 2.5 0 0 1 2.5-2.5H9" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M4 15h5" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M9 19V4" strokeWidth="1.6" strokeLinecap="round" />
-        <path
-          d="M14 10h6M17 10v9M14 19h6"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"

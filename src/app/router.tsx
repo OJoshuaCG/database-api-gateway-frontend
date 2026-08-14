@@ -68,14 +68,9 @@ const CollationConversionWizardPage = lazyPage(
   'CollationConversionWizardPage',
 )
 const SqlConsolePage = lazyPage(() => import('@/features/sql-console'), 'SqlConsolePage')
-const PrivilegesPage = lazyPage(() => import('@/features/privileges'), 'PrivilegesPage')
 const PermissionProfilesPage = lazyPage(
   () => import('@/features/permission-profiles'),
   'PermissionProfilesPage',
-)
-const CharsetCollationOptionsPage = lazyPage(
-  () => import('@/features/charset-collation-options'),
-  'CharsetCollationOptionsPage',
 )
 const AdminPage = lazyPage(() => import('@/features/admin'), 'AdminPage')
 
@@ -119,9 +114,14 @@ export const router = createBrowserRouter([
           // El servidor y la pestaña viajan como query params (`?server=2&tab=history`) para
           // poder enlazar la consola desde el detalle de un servidor.
           { path: 'sql-console', element: <SqlConsolePage /> },
-          { path: 'privileges', element: <PrivilegesPage /> },
+          // Privilegios y Charsets/collations pasaron a ser pestañas de Administración: las
+          // rutas propias quedan como redirect para no romper enlaces existentes.
+          { path: 'privileges', element: <Navigate to="/admin?tab=privileges" replace /> },
           { path: 'permission-profiles', element: <PermissionProfilesPage /> },
-          { path: 'charset-collation-options', element: <CharsetCollationOptionsPage /> },
+          {
+            path: 'charset-collation-options',
+            element: <Navigate to="/admin?tab=charset-collation" replace />,
+          },
           { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
