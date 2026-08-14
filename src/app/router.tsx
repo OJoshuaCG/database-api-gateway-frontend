@@ -62,6 +62,10 @@ const DatabaseCloneWizardPage = lazyPage(
   () => import('@/features/database-clones'),
   'DatabaseCloneWizardPage',
 )
+const CollationConversionWizardPage = lazyPage(
+  () => import('@/features/collation-conversions'),
+  'CollationConversionWizardPage',
+)
 const SqlConsolePage = lazyPage(() => import('@/features/sql-console'), 'SqlConsolePage')
 const PrivilegesPage = lazyPage(() => import('@/features/privileges'), 'PrivilegesPage')
 const PermissionProfilesPage = lazyPage(
@@ -103,6 +107,10 @@ export const router = createBrowserRouter([
           },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
+          // Identidad física (servidor+BD) por query string (`?serverId=&database=`), reentrada
+          // por `?jobId=` — igual mecanismo que `database-clones`. Se llega solo desde la ficha
+          // de la base de datos, sin entrada de sidebar propia.
+          { path: 'collation-conversions', element: <CollationConversionWizardPage /> },
           // El servidor y la pestaña viajan como query params (`?server=2&tab=history`) para
           // poder enlazar la consola desde el detalle de un servidor.
           { path: 'sql-console', element: <SqlConsolePage /> },

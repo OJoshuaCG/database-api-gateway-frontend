@@ -173,6 +173,36 @@ a partir de `backend/docs/features/database-clone.md`.
 | `GET /database-clones/{id}/items` | ✅ | Monitor de pasos ejecutados |
 | `POST /database-clones/{id}/cancel` | ✅ | Cancelación cooperativa |
 
+## Conversión de collation de una base de datos
+
+Módulo de `api-reference-v8.md`: re-alinea el charset/collation de una BD completa —tablas,
+columnas y (en MySQL/MariaDB) los 5 tipos de objeto que el motor congela con la collation de la
+sesión que los creó (PROCEDURE, FUNCTION, TRIGGER, EVENT, VIEW)— con `DROP`+`CREATE` y
+reaplicación de privilegios de rutina. En PostgreSQL es otra operación (columna por columna: el
+`ENCODING`/`LC_COLLATE` de la base es inmutable). El modo (`universal`/`columns`) lo decide el
+motor, nunca el operador. Pantalla nueva, sin tab embebido: se entra desde el botón "Convertir
+collation" de la pestaña "Resumen" de `ServerDatabaseDetailPage`
+(`/servers/:serverId/databases/:database`), sin entrada de sidebar propia — mismo criterio que el
+borrado de una base. Contrato en `lib/contracts/collation-conversions.ts`.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `POST /servers/{id}/databases/{database}/collation-conversions` 🔌 | ✅ | `PlanStep` — objetivo (charset+collation en MySQL/MariaDB, solo collation en PostgreSQL, con el mecanismo de "plan sonda" para poblar el catálogo de collations del servidor, ver nota) |
+| `GET /collation-conversions/{id}` | ✅ | `SummaryStep`/`MonitorStep` — polling cada 2 s hasta estado terminal |
+| `GET /collation-conversions/{id}/objects` 🔌 | ✅ | `InventoryStep` — inventario en vivo por tabla (universal) o por columna (columns), sin polling propio |
+| `POST /collation-conversions/{id}/preview` 🔌 | ✅ | `PreviewStep` — plan resuelto + `confirm_token`, modelado como `useQuery` con `useDeferredValue` (cambiar la selección invalida el token solo, sin lógica manual) |
+| `POST /collation-conversions/{id}/execute` 🔌 | ✅ | `PreviewStep` — `ConfirmDialog` con el nombre exacto de la base; rate limit `3/minute`, el más restrictivo del módulo |
+| `GET /collation-conversions/{id}/items` | ✅ | `MonitorStep` — paginado, con polling mientras el job no sea terminal |
+| `POST /collation-conversions/{id}/cancel` | ✅ | `MonitorStep` — cooperativa, no revierte lo ya aplicado |
+
+> **PostgreSQL — huevo y gallina del catálogo de collations (`[SUPUESTO F1]` del addendum v8).**
+> `available_collations` sale del inventario de un plan ya creado, pero crear un plan ya exige una
+> collation válida. `PlanStep` resuelve esto con la opción que el propio addendum asume del
+> frontend: crea automáticamente un plan **sonda** con `target_collation: "C"` (case-sensitive,
+> existe en prácticamente todo PostgreSQL), lee su inventario para poblar el selector real, y el
+> sonda se abandona solo (expira en 24 h). Es una solución transitoria — falta pedirle al backend
+> un endpoint de catálogo de collations por servidor.
+
 ## Consola SQL
 
 Módulo de `api-reference-v6.md`: ejecutar SQL ad-hoc eligiendo **con qué usuario del motor**
@@ -216,6 +246,12 @@ documento y todavía no se han ejercitado contra una instancia real:
   un MariaDB real ni verificó que los locales sembrados de PostgreSQL existan en el SO del
   servidor destino. El contrato puede tener ajustes menores; el mapeo de `charsetRejected`/
   `charsetDuplicate` está concentrado en `lib/api/errors.ts`.
+- **Conversión de collation** (`/collation-conversions` completo): según el propio addendum
+  v8, el backend está verificado con tests de API y adapters mockeados pero **no e2e contra
+  motores reales** — falta confirmar que una recreación de rutina falle/funcione como se
+  documenta en MySQL/MariaDB real, y que los locales de PostgreSQL sembrados existan en el SO
+  de cada servidor. El mapeo de errores está concentrado en `wizard/messages.ts` de la
+  feature (`classifyConversionError`); el contrato puede tener ajustes menores.
 - **Consola SQL entera** (`query/preview`, `query/execute`, `query/history`): el propio
   contrato v6 (§2.8) avisa de que el backend todavía no se validó contra motores
   MySQL/MariaDB/PostgreSQL reales y de que puede haber ajustes menores. Por eso todo el

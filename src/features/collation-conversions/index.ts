@@ -1,1 +1,1 @@
-// Pendiente: el wizard y la página los añaden los próximos commits a este mismo barrel.
+export { CollationConversionWizardPage } from './pages/CollationConversionWizardPage'
