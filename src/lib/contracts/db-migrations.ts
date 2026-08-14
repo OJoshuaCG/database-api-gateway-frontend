@@ -107,6 +107,13 @@ export const migrationApplyOutSchema = z.object({
   server_id: z.number().int().optional(),
   current_version: z.string().nullable().optional(),
   pending_count: z.number().int().optional(),
+  /**
+   * Captura de resultados de SELECT (api-reference-v9 §3.2): filas escritas por ESTA corrida
+   * (no un acumulado histórico), y si hay algo para leer en §3.5. `select_results_available:
+   * true` NO garantiza `row_count > 0` — un SELECT sin filas también queda "disponible".
+   */
+  captured_select_count: z.number().int().optional().default(0),
+  select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationApplyOut = z.infer<typeof migrationApplyOutSchema>
 
@@ -137,6 +144,9 @@ export const migrationRollbackResultSchema = z.object({
   failed: z.boolean().optional().default(false),
   quarantined: z.boolean().optional().default(false),
   results: z.array(migrationRunItemSchema).optional().default([]),
+  /** Ver `migrationApplyOutSchema` — idénticos en `rollback` (api-reference-v9 §3.3). */
+  captured_select_count: z.number().int().optional().default(0),
+  select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationRollbackResult = z.infer<typeof migrationRollbackResultSchema>
 

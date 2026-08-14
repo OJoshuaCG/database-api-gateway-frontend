@@ -57,6 +57,8 @@ export const queryKeys = {
       ['managed-databases', id, 'migrations', 'history', params] as const,
     reconcilePreview: (id: number, version: string) =>
       ['managed-databases', id, 'migrations', 'reconcile-preview', version] as const,
+    selectResults: (id: number, version: string) =>
+      ['managed-databases', id, 'migrations', version, 'select-results'] as const,
   },
   privileges: {
     all: ['privileges'] as const,

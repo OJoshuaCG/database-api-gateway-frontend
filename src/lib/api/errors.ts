@@ -138,6 +138,18 @@ export class ApiError extends Error {
    */
   readonly suggestedItemIds?: number[]
   /**
+   * Versiones con captura de resultados de SELECT SIN REVISAR que bloquean
+   * `apply`/`apply-all`/`rollback`/`stamp` (`public_context.unreviewed_capture`,
+   * api-reference-v9 §3.0). Alcance acotado a la llamada (§2.2), no todo el blueprint.
+   */
+  readonly unreviewedCapture?: string[]
+  /**
+   * Versiones con `capture_selects` activo en el camino de esta corrida que exigen
+   * `allow_result_capture=true` (`public_context.capture_versions`, api-reference-v9 §3.0).
+   * Puede ser un subconjunto de las pendientes/a revertir.
+   */
+  readonly captureVersions?: string[]
+  /**
    * Motivos de la política de la consola SQL (`public_context.reasons` del 403, v6 §9.2).
    * Idealmente este 403 nunca se ve —el preview ya devolvió `blocked: true`—, pero es la
    * segunda barrera y la ÚNICA que detecta `system_database_write`.
@@ -174,6 +186,8 @@ export class ApiError extends Error {
     unreversibleStatements?: string[]
     missingDependencies?: string[]
     suggestedItemIds?: number[]
+    unreviewedCapture?: string[]
+    captureVersions?: string[]
     reasons?: ApiReason[]
     blockedStatements?: BlockedStatement[]
     charsetRejected?: CharsetRejectedContext
@@ -192,6 +206,8 @@ export class ApiError extends Error {
     this.unreversibleStatements = args.unreversibleStatements
     this.missingDependencies = args.missingDependencies
     this.suggestedItemIds = args.suggestedItemIds
+    this.unreviewedCapture = args.unreviewedCapture
+    this.captureVersions = args.captureVersions
     this.reasons = args.reasons
     this.blockedStatements = args.blockedStatements
     this.charsetRejected = args.charsetRejected
@@ -319,6 +335,33 @@ function extractMissingDependencies(publicContext: unknown): string[] | undefine
     (g): g is string => typeof g === 'string',
   )
   return groups.length > 0 ? groups : undefined
+}
+
+/**
+ * Extrae `public_context.unreviewed_capture` (409 de captura sin revisar en
+ * `apply`/`apply-all`/`rollback`/`stamp`, api-reference-v9 §3.0). A diferencia del resto del
+ * gateway, este `public_context` viaja en TODOS los ambientes, no solo en desarrollo.
+ */
+function extractUnreviewedCapture(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.unreviewed_capture)) {
+    return undefined
+  }
+  const versions = publicContext.unreviewed_capture.filter(
+    (v): v is string => typeof v === 'string',
+  )
+  return versions.length > 0 ? versions : undefined
+}
+
+/**
+ * Extrae `public_context.capture_versions` (409 de falta de `allow_result_capture` en
+ * `apply`/`apply-all`/`rollback`, api-reference-v9 §3.0). Viaja en todos los ambientes.
+ */
+function extractCaptureVersions(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.capture_versions)) {
+    return undefined
+  }
+  const versions = publicContext.capture_versions.filter((v): v is string => typeof v === 'string')
+  return versions.length > 0 ? versions : undefined
 }
 
 /** Extrae `public_context.suggested_item_ids` (mismo 422 §10.6): ids que cierran la selección. */
@@ -461,6 +504,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         unreversibleStatements: extractUnreversibleStatements(d.public_context),
         missingDependencies: extractMissingDependencies(d.public_context),
         suggestedItemIds: extractSuggestedItemIds(d.public_context),
+        unreviewedCapture: extractUnreviewedCapture(d.public_context),
+        captureVersions: extractCaptureVersions(d.public_context),
         reasons: extractReasons(d.public_context),
         blockedStatements: extractBlockedStatements(d.public_context),
         charsetRejected: extractCharsetRejected(d.public_context),

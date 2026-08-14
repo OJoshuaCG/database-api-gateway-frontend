@@ -47,6 +47,11 @@ export const modelMigrationOutSchema = z.object({
   is_baseline: z.boolean().optional(),
   has_non_portable: z.boolean().optional(),
   reviewed: z.boolean().optional(),
+  /**
+   * Captura de resultados de SELECT (api-reference-v9 §1/§7), opt-in por versión. Activarlo
+   * (en la creación o en un PATCH posterior) fuerza `reviewed` a `false` — ver §2.3/§4.1.
+   */
+  capture_selects: z.boolean().optional().default(false),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -69,6 +74,8 @@ export const modelMigrationSummarySchema = z.object({
   is_baseline: z.boolean().optional(),
   has_non_portable: z.boolean().optional(),
   reviewed: z.boolean().optional(),
+  /** Ver `modelMigrationOutSchema.capture_selects` (api-reference-v9 §7). */
+  capture_selects: z.boolean().optional().default(false),
   checksum: z.string(),
   created_at: z.string(),
 })
@@ -89,6 +96,8 @@ export const modelMigrationCreateSchema = z.object({
   up_sql_mysql: z.string().max(SQL_MAX, 'Máximo 256 KB').nullable().optional(),
   up_sql_postgresql: z.string().max(SQL_MAX, 'Máximo 256 KB').nullable().optional(),
   down_sql: z.string().max(SQL_MAX, 'Máximo 256 KB').nullable().optional(),
+  /** Opt-in de captura de SELECT (api-reference-v9 §1/§4.1): nace `reviewed: false`. */
+  capture_selects: z.boolean().optional(),
 })
 export type ModelMigrationCreate = z.infer<typeof modelMigrationCreateSchema>
 
@@ -107,6 +116,12 @@ export const modelMigrationPatchSchema = z.object({
   up_sql_mysql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_postgresql: z.string().max(SQL_MAX).nullable().optional(),
   reviewed: z.boolean().optional(),
+  /**
+   * Activa/desactiva la captura de SELECT para esta versión (api-reference-v9 §3.1). ⚠️ El
+   * reset automático de `reviewed` a `false` PISA lo que se envíe en el mismo PATCH: si además
+   * se manda `reviewed: true` en la misma llamada, gana el reset (§2.3/§3.1).
+   */
+  capture_selects: z.boolean().optional(),
 })
 export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
 

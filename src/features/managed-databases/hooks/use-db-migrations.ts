@@ -16,6 +16,7 @@ import {
   type RollbackOptions,
   type StampOptions,
 } from '../api/db-migrations.api'
+import { getSelectResults, purgeSelectResults } from '../api/select-results.api'
 
 export function useMigrationStatus(dbId: number, enabled: boolean) {
   return useQuery({
@@ -76,9 +77,13 @@ export function useApplyMigrations(dbId: number) {
           description: `Versión actual: ${result.to_version ?? '—'}`,
         })
       } else {
+        const capture =
+          result.select_results_available && result.captured_select_count > 0
+            ? ` · ${result.captured_select_count} fila(s) capturada(s)`
+            : ''
         toast.success(
           'Base de datos actualizada',
-          `${result.applied_count} migración(es): ${result.from_version ?? '—'} → ${result.to_version ?? '—'}`,
+          `${result.applied_count} migración(es): ${result.from_version ?? '—'} → ${result.to_version ?? '—'}${capture}`,
         )
       }
     },
@@ -106,9 +111,13 @@ export function useRollbackMigration(dbId: number) {
           description: `Versión actual: ${result.to_version ?? '—'}`,
         })
       } else {
+        const capture =
+          result.select_results_available && result.captured_select_count > 0
+            ? ` · ${result.captured_select_count} fila(s) capturada(s)`
+            : ''
         toast.success(
           'Rollback ejecutado',
-          `Revertida(s) ${result.reverted_count}: ${result.from_version ?? '—'} → ${result.to_version ?? '—'}`,
+          `Revertida(s) ${result.reverted_count}: ${result.from_version ?? '—'} → ${result.to_version ?? '—'}${capture}`,
         )
       }
     },
@@ -206,5 +215,38 @@ export function useReconcilePartial(dbId: number) {
       }
     },
     onError: (error) => toast.error('No se pudo reconciliar', toApiError(error).message),
+  })
+}
+
+/**
+ * Lectura de la captura de resultados de SELECT (api-reference-v9 §3.5, nuevo). Sin `retry`:
+ * el endpoint tiene rate limit propio (20/min) y `items: []` con `200` ya es una respuesta
+ * válida (nunca capturado o expirado/purgado, §4.6) — no hay nada que reintentar por 4xx/404.
+ */
+export function useSelectResults(dbId: number, version: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.managedDatabases.selectResults(dbId, version),
+    queryFn: ({ signal }) => getSelectResults(dbId, version, signal),
+    enabled: enabled && version.length > 0,
+    retry: false,
+  })
+}
+
+/**
+ * Purga a demanda las filas capturadas (api-reference-v9 §3.6, nuevo). Idempotente e
+ * irreversible; la confirmación de dos pasos la exige la UI (`ConfirmDialog`), no el backend.
+ */
+export function usePurgeSelectResults(dbId: number, version: string) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: () => purgeSelectResults(dbId, version),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.managedDatabases.selectResults(dbId, version),
+      })
+      toast.success('Resultados capturados eliminados')
+    },
+    onError: (error) => toast.error('No se pudieron purgar los resultados', toApiError(error).message),
   })
 }
