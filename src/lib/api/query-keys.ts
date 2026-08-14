@@ -102,4 +102,12 @@ export const queryKeys = {
       ['database-clones', id, 'preview', selection] as const,
     items: (id: number, params: QueryParams) => ['database-clones', id, 'items', params] as const,
   },
+  collationConversions: {
+    all: ['collation-conversions'] as const,
+    detail: (id: number) => ['collation-conversions', 'detail', id] as const,
+    objects: (id: number) => ['collation-conversions', id, 'objects'] as const,
+    preview: (id: number, body: unknown) => ['collation-conversions', id, 'preview', body] as const,
+    items: (id: number, params: QueryParams) =>
+      ['collation-conversions', id, 'items', params] as const,
+  },
 } as const

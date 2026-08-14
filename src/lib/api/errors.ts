@@ -95,6 +95,16 @@ export interface CharsetDuplicateContext {
   enabled: boolean
 }
 
+/**
+ * Contexto del 422 "la collation pedida no existe en este servidor PostgreSQL…" al crear el plan
+ * de conversión de collation (`public_context` de `POST .../collation-conversions`). Trae SOLO el
+ * conteo de alternativas disponibles; la lista en sí sale de `available_collations` del inventario
+ * del plan (`GET .../objects`), no de este error.
+ */
+export interface PostgresCollationRejectedContext {
+  availableCount: number
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -145,6 +155,11 @@ export class ApiError extends Error {
    * charset/collation (`POST /charset-collation-options`).
    */
   readonly charsetDuplicate?: CharsetDuplicateContext
+  /**
+   * 422 "la collation pedida no existe en este servidor PostgreSQL…" al crear el plan de
+   * conversión de collation (`POST .../collation-conversions`).
+   */
+  readonly postgresCollationRejected?: PostgresCollationRejectedContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -163,6 +178,7 @@ export class ApiError extends Error {
     blockedStatements?: BlockedStatement[]
     charsetRejected?: CharsetRejectedContext
     charsetDuplicate?: CharsetDuplicateContext
+    postgresCollationRejected?: PostgresCollationRejectedContext
     requestId?: string
   }) {
     super(args.message)
@@ -180,6 +196,7 @@ export class ApiError extends Error {
     this.blockedStatements = args.blockedStatements
     this.charsetRejected = args.charsetRejected
     this.charsetDuplicate = args.charsetDuplicate
+    this.postgresCollationRejected = args.postgresCollationRejected
     this.requestId = args.requestId
   }
 
@@ -406,6 +423,20 @@ function extractCharsetDuplicate(publicContext: unknown): CharsetDuplicateContex
   }
 }
 
+/**
+ * Extrae `public_context.available_count` (422 "la collation pedida no existe…" al crear el plan
+ * de conversión de collation en PostgreSQL). Solo el conteo; la lista sale de `available_collations`.
+ */
+function extractPostgresCollationRejected(
+  publicContext: unknown,
+): PostgresCollationRejectedContext | undefined {
+  if (!isRecord(publicContext) || typeof publicContext.available_count !== 'number') {
+    return undefined
+  }
+  if (!Number.isFinite(publicContext.available_count)) return undefined
+  return { availableCount: publicContext.available_count }
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -434,6 +465,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         blockedStatements: extractBlockedStatements(d.public_context),
         charsetRejected: extractCharsetRejected(d.public_context),
         charsetDuplicate: extractCharsetDuplicate(d.public_context),
+        postgresCollationRejected: extractPostgresCollationRejected(d.public_context),
         requestId,
       })
     }
