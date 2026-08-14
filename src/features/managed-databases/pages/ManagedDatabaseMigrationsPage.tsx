@@ -25,6 +25,7 @@ import {
   MIGRATION_VERSION_PATTERN,
   PAGINATION,
   type MigrationApplyResult,
+  type MigrationRollbackResult,
   type ModelMigrationSummary,
   type OnFailureMode,
   type PartialApplicationEntry,
@@ -74,11 +75,22 @@ export function ManagedDatabaseMigrationsPage() {
   const [force, setForce] = useState(false)
   // `on_failure` (§9): compartido por "actualizar" e "ir a una versión" (solo MySQL/MariaDB).
   const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
+  // Consentimiento de captura de SELECT (api-reference-v9 §2/§3.2/§3.3): compartido por
+  // apply/rollback en esta página — es una única "corrida" desde el punto de vista del operador.
+  const [allowResultCapture, setAllowResultCapture] = useState(false)
   const [preview, setPreview] = useState<MigrationApplyResult | null>(null)
   // Resultado del último apply REAL (no dry-run): tabla de `results[]` + reconciliación.
   const [lastRun, setLastRun] = useState<MigrationApplyResult | null>(null)
+  const [lastRollback, setLastRollback] = useState<MigrationRollbackResult | null>(null)
   // Mensaje del 409 del gate R1 (baseline de snapshot sin revisar) para el CTA al blueprint.
   const [baselineGateMsg, setBaselineGateMsg] = useState<string | null>(null)
+  // 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0), compartido por
+  // apply y rollback: `public_context.unreviewed_capture` / `capture_versions`.
+  const [captureGate, setCaptureGate] = useState<{
+    kind: 'unreviewed' | 'consent'
+    versions: string[]
+    message: string
+  } | null>(null)
   const [confirmVersion, setConfirmVersion] = useState('')
   const [rollbackTarget, setRollbackTarget] = useState('')
   // Versiones sin `down_sql` confirmado devueltas por el 409 (`public_context.missing_down_sql`).
@@ -86,6 +98,9 @@ export function ManagedDatabaseMigrationsPage() {
   const [stampVersion, setStampVersion] = useState('')
   const [stampForce, setStampForce] = useState(false)
   const [stampOpen, setStampOpen] = useState(false)
+  // 409 de captura sin revisar al stampear (api-reference-v9 §3.4): `force` NO habilita la
+  // captura, solo permite marcar el puntero de versión igual.
+  const [stampUnreviewedCapture, setStampUnreviewedCapture] = useState<string[] | null>(null)
   // Tras un 429 (rate limit 10/min) bloqueamos el botón de stamp unos segundos (Item 9).
   const [stampCooldown, setStampCooldown] = useState(false)
   // Última entrada parcial vista para el `?reconcile=` actual: al ejecutar la reconciliación el
@@ -134,6 +149,10 @@ export function ManagedDatabaseMigrationsPage() {
   const versionItems = versions.data?.items ?? []
   const selectedStampVersion = versionItems.find((m) => m.version === stampVersion) ?? null
   const stampValid = MIGRATION_VERSION_PATTERN.test(stampVersion.trim())
+  // Captura de SELECT (api-reference-v9 §6): se muestra el checkbox de consentimiento de forma
+  // PROACTIVA si el blueprint tiene alguna versión aprobada con `capture_selects` — sin esperar
+  // al 409 (no distinguimos aquí el camino exacto de apply vs. rollback, alcance del backend).
+  const hasCaptureCandidates = versionItems.some((m) => m.capture_selects && m.reviewed)
 
   // Ajuste de estado en render (no en efecto): memoriza la entrada mientras siga en el estado.
   const matchedEntry = reconcileVersion
@@ -161,6 +180,7 @@ export function ManagedDatabaseMigrationsPage() {
   const openStamp = () => {
     setStampVersion('')
     setStampForce(false)
+    setStampUnreviewedCapture(null)
     setStampOpen(true)
   }
 
@@ -172,15 +192,24 @@ export function ManagedDatabaseMigrationsPage() {
           setStampOpen(false)
           setStampVersion('')
           setStampForce(false)
+          setStampUnreviewedCapture(null)
           // Un stamp saca a la BD de cuarentena (error→active); lo reflejamos en la UI.
           if (database.status === 'error') setRecovered(true)
         },
         onError: (err) => {
+          const apiError = toApiError(err)
           // 429: superó el límite de 10/min. Bloqueamos el botón unos segundos (el hook ya avisa).
-          if (toApiError(err).status === 429) {
+          if (apiError.status === 429) {
             setStampCooldown(true)
             window.setTimeout(() => setStampCooldown(false), 15_000)
           }
+          // 409 de captura sin revisar (api-reference-v9 §3.4): `force=true` NO habilita la
+          // captura, solo permite marcar el puntero de versión igual (defensa en profundidad).
+          setStampUnreviewedCapture(
+            apiError.status === 409 && apiError.unreviewedCapture
+              ? apiError.unreviewedCapture
+              : null,
+          )
         },
       },
     )
@@ -196,6 +225,21 @@ export function ManagedDatabaseMigrationsPage() {
       : null
   }
 
+  /** 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0). */
+  const readCaptureGate409 = (
+    err: unknown,
+  ): { kind: 'unreviewed' | 'consent'; versions: string[]; message: string } | null => {
+    const apiError = toApiError(err)
+    if (apiError.status !== 409) return null
+    if (apiError.unreviewedCapture) {
+      return { kind: 'unreviewed', versions: apiError.unreviewedCapture, message: apiError.message }
+    }
+    if (apiError.captureVersions) {
+      return { kind: 'consent', versions: apiError.captureVersions, message: apiError.message }
+    }
+    return null
+  }
+
   const runApply = (options: { version?: string; dryRun: boolean; force?: boolean }) => {
     apply.mutate(
       {
@@ -203,6 +247,7 @@ export function ManagedDatabaseMigrationsPage() {
         force: options.force ?? force,
         dryRun: options.dryRun,
         onFailure,
+        allowResultCapture,
       },
       {
         onSuccess: (result) => {
@@ -212,9 +257,13 @@ export function ManagedDatabaseMigrationsPage() {
           } else {
             setPreview(null)
             setLastRun(result)
+            setCaptureGate(null)
           }
         },
-        onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
+        onError: (err) => {
+          setBaselineGateMsg(isBaselineGate409(err))
+          setCaptureGate(readCaptureGate409(err))
+        },
       },
     )
   }
@@ -306,15 +355,19 @@ export function ManagedDatabaseMigrationsPage() {
                       isLoading={apply.isPending}
                       onClick={() =>
                         apply.mutate(
-                          { force: true, dryRun: false, onFailure },
+                          { force: true, dryRun: false, onFailure, allowResultCapture },
                           {
                             onSuccess: (result) => {
                               setPreview(null)
                               setLastRun(result)
+                              setCaptureGate(null)
                               // Si el apply forzado no falló, la BD sale de cuarentena (error→active).
                               if (!result.failed && !result.quarantined) setRecovered(true)
                             },
-                            onError: (err) => setBaselineGateMsg(isBaselineGate409(err)),
+                            onError: (err) => {
+                              setBaselineGateMsg(isBaselineGate409(err))
+                              setCaptureGate(readCaptureGate409(err))
+                            },
                           },
                         )
                       }
@@ -441,6 +494,20 @@ export function ManagedDatabaseMigrationsPage() {
 
               {!isArchived && (
                 <>
+                  {/* Consentimiento de captura de SELECT (api-reference-v9 §2/§6): proactivo, no
+                      reactivo al 409 — se ofrece si el blueprint tiene versiones aprobadas con
+                      `capture_selects`. Compartido por apply y rollback en esta página. */}
+                  {hasCaptureCandidates && (
+                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+                      <Switch
+                        checked={allowResultCapture}
+                        onCheckedChange={setAllowResultCapture}
+                        label="Permitir captura de resultados (allow_result_capture)"
+                        hint="Hay versiones aprobadas con captura de SELECT activada: aplicar o revertir sin este consentimiento guarda cifradas en el gateway filas de la BD destino; sin él, el backend responde 409."
+                      />
+                    </div>
+                  )}
+
                   <div className="grid items-start gap-6 lg:grid-cols-2">
                     {/* Opciones del apply — el disparador vive en la cabecera (Plan 09 §7-bis) */}
                     <Card className="border-primary/30">
@@ -537,6 +604,43 @@ export function ManagedDatabaseMigrationsPage() {
                     </div>
                   )}
 
+                  {/* 409 de captura de SELECT (api-reference-v9 §3.0): distinguimos "sin revisar"
+                      (hay que aprobar en el blueprint) de "falta consentimiento" (activar el
+                      switch de arriba y reintentar) — son causas y acciones distintas. */}
+                  {captureGate && (
+                    <div
+                      className={
+                        captureGate.kind === 'unreviewed'
+                          ? 'flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs'
+                          : 'flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-4 text-xs'
+                      }
+                    >
+                      <p className="text-foreground">{captureGate.message}</p>
+                      <p className="text-muted-foreground">
+                        Versión(es) involucrada(s):{' '}
+                        <strong>{captureGate.versions.join(', ')}</strong>
+                      </p>
+                      {captureGate.kind === 'unreviewed' ? (
+                        (database.model_id ?? status.data?.model_id) != null && (
+                          <Link
+                            to={`/database-models/${database.model_id ?? status.data?.model_id}/migrations`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            Ir al blueprint a revisar y aprobar →
+                          </Link>
+                        )
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="self-start"
+                          onClick={() => setAllowResultCapture(true)}
+                        >
+                          Activar «Permitir captura de resultados» arriba
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Resultado del último apply real: results[] + reconciliación (§9) */}
                   {lastRun && (
                     <Card>
@@ -610,6 +714,25 @@ export function ManagedDatabaseMigrationsPage() {
                           <p className="text-xs text-muted-foreground">
                             Sin resultados por migración.
                           </p>
+                        )}
+
+                        {/* Captura de SELECT (api-reference-v9 §3.2): tras un 200 con
+                            `select_results_available: true`, se ofrece el link directo a la
+                            pantalla de lectura (§6). `true` NO garantiza `row_count > 0`. */}
+                        {lastRun.select_results_available && lastRun.to_version && (
+                          <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs">
+                            <span className="text-foreground">
+                              {lastRun.captured_select_count > 0
+                                ? `Se capturaron ${lastRun.captured_select_count} fila(s) de SELECT.`
+                                : 'Hay una captura de SELECT disponible (sin filas).'}
+                            </span>
+                            <Link
+                              to={`/managed-databases/${databaseId}/migrations/${lastRun.to_version}/select-results`}
+                              className="shrink-0 font-medium text-primary hover:underline"
+                            >
+                              Ver resultados capturados →
+                            </Link>
+                          </div>
                         )}
 
                         {lastRun.reconciliation?.fully_reconciled && (
@@ -738,6 +861,21 @@ export function ManagedDatabaseMigrationsPage() {
                           )}
                         </div>
                       )}
+                      {lastRollback?.select_results_available && lastRollback.to_version && (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs">
+                          <span className="text-foreground">
+                            {lastRollback.captured_select_count > 0
+                              ? `Se capturaron ${lastRollback.captured_select_count} fila(s) de SELECT (down_sql).`
+                              : 'Hay una captura de SELECT disponible (sin filas).'}
+                          </span>
+                          <Link
+                            to={`/managed-databases/${databaseId}/migrations/${lastRollback.to_version}/select-results`}
+                            className="shrink-0 font-medium text-primary hover:underline"
+                          >
+                            Ver resultados capturados →
+                          </Link>
+                        </div>
+                      )}
                       <div className="flex justify-end">
                         <Button
                           variant="danger"
@@ -749,12 +887,15 @@ export function ManagedDatabaseMigrationsPage() {
                               {
                                 confirmVersion,
                                 targetVersion: rollbackTarget.trim() || undefined,
+                                allowResultCapture,
                               },
                               {
-                                onSuccess: () => {
+                                onSuccess: (result) => {
                                   setConfirmVersion('')
                                   setRollbackTarget('')
                                   setMissingDownSql(null)
+                                  setCaptureGate(null)
+                                  setLastRollback(result)
                                 },
                                 onError: (err) => {
                                   const apiError = toApiError(err)
@@ -763,6 +904,7 @@ export function ManagedDatabaseMigrationsPage() {
                                       ? apiError.missingDownSql
                                       : null,
                                   )
+                                  setCaptureGate(readCaptureGate409(err))
                                 },
                               },
                             )
@@ -832,6 +974,27 @@ export function ManagedDatabaseMigrationsPage() {
             El stamp <strong>no ejecuta SQL</strong>: solo marca la versión en el motor. Úsalo solo
             si el esquema de la BD ya coincide con esa versión.
           </p>
+          {stampUnreviewedCapture && stampUnreviewedCapture.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-2 text-xs">
+              <p className="text-foreground">
+                La versión <strong>{stampUnreviewedCapture.join(', ')}</strong> tiene captura de
+                resultados sin revisar (api-reference-v9 §3.4). Revisa el SQL y apruébalo (
+                <code>PATCH reviewed=true</code>) en el blueprint, o activa «Forzar» abajo —{' '}
+                <strong>
+                  forzar solo marca el puntero de versión, NO habilita la captura real
+                </strong>
+                .
+              </p>
+              {database.model_id && (
+                <Link
+                  to={`/database-models/${database.model_id}/migrations`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Ir al blueprint a revisar y aprobar →
+                </Link>
+              )}
+            </div>
+          )}
           <Switch
             checked={stampForce}
             onCheckedChange={setStampForce}

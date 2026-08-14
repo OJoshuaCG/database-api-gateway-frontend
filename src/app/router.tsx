@@ -54,6 +54,7 @@ const ManagedDatabaseMigrationsPage = lazyPage(
   () => import('@/features/managed-databases'),
   'ManagedDatabaseMigrationsPage',
 )
+const SelectResultsPage = lazyPage(() => import('@/features/managed-databases'), 'SelectResultsPage')
 const SchemaComparisonWizardPage = lazyPage(
   () => import('@/features/schema-comparisons'),
   'SchemaComparisonWizardPage',
@@ -104,6 +105,10 @@ export const router = createBrowserRouter([
           {
             path: 'managed-databases/:databaseId/migrations',
             element: <ManagedDatabaseMigrationsPage />,
+          },
+          {
+            path: 'managed-databases/:databaseId/migrations/:version/select-results',
+            element: <SelectResultsPage />,
           },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },

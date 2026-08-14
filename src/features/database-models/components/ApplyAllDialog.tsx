@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Badge, Button, Input, Modal, Switch } from '@/components/ui'
-import type { ApplyAllResult, OnFailureMode } from '@/lib/contracts'
-import { useApplyAllMigrations } from '../hooks/use-model-migrations'
+import { PAGINATION, type ApplyAllResult, type OnFailureMode } from '@/lib/contracts'
+import { useApplyAllMigrations, useModelMigrations } from '../hooks/use-model-migrations'
 import { OnFailureSelect } from './OnFailureSelect'
 
 interface ApplyAllDialogProps {
@@ -19,7 +19,15 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
   const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
   const [result, setResult] = useState<ApplyAllResult | null>(null)
   const [wasDryRun, setWasDryRun] = useState(false)
+  // Consentimiento de captura de SELECT (api-reference-v9 §2/§3.7): se evalúa por BD, pero se
+  // ofrece proactivamente en el diálogo si el blueprint tiene alguna versión aprobada con
+  // `capture_selects` — no esperamos al 409 (§6/checklist §9).
+  const [allowResultCapture, setAllowResultCapture] = useState(false)
   const applyAll = useApplyAllMigrations(modelId)
+  const migrations = useModelMigrations(modelId, { page: 1, size: PAGINATION.maxSize }, open)
+  const hasCaptureCandidates = (migrations.data?.items ?? []).some(
+    (m) => m.capture_selects && m.reviewed,
+  )
 
   const handleClose = () => {
     setResult(null)
@@ -29,7 +37,7 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
   const run = (dryRun: boolean) => {
     setWasDryRun(dryRun)
     applyAll.mutate(
-      { maxDatabases, force, dryRun, onFailure },
+      { maxDatabases, force, dryRun, onFailure, allowResultCapture },
       { onSuccess: (data) => setResult(data) },
     )
   }
@@ -70,6 +78,17 @@ export function ApplyAllDialog({ modelId, modelName, open, onClose }: ApplyAllDi
         <div className="max-w-sm">
           <OnFailureSelect value={onFailure} onChange={setOnFailure} />
         </div>
+
+        {hasCaptureCandidates && (
+          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+            <Switch
+              checked={allowResultCapture}
+              onCheckedChange={setAllowResultCapture}
+              label="Permitir captura de resultados (allow_result_capture)"
+              hint="Este blueprint tiene versiones aprobadas con captura de SELECT activada: sin este consentimiento, la aplicación va a guardar filas de la BD destino (cifradas) en el gateway y por BD que lo requiera y no lo tenga, el backend responde 409."
+            />
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button variant="outline" isLoading={applyAll.isPending} onClick={() => run(true)}>
