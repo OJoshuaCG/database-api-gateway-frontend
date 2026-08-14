@@ -120,6 +120,7 @@ export function ModelMigrationDetailPanel({
   }
 
   const needsReview = data.reviewed === false
+  const capturesSelects = data.capture_selects === true
   const isTip = latestVersion !== null && data.version === latestVersion
   const deleteHint = isTip
     ? undefined
@@ -138,7 +139,13 @@ export function ModelMigrationDetailPanel({
               {data.has_non_portable && (
                 <Badge tone="warning">🔒 {data.source_engine ?? 'motor específico'}</Badge>
               )}
-              {data.reviewed === false ? (
+              {capturesSelects ? (
+                data.reviewed === false ? (
+                  <Badge tone="warning">⚠️ Captura sin revisar</Badge>
+                ) : (
+                  <Badge tone="info">🔒 Captura aprobada</Badge>
+                )
+              ) : data.reviewed === false ? (
                 <Badge tone="warning">⚠ pendiente de revisión</Badge>
               ) : data.reviewed === true ? (
                 <Badge tone="success">revisado</Badge>
@@ -157,8 +164,9 @@ export function ModelMigrationDetailPanel({
           </div>
           {needsReview && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Este baseline se capturó del motor y nace sin revisar: no se podrá aplicar a ninguna
-              BD (el backend responde <code>409</code>) hasta aprobarlo.
+              {capturesSelects
+                ? 'Esta versión tiene activada la captura de resultados de SELECT y aún no fue revisada: el SQL de arriba guardará filas de la BD destino (cifradas) en el gateway. No se podrá aplicar/revertir/stampear (el backend responde 409) hasta aprobarla.'
+                : 'Este baseline se capturó del motor y nace sin revisar: no se podrá aplicar a ninguna BD (el backend responde 409) hasta aprobarlo.'}
             </p>
           )}
         </CardContent>
@@ -177,6 +185,7 @@ export function ModelMigrationDetailPanel({
               up_sql_mysql: data.up_sql_mysql ?? '',
               up_sql_postgresql: data.up_sql_postgresql ?? '',
               down_sql: data.down_sql ?? data.down_sql_suggested ?? '',
+              capture_selects: data.capture_selects ?? false,
             }}
             isSubmitting={update.isPending}
             submitError={submitError}
@@ -213,6 +222,7 @@ export function ModelMigrationDetailPanel({
                     is_baseline: data.is_baseline,
                     has_non_portable: data.has_non_portable,
                     reviewed: data.reviewed,
+                    capture_selects: data.capture_selects,
                     checksum: data.checksum,
                     created_at: data.created_at,
                   })

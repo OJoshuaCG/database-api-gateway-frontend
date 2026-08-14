@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
 import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
-import { Button, Input } from '@/components/ui'
+import { Badge, Button, Checkbox, Input } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { SqlField } from './SqlField'
 
@@ -17,6 +17,8 @@ export interface ModelMigrationFormValues {
   up_sql_mysql: string
   up_sql_postgresql: string
   down_sql: string
+  /** Opt-in de captura de resultados de SELECT (api-reference-v9 §1/§6). */
+  capture_selects: boolean
 }
 
 const DEFAULTS: ModelMigrationFormValues = {
@@ -26,6 +28,7 @@ const DEFAULTS: ModelMigrationFormValues = {
   up_sql_mysql: '',
   up_sql_postgresql: '',
   down_sql: '',
+  capture_selects: false,
 }
 
 function buildSchema(mode: 'create' | 'edit') {
@@ -48,6 +51,7 @@ function buildSchema(mode: 'create' | 'edit') {
     up_sql_mysql: z.string().max(SQL_MAX, 'Máximo 256 KB'),
     up_sql_postgresql: z.string().max(SQL_MAX, 'Máximo 256 KB'),
     down_sql: z.string().max(SQL_MAX, 'Máximo 256 KB'),
+    capture_selects: z.boolean(),
   })
 }
 
@@ -62,6 +66,7 @@ export function toCreate(values: ModelMigrationFormValues): ModelMigrationCreate
     up_sql_mysql: orNull(values.up_sql_mysql),
     up_sql_postgresql: orNull(values.up_sql_postgresql),
     down_sql: orNull(values.down_sql),
+    capture_selects: values.capture_selects,
   }
 }
 
@@ -120,7 +125,15 @@ export function ModelMigrationForm({
   const currentDownSql = watch('down_sql')
   const currentMysqlOverride = watch('up_sql_mysql')
   const currentPostgresqlOverride = watch('up_sql_postgresql')
+  const currentCaptureSelects = watch('capture_selects')
   const upSqlChanged = mode === 'edit' && currentUpSql !== originalUpSql
+  const originalCaptureSelects = defaultValues?.capture_selects ?? false
+  // Solo se manda `capture_selects` en el PATCH si realmente cambió: reenviar el mismo valor no
+  // debería tener efecto, pero evitamos depender de que el backend lo trate como no-op (§3.1).
+  const captureSelectsChanged = mode === 'edit' && currentCaptureSelects !== originalCaptureSelects
+  // Activarlo por primera vez (o reactivarlo) resetea `reviewed` a `false` en la respuesta
+  // (§2.3/§4.1): avisamos ANTES de guardar, no después de que el operador se sorprenda.
+  const willResetReview = captureSelectsChanged && currentCaptureSelects
 
   // Resolución de overrides al cambiar up_sql: cada override existente debe reenviarse o limpiarse.
   const [mysqlChoice, setMysqlChoice] = useState<OverrideChoice | null>(null)
@@ -153,6 +166,7 @@ export function ModelMigrationForm({
     }
     // El up_sql solo viaja si realmente cambió: así editar solo el nombre no dispara el 409-A.
     if (upSqlChanged) patch.up_sql = values.up_sql
+    if (captureSelectsChanged) patch.capture_selects = values.capture_selects
     // Overrides: si hay que resolverlos, "limpiar" ⇒ null; en el resto de casos, el valor tal cual.
     patch.up_sql_mysql =
       needMysqlResolution && mysqlChoice === 'clear' ? null : orNull(values.up_sql_mysql)
@@ -186,6 +200,28 @@ export function ModelMigrationForm({
           {...register('version')}
         />
         <Input label="Nombre" required error={errors.name?.message} {...register('name')} />
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            label="Capturar resultados de SELECT"
+            hint="Guarda cifradas en el gateway las filas de cada SELECT del up_sql/down_sql (§0). Opt-in por versión: el gateway normalmente NO guarda datos de la base gestionada."
+            {...register('capture_selects')}
+          />
+          {mode === 'edit' && currentCaptureSelects && (
+            <Badge tone="warning" className="ml-auto shrink-0">
+              Sin revisar hasta aprobar
+            </Badge>
+          )}
+        </div>
+        {willResetReview && (
+          <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
+            Al guardar, esta versión quedará <strong>sin revisar</strong> (necesitará un
+            «Revisar y aprobar» aparte): activar la captura por primera vez —o reactivarla—
+            siempre resetea la revisión, aunque se apruebe en el mismo paso.
+          </p>
+        )}
       </div>
 
       {upSqlReadOnly && (

@@ -71,6 +71,13 @@ export function NewModelMigrationPage() {
         <CardContent className="flex flex-col gap-4">
           {created ? (
             <>
+              {created.capture_selects && created.reviewed === false && (
+                <p className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-foreground">
+                  ⚠️ Esta versión activa la <strong>captura de resultados de SELECT</strong> y nace
+                  <strong> sin revisar</strong>: no podrá aplicarse ni revertirse hasta que la
+                  apruebes desde la pantalla de versiones («Revisar y aprobar»).
+                </p>
+              )}
               <MigrationSqlView migration={created} />
               <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
                 {canConfirmSuggested && (
