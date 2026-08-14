@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Card, CardContent, ErrorState, PageHeader, Spinner } from '@/components/ui'
-import { useServer } from '@/features/servers/hooks/use-servers'
+import { Button, Card, CardContent, Combobox, ErrorState, PageHeader, Spinner } from '@/components/ui'
+import { PAGINATION, type ServerOut } from '@/lib/contracts'
+import { useServer, useServers } from '@/features/servers/hooks/use-servers'
+import { useServerDatabases } from '@/features/server-databases/hooks/use-server-databases'
 import { MonitorStep } from '../wizard/steps/MonitorStep'
 import { PlanStep } from '../wizard/steps/PlanStep'
 import { PreviewStep } from '../wizard/steps/PreviewStep'
@@ -29,15 +32,7 @@ export function CollationConversionWizardPage() {
   const serverId = serverIdRaw ? Number(serverIdRaw) : NaN
 
   if (!Number.isFinite(serverId) || serverId <= 0 || !database) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-card border border-error/30 bg-error/5 px-6 py-10 text-center">
-        <p className="text-sm font-semibold text-foreground">Falta identificar la base de datos</p>
-        <p className="max-w-md text-sm text-muted-foreground">
-          Esta pantalla necesita el servidor y el nombre de la base en la URL (`?serverId=&database=`).
-          Volvé a entrar desde la ficha de la base de datos.
-        </p>
-      </div>
-    )
+    return <CollationConversionEntryPicker />
   }
 
   return (
@@ -47,6 +42,72 @@ export function CollationConversionWizardPage() {
       database={database}
       jobIdRaw={jobIdRaw}
     />
+  )
+}
+
+/**
+ * Se muestra cuando se entra a `/collation-conversions` sin `?serverId=&database=` (p. ej. desde
+ * el sidebar, en vez del atajo de `ServerDatabaseDetailPage`). Deja elegir servidor y base acá
+ * mismo, y navega con el mismo formato de URL que ese atajo en vez de duplicar el wizard.
+ */
+function CollationConversionEntryPicker() {
+  const navigate = useNavigate()
+  const [server, setServer] = useState<ServerOut | null>(null)
+  const [database, setDatabase] = useState<string | null>(null)
+
+  const servers = useServers({ page: 1, size: PAGINATION.maxSize })
+  const { rows } = useServerDatabases(server?.id ?? 0, server !== null)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Convertir collation"
+        description="Elegí el servidor y la base de datos a las que querés cambiarles el charset y la collation."
+      />
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          <Combobox<ServerOut>
+            items={servers.data?.items ?? []}
+            itemToKey={(item) => item.id}
+            itemToString={(item) => `${item.name} (${item.host}:${item.port})`}
+            value={server}
+            onChange={(item) => {
+              setServer(item)
+              setDatabase(null)
+            }}
+            label="Servidor"
+            placeholder="Elegí un servidor…"
+            isLoading={servers.isLoading}
+            clearable
+          />
+          <Combobox<string>
+            items={rows.map((row) => row.name)}
+            itemToKey={(name) => name}
+            itemToString={(name) => name}
+            value={database}
+            onChange={setDatabase}
+            label="Base de datos"
+            placeholder={server ? 'Elegí una base de datos…' : 'Elegí primero un servidor'}
+            disabled={server === null}
+            clearable
+          />
+          <div className="flex justify-end">
+            <Button
+              disabled={server === null || database === null}
+              onClick={() =>
+                server &&
+                database &&
+                navigate(
+                  `/collation-conversions?serverId=${server.id}&database=${encodeURIComponent(database)}`,
+                )
+              }
+            >
+              Continuar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

@@ -133,6 +133,22 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: '/collation-conversions',
+    label: 'Convertir collation',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <ellipse cx="12" cy="5.5" rx="7" ry="2.5" strokeWidth="1.6" />
+        <path d="M5 5.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6" strokeWidth="1.6" />
+        <path
+          d="M8 16l3 3-3 3M16 16l-3 3 3 3"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
     to: '/charset-collation-options',
     label: 'Charsets y collations',
     icon: (
