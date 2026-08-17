@@ -150,26 +150,55 @@ export function requestJson<S extends z.ZodTypeAny>(
 
 const DEFAULT_DOWNLOAD_FILENAME = 'export.sql'
 
-/** Extrae `filename="..."` de `Content-Disposition`; cae al nombre por defecto si no viene. */
-function extractFilename(contentDisposition: string | null): string {
-  if (!contentDisposition) return DEFAULT_DOWNLOAD_FILENAME
+/**
+ * Extrae `filename="..."` de `Content-Disposition`; cae a `fallback` si no viene.
+ *
+ * El `fallback` es un parámetro y no una constante fija porque no toda descarga es SQL: guardar un
+ * `.zip` o un `.csv` con extensión `.sql` deja al operador con un archivo que su sistema abre con la
+ * herramienta equivocada. En un despliegue cross-origin esto no es teórico: la cabecera solo llega
+ * si el backend la lista en `Access-Control-Expose-Headers`.
+ */
+function extractFilename(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) return fallback
   const match = /filename="?([^";]+)"?/.exec(contentDisposition)
-  return match?.[1] ?? DEFAULT_DOWNLOAD_FILENAME
+  return match?.[1] ?? fallback
 }
 
 /**
  * GET que devuelve una descarga de archivo cruda (p. ej. `.../export`), no el envelope
  * `ApiResponse` JSON del resto de la API. Los errores (4xx/5xx) sí llegan como JSON estándar
  * y se normalizan igual que en `apiRequest` (vía `runRequest`).
+ *
+ * Devuelve también las `headers` crudas: hay entregas cuyos metadatos viajan SOLO en cabeceras y
+ * no tienen forma de llegar por el cuerpo (`X-Export-Complete` marca un artefacto parcial, y
+ * `X-Export-Sha256` / `ETag` son el checksum con el que el operador verifica lo que bajó).
  */
 export async function fetchBlob(
   path: string,
-  options: RequestOptions = {},
-): Promise<{ blob: Blob; filename: string }> {
-  const response = await runRequest('GET', path, options)
+  options: RequestOptions & { fallbackFilename?: string } = {},
+): Promise<{ blob: Blob; filename: string; headers: Headers }> {
+  const { fallbackFilename, ...requestOptions } = options
+  const response = await runRequest('GET', path, requestOptions)
   const blob = await response.blob()
-  const filename = extractFilename(response.headers.get('Content-Disposition'))
-  return { blob, filename }
+  const filename = extractFilename(
+    response.headers.get('Content-Disposition'),
+    fallbackFilename ?? DEFAULT_DOWNLOAD_FILENAME,
+  )
+  return { blob, filename, headers: response.headers }
+}
+
+/**
+ * GET que devuelve texto plano sin envolver (p. ej. `.../content`, el artefacto de una exportación
+ * listo para el portapapeles). Igual que `fetchBlob`, los errores siguen siendo JSON estándar y se
+ * exponen las cabeceras porque los metadatos de la entrega viajan ahí.
+ */
+export async function fetchText(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ text: string; headers: Headers }> {
+  const response = await runRequest('GET', path, options, { Accept: 'text/plain' })
+  const text = await response.text()
+  return { text, headers: response.headers }
 }
 
 // ── Helpers tipados sobre el envelope `ApiResponse[T]` ──────────────────────
