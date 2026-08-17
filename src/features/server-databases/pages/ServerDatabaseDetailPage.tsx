@@ -159,7 +159,17 @@ export function ServerDatabaseDetailPage() {
       {tab === 'summary' && (
         <Card>
           <CardContent>
-            <div className="mb-4 flex justify-end">
+            <div className="mb-4 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate(
+                    `/database-exports?serverId=${serverId}&database=${encodeURIComponent(row.name)}`,
+                  )
+                }
+              >
+                Exportar 🔌
+              </Button>
               <Button
                 variant="outline"
                 onClick={() =>
