@@ -110,4 +110,18 @@ export const queryKeys = {
     items: (id: number, params: QueryParams) =>
       ['collation-conversions', id, 'items', params] as const,
   },
+  databaseExports: {
+    all: ['database-exports'] as const,
+    /** Capacidades del formulario: dependen del servidor + la base, no de un job todavía inexistente. */
+    capabilities: (serverId: number, database: string) =>
+      ['database-exports', 'capabilities', serverId, database] as const,
+    detail: (id: number) => ['database-exports', 'detail', id] as const,
+    objects: (id: number, params: QueryParams) =>
+      ['database-exports', id, 'objects', params] as const,
+    resolveSelection: (id: number, body: unknown) =>
+      ['database-exports', id, 'resolve-selection', body] as const,
+    preview: (id: number, body: unknown) => ['database-exports', id, 'preview', body] as const,
+    items: (id: number, params: QueryParams) => ['database-exports', id, 'items', params] as const,
+    manifest: (id: number) => ['database-exports', id, 'manifest'] as const,
+  },
 } as const
