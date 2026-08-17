@@ -66,6 +66,10 @@ const CollationConversionWizardPage = lazyPage(
   () => import('@/features/collation-conversions'),
   'CollationConversionWizardPage',
 )
+const DatabaseExportWizardPage = lazyPage(
+  () => import('@/features/database-exports'),
+  'DatabaseExportWizardPage',
+)
 const SqlConsolePage = lazyPage(() => import('@/features/sql-console'), 'SqlConsolePage')
 const PrivilegesPage = lazyPage(() => import('@/features/privileges'), 'PrivilegesPage')
 const PermissionProfilesPage = lazyPage(
@@ -111,6 +115,11 @@ export const router = createBrowserRouter([
           // por `?jobId=` — igual mecanismo que `database-clones`. Se llega solo desde la ficha
           // de la base de datos, sin entrada de sidebar propia.
           { path: 'collation-conversions', element: <CollationConversionWizardPage /> },
+          // Mismo mecanismo: `?serverId=&database=` para identificar la base y `?jobId=` para
+          // reentrar al monitor de un job en curso. Tampoco tiene entrada de sidebar, y por una
+          // razón de fondo: el formulario ENTERO se deriva de las capacidades de una base concreta,
+          // así que una pantalla sin contexto no tendría ni un control que pintar.
+          { path: 'database-exports', element: <DatabaseExportWizardPage /> },
           // El servidor y la pestaña viajan como query params (`?server=2&tab=history`) para
           // poder enlazar la consola desde el detalle de un servidor.
           { path: 'sql-console', element: <SqlConsolePage /> },
