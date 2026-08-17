@@ -105,6 +105,61 @@ export interface PostgresCollationRejectedContext {
   availableCount: number
 }
 
+/** Objeto del catálogo referido por un error de exportación (`{object_type, name}`). */
+export interface ExportErrorObject {
+  objectType: string
+  name: string
+}
+
+/**
+ * Contexto público de un error del módulo de exportación de bases (api-reference-v10 §6). Se
+ * agrupa en un solo campo —y no en once campos sueltos de `ApiError`— porque las claves son
+ * exclusivas de este módulo y varias colisionan de nombre con las de otros (`missing_dependencies`
+ * aquí son objetos `{object_type, name}`, no los `op_group` de schema-comparisons; `reasons` aquí
+ * son motivos del filtro de filas, no los de la política de la consola SQL).
+ *
+ * Todas las claves son opcionales: cada código estable trae solo las suyas.
+ */
+export interface DatabaseExportErrorContext {
+  /** Ruta con puntos del campo culpable (`structure.entity_ddl`, `output.delivery`, …). */
+  field?: string
+  /** Todos los campos culpables cuando la regla de compatibilidad señala más de uno. */
+  fields?: string[]
+  /** Valores admitidos para `field` (la whitelist de `file_encoding`, `["NONE"]`, …). */
+  allowed?: string[]
+  /** Tokens no reconocidos en `output.filename_template`. */
+  unknownTokens?: string[]
+  /** Tablas con datos pedidos cuya estructura quedó fuera (`export.data_without_structure`). */
+  dataWithoutStructure?: string[]
+  /** Dependencias que la selección explícita no cierra (`export.missing_dependencies`). */
+  missingDependencies?: ExportErrorObject[]
+  /** Nombres que el backend sugiere para cerrar la selección (mismo 422). */
+  suggestedNames?: string[]
+  /** Tabla cuyo filtro `where` fue rechazado (`export.invalid_row_filter`). */
+  table?: string
+  /** Motivo estable del rechazo del filtro de filas (vocabulario cerrado, §6.3). */
+  reason?: string
+  /** Motivos adicionales del mismo rechazo, cuando el backend detecta más de uno. */
+  filterReasons?: string[]
+  /** Fragmento peligroso detectado en el filtro de filas. */
+  danger?: string
+  /**
+   * Tope numérico del contexto. Su significado depende del código: longitud máxima del filtro en
+   * `export.invalid_row_filter`, y máximo de exportaciones concurrentes en `export.quota_exceeded`.
+   */
+  limit?: number
+  /** Exportaciones admitidas (en cola + en ejecución) al rechazar por cuota. */
+  running?: number
+  /** Tamaño real del artefacto que no cabe en la entrega en línea (`export.inline_too_large`). */
+  byteSize?: number
+  /** Tope de la entrega en línea, en bytes (mismo 409). */
+  inlineMaxBytes?: number
+  /** Id del plan original cuya `idempotency_key` se reutilizó con otro spec (409). */
+  exportJobId?: number
+  /** Estado del job que impide la operación (`already_executed`, `not_ready`, `not_cancellable`). */
+  jobStatus?: string
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -160,6 +215,14 @@ export class ApiError extends Error {
    * conversión de collation (`POST .../collation-conversions`).
    */
   readonly postgresCollationRejected?: PostgresCollationRejectedContext
+  /**
+   * `public_context.code`: identificador estable del fallo, independiente del texto del mensaje y
+   * visible **también en producción** (a diferencia de `context`, que solo existe en desarrollo).
+   * Es la única forma fiable de clasificar un error para decidir el CTA de recuperación.
+   */
+  readonly code?: string
+  /** Contexto del módulo de exportación de bases (api-reference-v10 §6). */
+  readonly exportContext?: DatabaseExportErrorContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -179,6 +242,8 @@ export class ApiError extends Error {
     charsetRejected?: CharsetRejectedContext
     charsetDuplicate?: CharsetDuplicateContext
     postgresCollationRejected?: PostgresCollationRejectedContext
+    code?: string
+    exportContext?: DatabaseExportErrorContext
     requestId?: string
   }) {
     super(args.message)
@@ -197,6 +262,8 @@ export class ApiError extends Error {
     this.charsetRejected = args.charsetRejected
     this.charsetDuplicate = args.charsetDuplicate
     this.postgresCollationRejected = args.postgresCollationRejected
+    this.code = args.code
+    this.exportContext = args.exportContext
     this.requestId = args.requestId
   }
 
@@ -437,6 +504,84 @@ function extractPostgresCollationRejected(
   return { availableCount: publicContext.available_count }
 }
 
+/** Extrae `public_context.code`: el identificador estable del fallo, presente en producción. */
+function extractCode(publicContext: unknown): string | undefined {
+  if (!isRecord(publicContext) || typeof publicContext.code !== 'string') return undefined
+  return publicContext.code.trim().length > 0 ? publicContext.code : undefined
+}
+
+/** Filtra un array desconocido dejando solo sus cadenas; `undefined` si no queda ninguna. */
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const items = value.filter((item): item is string => typeof item === 'string')
+  return items.length > 0 ? items : undefined
+}
+
+/** Lee una clave numérica finita de un `public_context`. */
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** Lee una clave de texto no vacía de un `public_context`. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
+
+/**
+ * Extrae la lista `[{object_type, name}]` de dependencias sin cerrar del módulo de exportación.
+ * Deliberadamente distinta de `extractMissingDependencies` (schema-comparisons), donde la misma
+ * clave transporta `op_group`s en texto plano.
+ */
+function extractExportObjects(value: unknown): ExportErrorObject[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const objects: ExportErrorObject[] = []
+  for (const entry of value) {
+    if (
+      isRecord(entry) &&
+      typeof entry.object_type === 'string' &&
+      typeof entry.name === 'string'
+    ) {
+      objects.push({ objectType: entry.object_type, name: entry.name })
+    }
+  }
+  return objects.length > 0 ? objects : undefined
+}
+
+/**
+ * Extrae el `public_context` de un error del módulo de exportación (api-reference-v10 §6). Solo se
+ * construye cuando el `code` pertenece al módulo: así un `field`/`limit` de cualquier otro endpoint
+ * no acaba disfrazado de contexto de exportación.
+ */
+function extractDatabaseExportContext(
+  code: string | undefined,
+  publicContext: unknown,
+): DatabaseExportErrorContext | undefined {
+  if (!code?.startsWith('export.') || !isRecord(publicContext)) return undefined
+
+  const context: DatabaseExportErrorContext = {
+    field: nonEmptyString(publicContext.field),
+    fields: stringList(publicContext.fields),
+    allowed: stringList(publicContext.allowed),
+    unknownTokens: stringList(publicContext.unknown_tokens),
+    dataWithoutStructure: stringList(publicContext.data_without_structure),
+    missingDependencies: extractExportObjects(publicContext.missing_dependencies),
+    suggestedNames: stringList(publicContext.suggested_names),
+    table: nonEmptyString(publicContext.table),
+    reason: nonEmptyString(publicContext.reason),
+    filterReasons: stringList(publicContext.reasons),
+    danger: nonEmptyString(publicContext.danger),
+    limit: finiteNumber(publicContext.limit),
+    running: finiteNumber(publicContext.running),
+    byteSize: finiteNumber(publicContext.byte_size),
+    inlineMaxBytes: finiteNumber(publicContext.inline_max_bytes),
+    exportJobId: finiteNumber(publicContext.export_job_id),
+    jobStatus: nonEmptyString(publicContext.status),
+  }
+
+  // Un contexto sin ninguna clave útil no aporta nada sobre el `code`, que ya viaja aparte.
+  return Object.values(context).some((value) => value !== undefined) ? context : undefined
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -450,6 +595,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
       const d = detail as DetailObject
       const message = typeof d.msg === 'string' && d.msg.trim().length > 0 ? d.msg : fallback
       const type = typeof d.type === 'string' ? d.type : undefined
+      const code = extractCode(d.public_context)
       return new ApiError({
         status,
         message,
@@ -466,6 +612,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         charsetRejected: extractCharsetRejected(d.public_context),
         charsetDuplicate: extractCharsetDuplicate(d.public_context),
         postgresCollationRejected: extractPostgresCollationRejected(d.public_context),
+        code,
+        exportContext: extractDatabaseExportContext(code, d.public_context),
         requestId,
       })
     }
