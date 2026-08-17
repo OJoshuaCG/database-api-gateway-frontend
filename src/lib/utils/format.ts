@@ -15,6 +15,28 @@ export function formatInteger(value: number): string {
   return new Intl.NumberFormat('es').format(value)
 }
 
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+
+/**
+ * Tamaño legible: `512 B`, `1,2 MB`, `2,3 GB`. Se usa en cifras que el admin compara contra un
+ * tope antes de decidir (el tamaño estimado de una exportación frente al máximo de la entrega en
+ * línea), así que la unidad importa tanto como el número: `1048576` a secas no se compara con nada.
+ *
+ * Base 1024 —la que reportan los motores y el sistema de archivos— con las etiquetas cortas.
+ */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '—'
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  // Los bytes sueltos nunca llevan decimales; a partir de KB, uno solo basta para comparar.
+  const digits = unit === 0 ? 0 : 1
+  return `${new Intl.NumberFormat('es', { maximumFractionDigits: digits }).format(value)} ${BYTE_UNITS[unit]}`
+}
+
 /** Duración legible: `842 ms`, `4.2 s`, `1 m 12 s`. */
 export function formatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—'
