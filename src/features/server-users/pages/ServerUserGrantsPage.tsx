@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useDebouncedValue } from '@/lib/utils/use-debounced-value'
 import {
   Badge,
   EmptyState,
@@ -139,16 +140,6 @@ function ServerUserGrantsContent({ user }: { user: ServerUserOut }) {
       {tab === 'profile' && <ApplyProfilePanel user={user} engine={engine} />}
     </div>
   )
-}
-
-/** Devuelve `value` retrasado `delayMs` para no consultar el motor 🔌 en cada pulsación. */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs)
-    return () => clearTimeout(id)
-  }, [value, delayMs])
-  return debounced
 }
 
 /** Permisos efectivos del usuario según la introspección del motor 🔌. */
