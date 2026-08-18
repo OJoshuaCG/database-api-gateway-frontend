@@ -221,6 +221,12 @@ function countStates(states: ReconcileState[]) {
   )
 }
 
+/**
+ * Variante "sub-pestaña" del patrón compartido (`components/ui/TabButton`): padding más chico y
+ * anidada bajo la pestaña principal de reconciliación, por lo que necesita marcar un nivel
+ * jerárquico distinto al del `TabButton` de nivel superior. Es una diferencia deliberada, no
+ * drift accidental — no fusionar sin resolver primero esa jerarquía visual.
+ */
 function SubTabButton({
   active,
   onClick,

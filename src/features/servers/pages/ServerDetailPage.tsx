@@ -9,6 +9,7 @@ import {
   ErrorState,
   FullPageSpinner,
   PageHeader,
+  TabButton,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { useServer } from '../hooks/use-servers'
@@ -177,32 +178,6 @@ export function ServerDetailPage() {
         isLoading={deleteServer.isPending}
       />
     </div>
-  )
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={
-        active
-          ? 'border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary'
-          : 'border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground'
-      }
-    >
-      {children}
-    </button>
   )
 }
 

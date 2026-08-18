@@ -110,22 +110,22 @@ export function SqlConsolePage() {
             />
           </div>
           <div className="flex gap-1" role="tablist" aria-label="Secciones de la consola">
-            <TabButton
+            <SegmentedTabButton
               active={tab === 'console'}
               disabled={isMutating}
               onClick={() => setParam('tab', 'console')}
             >
               <CodeIcon className="h-4 w-4" />
               Consola
-            </TabButton>
-            <TabButton
+            </SegmentedTabButton>
+            <SegmentedTabButton
               active={tab === 'history'}
               disabled={isMutating}
               onClick={() => setParam('tab', 'history')}
             >
               <HistoryIcon className="h-4 w-4" />
               Historial
-            </TabButton>
+            </SegmentedTabButton>
           </div>
         </CardContent>
       </Card>
@@ -154,7 +154,13 @@ export function SqlConsolePage() {
   )
 }
 
-function TabButton({
+/**
+ * Variante intencional del patrón de pestaña compartido (`components/ui/TabButton`): estilo
+ * "segmented control" (fondo `bg-primary/10` en la activa, sin subrayado) y con `disabled`
+ * propio mientras la consola está mutando. No es una copia accidental — no fusionar con
+ * `TabButton` a menos que también se unifique el estilo visual.
+ */
+function SegmentedTabButton({
   active,
   onClick,
   disabled,
