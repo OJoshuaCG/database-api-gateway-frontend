@@ -80,7 +80,7 @@ export function PrivilegesPage() {
             checked={row.original.is_active}
             disabled={toggle.isPending}
             onCheckedChange={(checked) => toggle.mutate({ id: row.original.id, isActive: checked })}
-            label=""
+            ariaLabel={`Marcar «${row.original.name}» como controlado`}
           />
         ),
       },

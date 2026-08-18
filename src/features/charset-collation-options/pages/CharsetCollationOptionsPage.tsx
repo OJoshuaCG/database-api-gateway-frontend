@@ -128,7 +128,7 @@ export function CharsetCollationOptionsPage() {
             checked={row.original.enabled}
             disabled={update.isPending}
             onCheckedChange={(checked) => handleToggleEnabled(row.original, checked)}
-            label=""
+            ariaLabel={`Habilitar «${formatOptionLabel(row.original)}» para creación de bases de datos`}
           />
         ),
       },
@@ -153,9 +153,7 @@ export function CharsetCollationOptionsPage() {
               variant="ghost"
               size="sm"
               disabled={update.isPending}
-              onClick={() =>
-                update.mutate({ id: row.original.id, body: { is_default: true } })
-              }
+              onClick={() => update.mutate({ id: row.original.id, body: { is_default: true } })}
             >
               Marcar sugerida
             </Button>
@@ -181,10 +179,7 @@ export function CharsetCollationOptionsPage() {
           {groups.length > 0 && (
             <div className="flex flex-col gap-2">
               {groups.map((group) => (
-                <div
-                  key={group.engineFamily}
-                  className="flex flex-wrap items-center gap-2 text-xs"
-                >
+                <div key={group.engineFamily} className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge tone="info">{FAMILY_LABELS[group.engineFamily]}</Badge>
                   {!group.hasDefault && (
                     <span className="text-muted-foreground">

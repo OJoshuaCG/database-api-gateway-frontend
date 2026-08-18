@@ -8,10 +8,24 @@ export interface SwitchProps {
   hint?: string
   disabled?: boolean
   id?: string
+  /**
+   * Nombre accesible del botón cuando no hay `label` visible (ej. una columna de tabla que ya
+   * identifica la fila con texto). Si se omite y tampoco hay `label`, el switch queda sin nombre
+   * accesible para lectores de pantalla.
+   */
+  ariaLabel?: string
 }
 
 /** Interruptor accesible (role="switch") para flags booleanos como `provision`. */
-export function Switch({ checked, onCheckedChange, label, hint, disabled, id }: SwitchProps) {
+export function Switch({
+  checked,
+  onCheckedChange,
+  label,
+  hint,
+  disabled,
+  id,
+  ariaLabel,
+}: SwitchProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
   const hintId = `${fieldId}-hint`
@@ -23,6 +37,7 @@ export function Switch({ checked, onCheckedChange, label, hint, disabled, id }: 
         role="switch"
         id={fieldId}
         aria-checked={checked}
+        aria-label={label ? undefined : ariaLabel}
         aria-describedby={hint ? hintId : undefined}
         disabled={disabled}
         onClick={() => onCheckedChange(!checked)}
