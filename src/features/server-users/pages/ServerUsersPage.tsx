@@ -12,7 +12,6 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
-  ShortcutBadge,
   TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
@@ -109,9 +108,6 @@ export function ServerUsersPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
-            {/* "Permisos efectivos" y "Ver BDs" duplican pestañas de la ficha unificada del
-                usuario: se conservan como atajo, pero marcados como tal. */}
-            <ShortcutBadge title="Atajo — también disponible en la ficha completa del usuario." />
             <Button
               variant="ghost"
               size="sm"

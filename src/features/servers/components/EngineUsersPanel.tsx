@@ -9,7 +9,6 @@ import {
   ErrorState,
   IconButton,
   RefreshIcon,
-  ShortcutBadge,
   Spinner,
   TrashIcon,
 } from '@/components/ui'
@@ -134,18 +133,11 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
         Permisos efectivos
       </Button>
     )
-    // Revelar/Rotar contraseña/Eliminar duplican acciones de la ficha unificada del usuario: se
-    // conservan como atajo para operarios avanzados, marcadas con `ShortcutBadge`. "Permisos
-    // efectivos" no es un atajo: es la puerta a esa misma ficha, no un duplicado.
-    const shortcutBadge = (
-      <ShortcutBadge title="Atajo — también disponible en la ficha completa del usuario." />
-    )
     switch (identity.status) {
       case 'adopted':
         return (
           <div className="flex flex-wrap justify-end gap-1.5">
             {viewFicha}
-            {shortcutBadge}
             {identity.has_password ? (
               <Button variant="ghost" size="sm" onClick={() => setRevealTarget({ username, host })}>
                 Revelar
@@ -174,7 +166,6 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
               Adoptar
             </Button>
             {viewFicha}
-            {shortcutBadge}
             <Button
               variant="ghost"
               size="sm"

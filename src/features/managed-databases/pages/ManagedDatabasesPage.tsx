@@ -14,7 +14,6 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
-  ShortcutBadge,
   TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
@@ -151,35 +150,29 @@ export function ManagedDatabasesPage() {
           <div className="flex items-center justify-end gap-1">
             {/* Comparar/Clonar/Migraciones/Reasignar duplican lo que la ficha unificada de la BD
                 también ofrece: se conservan como atajo para operarios avanzados (decisión de
-                producto), pero se agrupan aparte y se marcan con el badge para distinguirlos de
-                las acciones propias de este listado (Editar/Eliminar). */}
-            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-              <ShortcutBadge title="Atajo — también disponible en la ficha completa de la base de datos." />
-              {/* Solo el icono, el mismo que su entrada del menú lateral: el botón de fila y la
-                  sección a la que lleva se reconocen como lo mismo, y la fila deja de alargarse
-                  con dos etiquetas que se repiten en cada BD. El nombre sigue en el tooltip. */}
-              <IconButton
-                label="Comparar esquema"
-                icon={<CompareIcon />}
-                onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
-              />
-              <IconButton
-                label="Clonar"
-                icon={<CloneIcon />}
-                onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate(`/managed-databases/${row.original.id}/migrations`)}
-              >
-                Migraciones
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setReassignTarget(row.original)}>
-                Reasignar
-              </Button>
-            </div>
-            <div className="mx-1 h-5 w-px bg-border" />
+                producto). Solo el icono en Comparar/Clonar, el mismo que su entrada del menú
+                lateral: el botón de fila y la sección a la que lleva se reconocen como lo mismo,
+                y la fila deja de alargarse con dos etiquetas que se repiten en cada BD. */}
+            <IconButton
+              label="Comparar esquema"
+              icon={<CompareIcon />}
+              onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
+            />
+            <IconButton
+              label="Clonar"
+              icon={<CloneIcon />}
+              onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/managed-databases/${row.original.id}/migrations`)}
+            >
+              Migraciones
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setReassignTarget(row.original)}>
+              Reasignar
+            </Button>
             <IconButton
               label="Editar"
               icon={<PencilIcon />}
