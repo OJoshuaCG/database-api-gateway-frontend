@@ -145,6 +145,15 @@ export function ServerDatabasesPanel({
                 Ver usuarios
               </Button>
             </Link>
+            {/* La exportación funciona sobre cualquier base del servidor, adoptada o no: se
+                identifica por `serverId` + nombre, igual que la conversión de collation. */}
+            <Link
+              to={`/database-exports?serverId=${serverId}&database=${encodeURIComponent(row.original.name)}`}
+            >
+              <Button variant="ghost" size="sm">
+                Exportar
+              </Button>
+            </Link>
             {!row.original.isManaged && (
               <Link to="/managed-databases">
                 <Button variant="ghost" size="sm">

@@ -211,6 +211,20 @@ export function ServerDatabaseDetailPage() {
       {tab === 'summary' && (
         <Card>
           <CardContent>
+            {/* «Convertir collation» vive en su propia pestaña dedicada (ver abajo) desde la
+                unificación de esta ficha — no se repite acá para no duplicar el mismo atajo. */}
+            <div className="mb-4 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate(
+                    `/database-exports?serverId=${serverId}&database=${encodeURIComponent(row.name)}`,
+                  )
+                }
+              >
+                Exportar 🔌
+              </Button>
+            </div>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Fact label="Nombre">
                 <span className="font-mono text-xs">{row.name}</span>

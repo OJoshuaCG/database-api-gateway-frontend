@@ -237,6 +237,55 @@ Tres cosas que no se leen en la tabla y condicionan el código:
 - **El historial guarda metadatos, no filas.** No hay forma de volver a ver un resultado: se
   recarga el SQL en el editor y se ejecuta de nuevo.
 
+## Exportación de bases de datos
+
+Módulo de `api-reference-v10.md`: volcado configurable de la estructura y/o los datos de una base a
+`sql`/`csv`/`json`/`ndjson`, con confirmación de doble factor, TTL corto sobre el archivo, descarga
+de un solo uso y auditoría de cada entrega. Resuelve tres cosas que un `mysqldump` a mano no da:
+consistencia de punto único en el tiempo sobre los datos, determinismo byte a byte (dos volcados del
+mismo esquema son idénticos, así que se pueden diffear y versionar) y un manifiesto que permite
+auditar qué salió sin abrir el archivo. Pantalla nueva en `/database-exports`
+(`?serverId=&database=`, reentrada al monitor por `?jobId=`), sin entrada de sidebar: el formulario
+entero se deriva de las capacidades de una base concreta, así que sin contexto no habría ni un
+control que pintar. Se entra desde la acción "Exportar" de cada fila de `ServerDatabasesPanel` y
+desde la pestaña "Resumen" de `ServerDatabaseDetailPage`. Contrato en
+`lib/contracts/database-exports.ts`; flujo del frontend en [`database-export.md`](database-export.md).
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `GET /servers/{id}/databases/{db}/export-capabilities` 🔌 | ✅ | `OriginStep` — **se llama primero y de aquí sale el formulario entero** (controles, valores válidos, defaults, matriz de combinaciones prohibidas, dialecto csv, empaquetado y límites). 30/min |
+| `POST /servers/{id}/databases/{db}/database-exports` 🔌 | ✅ | `WizardNav` en `origin` → crea el plan al salir del paso 1, no al final: el catálogo de objetos cuelga del job. Manda `idempotency_key` para que un doble clic no genere dos planes. 10/min |
+| `GET /database-exports/{id}/objects` 🔌 | ✅ | `ObjectsStep` — árbol del catálogo con las dos columnas de casillas (estructura / datos), buscador, filtro por tipo y `counts_by_type`. **No usa el envelope paginado estándar**: la paginación viaja dentro del objeto. 10/min |
+| `POST /database-exports/{id}/resolve-selection` 🔌 | ✅ | `ObjectsStep` — cierre de dependencias sin congelar nada, como `useQuery` + `useDeferredValue` con flag `isStale`. 10/min |
+| `POST /database-exports/{id}/preview` 🔌 | ✅ | Dos usos distintos: `useExportDryRunPreview` (query, `dry_run_only: true` forzado) alimenta el panel vivo de `OptionsStep`/`ConfirmStep`; `useExportPreview` (mutación) es el autoritativo que congela la selección y emite el `confirm_token`. 10/min |
+| `POST /database-exports/{id}/execute` 🔌 | ✅ | `ConfirmStep` — encadenado al preview autoritativo para que el token viaje recién emitido; exige el nombre de la base re-tecleado. **3/min**, el más restrictivo |
+| `GET /database-exports/{id}` | ✅ | `MonitorStep` — polling cada 2,5 s hasta estado terminal. Sin rate limit a propósito |
+| `GET /database-exports/{id}/items` | ✅ | `MonitorStep`, **solo cuando el job ya es terminal**: el backend escribe los ítems de una sola vez al terminar, así que pedirlos antes mostraría «0 incidencias» durante toda la corrida |
+| `POST /database-exports/{id}/cancel` | ✅ | `MonitorStep` — cooperativa; descarta el artefacto parcial. Sin rate limit para que un freno nunca quede bloqueado por una cuota |
+| `GET /database-exports/{id}/manifest` | ✅ | `MonitorStep` — checksum, tamaño, objetos y TTL del artefacto. **Sobrevive a `consumed` y a `purged`**: «¿qué me llevé?» se sigue pudiendo responder cuando el archivo ya no está |
+| `GET /database-exports/{id}/download` | ✅ | `MonitorStep` — `fetchBlob`; **NO pasa por el envelope `ApiResponse`** y los metadatos (`X-Export-Sha256`, `X-Export-Complete`) viajan en cabeceras. Un solo uso. **3/min** |
+| `GET /database-exports/{id}/content` | ✅ | `MonitorStep` — `fetchText` para el portapapeles; deshabilitado desde el preview cuando `inline_delivery_viable` es `false`. Un solo uso. **3/min** |
+
+Cinco cosas que no se leen en la tabla y condicionan el código:
+
+- **El cliente no duplica ni una regla de negocio.** No hay un solo `if (format === 'csv')` en la
+  feature: el evaluador de `compatibility` de `logic.ts` aplica la misma matriz que el servidor hace
+  cumplir. Un 422 `export.incompatible_option` que llegue igual es un bug de ese evaluador, no del
+  usuario, y `messages.ts` lo loguea como tal.
+- **La consistencia es asimétrica por motor.** En MySQL/MariaDB el punto único en el tiempo cubre los
+  datos pero **no** la estructura. El backend lo avisa en `preview.warnings`; ocultar ese aviso sería
+  el peor bug de la pantalla, así que se muestran **todos** los warnings, no el primero.
+- **No hay enmascarado de datos.** Riesgo aceptado explícito: los controles compensatorios son la
+  confirmación de doble factor, el TTL corto, la descarga de un solo uso y la auditoría de cada
+  descarga. De ahí la banda permanente (`PlainDataNotice`), no un tooltip.
+- **Hay dos vencimientos distintos** y no se mezclan: el del PLAN (24 h, afecta a
+  `preview`/`execute`) y el del ARTEFACTO (30 min desde que el job termina, afecta a
+  `download`/`content`).
+- **El kill switch (`EXPORT_ENABLED=False`) no cubre los 12 endpoints, sino 8.** Los de observación y
+  freno (leer el job, los ítems, el manifiesto y cancelar) siguen respondiendo a propósito: si se
+  apaga el módulo mientras hay un job corriendo, el operador tiene que poder verlo y detenerlo. Por
+  eso `MonitorStep` no se desmonta al recibir un `export.disabled` en otra llamada.
+
 ## Pendiente de verificar contra el backend real
 
 Los contratos Zod se escriben a mano desde la documentación del backend
@@ -262,6 +311,15 @@ documento y todavía no se han ejercitado contra una instancia real:
   documenta en MySQL/MariaDB real, y que los locales de PostgreSQL sembrados existan en el SO
   de cada servidor. El mapeo de errores está concentrado en `wizard/messages.ts` de la
   feature (`classifyConversionError`); el contrato puede tener ajustes menores.
+- **Exportación de bases entera** (`/database-exports` completo): el contrato v10 documenta el
+  backend como implementado (fases F1–F6) pero nada de esto se ha ejercitado contra una instancia
+  real desde la UI. Puntos concretos a confirmar, todos elegidos porque el documento no los muestra
+  con datos: la forma de `excluded_by_dependency` (el contrato solo la muestra como array vacío; se
+  modeló como `[{object_type, name}]`), si `advisory` de `resolve-selection` comparte forma con
+  `edges`, y si `when` de la matriz de compatibilidad puede traer valores booleanos además de texto
+  (se aceptan las dos formas a propósito, y el comparador las normaliza). Todo el mapeo está
+  concentrado en `lib/contracts/database-exports.ts`, `features/database-exports/logic.ts` y
+  `features/database-exports/messages.ts`.
 - **Consola SQL entera** (`query/preview`, `query/execute`, `query/history`): el propio
   contrato v6 (§2.8) avisa de que el backend todavía no se validó contra motores
   MySQL/MariaDB/PostgreSQL reales y de que puede haber ajustes menores. Por eso todo el

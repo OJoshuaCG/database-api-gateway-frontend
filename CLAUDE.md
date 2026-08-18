@@ -74,8 +74,10 @@ qué cambió de verdad (`git diff --ignore-cr-at-eol -- <archivo>`) y no arrastr
 `maintenance.md` (convenciones y recetas — **el primero a leer para ampliar algo**) ·
 `architecture.md` (capas y carpetas) · `data-flow.md` (recorrido de una request) ·
 `api-coverage.md` (endpoint → pantalla) · `sql-console.md` (consola SQL: identidad de
-ejecución y ciclo del `confirm_token`) · `ui-components.md` · `theming.md` · `testing.md` ·
-`security.md` · `deployment.md` · `adr/` (el *porqué* de las decisiones).
+ejecución y ciclo del `confirm_token`) · `database-export.md` (exportación de bases: los dos
+conjuntos, la matriz de compatibilidad y el artefacto de un solo uso) · `ui-components.md` ·
+`theming.md` · `testing.md` · `security.md` · `deployment.md` · `adr/` (el *porqué* de las
+decisiones).
 
 ## Delegar en los agentes
 

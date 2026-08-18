@@ -88,6 +88,11 @@ src/
     managed-databases/ CRUD + provision/drop_remote + reasignar owner
     schema-comparisons/ Asistente: diff de esquema entre dos BDs
     database-clones/    Asistente: clonar una BD a otro servidor (asíncrono, con polling)
+    collation-conversions/ Asistente: re-alinear charset/collation de una BD (asíncrono)
+    database-exports/   Asistente: exportar estructura y/o datos (multiformato, asíncrono)
+    server-databases/ Ciclo de vida de BDs a nivel servidor + grantees
+    sql-console/  Ejecutar SQL ad-hoc eligiendo el usuario del motor
+    charset-collation-options/ Catálogo de combinaciones charset/collation
     privileges/   Catálogo + toggle
     permission-profiles/ CRUD de perfiles de permisos por motor
     admin/        Rotación de cifrado (DEK)

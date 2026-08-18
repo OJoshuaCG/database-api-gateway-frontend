@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Badge,
   EmptyState,
@@ -9,17 +9,8 @@ import {
   Spinner,
 } from '@/components/ui'
 import type { EngineType, ServerUserOut } from '@/lib/contracts'
+import { useDebouncedValue } from '@/lib/utils/use-debounced-value'
 import { useUserGrants } from '../hooks/use-user-grants'
-
-/** Devuelve `value` retrasado `delayMs` para no consultar el motor 🔌 en cada pulsación. */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs)
-    return () => clearTimeout(id)
-  }, [value, delayMs])
-  return debounced
-}
 
 interface EffectiveGrantsPanelProps {
   user: ServerUserOut

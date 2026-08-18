@@ -79,6 +79,11 @@ src/
 │   ├── managed-databases/   CRUD + provision/drop_remote + reasignar owner + migraciones por BD
 │   ├── schema-comparisons/  asistente: diff de esquema entre dos BDs → adoptar versión o ejecutar
 │   ├── database-clones/     asistente: clonar una BD (estructura + datos opcionales) a otro servidor, asíncrono con polling
+│   ├── collation-conversions/ asistente: re-alinear charset/collation de una BD completa, asíncrono con polling
+│   ├── database-exports/    asistente: exportar estructura y/o datos a sql/csv/json/ndjson; el formulario entero se deriva de `export-capabilities`
+│   ├── server-databases/    ciclo de vida de BDs a nivel servidor (crear/grantees/borrado en 2 pasos) — panel embebido en la ficha del servidor
+│   ├── sql-console/         ejecutar SQL ad-hoc eligiendo con qué usuario del motor se conecta
+│   ├── charset-collation-options/ catálogo de combinaciones charset/collation habilitadas por familia de motor
 │   ├── privileges/          catálogo + toggle + selector reutilizable de privilegios
 │   ├── permission-profiles/ CRUD de perfiles de permisos por motor
 │   ├── admin/               rotación de cifrado (DEK)
