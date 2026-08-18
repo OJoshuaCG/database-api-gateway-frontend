@@ -60,22 +60,31 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | 17–21 | CRUD de `/server-users` | ✅ | `ServerUsersPage` (`/server-users`); `?provision` y `?drop_remote` como `Switch`; borrado remoto exige reescribir el username |
-| 22 | `GET /{id}/databases` | ✅ | "Ver BDs" → `OwnedDatabasesModal` |
-| 23 | `GET /{id}/grants` 🔌 | ✅ | `ServerUserGrantsPage` (`/server-users/:userId/grants`) → pestaña "Permisos efectivos" (en PostgreSQL espera que se indique la BD antes de consultar) |
-| 24 | `POST /{id}/grants` 🔌 | ✅ | `GrantManager` → tab "Otorgar" |
+| 22 | `GET /{id}/databases` | ✅ | "Ver BDs" → `OwnedDatabasesModal` en `ServerUsersPage`; pestaña "Bases de datos" de la ficha física (`ServerUserDetailPage`) — ambos sobre `OwnedDatabasesContent` |
+| 23 | `GET /{id}/grants` 🔌 | ✅ | Ficha física de la identidad (`ServerUserDetailPage`, `/servers/:serverId/users/:username/:host?`) → pestaña "Permisos efectivos" → `EffectiveGrantsPanel` (en PostgreSQL espera que se indique la BD antes de consultar). `ServerUserGrantsPage` (`/server-users/:userId/grants`) queda como redirect de compatibilidad hacia `?tab=grants` de la ficha |
+| 24 | `POST /{id}/grants` 🔌 | ✅ | Ficha física → pestaña "Otorgar / revocar" → `GrantManager` |
 | 25 | `DELETE /{id}/grants` 🔌 | ✅ | `GrantManager` → revocar (`cascade` solo PostgreSQL, con confirmación del grantee) |
-| 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | `ApplyProfilePanel` (errores parciales enumerados) |
+| 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | Ficha física → pestaña "Aplicar perfil" → `ApplyProfilePanel` (errores parciales enumerados) |
 | 27 | `POST /server-users/provision` 🔌 | ✅ | `ServerUserForm` → sección "Permisos iniciales" al crear con aprovisionamiento (informa `grant_results[]`) |
-| 61 | `POST /server-users/adopt` 🔌 | ✅ | `AdoptUserModal`, desde `EngineUsersPanel` y `ServerReconcilePanel` |
+| 61 | `POST /server-users/adopt` 🔌 | ✅ | `AdoptUserModal`, desde `EngineUsersPanel`, `ServerReconcilePanel` y la ficha física (`ServerUserDetailPage`, pestaña "Identidad" y CTA de las pestañas de permisos sin adoptar) |
+
+> Las 4 pestañas de permisos/BDs de la ficha física (#23–26, #22) exigen `server_user_id`
+> numérico: sin adoptar (`status !== 'adopted'`), se reemplazan por un único `EmptyState` con
+> CTA "Adoptar esta identidad para gestionar sus permisos" en vez de ocultarse sin explicación.
 
 ### Identidad física y batch (`/servers/{id}/users/*`)
 
+Endpoints por `(server_id, username, host)`. `EngineUsersPanel` (tabla, `/servers/:serverId?tab=users`)
+y la ficha física de una identidad (`ServerUserDetailPage`, `/servers/:serverId/users/:username/:host?`)
+comparten la misma query agrupada y los mismos modales; la ficha es el destino recomendado para
+gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver grants").
+
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 64 | `GET /{id}/users/grouped` 🔌 | ✅ | `EngineUsersPanel` (pantalla principal; respeta `supports_hosts`) |
-| 65 | `POST /{id}/users` 🔌 | ✅ | "Crear usuario" y "Recrear en el motor" (drift `orphan`) |
-| 66 | `PATCH /{id}/users/password` 🔌 | ✅ | "Rotar contraseña" por identidad |
-| 67 | `DELETE /{id}/users` 🔌 | ✅ | `DeleteEngineUserDialog` (doble confirmación) |
+| 64 | `GET /{id}/users/grouped` 🔌 | ✅ | `EngineUsersPanel` (pantalla principal; respeta `supports_hosts`) y `ServerUserDetailPage` (resuelve la identidad de la ficha por username+host) |
+| 65 | `POST /{id}/users` 🔌 | ✅ | "Crear usuario" y "Recrear en el motor" (drift `orphan`), desde `EngineUsersPanel` y desde la pestaña "Identidad" de la ficha física |
+| 66 | `PATCH /{id}/users/password` 🔌 | ✅ | "Rotar contraseña" por identidad, desde `EngineUsersPanel` y la ficha física |
+| 67 | `DELETE /{id}/users` 🔌 | ✅ | `DeleteEngineUserDialog` (doble confirmación), desde `EngineUsersPanel` y la ficha física |
 | 68 | `POST /{id}/users/add-host` 🔌 | ✅ | Solo MySQL/MariaDB; advierte del sobre-aprovisionamiento de `copy_grants` |
 | 69 | `POST /{id}/users/reveal-password` 🔌 | ✅ | "Revelar" (solo si `has_password`); secreto efímero, sin caché |
 | 70 | `POST /{id}/users/adopt-all-hosts` 🔌 | ✅ | `AdoptAllHostsModal` (acción por *username*); resultado por host |
@@ -101,20 +110,20 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint y estado; borrado remoto exige reescribir el nombre |
-| 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal` (incluye *stamp-on-adopt*: blueprint + versión de partida) |
-| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) (versión actual, pendientes y **banner de aplicación parcial**) |
+| 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint y estado; borrado remoto exige reescribir el nombre. El nombre de cada fila enlaza a la ficha unificada `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`) |
+| 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal`: incluye *stamp-on-adopt* (blueprint + versión de partida). Se abre tanto desde `ServerReconcilePanel` como desde el CTA "Adoptar" de `ServerDatabaseDetailPage` cuando la BD física todavía no está en el inventario |
+| 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsContent`, compartido por la ruta de compatibilidad `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) y por la pestaña "Migraciones" de `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database?tab=migrations`, solo si la BD está adoptada) (versión actual, pendientes y **banner de aplicación parcial**) |
 | 55 | `POST .../migrations/apply` 🔌 | ✅ | Previsualizar (dry-run) + aplicar; selector `on_failure`; resultado por versión con retomas y sentencia de fallo; mensaje de auto-reconciliación |
 | 56 | `POST .../migrations/rollback` 🔌 | ✅ | Doble confirmación de la versión actual; el 409 por `down_sql` faltante enlaza al blueprint |
 | 57 | `POST .../migrations/stamp` 🔌 | ✅ | Con `force` y la advertencia del anti-patrón (no arregla un apply a medias) |
-| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de esa misma página, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
+| 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de ese mismo contenido, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
 | 58 | `GET .../migrations/history` 🔌 | ✅ | Tab "Historial" (paginado) |
 
 ## Comparación de esquemas
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 73 | `POST /schema-comparisons` 🔌 | ✅ | Asistente `/schema-comparisons`, paso selector (acepta BDs del inventario o crudas) |
+| 73 | `POST /schema-comparisons` 🔌 | ✅ | Asistente `/schema-comparisons`, paso selector (acepta BDs del inventario o crudas). También se llega con `?targetDatabaseId=` prellenado desde `ManagedDatabasesPage` y desde la acción "Comparar esquema" de `ServerDatabaseDetailPage` (habilitada solo si la BD está adoptada) |
 | 74 | `GET /{id}` | ✅ | Paso resumen (410 → banner "Recalcular") |
 | 75 | `GET /{id}/items` | ✅ | Paso detalle, filtrable; orden del servidor (`seq`), nunca reordenado por `phase` |
 | 76 | `GET /{id}/export` | ✅ | Descarga `.sql`; respeta filtros activos o la selección, con rollback comentado opcional |
@@ -164,7 +173,7 @@ a partir de `backend/docs/features/database-clone.md`.
 
 | Endpoint | Estado | Dónde |
 |---|---|---|
-| `POST /database-clones` | ✅ | Paso de plan |
+| `POST /database-clones` | ✅ | Paso de plan. Se llega con `?sourceDatabaseId=` prellenado desde `ManagedDatabasesPage` y desde la acción "Clonar" de `ServerDatabaseDetailPage` (habilitada solo si la BD está adoptada) |
 | `GET /database-clones/{id}` | ✅ | Estado del trabajo (poll 2 s hasta estado terminal) |
 | `GET /database-clones/{id}/objects` | ✅ | Inventario con portabilidad y grafo de dependencias |
 | `POST /database-clones/{id}/resolve-selection` | ✅ | Cierre de dependencias de una selección parcial |
@@ -180,10 +189,11 @@ columnas y (en MySQL/MariaDB) los 5 tipos de objeto que el motor congela con la 
 sesión que los creó (PROCEDURE, FUNCTION, TRIGGER, EVENT, VIEW)— con `DROP`+`CREATE` y
 reaplicación de privilegios de rutina. En PostgreSQL es otra operación (columna por columna: el
 `ENCODING`/`LC_COLLATE` de la base es inmutable). El modo (`universal`/`columns`) lo decide el
-motor, nunca el operador. Pantalla nueva, sin tab embebido: se entra desde el botón "Convertir
-collation" de la pestaña "Resumen" de `ServerDatabaseDetailPage`
-(`/servers/:serverId/databases/:database`), sin entrada de sidebar propia — mismo criterio que el
-borrado de una base. Contrato en `lib/contracts/collation-conversions.ts`.
+motor, nunca el operador. Pantalla propia, no un tab embebido (un job puede tardar horas y debe
+sobrevivir a la navegación): se entra desde el botón "Convertir collation" de la pestaña
+"Collation" de `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database?tab=collation`),
+sin entrada de sidebar propia — mismo criterio que el borrado de una base. Contrato en
+`lib/contracts/collation-conversions.ts`.
 
 | Endpoint | Estado | Dónde |
 |---|---|---|
