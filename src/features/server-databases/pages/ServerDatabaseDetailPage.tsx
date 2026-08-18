@@ -1,23 +1,29 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  AdoptionBadge,
   Badge,
   Button,
   Card,
   CardContent,
+  CloneIcon,
+  CompareIcon,
   EmptyState,
   ErrorState,
   FullPageSpinner,
   PageHeader,
+  TabButton,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { useServer } from '@/features/servers/hooks/use-servers'
+import { AdoptDatabaseModal } from '@/features/managed-databases/components/AdoptDatabaseModal'
+import { ManagedDatabaseMigrationsContent } from '@/features/managed-databases/components/ManagedDatabaseMigrationsContent'
 import { useServerDatabases } from '../hooks/use-server-databases'
 import { engineLabel } from '../logic'
 import { DatabaseGranteesPanel } from '../components/DatabaseGranteesPanel'
 import { DropDatabaseDialog } from '../components/DropDatabaseDialog'
 
-const TABS = ['grantees', 'summary'] as const
+const TABS = ['grantees', 'summary', 'migrations', 'collation'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -25,12 +31,18 @@ function isTab(value: string | null): value is Tab {
 }
 
 /**
- * Ficha de una base de datos física del servidor: usuarios con permisos y su cruce con el
+ * Ficha unificada de una base de datos física del servidor: usuarios con permisos, resumen,
+ * migraciones (si está adoptada) y el atajo a convertir su collation, junto con su cruce con el
  * inventario del gateway.
  *
  * Su identidad es `(server_id, nombre)` y ambos vienen de la URL, así que la página carga por su
  * cuenta el servidor (motor y endpoint) y el listado cruzado, en vez de recibirlos por props: es
  * lo que permite entrar aquí directamente desde un enlace o un recargado de página.
+ *
+ * Migraciones/comparar esquema/clonar dependen del `id` numérico de `ManagedDatabaseOut`: son
+ * operaciones de inventario (blueprint, historial, provisión) que no existen para una BD física
+ * sin adoptar. Por eso se condicionan a `managed !== null` y, sin adoptar, ofrecen el CTA
+ * «Adoptar» en vez de ocultarse del todo.
  */
 export function ServerDatabaseDetailPage() {
   const params = useParams()
@@ -54,6 +66,7 @@ export function ServerDatabaseDetailPage() {
   }
 
   const [dropOpen, setDropOpen] = useState(false)
+  const [adoptOpen, setAdoptOpen] = useState(false)
 
   const validParams = Number.isFinite(serverId) && database !== undefined
   const server = useServer(serverId)
@@ -111,9 +124,42 @@ export function ServerDatabaseDetailPage() {
           title={row.name}
           description={`${server.data.name} · ${server.data.host}:${server.data.port} · ${engineLabel(server.data.engine)}`}
           actions={
-            <Button variant="danger" onClick={() => setDropOpen(true)}>
-              Eliminar base de datos 🔌
-            </Button>
+            <>
+              {managed === null ? (
+                // Sin adoptar: comparar/clonar son operaciones de inventario y no aplican todavía.
+                // En vez de dos botones deshabilitados que solo explican por qué con un `title`
+                // nativo (invisible en touch y poco fiable en lectores de pantalla), se ocultan y
+                // el aviso queda escrito junto a «Adoptar», visible sin necesitar hover.
+                <div className="flex flex-col items-end gap-1">
+                  <Button variant="outline" onClick={() => setAdoptOpen(true)}>
+                    Adoptar
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Comparar esquema y clonar se habilitan tras adoptar esta base de datos.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${managed.id}`)}
+                  >
+                    <CompareIcon />
+                    Comparar esquema
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/database-clones?sourceDatabaseId=${managed.id}`)}
+                  >
+                    <CloneIcon />
+                    Clonar
+                  </Button>
+                </>
+              )}
+              <Button variant="danger" onClick={() => setDropOpen(true)}>
+                Eliminar base de datos 🔌
+              </Button>
+            </>
           }
         />
         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -123,7 +169,7 @@ export function ServerDatabaseDetailPage() {
             <Badge tone="neutral">Inventario…</Badge>
           ) : row.isManaged ? (
             <>
-              <Badge tone="success">Gestionada</Badge>
+              <AdoptionBadge status="adopted" />
               <Link
                 to="/managed-databases"
                 className="text-xs font-medium text-primary hover:underline"
@@ -132,7 +178,7 @@ export function ServerDatabaseDetailPage() {
               </Link>
             </>
           ) : (
-            <Badge tone="warning">No gestionada</Badge>
+            <AdoptionBadge status="unmanaged" />
           )}
         </div>
       </div>
@@ -152,6 +198,12 @@ export function ServerDatabaseDetailPage() {
         <TabButton active={tab === 'summary'} onClick={() => setTab('summary')}>
           Resumen
         </TabButton>
+        <TabButton active={tab === 'migrations'} onClick={() => setTab('migrations')}>
+          Migraciones
+        </TabButton>
+        <TabButton active={tab === 'collation'} onClick={() => setTab('collation')}>
+          Collation
+        </TabButton>
       </div>
 
       {tab === 'grantees' && <DatabaseGranteesPanel serverId={serverId} database={row.name} />}
@@ -159,18 +211,6 @@ export function ServerDatabaseDetailPage() {
       {tab === 'summary' && (
         <Card>
           <CardContent>
-            <div className="mb-4 flex justify-end">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  navigate(
-                    `/collation-conversions?serverId=${serverId}&database=${encodeURIComponent(row.name)}`,
-                  )
-                }
-              >
-                Convertir collation 🔌
-              </Button>
-            </div>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Fact label="Nombre">
                 <span className="font-mono text-xs">{row.name}</span>
@@ -204,6 +244,49 @@ export function ServerDatabaseDetailPage() {
         </Card>
       )}
 
+      {tab === 'migrations' &&
+        (managed !== null ? (
+          <ManagedDatabaseMigrationsContent databaseId={managed.id} />
+        ) : (
+          <EmptyState
+            title="Esta base de datos no está adoptada"
+            description="Las migraciones son una operación de inventario: adopta primero esta base para gestionar su blueprint y versiones."
+            action={
+              <Button onClick={() => setAdoptOpen(true)}>
+                Adoptar esta base para gestionar sus migraciones
+              </Button>
+            }
+          />
+        ))}
+
+      {/*
+        La pestaña «Collation» no embebe el asistente: es una ruta full-page a propósito (un job
+        puede tardar horas y debe sobrevivir a la navegación, ver el comentario en
+        `CollationConversionWizardPage`) y solo lee `serverId`/`database` de su propia query string,
+        no de props. Embeberla aquí duplicaría su layout y perdería esos parámetros porque esta
+        página los lleva en el path, no en `?serverId=&database=`. Se navega a la ruta dedicada.
+      */}
+      {tab === 'collation' && (
+        <Card>
+          <CardContent className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">
+              Re-alinea el charset y la collation de «{row.name}» hacia un valor único con el
+              asistente dedicado (previsualización, confirmación y monitor de un job que puede
+              tardar horas).
+            </p>
+            <Button
+              onClick={() =>
+                navigate(
+                  `/collation-conversions?serverId=${serverId}&database=${encodeURIComponent(row.name)}`,
+                )
+              }
+            >
+              Convertir collation 🔌
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/*
         El borrado sigue siendo modal aunque el detalle ya no lo sea: es una operación
         irreversible en dos pasos y el foco modal es justo su función. Montaje condicional para
@@ -229,33 +312,21 @@ export function ServerDatabaseDetailPage() {
           }}
         />
       )}
-    </div>
-  )
-}
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={
-        active
-          ? 'border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary'
-          : 'border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground'
-      }
-    >
-      {children}
-    </button>
+      {/* Adoptar (Plan 09 §3): registra en el inventario esta BD física ya existente sin
+          recrearla. Habilita migraciones/comparar/clonar, que son operaciones de inventario. */}
+      {adoptOpen && (
+        <AdoptDatabaseModal
+          open={adoptOpen}
+          onClose={() => {
+            setAdoptOpen(false)
+            refetch()
+          }}
+          serverId={serverId}
+          databaseName={row.name}
+        />
+      )}
+    </div>
   )
 }
 

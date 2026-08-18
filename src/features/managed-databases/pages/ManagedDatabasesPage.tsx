@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
-  Badge,
+  AdoptionBadge,
   Button,
   CloneIcon,
   Combobox,
@@ -14,6 +14,7 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
+  ShortcutBadge,
   TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
@@ -97,11 +98,16 @@ export function ManagedDatabasesPage() {
         header: 'Nombre',
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <span className="font-medium text-foreground">{row.original.name}</span>
+            {/* Ficha unificada de la BD (grantees, resumen, migraciones, collation, comparar,
+                clonar): identidad física `(server_id, nombre)`, no el id de inventario. */}
+            <Link
+              to={`/servers/${row.original.server_id}/databases/${encodeURIComponent(row.original.name)}`}
+              className="font-medium text-foreground hover:text-primary hover:underline"
+            >
+              {row.original.name}
+            </Link>
             {row.original.origin === 'adopted' && (
-              <Badge tone="neutral" className="shrink-0">
-                📥 adoptada
-              </Badge>
+              <AdoptionBadge status="adopted" className="shrink-0" />
             )}
           </div>
         ),
@@ -143,6 +149,10 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            {/* Comparar/Clonar/Migraciones duplican lo que la ficha unificada de la BD también
+                ofrece: se conservan como atajo para operarios avanzados (decisión de producto),
+                pero se marcan como tal para distinguirlos de una acción exclusiva de esta tabla. */}
+            <ShortcutBadge title="Atajo — también disponible en la ficha completa de la base de datos." />
             {/* Solo el icono, el mismo que su entrada del menú lateral: el botón de fila y la
                 sección a la que lleva se reconocen como lo mismo, y la fila deja de alargarse
                 con dos etiquetas que se repiten en cada BD. El nombre sigue en el tooltip. */}
