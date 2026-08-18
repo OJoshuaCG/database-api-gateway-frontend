@@ -8,6 +8,7 @@ import type {
 } from '@/lib/contracts'
 import { PAGINATION } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
+import { randomUuid } from '@/lib/utils'
 import { useCountdown } from '@/lib/utils/use-countdown'
 import { useDebouncedValue } from '@/lib/utils/use-debounced-value'
 import type { ExportSpecPayload } from '../api/database-exports.api'
@@ -503,9 +504,10 @@ export function useDatabaseExportWizard(options: WizardOptions): DatabaseExportW
    * Crea el plan. Es lo que habilita el catálogo (`/objects` cuelga del job), así que ocurre al
    * salir del primer paso y no al final.
    *
-   * La `idempotency_key` se genera acá —en el manejador, nunca en render: `crypto.randomUUID()` es
-   * impuro y `react-hooks/purity` lo marca— para que un doble clic o un reintento de red devuelvan
-   * el plan ya creado en vez de un segundo plan huérfano.
+   * La `idempotency_key` se genera acá —en el manejador, nunca en render: `randomUuid()` es impuro
+   * y `react-hooks/purity` lo marca— para que un doble clic o un reintento de red devuelvan el plan
+   * ya creado en vez de un segundo plan huérfano. Va por `randomUuid` y no por `crypto.randomUUID`
+   * directo porque este gateway también se sirve sobre HTTP plano, donde el segundo no existe.
    */
   const createPlan = useCallback(() => {
     // El plan ya existe: volver al paso 1, cambiar algo y seguir NO crea otro. El `preview`
@@ -518,7 +520,7 @@ export function useDatabaseExportWizard(options: WizardOptions): DatabaseExportW
     if (!specPayload) return
 
     const fingerprint = JSON.stringify(specPayload)
-    const key = planAttempt?.fingerprint === fingerprint ? planAttempt.key : crypto.randomUUID()
+    const key = planAttempt?.fingerprint === fingerprint ? planAttempt.key : randomUuid()
     setPlanAttempt({ key, fingerprint })
 
     createPlanMutation.mutate(
