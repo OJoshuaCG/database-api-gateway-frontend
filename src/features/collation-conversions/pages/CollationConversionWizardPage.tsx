@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Card, CardContent, Combobox, ErrorState, PageHeader, Spinner } from '@/components/ui'
+import {
+  Button,
+  Card,
+  CardContent,
+  Combobox,
+  ErrorState,
+  PageHeader,
+  Spinner,
+} from '@/components/ui'
 import { PAGINATION, type ServerOut } from '@/lib/contracts'
 import { useServer, useServers } from '@/features/servers/hooks/use-servers'
 import { useServerDatabases } from '@/features/server-databases/hooks/use-server-databases'
@@ -142,7 +150,9 @@ function CollationConversionWizardContent({
       serverName={server.data.name}
       database={database}
       engine={server.data.engine}
-      presetJobId={presetJobId !== undefined && Number.isFinite(presetJobId) ? presetJobId : undefined}
+      presetJobId={
+        presetJobId !== undefined && Number.isFinite(presetJobId) ? presetJobId : undefined
+      }
       onCancel={() => navigate(`/servers/${serverId}/databases/${encodeURIComponent(database)}`)}
     />
   )
@@ -163,7 +173,13 @@ function CollationConversionWizardBody({
   presetJobId?: number
   onCancel: () => void
 }) {
-  const wizard = useCollationConversionWizard({ serverId, serverName, database, engine, presetJobId })
+  const wizard = useCollationConversionWizard({
+    serverId,
+    serverName,
+    database,
+    engine,
+    presetJobId,
+  })
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--topbar-h)-3rem)] flex-col gap-6">
@@ -172,7 +188,7 @@ function CollationConversionWizardBody({
         description={`Re-alinea el charset y la collation de «${database}» hacia un valor único.`}
         actions={
           <Button variant="ghost" onClick={onCancel}>
-            Cerrar
+            Cancelar
           </Button>
         }
       />
