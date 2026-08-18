@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Badge,
@@ -10,6 +10,7 @@ import {
   CardTitle,
   ConfirmDialog,
   PageHeader,
+  TabButton,
 } from '@/components/ui'
 import { PrivilegesPage } from '@/features/privileges'
 import { CharsetCollationOptionsPage } from '@/features/charset-collation-options'
@@ -105,31 +106,5 @@ export function AdminPage() {
         isLoading={rotate.isPending}
       />
     </div>
-  )
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={
-        active
-          ? 'border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary'
-          : 'border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground'
-      }
-    >
-      {children}
-    </button>
   )
 }

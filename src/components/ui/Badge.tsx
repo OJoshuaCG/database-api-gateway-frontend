@@ -16,15 +16,18 @@ interface BadgeProps {
   tone?: BadgeTone
   children: ReactNode
   className?: string
+  /** Texto adicional para lectores de pantalla/hover; el badge sigue siendo visible sin él. */
+  title?: string
 }
 
 /**
  * Etiqueta de estado. Los colores de texto usan la variante a contraste suficiente del
  * token; el fondo es una versión translúcida del mismo token.
  */
-export function Badge({ tone = 'neutral', children, className }: BadgeProps) {
+export function Badge({ tone = 'neutral', children, className, title }: BadgeProps) {
   return (
     <span
+      title={title}
       className={cn(
         'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
         TONES[tone],
