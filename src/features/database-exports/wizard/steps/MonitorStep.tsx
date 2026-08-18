@@ -10,7 +10,7 @@ import {
   Spinner,
   type BadgeTone,
 } from '@/components/ui'
-import { cn, formatBytes, formatDuration, formatInteger } from '@/lib/utils'
+import { cn, formatBytes, formatDuration, formatInteger, isClipboardAvailable } from '@/lib/utils'
 import { formatCountdown } from '@/lib/utils/countdown'
 import { useToast } from '@/lib/toast/use-toast'
 import type { ExportItem, ExportItemStatus, ExportJobPhase, ExportJobStatus } from '@/lib/contracts'
@@ -204,12 +204,29 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
   const inlineNotViable = wizard.confirmPreview?.inline_delivery_viable === false
   const deliveryBlocked = purged || wizard.actionCooldown
 
+  /**
+   * Sin portapapeles, «Copiar contenido» no es una acción que falla: es una que **gasta**. El
+   * `GET /content` consume el artefacto de un solo uso ANTES de llegar al `writeText`, así que el
+   * admin se queda sin exportación y sin texto, y la única salida es crear un plan nuevo. Por eso
+   * se deshabilita en vez de dejar que lo intente.
+   */
+  const clipboardAvailable = isClipboardAvailable()
+
   const sha256 = manifest.sha256
 
   async function copyChecksum() {
     if (!sha256) return
-    // El `try/catch` no es decorativo: `writeText` falla por permisos o por contexto no seguro, y un
-    // «copiado» que no copió nada es peor que un error.
+    // Sin portapapeles el diagnóstico es otro —no lo denegó nadie, la API no existe— y decirlo mal
+    // manda al admin a revisar permisos del navegador que no tienen nada que ver.
+    if (!clipboardAvailable) {
+      toast.error(
+        'El portapapeles no está disponible',
+        'Copiá el checksum a mano; está a la vista.',
+      )
+      return
+    }
+    // El `try/catch` sigue haciendo falta: en un contexto seguro el permiso todavía puede negarse,
+    // y un «copiado» que no copió nada es peor que un error.
     try {
       await navigator.clipboard.writeText(sha256)
       toast.success('Checksum copiado', 'Comparalo con el sha256 del archivo que bajaste.')
@@ -309,6 +326,7 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
             disabled={
               deliveryBlocked ||
               inlineNotViable ||
+              !clipboardAvailable ||
               wizard.copyContent.isPending ||
               wizard.download.isPending
             }
@@ -322,6 +340,13 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
           <p className="text-xs text-muted-foreground">
             Copiar el contenido está deshabilitado porque el plan marcó la entrega en línea como no
             viable: el artefacto supera el máximo y nunca se trunca.
+          </p>
+        )}
+        {!clipboardAvailable && !inlineNotViable && (
+          <p className="text-xs text-muted-foreground">
+            Copiar el contenido está deshabilitado porque este navegador no expone el portapapeles:
+            el gateway se está sirviendo sobre HTTP sin TLS. Usá «Descargar artefacto», que sí
+            funciona; intentar copiar consumiría la entrega sin darte el texto.
           </p>
         )}
         {wizard.actionCooldown && (
