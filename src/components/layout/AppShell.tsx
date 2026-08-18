@@ -57,7 +57,11 @@ export function AppShell() {
           onToggleSidebar={() => setCollapsed((value) => !value)}
           sidebarCollapsed={collapsed}
         />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        {/* Sin tope de ancho: el margen fijo (`max-w-7xl`) dejaba una franja en blanco enorme al
+            colapsar el sidebar, en vez de aprovechar el espacio que el colapso libera. El
+            padding solo sigue existiendo para separar el contenido de los bordes de la
+            ventana. */}
+        <main className="w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
             {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
                 del shell para que el sidebar y la topbar no parpadeen al navegar. */}
