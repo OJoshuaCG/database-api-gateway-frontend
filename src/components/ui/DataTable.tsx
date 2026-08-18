@@ -171,7 +171,11 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-card border border-border bg-surface">
+      {/* Regla del proyecto: una tabla no lleva scroll horizontal salvo caso extraordinario
+          documentado aparte. Por debajo de `md` se cambia a una tarjeta por fila (abajo) en vez
+          de encoger columnas hasta ilegibilidad o esconder el contenido detrás de un scroll que
+          en móvil nadie descubre arrastrando. */}
+      <div className="hidden overflow-x-auto rounded-card border border-border bg-surface md:block">
         <table className="w-full border-collapse text-sm">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -243,6 +247,67 @@ export function DataTable<T>({
         </table>
 
         {showEmpty && <div className="p-6">{emptyState ?? <DefaultEmpty />}</div>}
+      </div>
+
+      {/* Vista de tarjetas para `< md`: una tarjeta por fila con cada columna como par
+          etiqueta/valor, y la columna de acciones (la que se identifica por `header: ''` en la
+          convención del proyecto) al final, sin etiqueta, como fila de botones. */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {isLoading &&
+          Array.from({ length: 3 }).map((_, cardIndex) => (
+            <div
+              key={`skeleton-card-${cardIndex}`}
+              className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4"
+            >
+              {Array.from({ length: 3 }).map((__, lineIndex) => (
+                <div
+                  key={lineIndex}
+                  className="h-4 w-full max-w-48 animate-pulse rounded bg-surface-muted"
+                />
+              ))}
+            </div>
+          ))}
+
+        {!isLoading &&
+          rows.map((row) => {
+            const cells = row.getVisibleCells()
+            const fields = cells.filter((cell) => headerLabel(cell.column.columnDef) !== '')
+            const actionCells = cells.filter((cell) => headerLabel(cell.column.columnDef) === '')
+            return (
+              <div
+                key={row.id}
+                className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4"
+              >
+                <dl className="flex flex-col gap-2">
+                  {fields.map((cell) => (
+                    <div key={cell.id} className="flex flex-col gap-0.5">
+                      <dt className="text-xs font-medium text-muted-foreground">
+                        {headerLabel(cell.column.columnDef)}
+                      </dt>
+                      <dd className="text-sm text-foreground">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {actionCells.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                    {actionCells.map((cell) => (
+                      <div key={cell.id} className="contents">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+        {showEmpty && (
+          <div className="rounded-card border border-border bg-surface p-6">
+            {emptyState ?? <DefaultEmpty />}
+          </div>
+        )}
       </div>
 
       {clientPageSize && rows.length > 0 && (

@@ -122,6 +122,13 @@ client-side**; la paginación/filtros server-side se controlan fuera (ver
   filtros server-side), `clientPageSize` (activa paginación client-side para listas no
   paginadas como privilegios).
 - Muestra filas-esqueleto mientras `isLoading`.
+- **Regla del proyecto: ninguna tabla lleva scroll horizontal**, salvo un caso
+  extraordinario justificado y documentado en el propio componente. Por debajo de `md`
+  `DataTable` deja de renderizar `<table>` y muestra una tarjeta por fila (par
+  etiqueta/valor por columna, más la columna de acciones — la de `header: ''`, convención
+  ya usada en toda la app — al final sin etiqueta). Esto es automático para cualquier
+  consumidor: no hay que hacer nada especial al definir `columns` más allá de seguir esa
+  convención de `header: ''` en la columna de acciones.
 
 ### `Pagination`
 Controles de paginación **server-side** (`page`/`size` del backend): `page`, `pages`,

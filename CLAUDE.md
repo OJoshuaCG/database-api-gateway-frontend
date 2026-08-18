@@ -63,6 +63,12 @@ usar `bg-surface-muted`**: ese es el tinte con el que las filas de tabla se resa
 que lo repita se vuelve invisible dentro de una fila apuntada. Los controles se resaltan con
 tinte de acento (`bg-primary/10`), que es otro tono y por eso nunca colisiona.
 
+**Tablas — sin scroll horizontal.** Ninguna tabla (`DataTable`) puede depender de scroll
+horizontal para mostrar sus columnas, salvo un caso extraordinario justificado y documentado
+en el propio componente. `DataTable` ya resuelve esto por debajo de `md` con una tarjeta por
+fila (ver `docs/ui-components.md`); no lo evadas armando una tabla propia fuera de ese
+componente para una vista nueva.
+
 ⚠️ **Ruido de fin de línea:** el árbol de trabajo tiene decenas de archivos marcados como
 modificados que solo cambian CRLF↔LF, sin cambio real de contenido. Antes de commitear, comprueba
 qué cambió de verdad (`git diff --ignore-cr-at-eol -- <archivo>`) y no arrastres ese ruido.
