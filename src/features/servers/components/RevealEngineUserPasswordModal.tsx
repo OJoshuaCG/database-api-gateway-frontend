@@ -33,8 +33,19 @@ export function RevealEngineUserPasswordModal({
 
   const handleCopy = async () => {
     if (!reveal.data) return
-    await navigator.clipboard.writeText(reveal.data.password)
-    toast.success('Contraseña copiada al portapapeles')
+    // `navigator.clipboard` no existe fuera de un contexto seguro (HTTP sin TLS). Sin este guarda
+    // el `await` lanzaba `TypeError`, el toast de éxito nunca llegaba y el botón parecía muerto:
+    // el peor final posible para una contraseña que el admin cree haber copiado.
+    if (!navigator.clipboard) {
+      toast.error('El portapapeles no está disponible', 'Copiá la contraseña manualmente.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(reveal.data.password)
+      toast.success('Contraseña copiada al portapapeles')
+    } catch {
+      toast.error('No se pudo copiar al portapapeles')
+    }
   }
 
   const apiError = reveal.isError ? toApiError(reveal.error) : null
