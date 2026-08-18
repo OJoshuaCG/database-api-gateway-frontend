@@ -25,6 +25,7 @@ const ServerDatabaseDetailPage = lazyPage(
   () => import('@/features/server-databases'),
   'ServerDatabaseDetailPage',
 )
+const ServerUserDetailPage = lazyPage(() => import('@/features/servers'), 'ServerUserDetailPage')
 const ServerUsersPage = lazyPage(() => import('@/features/server-users'), 'ServerUsersPage')
 const ServerUserGrantsPage = lazyPage(
   () => import('@/features/server-users'),
@@ -87,6 +88,12 @@ export const router = createBrowserRouter([
           { path: 'servers/:serverId', element: <ServerDetailPage /> },
           // El nombre de la BD viaja codificado: puede llevar `.`, `-` o `$` (nombres legados).
           { path: 'servers/:serverId/databases/:database', element: <ServerDatabaseDetailPage /> },
+          // `:host?` ausente = identidad sin host (rol de PostgreSQL, que no tiene). Username y
+          // host viajan codificados, igual criterio que `:database` arriba.
+          {
+            path: 'servers/:serverId/users/:username/:host?',
+            element: <ServerUserDetailPage />,
+          },
           { path: 'server-users', element: <ServerUsersPage /> },
           { path: 'server-users/:userId/grants', element: <ServerUserGrantsPage /> },
           { path: 'database-models', element: <DatabaseModelsPage /> },

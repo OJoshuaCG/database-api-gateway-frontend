@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -12,6 +12,7 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
+  ShortcutBadge,
   TrashIcon,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
@@ -22,8 +23,14 @@ import { ServerUserFormModal } from '../components/ServerUserFormModal'
 import { DeleteServerUserDialog } from '../components/DeleteServerUserDialog'
 import { OwnedDatabasesModal } from '../components/OwnedDatabasesModal'
 
-/** Origen que se pasa a la página de permisos para que su enlace «volver» regrese a esta lista. */
-const GRANTS_FROM = encodeURIComponent('/server-users')
+/**
+ * Ficha física de la identidad: `/servers/:serverId/users/:username/:host?` (host ausente en
+ * PostgreSQL). Es la misma ruta esté o no adoptada — la ficha decide qué mostrar.
+ */
+const userDetailPath = (user: ServerUserOut) =>
+  `/servers/${user.server_id}/users/${encodeURIComponent(user.username)}${
+    user.host ? `/${encodeURIComponent(user.host)}` : ''
+  }`
 
 export function ServerUsersPage() {
   const navigate = useNavigate()
@@ -53,12 +60,15 @@ export function ServerUsersPage() {
         accessorKey: 'username',
         header: 'Usuario',
         cell: ({ row }) => (
-          <span className="font-medium text-foreground">
+          <Link
+            to={userDetailPath(row.original)}
+            className="font-medium text-foreground hover:text-primary hover:underline"
+          >
             {row.original.username}
             {row.original.host ? (
               <span className="text-muted-foreground">@{row.original.host}</span>
             ) : null}
-          </span>
+          </Link>
         ),
       },
       {
@@ -99,14 +109,15 @@ export function ServerUsersPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1.5">
+            {/* "Permisos efectivos" y "Ver BDs" duplican pestañas de la ficha unificada del
+                usuario: se conservan como atajo, pero marcados como tal. */}
+            <ShortcutBadge title="Atajo — también disponible en la ficha completa del usuario." />
             <Button
               variant="ghost"
               size="sm"
-              onClick={() =>
-                navigate(`/server-users/${row.original.id}/grants?from=${GRANTS_FROM}`)
-              }
+              onClick={() => navigate(`${userDetailPath(row.original)}?tab=grants`)}
             >
-              Permisos
+              Permisos efectivos
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setOwnedTarget(row.original)}>
               Ver BDs

@@ -1,24 +1,21 @@
 import { Fragment, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  AdoptionBadge,
   Badge,
   Button,
   EmptyState,
   ErrorState,
   IconButton,
   RefreshIcon,
+  ShortcutBadge,
   Spinner,
   TrashIcon,
 } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { queryKeys } from '@/lib/api/query-keys'
-import type {
-  EngineType,
-  EngineUserIdentity,
-  EngineUserIdentityStatus,
-  GroupedEngineUser,
-} from '@/lib/contracts'
+import type { EngineType, EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
 import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
 import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
@@ -30,15 +27,6 @@ import { RevealEngineUserPasswordModal } from './RevealEngineUserPasswordModal'
 import { AdoptAllHostsModal } from './AdoptAllHostsModal'
 import { DefineKnownPasswordModal } from './DefineKnownPasswordModal'
 import { RotatePasswordAllHostsModal } from './RotatePasswordAllHostsModal'
-
-const STATUS_BADGE: Record<
-  EngineUserIdentityStatus,
-  { tone: 'success' | 'warning' | 'error'; label: string }
-> = {
-  adopted: { tone: 'success', label: '🟢 Adoptado' },
-  unmanaged: { tone: 'warning', label: '🟡 Sin adoptar' },
-  orphan: { tone: 'error', label: '🔴 Huérfano' },
-}
 
 interface IdentityTarget {
   username: string
@@ -82,12 +70,16 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
 
   const deleteServerUser = useDeleteServerUser()
 
-  // Los permisos son una página propia: se navega con `from` para que su enlace «volver» regrese
-  // a ESTA pestaña del detalle de servidor y no a la lista general de usuarios.
-  const goToGrants = (serverUserId: number) => {
-    void navigate(
-      `/server-users/${serverUserId}/grants?from=${encodeURIComponent(`/servers/${serverId}?tab=users`)}`,
-    )
+  // La ficha física vive en `/servers/:serverId/users/:username/:host?` (host ausente en
+  // PostgreSQL, que no tiene). Es la MISMA ruta esté o no adoptada la identidad: la ficha decide
+  // qué mostrar según su estado, ya no esta tabla.
+  const userDetailPath = (targetUsername: string, targetHost?: string | null) =>
+    `/servers/${serverId}/users/${encodeURIComponent(targetUsername)}${
+      targetHost ? `/${encodeURIComponent(targetHost)}` : ''
+    }`
+
+  const goToGrants = (targetUsername: string, targetHost?: string | null) => {
+    void navigate(`${userDetailPath(targetUsername, targetHost)}?tab=grants`)
   }
 
   const counts = useMemo(() => {
@@ -135,10 +127,25 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
 
   const identityActions = (username: string, identity: EngineUserIdentity) => {
     const host = identity.host ?? undefined
+    // Siempre habilitado, sea cual sea el estado: la ficha decide qué mostrar (permisos reales
+    // si está adoptada, o el CTA "Adoptar" si no) en vez de deshabilitar el botón acá.
+    const viewFicha = (
+      <Button variant="ghost" size="sm" onClick={() => goToGrants(username, host)}>
+        Permisos efectivos
+      </Button>
+    )
+    // Revelar/Rotar contraseña/Eliminar duplican acciones de la ficha unificada del usuario: se
+    // conservan como atajo para operarios avanzados, marcadas con `ShortcutBadge`. "Permisos
+    // efectivos" no es un atajo: es la puerta a esa misma ficha, no un duplicado.
+    const shortcutBadge = (
+      <ShortcutBadge title="Atajo — también disponible en la ficha completa del usuario." />
+    )
     switch (identity.status) {
       case 'adopted':
         return (
           <div className="flex flex-wrap justify-end gap-1.5">
+            {viewFicha}
+            {shortcutBadge}
             {identity.has_password ? (
               <Button variant="ghost" size="sm" onClick={() => setRevealTarget({ username, host })}>
                 Revelar
@@ -150,18 +157,6 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
               onClick={() => setPasswordTarget({ username, host, alreadyAdopted: true })}
             >
               Rotar contraseña
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              // Una identidad adoptada siempre tiene registro en el inventario; si por lo que
-              // fuera faltara, no hay página a la que ir.
-              disabled={identity.server_user_id == null}
-              onClick={() => {
-                if (identity.server_user_id != null) goToGrants(identity.server_user_id)
-              }}
-            >
-              Ver grants
             </Button>
             <IconButton
               label="Eliminar"
@@ -178,6 +173,8 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
             <Button variant="outline" size="sm" onClick={() => setAdoptTarget({ username, host })}>
               Adoptar
             </Button>
+            {viewFicha}
+            {shortcutBadge}
             <Button
               variant="ghost"
               size="sm"
@@ -208,6 +205,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
             >
               Limpiar registro
             </Button>
+            {viewFicha}
           </div>
         )
     }
@@ -327,7 +325,14 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                             {user.username}
                           </button>
                         ) : (
-                          user.username
+                          // Único host (o ninguno, en PostgreSQL): la fila YA es una identidad
+                          // concreta, así que el username enlaza directo a su ficha.
+                          <Link
+                            to={userDetailPath(user.username, singleIdentity?.host)}
+                            className="hover:text-primary hover:underline"
+                          >
+                            {user.username}
+                          </Link>
                         )}
                       </td>
                       {supportsHosts && (
@@ -339,9 +344,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                       )}
                       {!supportsHosts && singleIdentity && (
                         <td className="px-3 py-2">
-                          <Badge tone={STATUS_BADGE[singleIdentity.status].tone}>
-                            {STATUS_BADGE[singleIdentity.status].label}
-                          </Badge>
+                          <AdoptionBadge status={singleIdentity.status} />
                         </td>
                       )}
                       {!supportsHosts && singleIdentity && (
@@ -417,12 +420,19 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                                       className="border-b border-border bg-surface last:border-0"
                                     >
                                       <td className="px-3 py-1.5 font-mono text-xs text-foreground">
-                                        {identity.host ?? '—'}
+                                        {identity.host ? (
+                                          <Link
+                                            to={userDetailPath(user.username, identity.host)}
+                                            className="hover:text-primary hover:underline"
+                                          >
+                                            {identity.host}
+                                          </Link>
+                                        ) : (
+                                          '—'
+                                        )}
                                       </td>
                                       <td className="px-3 py-1.5">
-                                        <Badge tone={STATUS_BADGE[identity.status].tone}>
-                                          {STATUS_BADGE[identity.status].label}
-                                        </Badge>
+                                        <AdoptionBadge status={identity.status} />
                                       </td>
                                       <td className="px-3 py-1.5">
                                         <Badge tone={identity.has_password ? 'success' : 'neutral'}>
