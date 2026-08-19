@@ -177,6 +177,24 @@ Confirmación construida sobre `Modal`. Para borrados destructivos, `confirmWord
 `Topbar` (sesión, logout, tema, health), `ThemeToggle`, `SectionErrorFallback`,
 `PageHeader` (título + descripción + acciones de cada página).
 
+### Nada de scroll horizontal en la página
+
+`AppShell` coloca el contenido en la segunda columna de un grid. Un ítem de grid (o de flex)
+tiene `min-width: auto`, es decir: su ancho mínimo es el de su contenido, no cero. Sin
+`min-w-0` una tabla ancha o un `CodeBlock` con SQL largo estiran la columna más allá del
+viewport y el scroll horizontal aparece en toda la página, en vez de quedarse dentro del
+contenedor con `overflow-auto` que esos componentes ya traen. Por eso la columna y el `<main>`
+llevan `min-w-0`.
+
+Al montar layouts nuevos:
+
+- Un contenedor **flex en fila** cuyo hijo pueda contener una tabla, un `CodeBlock` o texto
+  monoespaciado largo necesita `min-w-0` en ese hijo.
+- Las rejillas `grid-cols-N` de Tailwind ya usan `minmax(0, 1fr)` y son seguras. Una plantilla
+  arbitraria (`grid-cols-[1fr_8rem]`) **no** lo es: escribe `minmax(0,1fr)` en vez de `1fr`.
+- Evita `min-w-[Xrem]` grande en barras de herramientas: suma al mínimo de toda la fila y
+  desborda antes de que nada pueda encogerse. Sube el contenido de breakpoint en su lugar.
+
 ## Patrón típico de una vista de datos
 
 ```tsx
