@@ -234,7 +234,11 @@ export function ManagedDatabasesPage() {
             searchPlaceholder="Buscar base de datos…"
             enableColumnVisibility
             toolbar={
-              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[48rem] lg:grid-cols-4">
+              /* Sin ancho mínimo fijo: `lg:min-w-[48rem]` sumado al buscador (`sm:max-w-xs`)
+                 exigía ~1100px de barra, más de lo que deja el contenido en `lg` con el sidebar
+                 abierto, y desbordaba la página en horizontal. Las cuatro columnas esperan a
+                 `xl`, que es donde caben sin apretarse. */
+              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Combobox<ServerOut>
                   items={servers.data ?? []}
                   value={serverFilter}
