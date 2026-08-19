@@ -51,7 +51,11 @@ export function AppShell() {
         </div>
       )}
 
-      <div className="flex min-h-screen flex-col">
+      {/* `min-w-0`: como columna de un grid, su ancho mínimo automático es el del contenido.
+          Sin esto, una tabla de resultados o un bloque de SQL anchos estiran la columna más
+          allá del viewport y aparece scroll horizontal en TODA la página, en vez de quedarse
+          dentro del contenedor con scroll propio que cada uno ya tiene. */}
+      <div className="flex min-h-screen min-w-0 flex-col">
         <Topbar
           onMenuClick={() => setMobileOpen(true)}
           onToggleSidebar={() => setCollapsed((value) => !value)}
@@ -61,7 +65,7 @@ export function AppShell() {
             colapsar el sidebar, en vez de aprovechar el espacio que el colapso libera. El
             padding solo sigue existiendo para separar el contenido de los bordes de la
             ventana. */}
-        <main className="w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main className="w-full min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
             {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
                 del shell para que el sidebar y la topbar no parpadeen al navegar. */}
