@@ -84,7 +84,7 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
 
       <div className="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
         <p className="text-sm font-medium text-foreground">Se creará</p>
-        <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]">
+        <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_minmax(0,1fr)]">
           <dt className="text-muted-foreground">Origen</dt>
           <dd className="text-foreground">
             servidor #{wizard.serverId} · BD <code className="font-mono">{wizard.database}</code>

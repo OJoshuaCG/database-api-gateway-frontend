@@ -124,7 +124,7 @@ export function ServerForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <Input label="Nombre" required error={errors.name?.message} {...register('name')} />
-      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
         <Input
           label="Host"
           required
