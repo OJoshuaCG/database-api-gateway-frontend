@@ -201,6 +201,12 @@ entran en la selección, así que copiar con el ratón devuelve SQL limpio.
 > lee. Un literal larguísimo sin espacios sigue desbordando, y para eso el bloque conserva
 > su scroll horizontal en los dos modos. Sobre un checksum o una ruta sí es correcto.
 
+### Alto ajustable
+A partir de unas pocas líneas el bloque trae tirador de alto en su esquina inferior. En
+cuanto se agarra, `maxHeightClass` deja de ser un tope y pasa a ser solo el alto de
+partida, y entra en juego un mínimo de cuatro líneas. Es por bloque y no se recuerda entre
+montajes: es un ajuste de lectura del momento, no una preferencia como el ajuste de línea.
+
 ## Layout (en `src/components/layout/`)
 
 `AppShell` (sidebar + topbar + boundary por sección), `Sidebar` (navegación),

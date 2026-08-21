@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/lib/toast/use-toast'
 import { useSqlWrap } from '@/lib/theme/use-sql-wrap'
@@ -12,6 +12,12 @@ import {
 import { CopyIcon, ExpandIcon, WrapIcon } from './icons'
 import { Modal } from './Modal'
 import { SqlThemeSelect } from './SqlThemeSelect'
+
+/** Alto mínimo (px) al que se puede encoger un bloque redimensionado: cuatro líneas y el relleno. */
+const MIN_RESIZE_HEIGHT = 104
+
+/** A partir de cuántas líneas se ofrece el tirador de alto. */
+const RESIZE_FROM_LINES = 3
 
 export interface CodeBlockProps {
   /** El SQL a mostrar. Se resalta con la gramática SQL de Prism. */
@@ -51,6 +57,10 @@ export interface CodeBlockProps {
  * concreta al reportar un problema. Nunca se usa `break-all` sobre SQL: partir un identificador a
  * mitad cambia lo que el ojo lee, así que un literal larguísimo sin espacios sigue desbordando y
  * el scroll del bloque es su válvula de escape.
+ *
+ * A partir de unas pocas líneas el bloque trae tirador de alto: `maxHeightClass` deja de ser un
+ * tope y pasa a ser solo el alto de partida. Es por bloque y no se recuerda entre montajes — es un
+ * ajuste de lectura del momento, no una preferencia como el ajuste de línea.
  */
 export function CodeBlock({
   code,
@@ -129,6 +139,8 @@ function CodeSurface({
   const lines = useMemo(() => splitTokenLines(tokenizeSql(code)), [code])
   const lineCount = countLines(code)
   const showGutter = !hideLineNumbers && lineCount > 1
+  // Por debajo de este tamaño el bloque cabe entero y el tirador solo sería ruido.
+  const resizable = lineCount > RESIZE_FROM_LINES
 
   const handleCopy = () => {
     // `navigator.clipboard` no existe fuera de un contexto seguro (HTTP sin TLS): se avisa en
@@ -141,6 +153,28 @@ function CodeSurface({
       .writeText(code)
       .then(() => toast.success('SQL copiado al portapapeles'))
       .catch(() => toast.error('No se pudo copiar al portapapeles'))
+  }
+
+  /*
+   * Alto ajustable por el usuario.
+   *
+   * `resize` está acotado por `max-height`, que es justo la propiedad con la que el bloque se
+   * ajusta hoy a su contenido: dejando el tope, el tirador no puede agrandar; quitándolo de
+   * entrada, todos los bloques crecerían hasta el contenido completo. Así que el tope se libera en
+   * el momento del arrastre: se congela el alto actual —para que no dé un salto al soltarlo— y a
+   * partir de ahí manda el usuario, con un mínimo para que el bloque no quede inservible.
+   *
+   * El mínimo se aplica solo al liberar, y no como clase permanente: si no, inflaría con espacio
+   * vacío los bloques de una o dos líneas, que son mayoría en la consola SQL.
+   */
+  const freeHeight = (event: PointerEvent<HTMLDivElement>) => {
+    // El tirador nativo forma parte de la caja del contenedor, así que al agarrarlo el destino del
+    // evento es el propio contenedor; al pulsar sobre el SQL el destino es un `span` o el `<pre>`.
+    if (event.target !== event.currentTarget) return
+    const surface = event.currentTarget
+    surface.style.height = `${Math.max(surface.getBoundingClientRect().height, MIN_RESIZE_HEIGHT)}px`
+    surface.style.maxHeight = 'none'
+    surface.style.minHeight = `${MIN_RESIZE_HEIGHT}px`
   }
 
   return (
@@ -179,10 +213,12 @@ function CodeSurface({
           role="group"
           aria-label={title ? `SQL: ${title}` : 'SQL'}
           style={gutterWidthStyle(lineCount)}
+          onPointerDown={resizable ? freeHeight : undefined}
           className={cn(
             'overflow-auto rounded-lg border border-border bg-syntax-bg font-mono text-xs leading-5',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             maxHeightClass,
+            resizable && 'resize-y',
           )}
         >
           {/* Una fila por línea lógica (ver `styles/code.css`): es lo que permite numerar y

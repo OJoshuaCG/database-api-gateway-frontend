@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/utils'
 import { CodeBlock } from './CodeBlock'
@@ -140,6 +140,31 @@ describe('CodeBlock', () => {
     await user.click(screen.getAllByRole('button', { name: 'Copiar SQL' })[0]!)
 
     expect(await screen.findByText('El portapapeles no está disponible')).toBeInTheDocument()
+  })
+
+  it('ofrece tirador de alto solo cuando el bloque da para redimensionarlo', () => {
+    const { unmount } = renderWithProviders(<CodeBlock code={SQL} title="Consulta" />)
+    expect(screen.getByRole('group', { name: 'SQL: Consulta' }).className).toContain('resize-y')
+    unmount()
+
+    renderWithProviders(<CodeBlock code={'SELECT 1;\nSELECT 2;'} title="Corta" />)
+    expect(screen.getByRole('group', { name: 'SQL: Corta' }).className).not.toContain('resize-y')
+  })
+
+  it('libera el tope de alto al agarrar el tirador, no al pulsar sobre el SQL', () => {
+    renderWithProviders(<CodeBlock code={SQL} title="Consulta" maxHeightClass="max-h-40" />)
+    const region = screen.getByRole('group', { name: 'SQL: Consulta' })
+
+    // Pulsar sobre el código no debe tocar el alto: el destino es un descendiente, no la región.
+    fireEvent.pointerDown(region.querySelector('.code-text')!)
+    expect(region.style.maxHeight).toBe('')
+
+    // El tirador nativo forma parte de la caja de la región, así que el destino es ella misma.
+    fireEvent.pointerDown(region)
+    expect(region.style.maxHeight).toBe('none')
+    // Con el tope fuera hace falta un mínimo, o el bloque se podría dejar en nada.
+    expect(region.style.minHeight).toBe('104px')
+    expect(region.style.height).toBe('104px')
   })
 
   it('muestra el texto alternativo cuando no hay SQL', () => {
