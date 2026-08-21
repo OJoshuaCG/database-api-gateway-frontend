@@ -99,12 +99,13 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`) |
+| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`). `GET .../databases` trae además el **estado de despliegue** por BD y lo consume la pestaña «Estado en las BDs» de `BlueprintMigrationsPage` (`?tab=estado`); `?refresh=true` 🔌 relee la versión real de cada motor |
 | 63 | `POST /database-models/from-snapshot` 🔌 | ✅ | Asistente `/database-models/from-snapshot` y CTA del panel de reconciliación |
 | 48–50 | Listar/crear/detallar migraciones | ✅ | `BlueprintMigrationsPage` (`/database-models/:modelId/migrations`); al crear, `version` va vacía = autoasignada |
 | 51 | `PATCH .../migrations/{version}` | ✅ | Confirmar `down_sql` sugerido, overrides por motor, y **aprobar el baseline** (`reviewed`, gate R1) |
-| 52 | `DELETE .../migrations/{version}` | ✅ | Solo habilitado en la punta de la secuencia |
-| 53 | `POST .../migrations/apply-all` 🔌 | ✅ | `ApplyAllDialog` (dry-run, `max_databases`, `force`, `on_failure`, resultado por BD) |
+| 52 | `DELETE .../migrations/{version}` | ✅ | Habilitado según `deletable` del backend; el 409 se explica en línea con su `block_reason` |
+| 52b | `POST .../migrations/validate` | ✅ | `MigrationValidationPanel` dentro de `ModelMigrationForm`: sintaxis, traducción a PostgreSQL, siembra, COLLATE forzado y sentencias destructivas. Con una BD elegida (🔌) comprueba además que las tablas referenciadas existan |
+| 53 | `POST .../migrations/apply-all` 🔌 | ✅ | `ApplyMigrationsDialog`: selector de destinos (todas / los que elija, vía `database_ids`), dry-run, `force`, `on_failure`, y resultado por BD con enlace a sus resultados capturados |
 
 ## Bases de datos gestionadas y migraciones por BD
 
@@ -118,6 +119,8 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 | 57 | `POST .../migrations/stamp` 🔌 | ✅ | Con `force` y la advertencia del anti-patrón (no arregla un apply a medias) |
 | 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de ese mismo contenido, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
 | 58 | `GET .../migrations/history` 🔌 | ✅ | Tab "Historial" (paginado) |
+| 58b | `GET .../migrations/{version}/select-results` | ✅ | `SelectResultsPage` (`/managed-databases/:databaseId/migrations/:version/select-results`). Faltaba en esta tabla pese a estar implementada. `rows` es POSICIONAL (`rows[i][j]` ↔ `columns[j]`) y solo guarda la corrida más reciente |
+| 58c | `DELETE .../migrations/{version}/select-results` | ✅ | Botón "Purgar ahora" de esa misma pantalla, con confirmación |
 
 ## Comparación de esquemas
 
