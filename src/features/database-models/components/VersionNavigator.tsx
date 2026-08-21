@@ -55,6 +55,26 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
                     <span className="truncate text-foreground">{m.name}</span>
                     <span className="ml-auto flex shrink-0 items-center gap-1">
                       {m.is_baseline && <Badge tone="info">baseline</Badge>}
+                      {/* Siembra, COLLATE forzado y destructividad salen del SQL, no de un
+                          campo declarado: son lo que de verdad hace la versión. */}
+                      {m.has_seed && (
+                        <Badge tone="info" title="Inserta o modifica datos">
+                          🌱
+                        </Badge>
+                      )}
+                      {m.forced_collations.length > 0 && (
+                        <Badge
+                          tone="warning"
+                          title={`COLLATE forzado: ${m.forced_collations.join(', ')}`}
+                        >
+                          ⚑ collate
+                        </Badge>
+                      )}
+                      {m.destructive && (
+                        <Badge tone="error" title="Contiene DROP o TRUNCATE">
+                          ⚠ destructiva
+                        </Badge>
+                      )}
                       {m.capture_selects ? (
                         m.reviewed === false ? (
                           <Badge tone="warning">⚠️ captura</Badge>

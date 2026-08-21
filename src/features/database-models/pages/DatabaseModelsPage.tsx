@@ -113,8 +113,8 @@ export function DatabaseModelsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Blueprints"
-        description="Categorías lógicas reutilizables de bases de datos (metadato de inventario)."
+        title="Blueprint schemas"
+        description="Esquemas de base de datos versionados. Cada uno define una estructura base y sus versiones; las BDs asociadas la replican."
         actions={
           <>
             <Button variant="outline" onClick={() => navigate('/database-models/from-snapshot')}>
@@ -144,8 +144,8 @@ export function DatabaseModelsPage() {
             searchPlaceholder="Buscar blueprint…"
             emptyState={
               <EmptyState
-                title="No hay blueprints"
-                description="Crea un blueprint para categorizar tus bases de datos."
+                title="No hay blueprint schemas"
+                description="Crea un blueprint para versionar la estructura de tus bases de datos."
               />
             }
           />
