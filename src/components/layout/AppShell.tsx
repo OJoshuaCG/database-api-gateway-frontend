@@ -25,10 +25,15 @@ export function AppShell() {
   }, [collapsed])
 
   return (
+    // `minmax(0,1fr)` y no `1fr`: `1fr` es `minmax(auto,1fr)`, y ese `auto` impide que la columna
+    // de contenido se encoja por debajo del `min-content` de lo que contiene. El `min-content` de
+    // un `<pre>` con `white-space: pre` es su línea más larga, así que un SQL ancho ensanchaba la
+    // columna —y con ella la página entera, topbar incluida— en vez de desplazarse dentro de su
+    // propio bloque. El `min-w-0` de la columna y del `<main>` cierra la misma fuga por dentro.
     <div
       className={cn(
         'min-h-screen bg-background lg:grid',
-        collapsed ? 'lg:grid-cols-[4.5rem_1fr]' : 'lg:grid-cols-[16rem_1fr]',
+        collapsed ? 'lg:grid-cols-[4.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
       )}
     >
       <aside className="hidden border-r border-border bg-surface lg:block">
@@ -51,7 +56,7 @@ export function AppShell() {
         </div>
       )}
 
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen min-w-0 flex-col">
         <Topbar
           onMenuClick={() => setMobileOpen(true)}
           onToggleSidebar={() => setCollapsed((value) => !value)}
@@ -61,7 +66,7 @@ export function AppShell() {
             colapsar el sidebar, en vez de aprovechar el espacio que el colapso libera. El
             padding solo sigue existiendo para separar el contenido de los bordes de la
             ventana. */}
-        <main className="w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main className="w-full min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
             {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
                 del shell para que el sidebar y la topbar no parpadeen al navegar. */}

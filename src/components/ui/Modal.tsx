@@ -84,7 +84,9 @@ export function Modal({
           </svg>
         </button>
       </div>
-      <div className="p-5">{children}</div>
+      {/* `min-w-0`: el visor a pantalla completa mete aquí el SQL más ancho de la app y no debe
+          poder empujar el panel más allá de su `max-w`. */}
+      <div className="min-w-0 p-5">{children}</div>
       {footer && (
         <div className="flex items-center justify-end gap-2 border-t border-border p-5">
           {footer}
