@@ -17,4 +17,8 @@ if (!HTMLDialogElement.prototype.close) {
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => server.resetHandlers())
+// Las preferencias de UI (tema, paleta y ajuste de línea del SQL) viven en `localStorage`, que en
+// jsdom es el mismo objeto para todo el archivo: sin limpiarlo, un test que conmuta una
+// preferencia decide con qué estado arranca el siguiente.
+afterEach(() => localStorage.clear())
 afterAll(() => server.close())

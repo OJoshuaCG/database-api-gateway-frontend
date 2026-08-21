@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '@/lib/theme/ThemeProvider'
 import { SqlThemeProvider } from '@/lib/theme/SqlThemeProvider'
+import { SqlWrapProvider } from '@/lib/theme/SqlWrapProvider'
 import { ToastProvider } from '@/lib/toast/ToastProvider'
 
 /** QueryClient para tests: sin reintentos para que los errores se propaguen al instante. */
@@ -32,11 +33,13 @@ export function AllProviders({
   return (
     <ThemeProvider>
       <SqlThemeProvider>
-        <QueryClientProvider client={client}>
-          <ToastProvider>
-            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
-          </ToastProvider>
-        </QueryClientProvider>
+        <SqlWrapProvider>
+          <QueryClientProvider client={client}>
+            <ToastProvider>
+              <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+            </ToastProvider>
+          </QueryClientProvider>
+        </SqlWrapProvider>
       </SqlThemeProvider>
     </ThemeProvider>
   )
