@@ -2,10 +2,29 @@ import { Link } from 'react-router-dom'
 import { Badge, Button, DataTable, EmptyState, ErrorState, RefreshIcon } from '@/components/ui'
 import type { ModelDatabaseStatus } from '@/lib/contracts'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useModelDatabases, useRefreshModelDatabases } from '../hooks/use-database-models'
+import {
+  useModelDatabases,
+  useRefreshModelDatabases,
+  useUpdateDatabaseModel,
+} from '../hooks/use-database-models'
+
+/**
+ * Collation en el que coinciden TODAS las BDs, o `null` si discrepan o no lo declaran.
+ *
+ * Solo se ofrece adoptar cuando hay unanimidad: con BDs en collations distintos no hay un
+ * valor de referencia que deducir, y elegir uno por mayoría sería inventarse el esquema.
+ */
+function unanimousCollation(databases: ModelDatabaseStatus[]): string | null {
+  const values = databases.map((db) => db.collation).filter((c): c is string => Boolean(c))
+  if (values.length === 0 || values.length !== databases.length) return null
+  const first = values[0]!
+  return values.every((c) => c.toLowerCase() === first.toLowerCase()) ? first : null
+}
 
 interface ModelDatabasesStatusTableProps {
   modelId: number
+  /** Collation de referencia declarado; si falta, se ofrece adoptar el de las BDs. */
+  blueprintCollation?: string | null
   /** Abre el diálogo de aplicar con esta BD ya preseleccionada. */
   onApplyTo: (database: ModelDatabaseStatus) => void
 }
@@ -21,9 +40,19 @@ interface ModelDatabasesStatusTableProps {
  * apply. Si alguien migró una BD por fuera del gateway, el dato queda viejo hasta que se pulse
  * «Releer del motor», que es la única acción 🔌 de esta tabla.
  */
-export function ModelDatabasesStatusTable({ modelId, onApplyTo }: ModelDatabasesStatusTableProps) {
+export function ModelDatabasesStatusTable({
+  modelId,
+  blueprintCollation,
+  onApplyTo,
+}: ModelDatabasesStatusTableProps) {
   const databases = useModelDatabases(modelId, true)
   const refresh = useRefreshModelDatabases(modelId)
+  const updateModel = useUpdateDatabaseModel(modelId)
+
+  // Un blueprint sin collation declarado no puede avisar de un COLLATE forzado: la comparación
+  // no tiene contra qué. Si sus BDs coinciden, ese valor ES el esquema de referencia de facto,
+  // así que se ofrece declararlo en un clic en vez de pedir que lo teclee.
+  const adoptable = blueprintCollation ? null : unanimousCollation(databases.data ?? [])
 
   const columns: ColumnDef<ModelDatabaseStatus>[] = [
     {
@@ -118,6 +147,24 @@ export function ModelDatabasesStatusTable({ modelId, onApplyTo }: ModelDatabases
           <RefreshIcon /> Releer del motor 🔌
         </Button>
       </div>
+      {adoptable && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-muted/50 p-3">
+          <p className="text-xs text-muted-foreground">
+            Este blueprint no declara collation de referencia y todas sus BDs usan{' '}
+            <strong>{adoptable}</strong>. Declararlo permite avisar cuando una migración fuerza uno
+            distinto.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            isLoading={updateModel.isPending}
+            onClick={() => updateModel.mutate({ collation: adoptable })}
+          >
+            Declarar {adoptable}
+          </Button>
+        </div>
+      )}
       <DataTable
         data={databases.data ?? []}
         columns={columns}

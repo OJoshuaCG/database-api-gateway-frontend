@@ -45,6 +45,11 @@ export function DatabaseModelFormModal({ open, onClose, model }: DatabaseModelFo
                 description: model.description ?? '',
                 current_version: model.current_version,
                 is_active: model.is_active,
+                // `null` cuando el blueprint no lo declara: el selector se queda en "por
+                // defecto del motor" en vez de autopreseleccionar y declararlo sin querer.
+                charsetCollation: model.charset
+                  ? { charset: model.charset, collation: model.collation ?? null }
+                  : null,
               }
             : undefined
         }

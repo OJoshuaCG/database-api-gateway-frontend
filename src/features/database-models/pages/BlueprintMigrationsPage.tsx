@@ -138,6 +138,7 @@ export function BlueprintMigrationsPage() {
       {tab === 'estado' ? (
         <ModelDatabasesStatusTable
           modelId={modelId}
+          blueprintCollation={model.data.collation}
           onApplyTo={(database) => {
             setApplyTargets([database])
             setApplyAllOpen(true)
