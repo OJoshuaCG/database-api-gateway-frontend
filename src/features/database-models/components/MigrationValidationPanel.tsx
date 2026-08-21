@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Badge, Button, CodeBlock, Combobox, Spinner } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
 import type { ManagedDatabaseOut, MigrationValidateOut } from '@/lib/contracts'
@@ -29,6 +30,9 @@ export function MigrationValidationPanel({
   blueprintCollation,
 }: MigrationValidationPanelProps) {
   const validate = useValidateModelMigration(modelId)
+  // Se recuerda la BD elegida: con `value={null}` fijo, el desplegable se vaciaba al validar y
+  // no quedaba a la vista contra qué catálogo se había comprobado.
+  const [target, setTarget] = useState<ManagedDatabaseOut | null>(null)
   // Solo se piden las BDs cuando ya hay algo que validar: en una migración nueva y vacía este
   // desplegable no aporta nada y sería una llamada de más al abrir el formulario.
   const databases = useModelDatabases(modelId, upSql.trim().length > 0)
@@ -36,8 +40,8 @@ export function MigrationValidationPanel({
   const result = validate.data
   const error = validate.error ? toApiError(validate.error) : null
 
-  const run = (target: ManagedDatabaseOut | null) =>
-    validate.mutate({ up_sql: upSql, managed_database_id: target?.id })
+  const run = (against: ManagedDatabaseOut | null) =>
+    validate.mutate({ up_sql: upSql, managed_database_id: against?.id })
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
@@ -66,11 +70,15 @@ export function MigrationValidationPanel({
               label="Comprobar además contra una BD 🔌"
               hint="Verifica que las tablas que el SQL referencia existan de verdad. Es lo único que detecta un ALTER sobre una tabla inexistente."
               items={databases.data ?? []}
-              value={null}
-              onChange={(db) => db && run(db)}
+              value={target}
+              onChange={(db) => {
+                setTarget(db)
+                if (db) run(db)
+              }}
               itemToString={(db) => db.name}
               itemToKey={(db) => db.id}
               placeholder="Elige una BD para comprobar…"
+              clearable
               disabled={validate.isPending || upSql.trim().length === 0}
             />
           </div>
@@ -143,6 +151,17 @@ function ValidationResult({
           </div>
         </div>
       ))}
+
+      {/* Antes que las tablas: si hay versiones anteriores pendientes en esa BD, sus tablas
+          todavía no existen y la lista de abajo no es un error del SQL. */}
+      {result.pending_before.length > 0 && (
+        <p className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+          {result.checked_database} tiene pendientes las versiones{' '}
+          <strong>{result.pending_before.join(', ')}</strong> antes que esta. Las tablas que esas
+          versiones creen todavía no existen ahí, así que lo de abajo puede no ser un problema del
+          SQL.
+        </p>
+      )}
 
       {result.missing_tables.length > 0 && (
         <div className="rounded-lg border border-error/40 bg-error/5 p-3 text-xs text-error">

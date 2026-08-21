@@ -99,7 +99,7 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`). `GET .../databases` trae además el **estado de despliegue** por BD y lo consume la pestaña «Estado en las BDs» de `BlueprintMigrationsPage` (`?tab=estado`); `?refresh=true` 🔌 relee la versión real de cada motor |
+| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`). `GET .../databases` trae además el **estado de despliegue** por BD y lo consume la pestaña «Estado en las BDs» de `BlueprintMigrationsPage` (`?tab=estado`); el refresco 🔌 es `POST .../databases/refresh` |
 | 63 | `POST /database-models/from-snapshot` 🔌 | ✅ | Asistente `/database-models/from-snapshot` y CTA del panel de reconciliación |
 | 48–50 | Listar/crear/detallar migraciones | ✅ | `BlueprintMigrationsPage` (`/database-models/:modelId/migrations`); al crear, `version` va vacía = autoasignada |
 | 51 | `PATCH .../migrations/{version}` | ✅ | Confirmar `down_sql` sugerido, overrides por motor, y **aprobar el baseline** (`reviewed`, gate R1) |

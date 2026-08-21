@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import {
   fetchData,
   fetchList,
@@ -58,13 +59,19 @@ export function deleteDatabaseModel(id: number): Promise<string | undefined> {
 /** BDs que replican este blueprint (§8). */
 export function listModelDatabases(
   id: number,
-  options: { refresh?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<ModelDatabaseStatus[]> {
-  return fetchList(`${BASE}/${id}/databases`, modelDatabaseStatusSchema, {
-    // `refresh` es 🔌: relee la versión real de cada BD y resincroniza la copia del gateway.
-    // Sin él la respuesta sale de datos locales y no abre ninguna conexión.
-    query: options.refresh ? { refresh: true } : undefined,
-    signal,
-  })
+  return fetchList(`${BASE}/${id}/databases`, modelDatabaseStatusSchema, { signal })
+}
+
+/**
+ * `POST .../databases/refresh` 🔌 — relee la versión real de cada BD y resincroniza la copia
+ * del gateway.
+ *
+ * Es POST y no un parámetro del GET porque **tiene efectos**: abre conexiones a los motores y
+ * reescribe `model_version`. Colgarlo del GET además obligaba a limitar por tasa la lectura
+ * barata, que es la que hace la UI al reenfocar la ventana.
+ */
+export function refreshModelDatabases(id: number): Promise<ModelDatabaseStatus[]> {
+  return mutateData('POST', `${BASE}/${id}/databases/refresh`, z.array(modelDatabaseStatusSchema))
 }

@@ -10,6 +10,7 @@ import {
   getDatabaseModel,
   listDatabaseModels,
   listModelDatabases,
+  refreshModelDatabases,
   updateDatabaseModel,
 } from '../api/database-models.api'
 
@@ -39,7 +40,7 @@ export function useDatabaseModel(id: number, enabled = true) {
 export function useModelDatabases(id: number, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.databaseModels.databases(id),
-    queryFn: ({ signal }) => listModelDatabases(id, {}, signal),
+    queryFn: ({ signal }) => listModelDatabases(id, signal),
     enabled,
   })
 }
@@ -47,15 +48,15 @@ export function useModelDatabases(id: number, enabled: boolean) {
 /**
  * Relee la versión REAL de cada BD y resincroniza la copia del gateway. 🔌
  *
- * Es una mutación aunque el endpoint sea `GET`: tiene efectos (escribe `model_version`), abre
- * conexiones y solo debe dispararse cuando el usuario lo pide. Como query se re-ejecutaría al
- * reenfocar la ventana, machacando los motores sin que nadie lo haya pedido.
+ * El endpoint es `POST` porque tiene efectos: abre conexiones y reescribe `model_version`.
+ * Colgarlo del `GET` obligaba además a limitar por tasa la lectura barata, que es la que la UI
+ * repite al reenfocar la ventana.
  */
 export function useRefreshModelDatabases(id: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
   return useMutation({
-    mutationFn: () => listModelDatabases(id, { refresh: true }),
+    mutationFn: () => refreshModelDatabases(id),
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.databaseModels.databases(id), data)
       toast.success('Estado actualizado', `${data.length} BD(s) releídas del motor`)

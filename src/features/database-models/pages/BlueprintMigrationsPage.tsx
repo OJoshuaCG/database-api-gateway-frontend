@@ -218,7 +218,12 @@ export function BlueprintMigrationsPage() {
           if (!deleteTarget) return
           setDeleteError(null)
           deleteMigration.mutate(deleteTarget, {
-            onSuccess: () => setDeleteTarget(null),
+            onSuccess: () => {
+              setDeleteTarget(null)
+              // También el error: si no, tras un 409 y un reintento con éxito, el mensaje
+              // viejo reaparecía al abrir el diálogo para otra versión.
+              setDeleteError(null)
+            },
             onError: (err) => {
               // El 409 se muestra AQUÍ, no solo como toast: su mensaje es la única forma de
               // saber cuál de las tres reglas se incumplió (aplicada con éxito / aplicación

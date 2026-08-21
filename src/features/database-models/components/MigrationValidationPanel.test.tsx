@@ -15,13 +15,13 @@ function result(overrides: Record<string, unknown> = {}) {
     ],
     has_seed: false,
     forced_collations: [],
-    forced_charsets: [],
     destructive_statements: [],
     parse_errors: [],
     gateway_internal_tables: [],
     postgresql_blockers: [],
     resumable: true,
     referenced_tables: ['t'],
+    pending_before: [],
     checked_database: null,
     missing_tables: [],
     catalog_error: null,
@@ -64,7 +64,7 @@ describe('MigrationValidationPanel', () => {
     await validate({ checked_database: 'app_prod', missing_tables: ['clientes'] })
     // Es el caso que ningún análisis estático detecta: un ALTER sobre una tabla inexistente
     // es sintácticamente impecable.
-    expect(await screen.findByText(/no existen en app_prod/)).toBeInTheDocument()
+    expect(await screen.findByText(/no existen en/)).toBeInTheDocument()
     expect(screen.getByText(/clientes/)).toBeInTheDocument()
   })
 
@@ -94,5 +94,16 @@ describe('MigrationValidationPanel', () => {
     await validate({ has_seed: true, destructive_statements: [0] })
     expect(await screen.findByText(/siembra datos/)).toBeInTheDocument()
     expect(screen.getByText(/sentencia\(s\) destructiva\(s\)/)).toBeInTheDocument()
+  })
+
+  it('avisa de las versiones anteriores pendientes antes de culpar al SQL', async () => {
+    await validate({
+      checked_database: 'app_prod',
+      pending_before: ['0001', '0002'],
+      missing_tables: ['clientes'],
+    })
+    // El aviso va ANTES: si esas versiones aún no se aplicaron, sus tablas no existen todavía
+    // y la lista de "no existen" no es un problema del SQL.
+    expect(await screen.findByText(/tiene pendientes las versiones/)).toBeInTheDocument()
   })
 })

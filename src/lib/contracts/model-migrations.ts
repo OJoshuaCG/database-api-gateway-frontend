@@ -232,14 +232,20 @@ export const migrationValidateOutSchema = z.object({
   statements: z.array(validateStatementSchema).default([]),
   has_seed: z.boolean().default(false),
   forced_collations: z.array(z.string()).default([]),
-  forced_charsets: z.array(z.string()).default([]),
   destructive_statements: z.array(z.number().int()).default([]),
   parse_errors: z.array(z.object({ seq: z.number().int(), message: z.string() })).default([]),
   gateway_internal_tables: z.array(z.string()).default([]),
   /** No vacío = el apply contra PostgreSQL dará 422 salvo que se defina `up_sql_postgresql`. */
   postgresql_blockers: z.array(z.string()).default([]),
   resumable: z.boolean().default(true),
+  /** Tablas que el SQL necesita PREEXISTENTES (no las que él mismo crea). */
   referenced_tables: z.array(z.string()).default([]),
+  /**
+   * Versiones que la BD comprobada tiene pendientes ANTES de la validada. Si no está vacío,
+   * las tablas que ESAS versiones crean todavía no existen: lo que falla es la premisa de la
+   * comprobación, no el SQL.
+   */
+  pending_before: z.array(z.string()).default([]),
   /** Solo si se pidió verificar contra una BD concreta. */
   checked_database: z.string().nullable().optional(),
   missing_tables: z.array(z.string()).default([]),
