@@ -27,12 +27,11 @@ describe('CodeBlock', () => {
 
   it('colorea cada tipo de token con su token del tema', () => {
     const { container } = renderWithProviders(<CodeBlock code={SQL} />)
-    const keyword = Array.from(container.querySelectorAll('span')).find(
-      (span) => span.textContent === 'SELECT',
-    )
-    const comment = Array.from(container.querySelectorAll('span')).find((span) =>
-      span.textContent?.startsWith('-- comentario'),
-    )
+    // Solo los spans de TOKEN: `.code-line` envuelve la línea entera y en una línea de un solo
+    // token su texto coincide, así que buscar sobre todos los `span` encontraba la fila.
+    const tokens = Array.from(container.querySelectorAll('.code-text > span'))
+    const keyword = tokens.find((span) => span.textContent === 'SELECT')
+    const comment = tokens.find((span) => span.textContent?.startsWith('-- comentario'))
     expect(keyword?.className).toContain('text-syntax-keyword')
     expect(comment?.className).toContain('text-syntax-comment')
   })
