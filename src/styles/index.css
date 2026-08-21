@@ -2,6 +2,8 @@
 @import './theme.css';
 /* Después de theme.css: redefine las variables `--syntax-*` según la paleta elegida. */
 @import './syntax-themes.css';
+/* Estructura de los visores de SQL: numeración y ajuste de línea. */
+@import './code.css';
 
 @layer base {
   /* `color-scheme` lo fija `theme.css` junto al resto del tema, para que siga al tema ELEGIDO

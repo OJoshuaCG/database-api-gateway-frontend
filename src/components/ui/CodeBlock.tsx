@@ -1,8 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/lib/toast/use-toast'
-import { countLines, SQL_TOKEN_CLASS, tokenizeSql } from '@/lib/syntax/sql-highlight'
-import { CopyIcon, ExpandIcon } from './icons'
+import { useSqlWrap } from '@/lib/theme/use-sql-wrap'
+import {
+  countLines,
+  gutterWidthStyle,
+  splitTokenLines,
+  SQL_TOKEN_CLASS,
+  tokenizeSql,
+} from '@/lib/syntax/sql-highlight'
+import { CopyIcon, ExpandIcon, WrapIcon } from './icons'
 import { Modal } from './Modal'
 import { SqlThemeSelect } from './SqlThemeSelect'
 
@@ -29,9 +36,21 @@ export interface CodeBlockProps {
  *
  * Sustituye a los bloques `<pre>` que estaban duplicados por toda la app. El SQL que muestra el
  * gateway es DDL que el admin va a ejecutar contra un motor real, así que el criterio es que se
- * lea sin fricción: no se envuelven las líneas (se hace scroll horizontal) porque partir un
- * identificador SQL a mitad cambia lo que el ojo lee, y la numeración permite referirse a una
- * línea concreta al reportar un problema.
+ * lea sin fricción.
+ *
+ * Dos modos, con un botón en la barra y **preferencia global** (`SqlWrapProvider`), para que dos
+ * SQL contiguos nunca se lean con reglas distintas:
+ *
+ *   - **Ajuste de línea (por omisión).** No hay que arrastrar en horizontal para leer una
+ *     sentencia entera. Es seguro para DDL porque se mantiene la numeración por línea lógica y la
+ *     continuación de una línea envuelta queda sangrada bajo el código, así que nunca se confunde
+ *     con una sentencia nueva.
+ *   - **Scroll horizontal.** Cada línea del origen es una línea en pantalla, sin excepción.
+ *
+ * En los dos modos se numera una fila por línea LÓGICA, lo que permite referirse a una línea
+ * concreta al reportar un problema. Nunca se usa `break-all` sobre SQL: partir un identificador a
+ * mitad cambia lo que el ojo lee, así que un literal larguísimo sin espacios sigue desbordando y
+ * el scroll del bloque es su válvula de escape.
  */
 export function CodeBlock({
   code,
@@ -106,7 +125,8 @@ function CodeSurface({
   onExpand?: () => void
 }) {
   const toast = useToast()
-  const tokens = useMemo(() => tokenizeSql(code), [code])
+  const { wrap, toggleWrap } = useSqlWrap()
+  const lines = useMemo(() => splitTokenLines(tokenizeSql(code)), [code])
   const lineCount = countLines(code)
   const showGutter = !hideLineNumbers && lineCount > 1
 
@@ -132,6 +152,11 @@ function CodeSurface({
           {lineCount > 0 && (
             <span className="mr-1 text-xs text-muted-foreground">{lineCount} línea(s)</span>
           )}
+          {/* Etiqueta FIJA + `aria-pressed`: si además cambiara el texto, el lector de pantalla
+              anunciaría el estado dos veces y en sentidos opuestos. */}
+          <ToolbarButton label="Ajustar líneas" pressed={wrap} onClick={toggleWrap}>
+            <WrapIcon />
+          </ToolbarButton>
           <ToolbarButton label="Copiar SQL" onClick={handleCopy}>
             <CopyIcon />
           </ToolbarButton>
@@ -153,28 +178,34 @@ function CodeSurface({
           tabIndex={0}
           role="group"
           aria-label={title ? `SQL: ${title}` : 'SQL'}
+          style={gutterWidthStyle(lineCount)}
           className={cn(
-            'flex overflow-auto rounded-lg border border-border bg-syntax-bg font-mono text-xs leading-5',
+            'overflow-auto rounded-lg border border-border bg-syntax-bg font-mono text-xs leading-5',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             maxHeightClass,
           )}
         >
-          {showGutter && (
-            // `sticky left-0`: la numeración se queda a la vista al desplazarse en horizontal.
-            <div
-              aria-hidden
-              className="sticky left-0 shrink-0 select-none border-r border-border bg-syntax-bg px-2 py-3 text-right text-syntax-gutter"
-            >
-              {Array.from({ length: lineCount }, (_, index) => (
-                <div key={index}>{index + 1}</div>
-              ))}
-            </div>
-          )}
-          <pre className="min-w-0 flex-1 px-3 py-3 text-syntax-plain">
+          {/* Una fila por línea lógica (ver `styles/code.css`): es lo que permite numerar y
+              envolver a la vez. El número lo pinta un pseudo-elemento a partir de `data-line`,
+              así que no se lo lleva la selección al copiar con el ratón. */}
+          {/* El relleno vertical va aquí y no en el contenedor con scroll: si fuera del contenedor
+              se quedaría fijo y el texto se vería pasar por debajo al desplazarse. */}
+          <pre
+            className={cn(
+              'code-lines py-3 text-syntax-plain',
+              showGutter && 'code-lines--numbered',
+            )}
+          >
             <code>
-              {tokens.map((token, index) => (
-                <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
-                  {token.content}
+              {lines.map((lineTokens, lineIndex) => (
+                <span key={lineIndex} className="code-line" data-line={lineIndex + 1}>
+                  <span className="code-text">
+                    {lineTokens.map((token, index) => (
+                      <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
+                        {token.content}
+                      </span>
+                    ))}
+                  </span>
                 </span>
               ))}
             </code>
@@ -187,10 +218,13 @@ function CodeSurface({
 
 function ToolbarButton({
   label,
+  pressed,
   onClick,
   children,
 }: {
   label: string
+  /** Marca el control como conmutador: aporta `aria-pressed` y el tinte de estado activo. */
+  pressed?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -202,7 +236,11 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-pressed={pressed}
+      className={cn(
+        'rounded-md p-1.5 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        pressed ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
+      )}
     >
       {children}
     </button>

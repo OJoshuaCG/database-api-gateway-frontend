@@ -217,3 +217,15 @@ export function ExpandIcon({ className }: IconProps) {
     </Glyph>
   )
 }
+
+/** Ajuste de línea: dos renglones y un tercero que retorna, como el símbolo «↵» de los editores. */
+export function WrapIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M3.4 5.4h13.2" />
+      <path d="M3.4 9.4h9.9a2.6 2.6 0 010 5.2H8.2" />
+      <path d="M10.2 12.6L8 14.6l2.2 2" />
+      <path d="M3.4 14.6h2.2" />
+    </Glyph>
+  )
+}

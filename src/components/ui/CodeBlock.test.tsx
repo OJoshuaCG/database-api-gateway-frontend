@@ -41,15 +41,59 @@ describe('CodeBlock', () => {
     renderWithProviders(<CodeBlock code={SQL} title="Consulta" />)
     expect(screen.getByText('4 línea(s)')).toBeInTheDocument()
     const region = screen.getByRole('group', { name: 'SQL: Consulta' })
-    // La numeración es decorativa: se marca `aria-hidden` para no ensuciar el lector de pantalla.
-    const gutter = region.querySelector('[aria-hidden]')
-    expect(gutter?.textContent).toBe('1234')
+    // El número se pinta con `content: attr(data-line)` para que no se lo lleve la selección al
+    // copiar con el ratón; en el DOM solo existe el atributo, que es lo que se comprueba aquí.
+    const lines = Array.from(region.querySelectorAll('[data-line]'))
+    expect(lines.map((line) => line.getAttribute('data-line'))).toEqual(['1', '2', '3', '4'])
+    expect(region.querySelector('.code-lines--numbered')).not.toBeNull()
+  })
+
+  it('reparte cada línea del SQL en su propia fila', () => {
+    renderWithProviders(<CodeBlock code={SQL} title="Consulta" />)
+    const region = screen.getByRole('group', { name: 'SQL: Consulta' })
+    const lines = Array.from(region.querySelectorAll('[data-line]'))
+    expect(lines[0]?.textContent).toBe('-- comentario')
+    expect(lines[3]?.textContent).toBe("WHERE activo = 'S';")
   })
 
   it('omite la numeración en un fragmento de una sola línea', () => {
     renderWithProviders(<CodeBlock code="SELECT 1;" title="Uno" />)
     const region = screen.getByRole('group', { name: 'SQL: Uno' })
-    expect(region.querySelector('[aria-hidden]')).toBeNull()
+    expect(region.querySelector('.code-lines--numbered')).toBeNull()
+  })
+
+  it('envuelve las líneas por omisión y deja alternar a scroll horizontal', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<CodeBlock code={SQL} title="Consulta" />)
+
+    const toggle = screen.getByRole('button', { name: 'Ajustar líneas' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(document.documentElement.dataset.sqlWrap).toBe('on')
+
+    await user.click(toggle)
+
+    // La etiqueta NO cambia: el estado lo lleva `aria-pressed`, para que el lector de pantalla no
+    // lo anuncie dos veces y en sentidos opuestos.
+    expect(screen.getByRole('button', { name: 'Ajustar líneas' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(document.documentElement.dataset.sqlWrap).toBe('off')
+  })
+
+  it('comparte el modo entre el bloque embebido y el visor a pantalla completa', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<CodeBlock code={SQL} title="Consulta" />)
+    await user.click(screen.getByRole('button', { name: 'Ver a pantalla completa' }))
+
+    // Uno por superficie (embebida y modal), los dos en el mismo estado.
+    const toggles = screen.getAllByRole('button', { name: 'Ajustar líneas' })
+    expect(toggles).toHaveLength(2)
+
+    await user.click(toggles[1]!)
+    for (const toggle of screen.getAllByRole('button', { name: 'Ajustar líneas' })) {
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    }
   })
 
   it('abre el visor a pantalla completa con el mismo SQL', async () => {

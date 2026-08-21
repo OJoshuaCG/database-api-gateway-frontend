@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { countLines, SQL_TOKEN_CLASS, tokenizeSql, type SqlTokenType } from './sql-highlight'
+import {
+  countLines,
+  gutterWidthStyle,
+  splitTokenLines,
+  SQL_TOKEN_CLASS,
+  tokenizeSql,
+  type SqlTokenType,
+} from './sql-highlight'
 
 /** Reconstruye el texto a partir de los tokens: la garantía que hace fiable al resaltador. */
 function rebuild(code: string): string {
@@ -95,9 +102,9 @@ describe('clasificación de tokens', () => {
 describe('mapa de clases', () => {
   it('cubre todos los tipos que puede emitir el tokenizador', () => {
     const emitted = new Set(
-      tokenizeSql(
-        "-- c\nSELECT COUNT(id), 'txt', 1, TRUE FROM `t` WHERE a <> @v AND b = 2;",
-      ).map((token) => token.type),
+      tokenizeSql("-- c\nSELECT COUNT(id), 'txt', 1, TRUE FROM `t` WHERE a <> @v AND b = 2;").map(
+        (token) => token.type,
+      ),
     )
     for (const type of emitted) {
       expect(SQL_TOKEN_CLASS[type], `falta la clase de «${type}»`).toBeTruthy()
@@ -109,6 +116,59 @@ describe('mapa de clases', () => {
       expect(className).not.toMatch(/#[0-9a-f]{3,8}|rgb\(/i)
       expect(className).toMatch(/text-syntax-/)
     }
+  })
+})
+
+describe('splitTokenLines', () => {
+  /** El visor renderiza una fila por línea; unirlas debe devolver el original tal cual. */
+  function rebuildLines(code: string): string {
+    return splitTokenLines(tokenizeSql(code))
+      .map((line) => line.map((token) => token.content).join(''))
+      .join('\n')
+  }
+
+  const samples: [string, string][] = [
+    ['DDL de varias líneas', 'CREATE TABLE t (\n  id INT\n);'],
+    ['comentario de bloque multilínea', 'SELECT 1; /* varias\nlíneas\nmás */ SELECT 2;'],
+    ['línea vacía intermedia', 'SELECT 1;\n\nSELECT 2;'],
+    ['salto final', 'SELECT 1;\n'],
+    ['saltos consecutivos al final', 'SELECT 1;\n\n\n'],
+    ['una sola línea', 'SELECT 1;'],
+    ['solo saltos', '\n\n'],
+  ]
+
+  for (const [name, sql] of samples) {
+    it(`conserva el texto y el número de líneas: ${name}`, () => {
+      expect(rebuildLines(sql)).toBe(sql)
+      expect(splitTokenLines(tokenizeSql(sql))).toHaveLength(countLines(sql))
+    })
+  }
+
+  it('devuelve una línea vacía con la cadena vacía, para que el editor tenga dónde poner el cursor', () => {
+    expect(splitTokenLines([])).toEqual([[]])
+  })
+
+  it('no emite tokens vacíos al partir', () => {
+    const lines = splitTokenLines(tokenizeSql('SELECT 1;\n\nSELECT 2;\n'))
+    expect(lines.flat().every((token) => token.content.length > 0)).toBe(true)
+  })
+
+  it('conserva el tipo de cada fragmento de un token multilínea', () => {
+    const lines = splitTokenLines(tokenizeSql('/* uno\ndos */'))
+    expect(lines[0]?.[0]?.type).toBe('comment')
+    expect(lines[1]?.[0]?.type).toBe('comment')
+  })
+})
+
+describe('gutterWidthStyle', () => {
+  it('dimensiona la columna según los dígitos del último número', () => {
+    expect(gutterWidthStyle(9)).toEqual({ '--code-gutter-w': 'calc(1ch + 1.25rem)' })
+    expect(gutterWidthStyle(10)).toEqual({ '--code-gutter-w': 'calc(2ch + 1.25rem)' })
+    expect(gutterWidthStyle(1234)).toEqual({ '--code-gutter-w': 'calc(4ch + 1.25rem)' })
+  })
+
+  it('no colapsa la columna con un fragmento vacío', () => {
+    expect(gutterWidthStyle(0)).toEqual({ '--code-gutter-w': 'calc(1ch + 1.25rem)' })
   })
 })
 
