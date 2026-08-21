@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { engineTypeSchema, migrationKindSchema, SLUG_PATTERN } from './common'
 import { dumpObjectTypeSchema } from './snapshot'
+import { managedDatabaseOutSchema } from './managed-databases'
 
 /** `DatabaseModelOut` (§8). */
 export const databaseModelOutSchema = z.object({
@@ -10,6 +11,14 @@ export const databaseModelOutSchema = z.object({
   description: z.string().nullable().optional(),
   current_version: z.string(),
   is_active: z.boolean(),
+  /**
+   * Juego de caracteres y collation de REFERENCIA del esquema (api-reference-v11 §2). Un
+   * blueprint es el esquema base que sus BDs replican, y el collation forma parte del esquema.
+   * Nulables: los blueprints anteriores no lo declaran, y mientras esté vacío el validador no
+   * puede marcar conflictos. Semántica de la familia MySQL — no aplica a destinos PostgreSQL.
+   */
+  charset: z.string().nullable().optional(),
+  collation: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -26,6 +35,8 @@ export const databaseModelCreateSchema = z.object({
   description: z.string().nullable().optional(),
   current_version: z.string().max(50, 'Máximo 50 caracteres').optional(),
   is_active: z.boolean().optional(),
+  charset: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
+  collation: z.string().max(100, 'Máximo 100 caracteres').nullable().optional(),
 })
 export type DatabaseModelCreate = z.infer<typeof databaseModelCreateSchema>
 
@@ -171,3 +182,20 @@ export const fromSnapshotOutSchema = z.object({
   versions: z.array(versionSummarySchema).default([]),
 })
 export type FromSnapshotOut = z.infer<typeof fromSnapshotOutSchema>
+
+/**
+ * Una BD del blueprint con su estado de despliegue (api-reference-v11 §3).
+ *
+ * Extiende el listado que ya existía en vez de ser un recurso nuevo: son tres campos más
+ * sobre la misma entidad, y un endpoint hermano habría obligado a cruzar dos respuestas.
+ *
+ * `model_version` es la copia que el gateway mantiene tras cada apply, no una lectura en
+ * vivo del motor. Para forzar la relectura, `?refresh=true` (🔌).
+ */
+export const modelDatabaseStatusSchema = managedDatabaseOutSchema.extend({
+  pending_count: z.number().int().optional().default(0),
+  pending_versions: z.array(z.string()).optional().default([]),
+  /** Ojo: `model_version` NO lo refleja — Alembic solo registra al TERMINAR el upgrade. */
+  has_partial_application: z.boolean().optional().default(false),
+})
+export type ModelDatabaseStatus = z.infer<typeof modelDatabaseStatusSchema>

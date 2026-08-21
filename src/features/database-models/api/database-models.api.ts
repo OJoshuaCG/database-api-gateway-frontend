@@ -9,13 +9,13 @@ import {
 import {
   databaseModelOutSchema,
   fromSnapshotOutSchema,
-  managedDatabaseOutSchema,
+  modelDatabaseStatusSchema,
   type DatabaseModelCreate,
   type DatabaseModelOut,
+  type ModelDatabaseStatus,
   type DatabaseModelUpdate,
   type FromSnapshotIn,
   type FromSnapshotOut,
-  type ManagedDatabaseOut,
   type Page,
 } from '@/lib/contracts'
 
@@ -58,7 +58,13 @@ export function deleteDatabaseModel(id: number): Promise<string | undefined> {
 /** BDs que replican este blueprint (§8). */
 export function listModelDatabases(
   id: number,
+  options: { refresh?: boolean } = {},
   signal?: AbortSignal,
-): Promise<ManagedDatabaseOut[]> {
-  return fetchList(`${BASE}/${id}/databases`, managedDatabaseOutSchema, { signal })
+): Promise<ModelDatabaseStatus[]> {
+  return fetchList(`${BASE}/${id}/databases`, modelDatabaseStatusSchema, {
+    // `refresh` es 🔌: relee la versión real de cada BD y resincroniza la copia del gateway.
+    // Sin él la respuesta sale de datos locales y no abre ninguna conexión.
+    query: options.refresh ? { refresh: true } : undefined,
+    signal,
+  })
 }

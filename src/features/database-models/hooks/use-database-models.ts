@@ -30,11 +30,37 @@ export function useDatabaseModel(id: number, enabled = true) {
   })
 }
 
+/**
+ * BDs del blueprint **con su estado de despliegue** (versión actual, pendientes, parcial).
+ *
+ * Sustituye a lo que antes exigía una llamada por BD a `/migrations/status`, cada una con su
+ * conexión al motor: ahora la tabla entera sale de una respuesta servida con datos locales.
+ */
 export function useModelDatabases(id: number, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.databaseModels.databases(id),
-    queryFn: ({ signal }) => listModelDatabases(id, signal),
+    queryFn: ({ signal }) => listModelDatabases(id, {}, signal),
     enabled,
+  })
+}
+
+/**
+ * Relee la versión REAL de cada BD y resincroniza la copia del gateway. 🔌
+ *
+ * Es una mutación aunque el endpoint sea `GET`: tiene efectos (escribe `model_version`), abre
+ * conexiones y solo debe dispararse cuando el usuario lo pide. Como query se re-ejecutaría al
+ * reenfocar la ventana, machacando los motores sin que nadie lo haya pedido.
+ */
+export function useRefreshModelDatabases(id: number) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: () => listModelDatabases(id, { refresh: true }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.databaseModels.databases(id), data)
+      toast.success('Estado actualizado', `${data.length} BD(s) releídas del motor`)
+    },
+    onError: (error) => toast.error('No se pudo releer el estado', toApiError(error).message),
   })
 }
 

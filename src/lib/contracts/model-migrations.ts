@@ -26,6 +26,44 @@ export const migrationTranslatedSchema = z.object({
 export type MigrationTranslated = z.infer<typeof migrationTranslatedSchema>
 
 /**
+ * Motivo por el que una versión está restringida. `not_tip` **solo** impide borrarla: editarla
+ * sigue permitido, y confundir las dos cosas es lo que hacía que la UI mintiera sobre lo que se
+ * podía hacer.
+ */
+export const migrationBlockReasonSchema = z.enum(['applied', 'partial', 'not_tip'])
+export type MigrationBlockReason = z.infer<typeof migrationBlockReasonSchema>
+
+/**
+ * Banderas de política que el backend calcula y publica (§8).
+ *
+ * Son la DECISIÓN, no sus insumos: el backend no manda «en cuántas BDs se aplicó» para que el
+ * cliente deduzca la regla, porque entonces la misma política viviría escrita a los dos lados
+ * del contrato y se desincronizarían. Con esto la UI puede bloquear el campo *antes* de que se
+ * escriba, en vez de rechazarlo al guardar.
+ *
+ * Los tres son opcionales con default permisivo: un backend anterior a este contrato no los
+ * envía, y en ese caso la UI se comporta como antes (todo editable, el 409 sigue de red).
+ */
+const migrationPolicyFields = {
+  sql_frozen: z.boolean().optional().default(false),
+  deletable: z.boolean().optional().default(true),
+  block_reason: migrationBlockReasonSchema.nullable().optional(),
+}
+
+/**
+ * Hechos derivados del SQL, para las insignias del listado (api-reference-v11).
+ *
+ * El backend los calcula con heurísticas de texto —baratas, se pagan por fila— y no con el
+ * análisis completo: parsear hasta 256 KB por versión solo para decidir si se dibuja una
+ * plantita no se sostiene. El veredicto fino lo da el endpoint de validación cuando se pide.
+ */
+const migrationSqlFactFields = {
+  has_seed: z.boolean().optional().default(false),
+  forced_collations: z.array(z.string()).optional().default([]),
+  destructive: z.boolean().optional().default(false),
+}
+
+/**
  * `ModelMigrationOut` — detalle completo de una migración (§8). Plan 09 añade los campos de
  * baseline de snapshot: `source_engine`, `is_baseline`, `has_non_portable` y `reviewed`
  * (un baseline de snapshot nace `reviewed=false` y no se puede aplicar hasta aprobarlo).
@@ -52,6 +90,8 @@ export const modelMigrationOutSchema = z.object({
    * (en la creación o en un PATCH posterior) fuerza `reviewed` a `false` — ver §2.3/§4.1.
    */
   capture_selects: z.boolean().optional().default(false),
+  ...migrationPolicyFields,
+  ...migrationSqlFactFields,
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -76,6 +116,8 @@ export const modelMigrationSummarySchema = z.object({
   reviewed: z.boolean().optional(),
   /** Ver `modelMigrationOutSchema.capture_selects` (api-reference-v9 §7). */
   capture_selects: z.boolean().optional().default(false),
+  ...migrationPolicyFields,
+  ...migrationSqlFactFields,
   checksum: z.string(),
   created_at: z.string(),
 })
@@ -149,6 +191,12 @@ export const applyAllItemSchema = z.object({
     .optional(),
   pending_versions: z.array(z.string()).optional(),
   error: z.string().nullable().optional(),
+  /**
+   * Paridad con el apply por BD (api-reference-v11 §3). Sin estos campos, tras un apply
+   * masivo no había forma de saber en qué BDs quedaron capturas ni cómo llegar a ellas.
+   */
+  captured_select_count: z.number().int().optional().default(0),
+  select_results_available: z.boolean().optional().default(false),
 })
 export type ApplyAllItem = z.infer<typeof applyAllItemSchema>
 
@@ -160,3 +208,51 @@ export const applyAllResultSchema = z.object({
   results: z.array(applyAllItemSchema),
 })
 export type ApplyAllResult = z.infer<typeof applyAllResultSchema>
+
+/**
+ * Validación estática del SQL de una migración (api-reference-v11 §1).
+ *
+ * La forma de `statements` es deliberadamente la misma que la del preview de la consola SQL,
+ * para poder reutilizar su panel de clasificación en vez de inventar otra presentación.
+ */
+export const validateStatementSchema = z.object({
+  seq: z.number().int(),
+  sql: z.string(),
+  kind: z.string(),
+  danger: z.string(),
+  reasons: z.array(z.object({ code: z.string(), message: z.string() })).default([]),
+  seeds: z.boolean().default(false),
+  destructive: z.boolean().default(false),
+  collations: z.array(z.string()).default([]),
+  parse_error: z.string().nullable().optional(),
+})
+export type ValidateStatement = z.infer<typeof validateStatementSchema>
+
+export const migrationValidateOutSchema = z.object({
+  statements: z.array(validateStatementSchema).default([]),
+  has_seed: z.boolean().default(false),
+  forced_collations: z.array(z.string()).default([]),
+  forced_charsets: z.array(z.string()).default([]),
+  destructive_statements: z.array(z.number().int()).default([]),
+  parse_errors: z.array(z.object({ seq: z.number().int(), message: z.string() })).default([]),
+  gateway_internal_tables: z.array(z.string()).default([]),
+  /** No vacío = el apply contra PostgreSQL dará 422 salvo que se defina `up_sql_postgresql`. */
+  postgresql_blockers: z.array(z.string()).default([]),
+  resumable: z.boolean().default(true),
+  referenced_tables: z.array(z.string()).default([]),
+  /** Solo si se pidió verificar contra una BD concreta. */
+  checked_database: z.string().nullable().optional(),
+  missing_tables: z.array(z.string()).default([]),
+  /** El motor no era alcanzable: el análisis estático viene igual. */
+  catalog_error: z.string().nullable().optional(),
+  blueprint_collation: z.string().nullable().optional(),
+  collation_conflicts: z.array(z.string()).default([]),
+})
+export type MigrationValidateOut = z.infer<typeof migrationValidateOutSchema>
+
+export const migrationValidateInSchema = z.object({
+  up_sql: z.string().max(SQL_MAX).optional(),
+  version: z.string().optional(),
+  managed_database_id: z.number().int().optional(),
+})
+export type MigrationValidateIn = z.infer<typeof migrationValidateInSchema>

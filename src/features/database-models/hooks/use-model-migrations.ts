@@ -3,7 +3,11 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
-import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
+import type {
+  MigrationValidateIn,
+  ModelMigrationCreate,
+  ModelMigrationPatch,
+} from '@/lib/contracts'
 import {
   applyAllMigrations,
   createModelMigration,
@@ -11,6 +15,7 @@ import {
   getModelMigration,
   listModelMigrations,
   updateModelMigration,
+  validateModelMigration,
   type ApplyAllOptions,
 } from '../api/model-migrations.api'
 
@@ -58,7 +63,8 @@ export function useUpdateModelMigration(modelId: number) {
       )
       toast.success('Migración actualizada', `${migration.version} · ${migration.name}`)
     },
-    onError: (error) => toast.error('No se pudo actualizar la migración', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo actualizar la migración', toApiError(error).message),
   })
 }
 
@@ -97,6 +103,23 @@ export function useApplyAllMigrations(modelId: number) {
         }
       }
     },
-    onError: (error) => toast.error('No se pudo ejecutar la aplicación masiva', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo ejecutar la aplicación masiva', toApiError(error).message),
+  })
+}
+
+/**
+ * Valida el SQL de una migración antes de aplicarla (api-reference-v11 §1).
+ *
+ * Es una mutación y no una query a propósito: se dispara cuando el usuario pulsa «Validar»,
+ * no en cada tecla. El endpoint tiene rate limit (20/min) y, con `managedDatabaseId`, abre
+ * una conexión al motor — validar mientras se escribe lo agotaría en segundos.
+ *
+ * Sin `onError` con toast: el panel de resultados ya muestra el fallo en contexto, y un toast
+ * encima solo taparía lo que el usuario está leyendo.
+ */
+export function useValidateModelMigration(modelId: number) {
+  return useMutation({
+    mutationFn: (body: MigrationValidateIn) => validateModelMigration(modelId, body),
   })
 }

@@ -1,9 +1,12 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
   applyAllResultSchema,
+  migrationValidateOutSchema,
   modelMigrationOutSchema,
   modelMigrationSummarySchema,
   type ApplyAllResult,
+  type MigrationValidateIn,
+  type MigrationValidateOut,
   type ModelMigrationCreate,
   type ModelMigrationOut,
   type ModelMigrationPatch,
@@ -68,6 +71,12 @@ export function deleteModelMigration(
 
 export interface ApplyAllOptions {
   maxDatabases?: number
+  /**
+   * Destinos concretos. Sin él se aplica a TODAS las BDs del blueprint (hasta `maxDatabases`).
+   * Un id que no pertenezca al blueprint devuelve 422 con la lista: es la frontera que impide
+   * aplicar sus migraciones a una BD ajena.
+   */
+  databaseIds?: number[]
   force?: boolean
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
@@ -87,10 +96,29 @@ export function applyAllMigrations(
   return mutateData('POST', `${base(modelId)}/apply-all`, applyAllResultSchema, {
     query: {
       max_databases: options.maxDatabases,
+      database_ids: options.databaseIds,
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
       allow_result_capture: options.allowResultCapture,
     },
+  })
+}
+
+/**
+ * `POST .../migrations/validate` — analiza el SQL ANTES de aplicarlo (api-reference-v11 §1).
+ *
+ * Sin `managed_database_id` es análisis estático y no toca ningún motor. Con él se comprueba
+ * además contra el catálogo de esa BD que las tablas referenciadas existan — es lo único que
+ * detecta un `ALTER TABLE` sobre una tabla inexistente, que es sintácticamente válido.
+ */
+export function validateModelMigration(
+  modelId: number,
+  body: MigrationValidateIn,
+  signal?: AbortSignal,
+): Promise<MigrationValidateOut> {
+  return mutateData('POST', `${base(modelId)}/validate`, migrationValidateOutSchema, {
+    body,
+    signal,
   })
 }
