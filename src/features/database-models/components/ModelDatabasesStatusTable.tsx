@@ -1,5 +1,14 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Button, DataTable, EmptyState, ErrorState, RefreshIcon } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  DataTable,
+  EmptyState,
+  EnvironmentBadge,
+  ErrorState,
+  RefreshIcon,
+} from '@/components/ui'
 import type { ModelDatabaseStatus } from '@/lib/contracts'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
@@ -7,6 +16,7 @@ import {
   useRefreshModelDatabases,
   useUpdateDatabaseModel,
 } from '../hooks/use-database-models'
+import { resolveEnvironmentState, useEnvironmentMap } from '@/features/environments'
 
 /**
  * Collation en el que coinciden TODAS las BDs, o `null` si discrepan o no lo declaran.
@@ -52,19 +62,30 @@ export function ModelDatabasesStatusTable({
   // Un blueprint sin collation declarado no puede avisar de un COLLATE forzado: la comparación
   // no tiene contra qué. Si sus BDs coinciden, ese valor ES el esquema de referencia de facto,
   // así que se ofrece declararlo en un clic en vez de pedir que lo teclee.
+  const environmentMap = useEnvironmentMap()
   const adoptable = blueprintCollation ? null : unanimousCollation(databases.data ?? [])
 
-  const columns: ColumnDef<ModelDatabaseStatus>[] = [
+  // `useMemo`: era el único sitio del repo que construía las columnas en cada render, y esta
+  // tarea le agrega un join contra el catálogo de entornos (más re-renders).
+  const columns: ColumnDef<ModelDatabaseStatus>[] = useMemo(
+    () => [
     {
       accessorKey: 'name',
       header: 'Base de datos',
       cell: ({ row }) => (
-        <Link
-          to={`/managed-databases/${row.original.id}/migrations`}
-          className="font-medium text-foreground hover:underline"
-        >
-          {row.original.name}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/managed-databases/${row.original.id}/migrations`}
+            className="font-medium text-foreground hover:underline"
+          >
+            {row.original.name}
+          </Link>
+          {/* Inline y no en columna propia, por el mismo criterio que el inventario. */}
+          <EnvironmentBadge
+            state={resolveEnvironmentState(row.original.environment_id, environmentMap)}
+            className="shrink-0"
+          />
+        </div>
       ),
     },
     {
@@ -124,7 +145,13 @@ export function ModelDatabasesStatusTable({
         </div>
       ),
     },
-  ]
+    ],
+    // `onApplyTo` va en las deps: sin él, un `useMemo` que solo mira `environmentMap` congelaría
+    // el handler de la primera render y el botón llamaría a un closure viejo. Si el padre no lo
+    // envuelve en `useCallback`, las columnas se rearman por render — que es exactamente lo que
+    // pasaba antes de memoizarlas, así que no es una regresión.
+    [environmentMap, onApplyTo],
+  )
 
   if (databases.isError) {
     return <ErrorState error={databases.error} onRetry={() => void databases.refetch()} />
