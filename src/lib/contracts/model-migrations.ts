@@ -173,8 +173,22 @@ export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
  */
 export const applyAllItemSchema = z.object({
   managed_database_id: z.number().int(),
-  database_name: z.string(),
-  server_id: z.number().int(),
+  /**
+   * `.nullish()` y NO requerido: el backend los tipa `str | None` / `int | None`.
+   *
+   * Esto era un defecto real, no una precaución: `ApiResponse._exclude_none` filtra solo las
+   * claves del ENVELOPE, así que los `None` anidados salen como `null`, y `apiRequest` hace
+   * `safeParse` del envelope completo. Un solo `null` en un solo ítem de un lote de 50 BDs
+   * descartaba TODA la respuesta —"La API devolvió una respuesta inesperada."— después de que el
+   * apply YA ejecutó DDL, dejando al operador sin ver qué pasó en ninguna. Es el peor modo de
+   * fallo del módulo. `migrationApplyOutSchema` tenía el mismo defecto (allá con `.optional()`,
+   * que tampoco acepta `null`).
+   *
+   * Al renderizar hay que pasar por `databaseLabel(item)`: TypeScript no fuerza el fallback
+   * porque `ReactNode` acepta `null`, y una fila fallada sin nombre es inaccionable.
+   */
+  database_name: z.string().nullish(),
+  server_id: z.number().int().nullish(),
   ok: z.boolean(),
   applied: z
     .array(
@@ -192,6 +206,24 @@ export const applyAllItemSchema = z.object({
   pending_versions: z.array(z.string()).optional(),
   error: z.string().nullable().optional(),
   /**
+   * Código estable del rechazo. Va APARTE de `error`, que es prosa para mostrar: el `except` del
+   * lote en el backend conserva solo `exc.message` y descarta el `public_context`, y la ruta
+   * responde 200 con los ítems adentro — así que para los rechazos POR BD este campo es el
+   * único transporte del código, y `extractEnvironmentContext` (que opera sobre `ApiError`)
+   * nunca lo ve. La clasificación de filas se hace con el mapa de `environments/messages.ts`.
+   *
+   * `.nullish()` obligatorio: es `null` en TODOS los ítems OK, así que con `.optional()` fallaría
+   * el parseo en CADA `apply-all`.
+   */
+  error_code: z.string().nullish(),
+  /** Entorno de esta BD; `null` en toda BD sin clasificar (de ahí el `.nullish()`). */
+  environment_slug: z.string().nullish(),
+  /**
+   * Versiones que el entorno bloquea. En dry-run es INFORMATIVO (el plan no falla); en un apply
+   * real acompaña al rechazo. `default_factory=list` en el backend, nunca `null`.
+   */
+  blocked_by: z.array(z.string()).optional().default([]),
+  /**
    * Paridad con el apply por BD (api-reference-v11 §3). Sin estos campos, tras un apply
    * masivo no había forma de saber en qué BDs quedaron capturas ni cómo llegar a ellas.
    */
@@ -203,7 +235,14 @@ export type ApplyAllItem = z.infer<typeof applyAllItemSchema>
 /** Respuesta de `POST .../migrations/apply-all` (§8). */
 export const applyAllResultSchema = z.object({
   model_id: z.number().int(),
+  /** TODAS las BDs del blueprint. NO refleja los filtros del lote. */
   total_databases: z.number().int(),
+  /**
+   * BDs que coincidieron con los filtros ANTES del tope `max_databases`. Comparado con
+   * `processed` dice si hubo recorte: sin este número, "3 de 40 procesadas" no distingue
+   * "sobraron 37" de "en ese entorno solo había 3". `int = 0` en el backend, nunca `null`.
+   */
+  matched_databases: z.number().int().optional().default(0),
   processed: z.number().int(),
   results: z.array(applyAllItemSchema),
 })

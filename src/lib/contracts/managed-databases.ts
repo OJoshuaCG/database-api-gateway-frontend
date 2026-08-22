@@ -20,6 +20,15 @@ export const managedDatabaseOutSchema = z.object({
   owner_id: z.number().int(),
   model_id: z.number().int().nullable().optional(),
   model_version: z.string().nullable().optional(),
+  /**
+   * Entorno que clasifica esta BD; `null` = sin clasificar (y por lo tanto SIN la protección
+   * del guard de migraciones destructivas). Llega como id crudo: el nombre y el color se
+   * resuelven con un join en cliente contra el catálogo (`useEnvironmentMap`).
+   *
+   * Este campo lo heredan `modelDatabaseStatusSchema` (vía `.extend()`) y `listOwnedDatabases`,
+   * así que un solo agregado cubre los tres endpoints que comparten este schema.
+   */
+  environment_id: z.number().int().nullable().optional(),
   charset: z.string().nullable().optional(),
   collation: z.string().nullable().optional(),
   status: provisionStatusSchema,
@@ -47,16 +56,30 @@ export const managedDatabaseCreateSchema = z.object({
   owner_id: z.number().int().min(1, 'Selecciona un propietario'),
   model_id: z.number().int().min(1).nullable().optional(),
   model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
+  /** Requerido en el alta a propósito: ver el comentario de `ManagedDatabaseUpdate`. */
+  environment_id: z.number().int().min(1, 'Selecciona un entorno'),
   charset: charsetField,
   collation: charsetField,
   notes: z.string().nullable().optional(),
 })
 export type ManagedDatabaseCreate = z.infer<typeof managedDatabaseCreateSchema>
 
-/** `ManagedDatabaseUpdate` — `name`/`server_id`/`owner_id` no se editan aquí. */
+/**
+ * `ManagedDatabaseUpdate` — `name`/`server_id`/`owner_id` no se editan aquí.
+ *
+ * `model_version` TAMPOCO, y no es un olvido: el backend dejó de aceptarlo y lo **descarta en
+ * silencio**, así que dejarlo acá hacía que la UI mintiera (el operador escribe, guarda, ve el
+ * toast de éxito y el valor no cambió). Se sigue aceptando en `create` y en `adopt`, donde el
+ * backend sí lo valida contra el blueprint. Para declararla a mano está
+ * `POST /{id}/migrations/stamp`.
+ *
+ * `environment_id` es la vía de RECLASIFICACIÓN, y `null` DESCLASIFICA — lo que además le quita
+ * a la base la protección del guard. Por eso el body de este PATCH se construye por PRESENCIA
+ * de la clave (`dirtyFields`) y no por valor: ver `toManagedDatabaseUpdate`.
+ */
 export const managedDatabaseUpdateSchema = z.object({
   model_id: z.number().int().min(1).nullable().optional(),
-  model_version: z.string().max(50).nullable().optional(),
+  environment_id: z.number().int().min(1).nullable().optional(),
   charset: charsetField,
   collation: charsetField,
   notes: z.string().nullable().optional(),
@@ -89,6 +112,8 @@ export const adoptDatabaseInSchema = z
     owner_id: z.number().int().min(1, 'Selecciona un propietario'),
     model_id: z.number().int().min(1).nullable().optional(),
     model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
+    /** Entorno del destino adoptado. Si se omite, el backend usa el marcado `is_default`. */
+    environment_id: z.number().int().min(1).nullable().optional(),
     charset: charsetField,
     collation: charsetField,
     notes: z.string().nullable().optional(),
