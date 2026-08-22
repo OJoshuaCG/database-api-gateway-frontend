@@ -1,3 +1,4 @@
+export { EnvironmentsPanel } from './components/EnvironmentsPanel'
 export {
   useEnvironmentOptions,
   useEnvironmentMap,

@@ -14,9 +14,10 @@ import {
 } from '@/components/ui'
 import { PrivilegesPage } from '@/features/privileges'
 import { CharsetCollationOptionsPage } from '@/features/charset-collation-options'
+import { EnvironmentsPanel } from '@/features/environments'
 import { useRotateCrypto } from '../hooks/use-crypto-rotation'
 
-const TABS = ['crypto', 'privileges', 'charset-collation'] as const
+const TABS = ['crypto', 'privileges', 'charset-collation', 'environments'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -57,6 +58,9 @@ export function AdminPage() {
         <TabButton active={tab === 'charset-collation'} onClick={() => setTab('charset-collation')}>
           Charsets y collations
         </TabButton>
+        <TabButton active={tab === 'environments'} onClick={() => setTab('environments')}>
+          Entornos
+        </TabButton>
       </div>
 
       {tab === 'crypto' && (
@@ -90,6 +94,7 @@ export function AdminPage() {
 
       {tab === 'privileges' && <PrivilegesPage />}
       {tab === 'charset-collation' && <CharsetCollationOptionsPage />}
+      {tab === 'environments' && <EnvironmentsPanel />}
 
       <ConfirmDialog
         open={confirmOpen}

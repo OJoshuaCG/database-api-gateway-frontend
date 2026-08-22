@@ -235,6 +235,8 @@ export class ApiError extends Error {
   readonly code?: string
   /** Contexto del módulo de exportación de bases (api-reference-v10 §6). */
   readonly exportContext?: DatabaseExportErrorContext
+  /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
+  readonly environmentContext?: EnvironmentErrorContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -258,6 +260,7 @@ export class ApiError extends Error {
     postgresCollationRejected?: PostgresCollationRejectedContext
     code?: string
     exportContext?: DatabaseExportErrorContext
+    environmentContext?: EnvironmentErrorContext
     requestId?: string
   }) {
     super(args.message)
@@ -280,6 +283,7 @@ export class ApiError extends Error {
     this.postgresCollationRejected = args.postgresCollationRejected
     this.code = args.code
     this.exportContext = args.exportContext
+    this.environmentContext = args.environmentContext
     this.requestId = args.requestId
   }
 
@@ -595,6 +599,39 @@ function extractExportObjects(value: unknown): ExportErrorObject[] | undefined {
  * construye cuando el `code` pertenece al módulo: así un `field`/`limit` de cualquier otro endpoint
  * no acaba disfrazado de contexto de exportación.
  */
+/**
+ * Contexto del módulo de ENTORNOS. Solo se construye cuando el `code` pertenece al módulo, para
+ * que un `database_count` de cualquier otro endpoint no acabe disfrazado de contexto de entorno.
+ *
+ * OJO con el alcance: esto sirve para los 422/409 que llegan como `ApiError`. El `apply-all`
+ * responde **200** con los ítems fallidos adentro, y ahí el código viaja en `item.error_code`,
+ * en el cuerpo de éxito — este extractor NUNCA lo ve. Esa clasificación se hace con el mapa de
+ * `features/environments/messages.ts`. Son dos mecanismos distintos.
+ */
+export interface EnvironmentErrorContext {
+  /** Slug del entorno que rechazó (`environment.destructive_blocked`). */
+  environmentSlug?: string
+  /** Versiones frenadas por política. */
+  blockedVersions?: string[]
+  /** BDs del lote que no pertenecen al entorno pedido (`...databases_outside_environment`). */
+  databaseIdsOutside?: number[]
+}
+
+function extractEnvironmentContext(
+  code: string | undefined,
+  publicContext: unknown,
+): EnvironmentErrorContext | undefined {
+  if (!code?.startsWith('environment.') || !isRecord(publicContext)) return undefined
+  const ids = Array.isArray(publicContext.database_ids_outside)
+    ? publicContext.database_ids_outside.filter((v): v is number => typeof v === 'number')
+    : undefined
+  return {
+    environmentSlug: nonEmptyString(publicContext.environment_slug),
+    blockedVersions: stringList(publicContext.blocked_versions),
+    databaseIdsOutside: ids?.length ? ids : undefined,
+  }
+}
+
 function extractDatabaseExportContext(
   code: string | undefined,
   publicContext: unknown,
@@ -659,6 +696,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         postgresCollationRejected: extractPostgresCollationRejected(d.public_context),
         code,
         exportContext: extractDatabaseExportContext(code, d.public_context),
+        environmentContext: extractEnvironmentContext(code, d.public_context),
         requestId,
       })
     }

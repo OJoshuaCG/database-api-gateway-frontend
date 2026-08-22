@@ -86,6 +86,19 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const [lastRollback, setLastRollback] = useState<MigrationRollbackResult | null>(null)
   // Mensaje del 409 del gate R1 (baseline de snapshot sin revisar) para el CTA al blueprint.
   const [baselineGateMsg, setBaselineGateMsg] = useState<string | null>(null)
+  /**
+   * Rechazo del guard de entorno (409 `environment.destructive_blocked`).
+   *
+   * El guard del backend cubre los DOS entrypoints —el apply masivo y este—, así que sin
+   * clasificarlo acá el 409 caía como un error rojo genérico justo en el camino más
+   * peligroso: «Aplicar» desde la cabecera no pasa por ningún dry-run intermedio. Esta
+   * página ya tenía la maquinaria exacta para esto (`baselineGateMsg`, `captureGate`), así
+   * que el código nuevo encaja uno a uno.
+   */
+  const [environmentGate, setEnvironmentGate] = useState<{
+    slug: string | null
+    versions: string[]
+  } | null>(null)
   // 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0), compartido por
   // apply y rollback: `public_context.unreviewed_capture` / `capture_versions`.
   const [captureGate, setCaptureGate] = useState<{
@@ -224,6 +237,24 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       : null
   }
 
+  /**
+   * 409 `environment.destructive_blocked`: el entorno de esta base prohíbe las destructivas.
+   *
+   * Se clasifica por CÓDIGO (`public_context.code`), no por la prosa del mensaje — a diferencia
+   * de `isBaselineGate409`, que tiene que reconocer el texto porque aquel 409 no expone código.
+   * Los datos estructurados también vienen en `public_context`, así que no hay que parsear nada.
+   */
+  const readEnvironmentGate409 = (
+    err: unknown,
+  ): { slug: string | null; versions: string[] } | null => {
+    const apiError = toApiError(err)
+    if (apiError.status !== 409 || apiError.code !== 'environment.destructive_blocked') return null
+    return {
+      slug: apiError.environmentContext?.environmentSlug ?? null,
+      versions: apiError.environmentContext?.blockedVersions ?? [],
+    }
+  }
+
   /** 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0). */
   const readCaptureGate409 = (
     err: unknown,
@@ -251,6 +282,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       {
         onSuccess: (result) => {
           setBaselineGateMsg(null)
+          setEnvironmentGate(null)
           if (isDryRunResult(result)) {
             setPreview(result)
           } else {
@@ -262,6 +294,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
         onError: (err) => {
           setBaselineGateMsg(isBaselineGate409(err))
           setCaptureGate(readCaptureGate409(err))
+          setEnvironmentGate(readEnvironmentGate409(err))
         },
       },
     )
@@ -597,6 +630,28 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                   </div>
 
                   {/* Gate R1 (§9): 409 por baseline de snapshot sin revisar → CTA al blueprint */}
+                  {/*
+                    Ámbar y no rojo: en esta app el rojo significa "está roto", y un rechazo por
+                    política es el sistema funcionando. Y sin acción de reintento — `force` es
+                    override de cuarentena, no de esto.
+                  */}
+                  {environmentGate && (
+                    <div className="rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm">
+                      <p className="font-medium text-foreground">
+                        🔒 No se intentó: no se ejecutó ningún DDL.
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        El entorno{' '}
+                        <strong>{environmentGate.slug ?? 'de esta base'}</strong> bloquea las
+                        migraciones destructivas
+                        {environmentGate.versions.length > 0 && (
+                          <> y las versiones {environmentGate.versions.join(', ')} las contienen</>
+                        )}
+                        . Las salidas son reclasificar la base o separar las sentencias
+                        destructivas de esa versión.
+                      </p>
+                    </div>
+                  )}
                   {baselineGateMsg && (
                     <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs">
                       <p className="text-foreground">{baselineGateMsg}</p>
