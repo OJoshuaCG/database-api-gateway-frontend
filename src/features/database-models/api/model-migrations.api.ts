@@ -77,6 +77,13 @@ export interface ApplyAllOptions {
    * aplicar sus migraciones a una BD ajena.
    */
   databaseIds?: number[]
+  /**
+   * Acota el lote a un entorno. Es lo que convierte "aplicá a todo" en "aplicá a desarrollo": el
+   * backend lo filtra ANTES del tope, así que `maxDatabases` no se consume con BDs de otros
+   * entornos. Combinado con `databaseIds`, un id fuera del entorno devuelve 422 con la lista en
+   * vez de desaparecer del lote en silencio.
+   */
+  environmentId?: number
   force?: boolean
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
@@ -97,6 +104,7 @@ export function applyAllMigrations(
     query: {
       max_databases: options.maxDatabases,
       database_ids: options.databaseIds,
+      environment_id: options.environmentId,
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,

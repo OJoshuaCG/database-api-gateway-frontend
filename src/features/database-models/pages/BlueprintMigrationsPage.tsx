@@ -198,9 +198,17 @@ export function BlueprintMigrationsPage() {
       )}
 
       <ApplyMigrationsDialog
-        // `key` con los destinos: el diálogo nace con la preselección correcta al abrirlo
-        // desde una fila, sin un efecto que sincronice props con estado interno.
-        key={applyTargets.map((t) => t.id).join(',') || 'all'}
+        // `key` con los destinos Y con el estado de apertura. Lo primero ya estaba: el diálogo
+        // nace con la preselección correcta al abrirlo desde una fila, sin un efecto que
+        // sincronice props con estado interno.
+        //
+        // Lo segundo es un arreglo: el diálogo es el PADRE del `Modal`, así que cerrarlo no lo
+        // desmonta y su estado sobrevive. Abriendo siempre por "Aplicar a todas" la key era
+        // constante (`'all'`), de modo que elegir un entorno, cerrar y reabrir dejaba el lote
+        // filtrado sin que nada lo dijera — y lo mismo pasaba con "Forzar" y con el
+        // consentimiento de captura, que el propio diálogo documenta como POR CORRIDA. Remontar
+        // en cada apertura da la operación "reset" que no existía, sin escribir código nuevo.
+        key={`${applyTargets.map((t) => t.id).join(',') || 'all'}-${String(applyAllOpen)}`}
         modelId={modelId}
         modelName={model.data.name}
         open={applyAllOpen}
