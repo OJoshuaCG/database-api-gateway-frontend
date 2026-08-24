@@ -17,6 +17,7 @@ import {
   deleteManagedDatabase,
   getManagedDatabase,
   listManagedDatabases,
+  provisionManagedDatabase,
   reassignOwner,
   updateManagedDatabase,
 } from '../api/managed-databases.api'
@@ -90,6 +91,52 @@ export function useCreateManagedDatabase() {
     },
     onError: (error) => toast.error('No se pudo crear la base de datos', toApiError(error).message),
   })
+}
+
+/**
+ * Aprovisiona en el motor 🔌 una BD que ya está en el inventario pero no existe físicamente
+ * (`pending`, o `error` si el DDL del alta falló).
+ *
+ * Los errores se distinguen por `public_context.code` y no por el texto del mensaje: es el
+ * único canal estable, y viaja también en producción (`context` solo existe en desarrollo).
+ */
+export function useProvisionManagedDatabase() {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ id, allowRecreate }: { id: number; allowRecreate?: boolean }) =>
+      provisionManagedDatabase(id, { allowRecreate }),
+    onSuccess: (result) => {
+      invalidateDatabaseViews(queryClient)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.managedDatabases.migrationStatus(result.database.id),
+      })
+      if (result.provisioned) {
+        toast.success('Base de datos creada en el motor', result.database.name)
+      } else {
+        // No es un fallo: otra llamada simultánea la creó primero y esta solo reconcilió.
+        toast.success(
+          'La base ya había sido creada',
+          `Se reconcilió el estado de ${result.database.name}.`,
+        )
+      }
+    },
+    onError: (error) => {
+      const apiError = toApiError(error)
+      toast.error(MESSAGES_BY_CODE[apiError.code ?? ''] ?? 'No se pudo aprovisionar', apiError.message)
+    },
+  })
+}
+
+/**
+ * Títulos por código de error de aprovisionamiento. El detalle accionable ya viene en el
+ * `message` del backend, así que acá solo se nombra el problema en pocas palabras.
+ */
+const MESSAGES_BY_CODE: Record<string, string> = {
+  'managed_database.exists_in_engine': 'La base ya existe en el motor',
+  'managed_database.quarantined_not_missing': 'La base existe pero está en cuarentena',
+  'managed_database.already_active': 'El inventario ya la marca activa',
+  'managed_database.archived': 'La base está archivada',
 }
 
 export function useUpdateManagedDatabase(id: number) {

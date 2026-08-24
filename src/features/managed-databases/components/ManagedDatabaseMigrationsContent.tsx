@@ -33,6 +33,7 @@ import {
 } from '@/lib/contracts'
 import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
+import { splitCaptureVersions } from '@/features/database-models/capture'
 import { useManagedDatabase } from '../hooks/use-managed-databases'
 import {
   useApplyMigrations,
@@ -42,7 +43,12 @@ import {
   useStampMigration,
 } from '../hooks/use-db-migrations'
 import { ProvisionStatusBadge } from './ProvisionStatusBadge'
+import { ProvisionDatabaseDialog } from './ProvisionDatabaseDialog'
 import { ReconcilePartialSection } from './ReconcilePartialSection'
+
+/** Motivo único para los `title` de los controles que el backend rechazaría con 409. */
+const NOT_PROVISIONED_HINT =
+  'La base de datos no existe en el motor: aprovisionala antes de operar migraciones.'
 
 const TABS = ['actions', 'history'] as const
 type Tab = (typeof TABS)[number]
@@ -77,9 +83,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const [force, setForce] = useState(false)
   // `on_failure` (§9): compartido por "actualizar" e "ir a una versión" (solo MySQL/MariaDB).
   const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
-  // Consentimiento de captura de SELECT (api-reference-v9 §2/§3.2/§3.3): compartido por
-  // apply/rollback en esta página — es una única "corrida" desde el punto de vista del operador.
-  const [allowResultCapture, setAllowResultCapture] = useState(false)
   const [preview, setPreview] = useState<MigrationApplyResult | null>(null)
   // Resultado del último apply REAL (no dry-run): tabla de `results[]` + reconciliación.
   const [lastRun, setLastRun] = useState<MigrationApplyResult | null>(null)
@@ -100,9 +103,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
     versions: string[]
   } | null>(null)
   // 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0), compartido por
-  // apply y rollback: `public_context.unreviewed_capture` / `capture_versions`.
+  // apply y rollback: `public_context.unreviewed_capture` (contrato v13 §2).
   const [captureGate, setCaptureGate] = useState<{
-    kind: 'unreviewed' | 'consent'
     versions: string[]
     message: string
   } | null>(null)
@@ -125,6 +127,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   // La BD llega como snapshot: tras un stamp exitoso reflejamos error→active localmente sin esperar
   // al refetch del detalle (el estado real ya se invalidó).
   const [recovered, setRecovered] = useState(false)
+  // Diálogo de aprovisionamiento para el caso «la base no existe en el motor».
+  const [provisionOpen, setProvisionOpen] = useState(false)
 
   const db = useManagedDatabase(databaseId, true)
   const modelId = db.data?.model_id ?? 0
@@ -155,16 +159,26 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion && !hasPartial
 
   const isQuarantined = database.status === 'error' && !recovered
+  // La BD figura en el inventario pero NO existe en el motor: registrada sin aprovisionar, o
+  // borrada por fuera. Se lee del backend (plano físico) y no del `status` de la fila, que está
+  // rancio en las dos direcciones. Mientras dure, `pending_count` cuenta TODAS las versiones del
+  // blueprint: pintarlo sin este aviso haría creer que hay trabajo pendiente cuando lo que falta
+  // es la base. Todo lo que ejecuta responde 409, así que se deshabilita en la UI.
+  const notProvisioned = status.data?.database_exists === false
   // Una BD archivada es de solo lectura: se ocultan las acciones que tocan el motor (Item 11).
   const isArchived = database.status === 'archived'
   const effectiveStatus = recovered ? 'active' : database.status
   const versionItems = versions.data?.items ?? []
   const selectedStampVersion = versionItems.find((m) => m.version === stampVersion) ?? null
   const stampValid = MIGRATION_VERSION_PATTERN.test(stampVersion.trim())
-  // Captura de SELECT (api-reference-v9 §6): se muestra el checkbox de consentimiento de forma
-  // PROACTIVA si el blueprint tiene alguna versión aprobada con `capture_selects` — sin esperar
-  // al 409 (no distinguimos aquí el camino exacto de apply vs. rollback, alcance del backend).
-  const hasCaptureCandidates = versionItems.some((m) => m.capture_selects && m.reviewed)
+  // Captura de SELECT: aviso PROACTIVO, acotado a las versiones PENDIENTES de ESTA base. El
+  // predicado es compartido con el diálogo del lote (`features/database-models/capture`): estaba
+  // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`, con el
+  // resultado de que acá el aviso no aparecía nunca contra un backend que no devuelve el campo.
+  const { willCapture: captureWillRun, blockedByReview: captureBlocked } = splitCaptureVersions(
+    versionItems,
+    { only: status.data?.pending_versions },
+  )
 
   // Ajuste de estado en render (no en efecto): memoriza la entrada mientras siga en el estado.
   const matchedEntry = reconcileVersion
@@ -255,17 +269,18 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
     }
   }
 
-  /** 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0). */
+  /**
+   * 409 de captura SIN REVISAR (contrato v13 §2). Ya no hay variante de "falta consentimiento":
+   * ese gate se retiró, así que la única causa posible es que la versión no esté aprobada — y
+   * eso tiene una salida concreta (aprobarla en el blueprint), no un checkbox.
+   */
   const readCaptureGate409 = (
     err: unknown,
-  ): { kind: 'unreviewed' | 'consent'; versions: string[]; message: string } | null => {
+  ): { versions: string[]; message: string } | null => {
     const apiError = toApiError(err)
     if (apiError.status !== 409) return null
     if (apiError.unreviewedCapture) {
-      return { kind: 'unreviewed', versions: apiError.unreviewedCapture, message: apiError.message }
-    }
-    if (apiError.captureVersions) {
-      return { kind: 'consent', versions: apiError.captureVersions, message: apiError.message }
+      return { versions: apiError.unreviewedCapture, message: apiError.message }
     }
     return null
   }
@@ -277,7 +292,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
         force: options.force ?? force,
         dryRun: options.dryRun,
         onFailure,
-        allowResultCapture,
       },
       {
         onSuccess: (result) => {
@@ -323,21 +337,30 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
           actions={
             hasModel && !isArchived ? (
               <>
-                <Button variant="outline" onClick={openStamp} disabled={stamp.isPending}>
+                <Button
+                  variant="outline"
+                  onClick={openStamp}
+                  disabled={stamp.isPending || notProvisioned}
+                  title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
+                >
                   Marcar versión (stamp)…
                 </Button>
                 <Button
                   isLoading={apply.isPending}
-                  disabled={pendingCount === 0}
+                  disabled={pendingCount === 0 || notProvisioned}
+                  title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
                   onClick={() => runApply({ dryRun: false })}
                 >
                   {/* En la cabecera el botón se lee antes que el estado: mientras se carga no
-                      puede afirmar «ya está al día», que aún no se sabe. */}
+                      puede afirmar «ya está al día», que aún no se sabe. Y con la base sin
+                      crear tampoco: hay pendientes, pero no hay dónde aplicarlas. */}
                   {status.isLoading
                     ? 'Comprobando estado…'
-                    : pendingCount === 0
-                      ? 'Ya está al día'
-                      : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
+                    : notProvisioned
+                      ? 'La base no existe en el motor'
+                      : pendingCount === 0
+                        ? 'Ya está al día'
+                        : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
                 </Button>
               </>
             ) : undefined
@@ -377,6 +400,35 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
 
           {tab === 'actions' && (
             <div className="flex flex-col gap-6">
+              {/* La base no existe en el motor: es la causa raíz más frecuente de que esta
+                  pantalla no sirva para nada, y hasta ahora se manifestaba como un 404 opaco
+                  («El recurso solicitado no existe en el servidor destino») sin decir qué
+                  hacer. Va PRIMERO porque bloquea todo lo demás. */}
+              {notProvisioned && (
+                <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      La base de datos no existe en el motor
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Está registrada en el inventario pero nunca se creó en el servidor (o la
+                      borraron por fuera del gateway). Hasta que se aprovisione no hay dónde
+                      aplicar, revertir ni marcar versiones, y el contador de pendientes lista
+                      todas las del blueprint porque ninguna pudo aplicarse.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setProvisionOpen(true)}
+                    >
+                      Aprovisionar ahora 🔌
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Recuperación de cuarentena (Cambio 4) */}
               {isQuarantined && (
                 <div className="flex flex-col gap-3 rounded-lg border border-error/40 bg-error/5 p-4">
@@ -395,7 +447,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                       isLoading={apply.isPending}
                       onClick={() =>
                         apply.mutate(
-                          { force: true, dryRun: false, onFailure, allowResultCapture },
+                          { force: true, dryRun: false, onFailure },
                           {
                             onSuccess: (result) => {
                               setPreview(null)
@@ -534,17 +586,36 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
 
               {!isArchived && (
                 <>
-                  {/* Consentimiento de captura de SELECT (api-reference-v9 §2/§6): proactivo, no
-                      reactivo al 409 — se ofrece si el blueprint tiene versiones aprobadas con
-                      `capture_selects`. Compartido por apply y rollback en esta página. */}
-                  {hasCaptureCandidates && (
-                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
-                      <Switch
-                        checked={allowResultCapture}
-                        onCheckedChange={setAllowResultCapture}
-                        label="Permitir captura de resultados (allow_result_capture)"
-                        hint="Hay versiones aprobadas con captura de SELECT activada: aplicar o revertir sin este consentimiento guarda cifradas en el gateway filas de la BD destino; sin él, el backend responde 409."
-                      />
+                  {/* AVISO, no control. Acá había un interruptor de consentimiento por
+                      corrida; se retiró (contrato v13 §1). Además el aviso ahora se acota a las
+                      versiones PENDIENTES de ESTA base: el interruptor aparecía por cualquier
+                      versión aprobada del blueprint aunque esta BD ya la tuviera aplicada, y un
+                      aviso que sale siempre deja de leerse. */}
+                  {captureWillRun.length > 0 && (
+                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+                      <p className="text-muted-foreground">
+                        <strong className="text-foreground">
+                          Esta corrida va a capturar resultados.
+                        </strong>{' '}
+                        Las versiones pendientes <strong>{captureWillRun.join(', ')}</strong>{' '}
+                        guardan en el gateway el resultado de sus SELECT: filas de esta base de
+                        datos, cifradas. Se conserva solo la corrida más reciente por versión y
+                        caduca sola; al terminar podés verlas o purgarlas desde esta misma
+                        pantalla.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Distinto del anterior: esto NO va a pasar, va a ser rechazado con 409. */}
+                  {captureBlocked.length > 0 && (
+                    <div className="rounded-lg border border-error/40 bg-error/5 p-3 text-xs">
+                      <p className="text-muted-foreground">
+                        <strong className="text-foreground">
+                          Captura sin aprobar: {captureBlocked.join(', ')}
+                        </strong>{' '}
+                        — el apply y el rollback se van a rechazar hasta que revises qué consultan
+                        y las apruebes.
+                      </p>
                     </div>
                   )}
 
@@ -568,7 +639,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             variant="outline"
                             size="sm"
                             isLoading={apply.isPending}
-                            disabled={pendingCount === 0}
+                            disabled={pendingCount === 0 || notProvisioned}
+                            title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
                             onClick={() => runApply({ dryRun: true })}
                           >
                             Previsualizar (dry-run)
@@ -617,7 +689,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                           <Button
                             size="sm"
                             isLoading={apply.isPending}
-                            disabled={applyVersion.trim().length === 0}
+                            disabled={applyVersion.trim().length === 0 || notProvisioned}
+                            title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
                             onClick={() =>
                               runApply({ version: applyVersion.trim(), dryRun: false })
                             }
@@ -666,39 +739,24 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                     </div>
                   )}
 
-                  {/* 409 de captura de SELECT (api-reference-v9 §3.0): distinguimos "sin revisar"
-                      (hay que aprobar en el blueprint) de "falta consentimiento" (activar el
-                      switch de arriba y reintentar) — son causas y acciones distintas. */}
+                  {/* 409 de captura SIN REVISAR (contrato v13 §2). Antes había dos variantes;
+                      la de "falta consentimiento" desapareció con su gate, y con ella el botón
+                      que activaba un control que ya no existe. La salida es una sola: aprobar la
+                      versión en el blueprint. */}
                   {captureGate && (
-                    <div
-                      className={
-                        captureGate.kind === 'unreviewed'
-                          ? 'flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs'
-                          : 'flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-4 text-xs'
-                      }
-                    >
+                    <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs">
                       <p className="text-foreground">{captureGate.message}</p>
                       <p className="text-muted-foreground">
                         Versión(es) involucrada(s):{' '}
                         <strong>{captureGate.versions.join(', ')}</strong>
                       </p>
-                      {captureGate.kind === 'unreviewed' ? (
-                        (database.model_id ?? status.data?.model_id) != null && (
-                          <Link
-                            to={`/database-models/${database.model_id ?? status.data?.model_id}/migrations`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            Ir al blueprint a revisar y aprobar →
-                          </Link>
-                        )
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="self-start"
-                          onClick={() => setAllowResultCapture(true)}
+                      {(database.model_id ?? status.data?.model_id) != null && (
+                        <Link
+                          to={`/database-models/${database.model_id ?? status.data?.model_id}/migrations`}
+                          className="font-medium text-primary hover:underline"
                         >
-                          Activar «Permitir captura de resultados» arriba
-                        </Button>
+                          Ir al blueprint a revisar y aprobar →
+                        </Link>
                       )}
                     </div>
                   )}
@@ -942,14 +1000,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                         <Button
                           variant="danger"
                           size="sm"
-                          disabled={!canRollback}
+                          disabled={!canRollback || notProvisioned}
+                          title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
                           isLoading={rollback.isPending}
                           onClick={() =>
                             rollback.mutate(
                               {
                                 confirmVersion,
                                 targetVersion: rollbackTarget.trim() || undefined,
-                                allowResultCapture,
                               },
                               {
                                 onSuccess: (result) => {
@@ -1083,6 +1141,13 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
           )}
         </div>
       </Modal>
+
+      {provisionOpen && (
+        <ProvisionDatabaseDialog
+          database={database}
+          onClose={() => setProvisionOpen(false)}
+        />
+      )}
     </div>
   )
 }

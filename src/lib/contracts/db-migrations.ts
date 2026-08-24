@@ -27,6 +27,17 @@ export const migrationStatusOutSchema = z.object({
   managed_database_id: z.number().int(),
   model_id: z.number().int(),
   slug: z.string(),
+  /**
+   * `false` = la BD **no existe en el motor**: quedó registrada en el inventario sin
+   * aprovisionar, o alguien la borró por fuera del gateway. Con esto en `false`,
+   * `current_version` es `null` por AUSENCIA (no por "todavía sin migraciones") y
+   * `pending_versions` lista todas las del blueprint, así que los contadores mienten si se
+   * pintan sin mirar este campo. Todo lo que ejecuta responde 409 hasta aprovisionar.
+   *
+   * Opcional con default por compatibilidad con backends previos, igual que los campos de
+   * reconciliación.
+   */
+  database_exists: z.boolean().optional().default(true),
   current_version: z.string().nullable(),
   latest_available: z.string().nullable(),
   pending_count: z.number().int(),
@@ -98,6 +109,12 @@ export const migrationApplyOutSchema = z.object({
   failed: z.boolean().optional().default(false),
   quarantined: z.boolean().optional().default(false),
   dry_run: z.boolean().optional().default(false),
+  /**
+   * Solo en dry-run: `false` = la BD no existe en el motor. El dry-run informa y no falla —es
+   * la llamada de diagnóstico— pero fuerza `no_op`; el apply real responde 409
+   * `managed_database.not_provisioned`.
+   */
+  database_exists: z.boolean().optional().default(true),
   pending_versions: z.array(z.string()).optional().default([]),
   results: z.array(migrationRunItemSchema).optional().default([]),
   /** Reconciliación automática de la migración fallida (§9); `null`/ausente = no aplicó. */
@@ -123,6 +140,19 @@ export const migrationApplyOutSchema = z.object({
    * true` NO garantiza `row_count > 0` — un SELECT sin filas también queda "disponible".
    */
   captured_select_count: z.number().int().optional().default(0),
+  /**
+   * Versiones en las que ESTA corrida escribió capturas. Es lo que hace falta para enlazar a
+   * `…/{version}/select-results`: antes se adivinaba con `to_version` (la última aplicada), así
+   * que un apply 0005→0010 cuya captura ocurrió en 0007 enlazaba a una página vacía.
+   */
+  captured_versions: z.array(z.string()).optional().default([]),
+  /**
+   * Solo en dry-run: versiones pendientes que van a guardar el resultado de sus SELECT (filas de
+   * esta base, cifradas) en el gateway. Es un AVISO, no un bloqueo — reemplaza al 409 de
+   * consentimiento por corrida que el backend retiró (v13 §1). Distinto de `captured_versions`,
+   * que es el HECHO de la corrida real.
+   */
+  will_capture_versions: z.array(z.string()).optional().default([]),
   select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationApplyOut = z.infer<typeof migrationApplyOutSchema>
@@ -156,6 +186,8 @@ export const migrationRollbackResultSchema = z.object({
   results: z.array(migrationRunItemSchema).optional().default([]),
   /** Ver `migrationApplyOutSchema` — idénticos en `rollback` (api-reference-v9 §3.3). */
   captured_select_count: z.number().int().optional().default(0),
+  /** Versiones en las que ESTE rollback escribió capturas (para enlazar sin adivinar). */
+  captured_versions: z.array(z.string()).optional().default([]),
   select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationRollbackResult = z.infer<typeof migrationRollbackResultSchema>

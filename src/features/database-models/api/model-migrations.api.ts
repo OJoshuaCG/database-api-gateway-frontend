@@ -88,11 +88,6 @@ export interface ApplyAllOptions {
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
   onFailure?: OnFailureMode
-  /**
-   * Consentimiento explícito de captura de SELECT (api-reference-v9 §3.7). Se evalúa POR BD, no
-   * una vez para todo el lote: el `409` de una BD no frena el resto del lote.
-   */
-  allowResultCapture?: boolean
 }
 
 /** `POST .../migrations/apply-all` 🔌 — aplica a todas las BDs del blueprint (rate limit 3/min). */
@@ -108,7 +103,6 @@ export function applyAllMigrations(
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
-      allow_result_capture: options.allowResultCapture,
     },
   })
 }

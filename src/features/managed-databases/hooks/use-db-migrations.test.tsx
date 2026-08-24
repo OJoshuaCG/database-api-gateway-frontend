@@ -43,6 +43,40 @@ describe('useMigrationStatus', () => {
     // Compatibilidad: sin los campos de reconciliación, los defaults del contrato aplican.
     expect(result.current.data?.has_partial_application).toBe(false)
     expect(result.current.data?.partial_application).toEqual([])
+    // Ídem `database_exists`: un backend previo no lo manda y el default no puede ser `false`,
+    // o toda BD sana quedaría marcada como inexistente y con las acciones deshabilitadas.
+    expect(result.current.data?.database_exists).toBe(true)
+  })
+
+  it('marca la BD que no existe en el motor sin tratarlo como error', async () => {
+    // El backend responde 200 (no 404) porque «la base no existe» es un ESTADO que describir,
+    // no un fallo de la petición: así la pantalla puede renderizar y alojar el CTA.
+    server.use(
+      http.get('http://localhost/api/v1/managed-databases/5/migrations/status', () =>
+        HttpResponse.json({
+          data: {
+            managed_database_id: 5,
+            model_id: 3,
+            slug: 'whatsapp',
+            database_exists: false,
+            current_version: null,
+            latest_available: '0002',
+            pending_count: 2,
+            pending_versions: ['0001', '0002'],
+          },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(() => useMigrationStatus(5, true), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.isError).toBe(false)
+    expect(result.current.data?.database_exists).toBe(false)
+    // `current_version` es null por AUSENCIA de la base, y las pendientes son todas: los
+    // contadores mienten si se pintan sin mirar `database_exists`.
+    expect(result.current.data?.current_version).toBeNull()
+    expect(result.current.data?.pending_count).toBe(2)
   })
 
   it('expone la aplicación parcial (§9)', async () => {

@@ -1,9 +1,11 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
   managedDatabaseOutSchema,
+  managedDatabaseProvisionOutSchema,
   type AdoptDatabaseIn,
   type ManagedDatabaseCreate,
   type ManagedDatabaseOut,
+  type ManagedDatabaseProvisionOut,
   type ManagedDatabaseUpdate,
   type Page,
   type ReassignOwnerIn,
@@ -36,6 +38,26 @@ export function createManagedDatabase(
   provision: boolean,
 ): Promise<ManagedDatabaseOut> {
   return mutateData('POST', BASE, managedDatabaseOutSchema, { body, query: { provision } })
+}
+
+/**
+ * `POST /managed-databases/{id}/provision` 🔌 — ejecuta el `CREATE DATABASE` que faltaba sobre
+ * una fila YA registrada (`pending`, o `error` si el DDL del alta falló), sin tener que
+ * borrarla y volver a crearla (lo que perdería notas, entorno, blueprint e historial).
+ *
+ * No aplica las migraciones del blueprint ni otorga privilegios.
+ *
+ * `allowRecreate` solo hace falta cuando el inventario ya la marca `active`: es el caso de una
+ * base borrada por fuera del gateway. Sin ese gesto explícito el backend responde 409, para no
+ * enmascarar ese borrado con un CREATE silencioso.
+ */
+export function provisionManagedDatabase(
+  id: number,
+  options: { allowRecreate?: boolean } = {},
+): Promise<ManagedDatabaseProvisionOut> {
+  return mutateData('POST', `${BASE}/${id}/provision`, managedDatabaseProvisionOutSchema, {
+    query: { allow_recreate: options.allowRecreate ?? false },
+  })
 }
 
 /** PATCH solo actualiza metadata (no toca el motor). */
