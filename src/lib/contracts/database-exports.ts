@@ -405,6 +405,9 @@ export type ExportSpec = z.infer<typeof exportSpecSchema>
  *   exacto: se etiqueta como aproximada (`~15 K`).
  * - `size_bytes` es **hoy siempre `null`**; no se construye nada que dependa de él.
  * - `has_primary_key: false` ⇒ esa tabla, si lleva datos, sale sin orden garantizado.
+ * - `has_primary_key` y `has_triggers` son `null` cuando el concepto **no aplica** al tipo de
+ *   objeto: una rutina, una vista o un trigger no tienen clave primaria. `null` no es lo mismo
+ *   que `false` — «no aplica» y «le falta» se muestran distinto, así que compáralos en estricto.
  */
 export const exportCatalogObjectSchema = z.object({
   object_type: z.string(),
@@ -413,8 +416,8 @@ export const exportCatalogObjectSchema = z.object({
   size_bytes: z.number().int().nullable(),
   charset: z.string().nullable(),
   collation: z.string().nullable(),
-  has_primary_key: z.boolean(),
-  has_triggers: z.boolean(),
+  has_primary_key: z.boolean().nullable(),
+  has_triggers: z.boolean().nullable(),
   is_materialized: z.boolean().nullable(),
   row_filter: z.boolean(),
 })

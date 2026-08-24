@@ -203,9 +203,14 @@ export function ObjectsStep({ wizard }: { wizard: DatabaseExportWizard }) {
         const object = row.original
         return (
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* Sin clave primaria, si esa tabla lleva datos, sus filas salen sin orden garantizado. */}
-            {!object.has_primary_key && <Badge tone="warning">sin clave primaria</Badge>}
-            {object.has_triggers && <Badge tone="neutral">con triggers</Badge>}
+            {/*
+              Sin clave primaria, si esa tabla lleva datos, sus filas salen sin orden garantizado.
+              La comparación es estricta a propósito: el motor manda `null` cuando el concepto no
+              aplica (una rutina no tiene clave primaria), y `!null` marcaría de advertencia a todo
+              lo que no es tabla.
+            */}
+            {object.has_primary_key === false && <Badge tone="warning">sin clave primaria</Badge>}
+            {object.has_triggers === true && <Badge tone="neutral">con triggers</Badge>}
             {object.is_materialized === true && <Badge tone="neutral">materializada</Badge>}
             {object.row_filter && <Badge tone="primary">con filtro de filas</Badge>}
             {object.collation && (
