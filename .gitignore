@@ -24,6 +24,9 @@ dist-ssr
 *.sw?
 
 # Claude Code — solo archivos personales/locales (no ignorar toda la carpeta)
+# El claim del protocolo de tareas es estado de ESTA máquina y ESTA persona:
+# versionarlo haría que el repo afirme que vos tenés una tarea tomada en la máquina de otro.
+.claude/.tarea-actual
 .claude/settings.local.json
 .claude/plans/
 .claude/.cache/
