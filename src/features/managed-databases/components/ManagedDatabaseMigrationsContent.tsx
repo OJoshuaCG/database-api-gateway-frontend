@@ -33,6 +33,7 @@ import {
 } from '@/lib/contracts'
 import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
+import { splitCaptureVersions } from '@/features/database-models/capture'
 import { useManagedDatabase } from '../hooks/use-managed-databases'
 import {
   useApplyMigrations,
@@ -104,7 +105,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   // 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0), compartido por
   // apply y rollback: `public_context.unreviewed_capture` (contrato v13 §2).
   const [captureGate, setCaptureGate] = useState<{
-    kind: 'unreviewed' | 'consent'
     versions: string[]
     message: string
   } | null>(null)
@@ -127,9 +127,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   // La BD llega como snapshot: tras un stamp exitoso reflejamos error→active localmente sin esperar
   // al refetch del detalle (el estado real ya se invalidó).
   const [recovered, setRecovered] = useState(false)
-  // Consentimiento de captura de SELECT (api-reference-v9 §2/§3.2/§3.3): compartido por
-  // apply/rollback en esta página — es una única "corrida" desde el punto de vista del operador.
-  const [allowResultCapture, setAllowResultCapture] = useState(false)
   // Diálogo de aprovisionamiento para el caso «la base no existe en el motor».
   const [provisionOpen, setProvisionOpen] = useState(false)
 
@@ -174,10 +171,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const versionItems = versions.data?.items ?? []
   const selectedStampVersion = versionItems.find((m) => m.version === stampVersion) ?? null
   const stampValid = MIGRATION_VERSION_PATTERN.test(stampVersion.trim())
-  // Captura de SELECT (api-reference-v9 §6): se muestra el checkbox de consentimiento de forma
-  // PROACTIVA si el blueprint tiene alguna versión aprobada con `capture_selects` — sin esperar
-  // al 409 (no distinguimos aquí el camino exacto de apply vs. rollback, alcance del backend).
-  const hasCaptureCandidates = versionItems.some((m) => m.capture_selects && m.reviewed)
+  // Captura de SELECT: aviso PROACTIVO, acotado a las versiones PENDIENTES de ESTA base. El
+  // predicado es compartido con el diálogo del lote (`features/database-models/capture`): estaba
+  // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`, con el
+  // resultado de que acá el aviso no aparecía nunca contra un backend que no devuelve el campo.
+  const { willCapture: captureWillRun, blockedByReview: captureBlocked } = splitCaptureVersions(
+    versionItems,
+    { only: status.data?.pending_versions },
+  )
 
   // Ajuste de estado en render (no en efecto): memoriza la entrada mientras siga en el estado.
   const matchedEntry = reconcileVersion
@@ -268,17 +269,18 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
     }
   }
 
-  /** 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0). */
+  /**
+   * 409 de captura SIN REVISAR (contrato v13 §2). Ya no hay variante de "falta consentimiento":
+   * ese gate se retiró, así que la única causa posible es que la versión no esté aprobada — y
+   * eso tiene una salida concreta (aprobarla en el blueprint), no un checkbox.
+   */
   const readCaptureGate409 = (
     err: unknown,
-  ): { kind: 'unreviewed' | 'consent'; versions: string[]; message: string } | null => {
+  ): { versions: string[]; message: string } | null => {
     const apiError = toApiError(err)
     if (apiError.status !== 409) return null
     if (apiError.unreviewedCapture) {
-      return { kind: 'unreviewed', versions: apiError.unreviewedCapture, message: apiError.message }
-    }
-    if (apiError.captureVersions) {
-      return { kind: 'consent', versions: apiError.captureVersions, message: apiError.message }
+      return { versions: apiError.unreviewedCapture, message: apiError.message }
     }
     return null
   }
@@ -290,7 +292,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
         force: options.force ?? force,
         dryRun: options.dryRun,
         onFailure,
-        allowResultCapture,
       },
       {
         onSuccess: (result) => {
@@ -446,7 +447,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                       isLoading={apply.isPending}
                       onClick={() =>
                         apply.mutate(
-                          { force: true, dryRun: false, onFailure, allowResultCapture },
+                          { force: true, dryRun: false, onFailure },
                           {
                             onSuccess: (result) => {
                               setPreview(null)
@@ -585,17 +586,36 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
 
               {!isArchived && (
                 <>
-                  {/* Consentimiento de captura de SELECT (api-reference-v9 §2/§6): proactivo, no
-                      reactivo al 409 — se ofrece si el blueprint tiene versiones aprobadas con
-                      `capture_selects`. Compartido por apply y rollback en esta página. */}
-                  {hasCaptureCandidates && (
-                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
-                      <Switch
-                        checked={allowResultCapture}
-                        onCheckedChange={setAllowResultCapture}
-                        label="Permitir captura de resultados (allow_result_capture)"
-                        hint="Hay versiones aprobadas con captura de SELECT activada: aplicar o revertir sin este consentimiento guarda cifradas en el gateway filas de la BD destino; sin él, el backend responde 409."
-                      />
+                  {/* AVISO, no control. Acá había un interruptor de consentimiento por
+                      corrida; se retiró (contrato v13 §1). Además el aviso ahora se acota a las
+                      versiones PENDIENTES de ESTA base: el interruptor aparecía por cualquier
+                      versión aprobada del blueprint aunque esta BD ya la tuviera aplicada, y un
+                      aviso que sale siempre deja de leerse. */}
+                  {captureWillRun.length > 0 && (
+                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+                      <p className="text-muted-foreground">
+                        <strong className="text-foreground">
+                          Esta corrida va a capturar resultados.
+                        </strong>{' '}
+                        Las versiones pendientes <strong>{captureWillRun.join(', ')}</strong>{' '}
+                        guardan en el gateway el resultado de sus SELECT: filas de esta base de
+                        datos, cifradas. Se conserva solo la corrida más reciente por versión y
+                        caduca sola; al terminar podés verlas o purgarlas desde esta misma
+                        pantalla.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Distinto del anterior: esto NO va a pasar, va a ser rechazado con 409. */}
+                  {captureBlocked.length > 0 && (
+                    <div className="rounded-lg border border-error/40 bg-error/5 p-3 text-xs">
+                      <p className="text-muted-foreground">
+                        <strong className="text-foreground">
+                          Captura sin aprobar: {captureBlocked.join(', ')}
+                        </strong>{' '}
+                        — el apply y el rollback se van a rechazar hasta que revises qué consultan
+                        y las apruebes.
+                      </p>
                     </div>
                   )}
 
@@ -719,39 +739,24 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                     </div>
                   )}
 
-                  {/* 409 de captura de SELECT (api-reference-v9 §3.0): distinguimos "sin revisar"
-                      (hay que aprobar en el blueprint) de "falta consentimiento" (activar el
-                      switch de arriba y reintentar) — son causas y acciones distintas. */}
+                  {/* 409 de captura SIN REVISAR (contrato v13 §2). Antes había dos variantes;
+                      la de "falta consentimiento" desapareció con su gate, y con ella el botón
+                      que activaba un control que ya no existe. La salida es una sola: aprobar la
+                      versión en el blueprint. */}
                   {captureGate && (
-                    <div
-                      className={
-                        captureGate.kind === 'unreviewed'
-                          ? 'flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs'
-                          : 'flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-4 text-xs'
-                      }
-                    >
+                    <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-4 text-xs">
                       <p className="text-foreground">{captureGate.message}</p>
                       <p className="text-muted-foreground">
                         Versión(es) involucrada(s):{' '}
                         <strong>{captureGate.versions.join(', ')}</strong>
                       </p>
-                      {captureGate.kind === 'unreviewed' ? (
-                        (database.model_id ?? status.data?.model_id) != null && (
-                          <Link
-                            to={`/database-models/${database.model_id ?? status.data?.model_id}/migrations`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            Ir al blueprint a revisar y aprobar →
-                          </Link>
-                        )
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="self-start"
-                          onClick={() => setAllowResultCapture(true)}
+                      {(database.model_id ?? status.data?.model_id) != null && (
+                        <Link
+                          to={`/database-models/${database.model_id ?? status.data?.model_id}/migrations`}
+                          className="font-medium text-primary hover:underline"
                         >
-                          Activar «Permitir captura de resultados» arriba
-                        </Button>
+                          Ir al blueprint a revisar y aprobar →
+                        </Link>
                       )}
                     </div>
                   )}
@@ -1003,7 +1008,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                               {
                                 confirmVersion,
                                 targetVersion: rollbackTarget.trim() || undefined,
-                                allowResultCapture,
                               },
                               {
                                 onSuccess: (result) => {

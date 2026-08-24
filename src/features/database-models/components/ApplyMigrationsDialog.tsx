@@ -21,6 +21,11 @@ import { useModelDatabases } from '../hooks/use-database-models'
 import { useApplyAllMigrations, useModelMigrations } from '../hooks/use-model-migrations'
 import { OnFailureSelect } from './OnFailureSelect'
 import {
+  CAPTURE_UNREVIEWED_CODE,
+  describeCaptureRejection,
+  splitCaptureVersions,
+} from '../capture'
+import {
   blockingEnvironments,
   classifyItem,
   databaseLabel,
@@ -77,7 +82,6 @@ export function ApplyMigrationsDialog({
   const [maxDatabases, setMaxDatabases] = useState(10)
   const [force, setForce] = useState(false)
   const [onFailure, setOnFailure] = useState<OnFailureMode>('auto')
-  const [allowResultCapture, setAllowResultCapture] = useState(false)
   const [environment, setEnvironment] = useState<EnvironmentOut | null>(null)
   const [result, setResult] = useState<ApplyAllResult | null>(null)
   const [wasDryRun, setWasDryRun] = useState(false)
@@ -89,12 +93,9 @@ export function ApplyMigrationsDialog({
   const environments = useSelectableEnvironments()
   const environmentMap = useEnvironmentMap()
 
-  // Versiones que capturarían: `reviewed` es opcional en el resumen, y tratar el `undefined`
-  // como "no candidata" hacía que el interruptor no apareciera nunca contra un backend que no
-  // lo devuelve — y entonces el 409 por BD era inevitable.
-  const capturing = (migrations.data?.items ?? []).filter(
-    (m) => m.capture_selects && m.reviewed !== false,
-  )
+  // Predicado COMPARTIDO con la ficha de la BD (`features/database-models/capture`). Vivía
+  // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`.
+  const { willCapture, blockedByReview } = splitCaptureVersions(migrations.data?.items ?? [])
 
   const handleClose = () => {
     setResult(null)
@@ -114,7 +115,6 @@ export function ApplyMigrationsDialog({
         force,
         dryRun,
         onFailure,
-        allowResultCapture,
       },
       { onSuccess: (data) => setResult(data) },
     )
@@ -257,22 +257,33 @@ export function ApplyMigrationsDialog({
           <OnFailureSelect value={onFailure} onChange={setOnFailure} />
         </div>
 
-        {capturing.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
-            <Switch
-              checked={allowResultCapture}
-              onCheckedChange={setAllowResultCapture}
-              label="Permitir captura de resultados"
-              hint="Sin este consentimiento, el backend responde 409 en cada BD que lo requiera."
-            />
-            {/* El consentimiento es POR CORRIDA a propósito (no se recuerda): cada aplicación
-                que va a guardar filas de tus BDs en el gateway pide un sí explícito. Lo que sí
-                debe estar claro es QUÉ está en juego, que antes no se decía. */}
+        {/* AVISO, no control. Acá había un interruptor de consentimiento por corrida; se
+            retiró (contrato v13 §1) porque con un solo admin no aportaba una decisión nueva
+            —`reviewed` ya aprueba la consulta concreta— y no dejaba rastro en la auditoría,
+            mientras que un click de más en cada corrida entrena el «siempre que sí». Lo que sí
+            hacía falta es que se lea QUÉ está en juego, y eso se conserva. */}
+        {willCapture.length > 0 && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
             <p className="text-xs text-muted-foreground">
-              Estas versiones guardarán en el gateway el resultado de sus SELECT, cifrado:{' '}
-              <strong>{capturing.map((m) => m.version).join(', ')}</strong>. Se pide en cada corrida
-              a propósito. Solo se conserva la corrida más reciente por BD y versión, y caduca sola;
-              podrás verlo o purgarlo desde cada BD al terminar.
+              <strong className="text-foreground">Este lote va a capturar resultados.</strong> Las
+              versiones <strong>{willCapture.join(', ')}</strong> guardan en el gateway el resultado
+              de sus SELECT: filas de <strong>cada BD alcanzada</strong>, cifradas. Solo se conserva
+              la corrida más reciente por BD y versión, y caduca sola; podrás verlas o purgarlas
+              desde cada BD al terminar.
+            </p>
+          </div>
+        )}
+
+        {/* Distinto del anterior: esto NO va a pasar, va a ser rechazado. Se avisa antes de
+            gastar una corrida y descubrirlo ítem por ítem. */}
+        {blockedByReview.length > 0 && (
+          <div className="rounded-lg border border-error/40 bg-error/5 p-3">
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-foreground">
+                Captura sin aprobar: {blockedByReview.join(', ')}
+              </strong>{' '}
+              — el backend va a rechazar (409) cada BD que tenga esas versiones pendientes.
+              Revisá qué consultan y aprobalas en la tabla de versiones antes de aplicar.
             </p>
           </div>
         )}
@@ -356,9 +367,11 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
       <ul className="flex max-h-64 flex-col divide-y divide-border overflow-auto rounded-lg border border-border">
         {items.map((item) => {
           const outcome = classifyItem(item)
-          // La versión a la que enlazar es la última aplicada de esta BD: es la corrida cuyas
-          // capturas siguen guardadas (solo se conserva la más reciente por BD y versión).
-          const lastApplied = item.applied?.at(-1)?.version
+          // La versión a la que enlazar es la que REALMENTE capturó, que el backend informa
+          // en `captured_versions`. Antes se adivinaba con la última aplicada: un apply
+          // 0005→0010 cuya captura ocurrió en 0007 enlazaba a `…/0010/select-results`, vacío.
+          // El fallback a la última aplicada cubre un backend previo al campo.
+          const capturedAt = item.captured_versions?.[0] ?? item.applied?.at(-1)?.version
           return (
             <li key={item.managed_database_id} className="flex flex-col gap-1 p-3">
               <div className="flex items-center justify-between gap-2">
@@ -413,9 +426,9 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
               )}
               {/* Puente que faltaba: desde el blueprint no había forma de llegar a lo
                   capturado; solo se llegaba entrando a la ficha de cada BD. */}
-              {item.select_results_available && lastApplied && (
+              {item.select_results_available && capturedAt && (
                 <Link
-                  to={`/managed-databases/${item.managed_database_id}/migrations/${lastApplied}/select-results`}
+                  to={`/managed-databases/${item.managed_database_id}/migrations/${capturedAt}/select-results`}
                   className="text-xs text-primary hover:underline"
                 >
                   Ver {item.captured_select_count} resultado(s) capturado(s) →
@@ -430,8 +443,21 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
               {outcome === 'blocked' && (
                 <span className="text-xs text-warning">{describeItemRejection(item)}</span>
               )}
-              {outcome === 'failed' && item.error && (
-                <span className="text-xs text-error">{item.error}</span>
+              {/*
+                Rechazo por CAPTURA sin revisar. Llega como ítem de una respuesta 200 —el guard
+                corre por BD dentro del bucle del backend—, así que nunca fue un error de la
+                mutación y el `onError` del diálogo no lo veía: caía como el `item.error` crudo,
+                sin decir que no se ejecutó nada ni cómo salir. Se clasifica por `error_code`,
+                que es el único canal estable acá (el `public_context` de la respuesta HTTP no
+                existe para un rechazo por ítem).
+              */}
+              {item.error_code === CAPTURE_UNREVIEWED_CODE ? (
+                <span className="text-xs text-warning">
+                  {describeCaptureRejection(item.unreviewed_capture ?? [])}
+                </span>
+              ) : (
+                outcome === 'failed' &&
+                item.error && <span className="text-xs text-error">{item.error}</span>
               )}
               {/* Dry-run: informativo, el plan no falla. */}
               {wasDryRun && item.blocked_by && item.blocked_by.length > 0 && (

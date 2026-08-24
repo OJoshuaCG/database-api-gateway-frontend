@@ -140,6 +140,19 @@ export const migrationApplyOutSchema = z.object({
    * true` NO garantiza `row_count > 0` — un SELECT sin filas también queda "disponible".
    */
   captured_select_count: z.number().int().optional().default(0),
+  /**
+   * Versiones en las que ESTA corrida escribió capturas. Es lo que hace falta para enlazar a
+   * `…/{version}/select-results`: antes se adivinaba con `to_version` (la última aplicada), así
+   * que un apply 0005→0010 cuya captura ocurrió en 0007 enlazaba a una página vacía.
+   */
+  captured_versions: z.array(z.string()).optional().default([]),
+  /**
+   * Solo en dry-run: versiones pendientes que van a guardar el resultado de sus SELECT (filas de
+   * esta base, cifradas) en el gateway. Es un AVISO, no un bloqueo — reemplaza al 409 de
+   * consentimiento por corrida que el backend retiró (v13 §1). Distinto de `captured_versions`,
+   * que es el HECHO de la corrida real.
+   */
+  will_capture_versions: z.array(z.string()).optional().default([]),
   select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationApplyOut = z.infer<typeof migrationApplyOutSchema>
@@ -173,6 +186,8 @@ export const migrationRollbackResultSchema = z.object({
   results: z.array(migrationRunItemSchema).optional().default([]),
   /** Ver `migrationApplyOutSchema` — idénticos en `rollback` (api-reference-v9 §3.3). */
   captured_select_count: z.number().int().optional().default(0),
+  /** Versiones en las que ESTE rollback escribió capturas (para enlazar sin adivinar). */
+  captured_versions: z.array(z.string()).optional().default([]),
   select_results_available: z.boolean().optional().default(false),
 })
 export type MigrationRollbackResult = z.infer<typeof migrationRollbackResultSchema>

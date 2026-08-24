@@ -228,6 +228,18 @@ export const applyAllItemSchema = z.object({
    * masivo no había forma de saber en qué BDs quedaron capturas ni cómo llegar a ellas.
    */
   captured_select_count: z.number().int().optional().default(0),
+  /**
+   * Versiones en las que se escribieron capturas en ESTA BD. Sin esto el cliente adivinaba con
+   * la última versión aplicada del ítem, que no tiene por qué ser en la que se capturó.
+   */
+  captured_versions: z.array(z.string()).optional().default([]),
+  /**
+   * Versiones con captura SIN revisar que frenaron a esta BD. Acompaña a
+   * `error_code: 'migration.capture_unreviewed'`. Ese rechazo viaja por ítem dentro de una
+   * respuesta 200 (el guard corre por BD dentro del bucle), así que el `public_context` de la
+   * respuesta HTTP no existe para él y el `error_code` es el único canal clasificable.
+   */
+  unreviewed_capture: z.array(z.string()).optional().default([]),
   select_results_available: z.boolean().optional().default(false),
 })
 export type ApplyAllItem = z.infer<typeof applyAllItemSchema>

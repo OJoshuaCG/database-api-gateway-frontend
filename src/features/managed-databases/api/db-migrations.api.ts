@@ -32,12 +32,6 @@ export interface ApplyOptions {
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (solo MySQL/MariaDB). Default: `auto`. */
   onFailure?: OnFailureMode
-  /**
-   * Consentimiento explícito por corrida para capturar resultados de SELECT (api-reference-v9
-   * §2/§3.2). Default `false`; sin él, si hay versiones con `capture_selects` en el camino, el
-   * backend responde `409` con `public_context.capture_versions`.
-   */
-  allowResultCapture?: boolean
 }
 
 /** `POST .../migrations/apply` 🔌 — aplica las pendientes (o hasta `version`); dry-run opcional (§9). */
@@ -51,7 +45,6 @@ export function applyMigrations(
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
-      allow_result_capture: options.allowResultCapture,
     },
   })
 }
@@ -61,8 +54,6 @@ export interface RollbackOptions {
   confirmVersion: string
   /** Destino: revierte secuencialmente hasta esta versión. Omitir = solo la última. */
   targetVersion?: string
-  /** Igual que en `apply`, pero evaluado sobre el camino de REVERSIÓN (api-reference-v9 §3.3). */
-  allowResultCapture?: boolean
 }
 
 /**
@@ -77,7 +68,6 @@ export function rollbackMigration(
     query: {
       confirm_version: options.confirmVersion,
       target_version: options.targetVersion,
-      allow_result_capture: options.allowResultCapture,
     },
   })
 }
