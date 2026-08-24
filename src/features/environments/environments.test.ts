@@ -38,7 +38,6 @@ describe('toManagedDatabaseUpdate', () => {
     environment_id: 4,
     charsetCollation: undefined,
     notes: 'nota nueva',
-    provision: false,
   }
 
   it('editar SOLO las notas no manda environment_id (no desclasifica)', () => {

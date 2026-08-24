@@ -40,6 +40,24 @@ export const managedDatabaseOutSchema = z.object({
 })
 export type ManagedDatabaseOut = z.infer<typeof managedDatabaseOutSchema>
 
+/**
+ * `ManagedDatabaseProvisionOut` — respuesta de `POST /managed-databases/{id}/provision` 🔌.
+ *
+ * Ejecuta el `CREATE DATABASE` que faltaba sobre una fila YA registrada (estado `pending`, o
+ * `error` si el DDL del alta falló). No aplica migraciones del blueprint ni otorga privilegios.
+ *
+ * `provisioned: false` no es un fallo: significa que otra llamada simultánea al mismo endpoint
+ * creó la base primero y esta solo reconcilió el estado del inventario.
+ */
+export const managedDatabaseProvisionOutSchema = z.object({
+  database: managedDatabaseOutSchema,
+  provisioned: z.boolean(),
+  previous_status: provisionStatusSchema,
+  charset: z.string().nullish(),
+  collation: z.string().nullish(),
+})
+export type ManagedDatabaseProvisionOut = z.infer<typeof managedDatabaseProvisionOutSchema>
+
 const charsetField = z
   .string()
   .regex(CHARSET_PATTERN, 'Solo MySQL/MariaDB; [A-Za-z0-9_], 1–64')

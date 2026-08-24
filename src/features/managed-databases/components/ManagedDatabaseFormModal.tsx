@@ -34,8 +34,11 @@ export function ManagedDatabaseFormModal({
     if (database) {
       update.mutate(toManagedDatabaseUpdate(values, dirtyFields), { onSuccess: onClose })
     } else {
+      // `provision: true` fijo, sin switch: ver el comentario largo en `ManagedDatabaseForm`.
+      // El flag sigue en la capa API porque el endpoint lo acepta, pero desde la SPA crear una
+      // base SIEMPRE la crea en el motor.
       create.mutate(
-        { body: toManagedDatabaseCreate(values), provision: values.provision },
+        { body: toManagedDatabaseCreate(values), provision: true },
         { onSuccess: onClose },
       )
     }
@@ -49,7 +52,8 @@ export function ManagedDatabaseFormModal({
       description={
         database
           ? 'Actualiza la metadata de la base de datos (no toca el motor).'
-          : 'Registra una base de datos. Con aprovisionar, se ejecuta CREATE DATABASE + GRANT.'
+          : 'Crea la base de datos en el motor 🔌 y la registra en el inventario. No otorga ' +
+            'privilegios: se asignan aparte desde Permisos.'
       }
       size="lg"
     >

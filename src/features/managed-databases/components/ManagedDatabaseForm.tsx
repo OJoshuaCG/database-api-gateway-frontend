@@ -10,7 +10,7 @@ import {
   type ServerOut,
   type ServerUserOut,
 } from '@/lib/contracts'
-import { Button, Combobox, Input, Switch, Textarea } from '@/components/ui'
+import { Button, Combobox, Input, Textarea } from '@/components/ui'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
@@ -31,7 +31,6 @@ export interface ManagedDatabaseFormValues {
   environment_id: number | null
   charsetCollation: CharsetCollationValue | null | undefined
   notes: string
-  provision: boolean
 }
 
 const DEFAULTS: ManagedDatabaseFormValues = {
@@ -43,7 +42,6 @@ const DEFAULTS: ManagedDatabaseFormValues = {
   environment_id: null,
   charsetCollation: undefined,
   notes: '',
-  provision: false,
 }
 
 function buildSchema(mode: 'create' | 'edit') {
@@ -70,7 +68,6 @@ function buildSchema(mode: 'create' | 'edit') {
     // `edit` ni se muestra ni se envía.
     charsetCollation: z.custom<CharsetCollationValue | null | undefined>(),
     notes: z.string(),
-    provision: z.boolean(),
   })
 }
 
@@ -340,20 +337,17 @@ export function ManagedDatabaseForm({
 
       <Textarea label="Notas" rows={2} {...register('notes')} />
 
-      {mode === 'create' && (
-        <Controller
-          control={control}
-          name="provision"
-          render={({ field }) => (
-            <Switch
-              checked={field.value}
-              onCheckedChange={field.onChange}
-              label="Aprovisionar en el motor 🔌"
-              hint="Ejecuta CREATE DATABASE y otorga privilegios al propietario."
-            />
-          )}
-        />
-      )}
+      {/*
+        Acá vivía un switch «Aprovisionar en el motor» que nacía APAGADO, y se quitó a
+        propósito: era el único productor de filas `pending` de todo el sistema —bases que
+        figuran en el inventario y no existen en el motor—, un estado que nada leía como guard
+        y que hacía fallar todo lo demás después con errores opacos. Los casos que decía cubrir
+        ya tienen dueño mejor: para traer al inventario una base que YA existe está «Adoptar»,
+        que verifica su existencia y la deja `active`; y el alta exige un servidor ya cargado
+        con credenciales, así que «todavía no tengo acceso al motor» no se sostiene. Crear es
+        crear. La vía «solo inventario» sigue existiendo en la API (`?provision=false`) para
+        scripting, y las filas históricas se recuperan con el botón «Aprovisionar» del listado.
+      */}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>

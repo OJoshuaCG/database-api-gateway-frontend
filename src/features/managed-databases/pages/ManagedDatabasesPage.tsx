@@ -40,6 +40,7 @@ import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
 import { ManagedDatabaseFormModal } from '../components/ManagedDatabaseFormModal'
 import { ReassignOwnerModal } from '../components/ReassignOwnerModal'
 import { DeleteManagedDatabaseDialog } from '../components/DeleteManagedDatabaseDialog'
+import { ProvisionDatabaseDialog } from '../components/ProvisionDatabaseDialog'
 
 interface StatusOption {
   value: ProvisionStatus
@@ -103,6 +104,7 @@ export function ManagedDatabasesPage() {
   const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
   const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedDatabaseOut | null>(null)
+  const [provisionTarget, setProvisionTarget] = useState<ManagedDatabaseOut | null>(null)
 
   const servers = useServerOptions()
   const models = useDatabaseModelOptions()
@@ -213,6 +215,19 @@ export function ManagedDatabasesPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1">
+            {/* Solo si la BD NO está creada en el motor: es la salida para las filas que
+                quedaron registradas sin aprovisionar (y para las que fallaron al crearse).
+                Sin esto la única forma de recuperarlas era borrar el registro y rehacerlo,
+                perdiendo notas, entorno, blueprint e historial de migraciones. */}
+            {(row.original.status === 'pending' || row.original.status === 'error') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setProvisionTarget(row.original)}
+              >
+                Aprovisionar 🔌
+              </Button>
+            )}
             {/* Comparar/Clonar/Migraciones/Reasignar duplican lo que la ficha unificada de la BD
                 también ofrece: se conservan como atajo para operarios avanzados (decisión de
                 producto). Solo el icono en Comparar/Clonar, el mismo que su entrada del menú
@@ -412,6 +427,13 @@ export function ManagedDatabasesPage() {
         <DeleteManagedDatabaseDialog
           database={deleteTarget}
           onClose={() => setDeleteTarget(null)}
+        />
+      )}
+      {provisionTarget && (
+        <ProvisionDatabaseDialog
+          database={provisionTarget}
+          serverName={serverNameById.get(provisionTarget.server_id)}
+          onClose={() => setProvisionTarget(null)}
         />
       )}
     </div>
