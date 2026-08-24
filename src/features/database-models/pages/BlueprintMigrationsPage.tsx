@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -11,13 +11,16 @@ import {
   FullPageSpinner,
   PageHeader,
   Spinner,
+  TabButton,
 } from '@/components/ui'
-import { PAGINATION, type ModelMigrationSummary } from '@/lib/contracts'
+import { PAGINATION, type ModelDatabaseStatus } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
 import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-migrations'
 import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPanel'
-import { ApplyAllDialog } from '../components/ApplyAllDialog'
+import { ApplyMigrationsDialog } from '../components/ApplyMigrationsDialog'
+import { ModelDatabasesStatusTable } from '../components/ModelDatabasesStatusTable'
+import { VersionsTable } from '../components/VersionsTable'
 import { VersionNavigator } from '../components/VersionNavigator'
 import { latestVersionOf, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
 
@@ -32,9 +35,23 @@ export function BlueprintMigrationsPage() {
   const navigate = useNavigate()
   const newVersionPath = `/database-models/${modelId}/migrations/new`
 
+  // La pestaña vive en la URL, no en `useState`: así se puede enlazar y compartir «el estado
+  // de este blueprint», y volver atrás no pierde dónde estabas. Mismo patrón que
+  // `ManagedDatabaseMigrationsContent`, que ya guarda `?tab=` y `?reconcile=`.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') === 'estado' ? 'estado' : 'versiones'
+  const setTab = (next: 'versiones' | 'estado') =>
+    setSearchParams((params) => {
+      if (next === 'versiones') params.delete('tab')
+      else params.set('tab', next)
+      return params
+    })
+
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [applyAllOpen, setApplyAllOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ModelMigrationSummary | null>(null)
+  const [applyTargets, setApplyTargets] = useState<ModelDatabaseStatus[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const model = useDatabaseModel(modelId)
   // El desplegable necesita el catálogo completo (ligero, sin SQL): pedimos el máximo por página.
@@ -78,15 +95,21 @@ export function BlueprintMigrationsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <Link to="/database-models" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Blueprints
+          ← Blueprint schemas
         </Link>
         <PageHeader
           title={model.data.name}
           description="Versiones (deltas SQL) del blueprint. El SQL base se escribe en estilo MySQL y se traduce a PostgreSQL automáticamente."
           actions={
             <>
-              <Button variant="outline" onClick={() => setApplyAllOpen(true)}>
-                Aplicar a todas 🔌
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setApplyTargets([])
+                  setApplyAllOpen(true)
+                }}
+              >
+                Aplicar… 🔌
               </Button>
               <Button onClick={() => void navigate(newVersionPath)}>Nueva versión</Button>
             </>
@@ -103,75 +126,144 @@ export function BlueprintMigrationsPage() {
         </div>
       </div>
 
-      {/* Selector de versión: sticky, para no perder de vista cuál se está mirando al bajar
-          por el detalle (que es largo: formulario de SQL más los bloques traducidos). */}
-      {sorted.length > 0 ? (
-        <VersionNavigator
-          sorted={sorted}
-          index={index}
-          onSelect={setSelectedVersion}
-          total={total}
+      <div role="tablist" className="flex items-center gap-1 border-b border-border">
+        <TabButton active={tab === 'versiones'} onClick={() => setTab('versiones')}>
+          Versiones
+        </TabButton>
+        <TabButton active={tab === 'estado'} onClick={() => setTab('estado')}>
+          Estado en las BDs
+        </TabButton>
+      </div>
+
+      {tab === 'estado' ? (
+        <ModelDatabasesStatusTable
+          modelId={modelId}
+          blueprintCollation={model.data.collation}
+          onApplyTo={(database) => {
+            setApplyTargets([database])
+            setApplyAllOpen(true)
+          }}
         />
       ) : (
-        <Card>
-          <CardContent className="py-4">
-            {migrations.isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner className="h-4 w-4" /> Cargando versiones…
-              </div>
-            ) : migrations.isError ? (
-              <ErrorState error={migrations.error} onRetry={() => void migrations.refetch()} />
-            ) : (
-              <EmptyState
-                title="Sin migraciones"
-                description="Crea la primera migración (delta SQL) de este blueprint."
-              />
-            )}
-          </CardContent>
-        </Card>
+        <>
+          {/* Selector de versión: sticky, para no perder de vista cuál se está mirando al
+              bajar por el detalle (que es largo). La tabla de abajo sirve para ESCANEAR las
+              versiones y comparar sus insignias; el navegador, para moverse entre ellas. */}
+          {sorted.length > 0 ? (
+            <VersionNavigator
+              sorted={sorted}
+              index={index}
+              onSelect={setSelectedVersion}
+              total={total}
+            />
+          ) : (
+            <Card>
+              <CardContent className="py-4">
+                {migrations.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="h-4 w-4" /> Cargando versiones…
+                  </div>
+                ) : migrations.isError ? (
+                  <ErrorState error={migrations.error} onRetry={() => void migrations.refetch()} />
+                ) : (
+                  <EmptyState
+                    title="Sin migraciones"
+                    description="Crea la primera migración (delta SQL) de este blueprint."
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {sorted.length > 0 && (
+            <VersionsTable
+              versions={sorted}
+              isLoading={migrations.isLoading}
+              selectedVersion={selected?.version ?? null}
+              onSelect={setSelectedVersion}
+            />
+          )}
+
+          {sorted.length > 0 && (
+            <ModelMigrationDetailPanel
+              modelId={modelId}
+              version={selected?.version ?? null}
+              latestVersion={latestVersion}
+              blueprintCollation={model.data.collation}
+              onRequestDelete={setDeleteTarget}
+              onCreateNewVersion={() => void navigate(newVersionPath)}
+            />
+          )}
+        </>
       )}
 
-      {/* Estado + detalle de la versión seleccionada */}
-      {sorted.length > 0 && (
-        <ModelMigrationDetailPanel
-          modelId={modelId}
-          version={selected?.version ?? null}
-          latestVersion={latestVersion}
-          onRequestDelete={setDeleteTarget}
-          onCreateNewVersion={() => void navigate(newVersionPath)}
-        />
-      )}
-
-      <ApplyAllDialog
+      <ApplyMigrationsDialog
+        // `key` con los destinos Y con el estado de apertura. Lo primero ya estaba: el diálogo
+        // nace con la preselección correcta al abrirlo desde una fila, sin un efecto que
+        // sincronice props con estado interno.
+        //
+        // Lo segundo es un arreglo: el diálogo es el PADRE del `Modal`, así que cerrarlo no lo
+        // desmonta y su estado sobrevive. Abriendo siempre por "Aplicar a todas" la key era
+        // constante (`'all'`), de modo que elegir un entorno, cerrar y reabrir dejaba el lote
+        // filtrado sin que nada lo dijera — y lo mismo pasaba con "Forzar" y con el
+        // consentimiento de captura, que el propio diálogo documenta como POR CORRIDA. Remontar
+        // en cada apertura da la operación "reset" que no existía, sin escribir código nuevo.
+        key={`${applyTargets.map((t) => t.id).join(',') || 'all'}-${String(applyAllOpen)}`}
         modelId={modelId}
         modelName={model.data.name}
         open={applyAllOpen}
+        initialTargets={applyTargets}
         onClose={() => setApplyAllOpen(false)}
       />
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => {
+          setDeleteTarget(null)
+          setDeleteError(null)
+        }}
         onConfirm={() => {
           if (!deleteTarget) return
-          deleteMigration.mutate(deleteTarget.version, {
-            onSuccess: () => setDeleteTarget(null),
+          setDeleteError(null)
+          deleteMigration.mutate(deleteTarget, {
+            onSuccess: () => {
+              setDeleteTarget(null)
+              // También el error: si no, tras un 409 y un reintento con éxito, el mensaje
+              // viejo reaparecía al abrir el diálogo para otra versión.
+              setDeleteError(null)
+            },
             onError: (err) => {
-              // Solo el 409 (dejó de ser la punta o ganó historial) invalida la premisa: cerramos y
-              // refrescamos para recalcular la punta. En otros errores (red/500) mantenemos el
-              // diálogo abierto para reintentar (el hook ya muestra el detail.msg en un toast).
-              if (toApiError(err).status === 409) {
-                setDeleteTarget(null)
+              // El 409 se muestra AQUÍ, no solo como toast: su mensaje es la única forma de
+              // saber cuál de las tres reglas se incumplió (aplicada con éxito / aplicación
+              // parcial sin resolver / dejó de ser la punta), y cada una lleva a una acción
+              // distinta. Cerrar el diálogo dejaba al operador con un toast que se va solo.
+              const apiError = toApiError(err)
+              if (apiError.status === 409) {
+                setDeleteError(apiError.message)
                 void migrations.refetch()
               }
             },
           })
         }}
         title="Eliminar la última versión"
-        description={`Se eliminará la versión ${deleteTarget?.version} del blueprint. Esta acción es irreversible y solo es posible en la última versión sin historial de aplicación.`}
+        description={`Se eliminará la versión ${deleteTarget} del blueprint. Es irreversible, y solo es posible en la última versión y mientras ninguna BD la haya aplicado con éxito.`}
         confirmLabel="Eliminar"
         isLoading={deleteMigration.isPending}
-      />
+      >
+        <div className="flex flex-col gap-2">
+          {/* Un intento fallido no impide borrar, pero su rastro sí se va: al eliminar la
+              versión se pierden sus filas de historial (queda constancia en la auditoría). */}
+          <p className="text-sm text-muted-foreground">
+            Si esta versión llegó a intentarse y falló, se descartará también el registro de esos
+            intentos por BD.
+          </p>
+          {deleteError && (
+            <p className="rounded-lg border border-error/40 bg-error/5 p-3 text-sm text-error">
+              {deleteError}
+            </p>
+          )}
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }

@@ -25,10 +25,15 @@ export function AppShell() {
   }, [collapsed])
 
   return (
+    // `minmax(0,1fr)` y no `1fr`: `1fr` es `minmax(auto,1fr)`, y ese `auto` impide que la columna
+    // de contenido se encoja por debajo del `min-content` de lo que contiene. El `min-content` de
+    // un `<pre>` con `white-space: pre` es su línea más larga, así que un SQL ancho ensanchaba la
+    // columna —y con ella la página entera, topbar incluida— en vez de desplazarse dentro de su
+    // propio bloque. El `min-w-0` de la columna y del `<main>` cierra la misma fuga por dentro.
     <div
       className={cn(
         'min-h-screen bg-background lg:grid',
-        collapsed ? 'lg:grid-cols-[4.5rem_1fr]' : 'lg:grid-cols-[16rem_1fr]',
+        collapsed ? 'lg:grid-cols-[4.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
       )}
     >
       <aside className="hidden border-r border-border bg-surface lg:block">
@@ -51,10 +56,6 @@ export function AppShell() {
         </div>
       )}
 
-      {/* `min-w-0`: como columna de un grid, su ancho mínimo automático es el del contenido.
-          Sin esto, una tabla de resultados o un bloque de SQL anchos estiran la columna más
-          allá del viewport y aparece scroll horizontal en TODA la página, en vez de quedarse
-          dentro del contenedor con scroll propio que cada uno ya tiene. */}
       <div className="flex min-h-screen min-w-0 flex-col">
         <Topbar
           onMenuClick={() => setMobileOpen(true)}

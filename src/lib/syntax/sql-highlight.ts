@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import Prism from 'prismjs'
 // Registra `Prism.languages.sql` por efecto secundario sobre el Prism global. El componente de
 // SQL no depende de ningún otro lenguaje, así que esto es lo único que hace falta importar.
@@ -96,6 +97,30 @@ export function tokenizeSql(code: string): SqlToken[] {
   return out
 }
 
+/**
+ * Reparte los tokens en líneas, partiendo por `\n` los que abarcan varias (un comentario de bloque
+ * o una cadena multilínea son un solo token de Prism).
+ *
+ * El visor necesita una línea = un elemento para poder numerar y envolver sin que los números se
+ * desalineen. Los saltos NO se conservan en el contenido: los aporta la estructura.
+ *
+ * INVARIANTE, cubierta por test: unir las líneas con `\n` reproduce el original carácter a
+ * carácter, y el número de líneas coincide con `countLines`.
+ */
+export function splitTokenLines(tokens: SqlToken[]): SqlToken[][] {
+  const lines: SqlToken[][] = [[]]
+  for (const token of tokens) {
+    const parts = token.content.split('\n')
+    parts.forEach((part, index) => {
+      // Cada `\n` del token abre una línea nueva; los fragmentos vacíos que deja `split` en los
+      // extremos no se emiten para no ensuciar el DOM con spans sin texto.
+      if (index > 0) lines.push([])
+      if (part.length > 0) lines[lines.length - 1]!.push({ type: token.type, content: part })
+    })
+  }
+  return lines
+}
+
 /** Clase de color por tipo de token. Los valores viven en `theme.css`, uno por tema. */
 export const SQL_TOKEN_CLASS: Record<SqlTokenType, string> = {
   plain: 'text-syntax-plain',
@@ -115,4 +140,17 @@ export const SQL_TOKEN_CLASS: Record<SqlTokenType, string> = {
 export function countLines(code: string): number {
   if (code.length === 0) return 0
   return code.split('\n').length
+}
+
+/**
+ * Ancho de la columna de numeración, en `ch`: exacto porque la tipografía es monoespaciada.
+ *
+ * Se publica como variable CSS y no como clase porque depende del número de dígitos. Lo consumen
+ * el pseudo-elemento de `styles/code.css` y, en el editor, el relleno izquierdo del `<textarea>`,
+ * que tiene que casar al carácter con la capa resaltada de debajo.
+ */
+export function gutterWidthStyle(lineCount: number): CSSProperties {
+  const digits = String(Math.max(lineCount, 1)).length
+  // 1.25rem = el relleno de la columna (0.5rem a la izquierda del número, 0.75rem hasta el código).
+  return { '--code-gutter-w': `calc(${digits}ch + 1.25rem)` } as CSSProperties
 }

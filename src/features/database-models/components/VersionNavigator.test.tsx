@@ -19,6 +19,11 @@ function migration(version: string, id: number): ModelMigrationSummary {
     is_baseline: false,
     reviewed: true,
     capture_selects: false,
+    sql_frozen: false,
+    deletable: true,
+    has_seed: false,
+    forced_collations: [],
+    destructive: false,
     checksum: `sha-${id}`,
     created_at: '2026-07-01T10:00:00Z',
   }

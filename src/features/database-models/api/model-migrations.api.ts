@@ -1,9 +1,12 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
   applyAllResultSchema,
+  migrationValidateOutSchema,
   modelMigrationOutSchema,
   modelMigrationSummarySchema,
   type ApplyAllResult,
+  type MigrationValidateIn,
+  type MigrationValidateOut,
   type ModelMigrationCreate,
   type ModelMigrationOut,
   type ModelMigrationPatch,
@@ -68,6 +71,19 @@ export function deleteModelMigration(
 
 export interface ApplyAllOptions {
   maxDatabases?: number
+  /**
+   * Destinos concretos. Sin él se aplica a TODAS las BDs del blueprint (hasta `maxDatabases`).
+   * Un id que no pertenezca al blueprint devuelve 422 con la lista: es la frontera que impide
+   * aplicar sus migraciones a una BD ajena.
+   */
+  databaseIds?: number[]
+  /**
+   * Acota el lote a un entorno. Es lo que convierte "aplicá a todo" en "aplicá a desarrollo": el
+   * backend lo filtra ANTES del tope, así que `maxDatabases` no se consume con BDs de otros
+   * entornos. Combinado con `databaseIds`, un id fuera del entorno devuelve 422 con la lista en
+   * vez de desaparecer del lote en silencio.
+   */
+  environmentId?: number
   force?: boolean
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
@@ -87,10 +103,30 @@ export function applyAllMigrations(
   return mutateData('POST', `${base(modelId)}/apply-all`, applyAllResultSchema, {
     query: {
       max_databases: options.maxDatabases,
+      database_ids: options.databaseIds,
+      environment_id: options.environmentId,
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
       allow_result_capture: options.allowResultCapture,
     },
+  })
+}
+
+/**
+ * `POST .../migrations/validate` — analiza el SQL ANTES de aplicarlo (api-reference-v11 §1).
+ *
+ * Sin `managed_database_id` es análisis estático y no toca ningún motor. Con él se comprueba
+ * además contra el catálogo de esa BD que las tablas referenciadas existan — es lo único que
+ * detecta un `ALTER TABLE` sobre una tabla inexistente, que es sintácticamente válido.
+ */
+export function validateModelMigration(
+  modelId: number,
+  body: MigrationValidateIn,
+  signal?: AbortSignal,
+): Promise<MigrationValidateOut> {
+  return mutateData('POST', `${base(modelId)}/validate`, migrationValidateOutSchema, {
+    body,
+    signal,
   })
 }

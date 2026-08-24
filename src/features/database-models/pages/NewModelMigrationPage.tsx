@@ -103,6 +103,8 @@ export function NewModelMigrationPage() {
           ) : (
             <ModelMigrationForm
               mode="create"
+              modelId={modelId}
+              blueprintCollation={model.data?.collation}
               isSubmitting={create.isPending}
               onSubmit={submit}
               onCancel={() => void navigate(backTo)}

@@ -171,6 +171,42 @@ Confirmación construida sobre `Modal`. Para borrados destructivos, `confirmWord
 > Patrón: los diálogos de borrado se **montan condicionalmente** (`{target && <Dialog/>}`)
 > para tener estado fresco sin `setState` en efectos. Ver [`maintenance.md`](maintenance.md).
 
+## SQL (visor y editor)
+
+### `CodeBlock`
+Visor de SQL de solo lectura: resaltado por tokens (`src/lib/syntax/sql-highlight.ts`),
+numeración, copiar y expandir a pantalla completa. Props: `code`, `title?`, `extra?`,
+`maxHeightClass?` (`max-h-80`), `hideLineNumbers?`, `emptyLabel?`, `hideFullscreen?`.
+**Es la única forma correcta de mostrar SQL**: no montes un `<pre>` propio.
+
+### `SqlEditor` / `SqlField`
+Editor con resaltado *mientras se escribe*: un `<pre>` coloreado debajo y el `<textarea>`
+real encima, transparente. `SqlField` es el puente con react-hook-form (y cae a `CodeBlock`
+cuando el campo es de solo lectura). Las dos capas comparten tipografía, caja y ancho útil
+al carácter; si tocas una, toca la otra o el cursor deja de coincidir con el texto.
+
+### Los dos modos de lectura
+Ajuste de línea (**por omisión**) o scroll horizontal. Se conmuta con el botón de la barra
+de cualquier `CodeBlock`, pero **la preferencia es global** (`SqlWrapProvider`, ver
+[`theming.md`](theming.md)): todos los bloques cambian a la vez, para que dos SQL contiguos
+nunca se lean con reglas distintas. La aplica el CSS desde `[data-sql-wrap]`, así que
+alternar no re-renderiza ningún bloque.
+
+El ajuste es seguro para DDL porque se numera **una fila por línea lógica** y la
+continuación de una línea envuelta queda sangrada bajo el código, nunca a la altura del
+número. Los números se pintan con `content: attr(data-line)`: al ser contenido generado no
+entran en la selección, así que copiar con el ratón devuelve SQL limpio.
+
+> **Nunca `break-all` sobre SQL**: partir un identificador a mitad cambia lo que el ojo
+> lee. Un literal larguísimo sin espacios sigue desbordando, y para eso el bloque conserva
+> su scroll horizontal en los dos modos. Sobre un checksum o una ruta sí es correcto.
+
+### Alto ajustable
+A partir de unas pocas líneas el bloque trae tirador de alto en su esquina inferior. En
+cuanto se agarra, `maxHeightClass` deja de ser un tope y pasa a ser solo el alto de
+partida, y entra en juego un mínimo de cuatro líneas. Es por bloque y no se recuerda entre
+montajes: es un ajuste de lectura del momento, no una preferencia como el ajuste de línea.
+
 ## Layout (en `src/components/layout/`)
 
 `AppShell` (sidebar + topbar + boundary por sección), `Sidebar` (navegación),

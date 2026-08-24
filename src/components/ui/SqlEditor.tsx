@@ -1,6 +1,13 @@
 import { useRef, type ComponentPropsWithRef, type UIEvent } from 'react'
 import { cn } from '@/lib/utils'
-import { countLines, SQL_TOKEN_CLASS, tokenizeSql } from '@/lib/syntax/sql-highlight'
+import { useSqlWrap } from '@/lib/theme/use-sql-wrap'
+import {
+  countLines,
+  gutterWidthStyle,
+  splitTokenLines,
+  SQL_TOKEN_CLASS,
+  tokenizeSql,
+} from '@/lib/syntax/sql-highlight'
 
 /**
  * Se parte de `ComponentPropsWithRef` y no de `TextareaHTMLAttributes` para que `ref` forme
@@ -28,9 +35,21 @@ export interface SqlEditorProps extends Omit<
  * que se ve son los tokens coloreados de la capa inferior.
  *
  * Para que las dos capas no se desalineen tienen que compartir EXACTAMENTE tipografía, tamaño,
- * interlineado y relleno. Además ambas van sin ajuste de línea (`wrap="off"` + `whitespace-pre`),
- * que es lo que elimina la principal fuente de desfase: si una capa parte una línea larga y la
- * otra no, el texto empieza a bailar. El desplazamiento se replica a mano en cada scroll.
+ * interlineado y ancho útil; si una parte una línea larga y la otra no, el cursor deja de
+ * coincidir con el texto. De ahí tres decisiones:
+ *
+ *   - El `white-space` de ambas lo fija un único selector de `styles/code.css` a partir de
+ *     `[data-sql-wrap]`, así que es imposible cambiar una capa y olvidar la otra.
+ *   - Las dos llevan `scrollbar-gutter: stable`: sin él, al aparecer la barra de scroll vertical
+ *     el textarea pierde ancho útil y envolvería una columna antes que el `<pre>`.
+ *   - La numeración cambia de sitio según el modo. En **scroll** va en una columna hermana, fuera
+ *     del textarea, y se sincroniza por `scrollTop`. En **ajuste** eso ya no vale —una línea
+ *     envuelta ocupa más de un renglón y los números se descuadran—, y el textarea es una caja
+ *     monolítica que no se puede partir en filas; así que los números pasan a la capa `<pre>`, con
+ *     la misma estructura que `CodeBlock`, y el textarea recibe el ancho de esa columna como
+ *     `padding-left`. Ese reparto deja a las dos capas exactamente el mismo ancho de código.
+ *
+ * El desplazamiento se replica a mano en cada scroll.
  */
 export function SqlEditor({
   value,
@@ -41,9 +60,12 @@ export function SqlEditor({
 }: SqlEditorProps) {
   const preRef = useRef<HTMLPreElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
-  const tokens = tokenizeSql(value)
+  const { wrap } = useSqlWrap()
   const lineCount = countLines(value)
   const showGutter = !hideLineNumbers && lineCount > 1
+  // En modo ajuste la numeración vive dentro de la capa resaltada; en modo scroll, en la columna
+  // hermana de siempre.
+  const numbersInLayer = wrap && showGutter
 
   // El textarea es el único elemento que scrollea de verdad; las otras dos capas lo siguen.
   const syncScroll = (event: UIEvent<HTMLTextAreaElement>) => {
@@ -55,8 +77,9 @@ export function SqlEditor({
     if (gutterRef.current) gutterRef.current.scrollTop = scrollTop
   }
 
-  // Tipografía y caja compartidas por las dos capas: cualquier diferencia aquí las desalinea.
-  const shared = 'font-mono text-xs leading-5 whitespace-pre px-3 py-3'
+  // Tipografía y caja compartidas por las dos capas: cualquier diferencia aquí las desalinea. El
+  // `white-space` NO se pone aquí; lo decide `code.css` para las dos a la vez.
+  const shared = 'sql-editor-layer font-mono text-xs leading-5 py-3'
 
   /*
    * La altura la fija el CONTENEDOR, no sus hijos.
@@ -72,16 +95,18 @@ export function SqlEditor({
    */
   const height = `calc(${rows} * 1.25rem + 1.5rem)`
 
+  const lines = splitTokenLines(tokenizeSql(value))
+
   return (
     <div
-      style={{ height }}
+      style={{ height, ...gutterWidthStyle(lineCount) }}
       className="flex overflow-hidden rounded-lg border border-border bg-syntax-bg focus-within:ring-2 focus-within:ring-ring"
     >
-      {showGutter && (
+      {showGutter && !numbersInLayer && (
         <div
           ref={gutterRef}
           aria-hidden
-          className="h-full shrink-0 select-none overflow-hidden border-r border-border px-2 py-3 text-right font-mono text-xs leading-5 text-syntax-gutter"
+          className="h-full shrink-0 select-none overflow-hidden py-3 pl-2 pr-3 text-right font-mono text-xs leading-5 text-syntax-gutter"
         >
           {Array.from({ length: lineCount }, (_, index) => (
             <div key={index}>{index + 1}</div>
@@ -93,28 +118,43 @@ export function SqlEditor({
         <pre
           ref={preRef}
           aria-hidden
-          className={cn('pointer-events-none absolute inset-0 overflow-hidden', shared)}
+          className={cn(
+            'pointer-events-none absolute inset-0 overflow-hidden code-lines',
+            shared,
+            numbersInLayer && 'code-lines--numbered',
+          )}
         >
+          {/* Misma estructura de fila por línea que `CodeBlock`, aquí también en modo scroll: así
+              una línea en blanco al final conserva su alto (`min-height` en `code.css`) y el
+              cursor no se sale de la capa resaltada al pulsar Intro. */}
           <code className="text-syntax-plain">
-            {tokens.map((token, index) => (
-              <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
-                {token.content}
+            {lines.map((lineTokens, lineIndex) => (
+              <span key={lineIndex} className="code-line" data-line={lineIndex + 1}>
+                <span className="code-text">
+                  {lineTokens.map((token, index) => (
+                    <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
+                      {token.content}
+                    </span>
+                  ))}
+                </span>
               </span>
             ))}
-            {/* Sin este salto final, la última línea vacía no ocupa alto y el cursor se sale
-                de la capa resaltada al pulsar Intro al final del texto. */}
-            {'\n'}
           </code>
         </pre>
 
         <textarea
-          wrap="off"
+          // `wrap` es atributo HTML, no CSS: es lo único del modo que no se puede conmutar desde
+          // la hoja de estilos, y por eso el editor consume el contexto.
+          wrap={wrap ? 'soft' : 'off'}
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
           onScroll={syncScroll}
+          // El relleno izquierdo reserva exactamente la columna de números de la capa de abajo,
+          // para que ambas envuelvan en la misma columna.
+          style={{ paddingLeft: numbersInLayer ? 'var(--code-gutter-w)' : '0.75rem' }}
           className={cn(
-            'relative block h-full w-full resize-none overflow-auto border-0 bg-transparent',
+            'relative block h-full w-full resize-none overflow-auto border-0 bg-transparent pr-3',
             'text-transparent caret-syntax-plain outline-none',
             shared,
             className,

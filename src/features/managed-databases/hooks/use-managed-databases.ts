@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
+import { invalidateDatabaseViews } from '../invalidate'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type {
@@ -77,7 +78,7 @@ export function useCreateManagedDatabase() {
     mutationFn: ({ body, provision }: { body: ManagedDatabaseCreate; provision: boolean }) =>
       createManagedDatabase(body, provision),
     onSuccess: (db, { provision }) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.managedDatabases.all })
+      invalidateDatabaseViews(queryClient)
       if (provision && db.status === 'error') {
         toast.error('La BD quedó en estado «error»', db.notes ?? 'Revisa el detalle en el motor.')
       } else {
@@ -97,7 +98,7 @@ export function useUpdateManagedDatabase(id: number) {
   return useMutation({
     mutationFn: (body: ManagedDatabaseUpdate) => updateManagedDatabase(id, body),
     onSuccess: (db) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.managedDatabases.all })
+      invalidateDatabaseViews(queryClient)
       toast.success('Base de datos actualizada', db.name)
     },
     onError: (error) =>
@@ -119,7 +120,7 @@ export function useDeleteManagedDatabase() {
       confirmName?: string
     }) => deleteManagedDatabase(id, { dropRemote, confirmName }),
     onSuccess: (_, { dropRemote }) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.managedDatabases.all })
+      invalidateDatabaseViews(queryClient)
       toast.success(dropRemote ? 'Base de datos eliminada del motor' : 'Base de datos eliminada')
     },
     onError: (error) =>
@@ -134,7 +135,7 @@ export function useReassignOwner(id: number) {
     mutationFn: ({ body, provision }: { body: ReassignOwnerIn; provision: boolean }) =>
       reassignOwner(id, body, provision),
     onSuccess: (db) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.managedDatabases.all })
+      invalidateDatabaseViews(queryClient)
       toast.success('Propietario reasignado', db.name)
     },
     onError: (error) =>

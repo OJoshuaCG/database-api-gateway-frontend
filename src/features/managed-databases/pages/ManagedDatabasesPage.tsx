@@ -15,6 +15,7 @@ import {
   Pagination,
   PencilIcon,
   TrashIcon,
+  EnvironmentBadge,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import {
@@ -24,9 +25,15 @@ import {
   type ServerOut,
   type ServerUserOut,
   type DatabaseModelOut,
+  type EnvironmentOut,
 } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
+import {
+  resolveEnvironmentState,
+  useEnvironmentMap,
+  useEnvironmentOptions,
+} from '@/features/environments'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
 import { useManagedDatabases } from '../hooks/use-managed-databases'
 import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
@@ -51,6 +58,28 @@ const STATUS_OPTIONS: StatusOption[] = provisionStatusSchema.options.map((value)
   label: STATUS_LABELS[value],
 }))
 
+/**
+ * Opción del filtro de entorno. El centinela vive en el CAMPO `environment` (null), no en una
+ * unión de tipos: así `itemToString`/`itemToKey`/`renderItem` son totales y no hay que
+ * discriminar en cada callback. Precedente: `EMPTY_VERSION` de `AdoptDatabaseModal`.
+ */
+interface EnvironmentFilterOption {
+  key: string
+  label: string
+  environment: EnvironmentOut | null
+}
+
+/**
+ * La etiqueta NO puede ser "Sin entorno": se leería como "no filtrar por entorno", que es lo que
+ * significa el `placeholder="Todos"` de los otros cuatro filtros de esta misma barra. Nombra el
+ * ESTADO y su consecuencia, igual que `EMPTY_VERSION` dice «Vacía / en ceros (sin marcar)».
+ */
+const UNASSIGNED_ENVIRONMENT: EnvironmentFilterOption = {
+  key: '__unassigned__',
+  label: 'Sin clasificar (no protegidas)',
+  environment: null,
+}
+
 export function ManagedDatabasesPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
@@ -60,6 +89,16 @@ export function ManagedDatabasesPage() {
   const [modelFilter, setModelFilter] = useState<DatabaseModelOut | null>(null)
   // Filtro por propietario: solo tiene sentido con un servidor elegido (los owners son por server).
   const [ownerFilter, setOwnerFilter] = useState<ServerUserOut | null>(null)
+  /**
+   * UN solo control para el entorno, con el centinela en un CAMPO y no como unión de tipos.
+   *
+   * El backend rechaza con 422 mandar `environment_id` y `only_unassigned` a la vez, así que la
+   * combinación ilegal tiene que ser INEXPRESABLE en el cliente, no validada. Con dos `useState`
+   * sueltos mandar las dos es trivial. El precedente es `EMPTY_VERSION` de `AdoptDatabaseModal`:
+   * un objeto normal cuyo centinela vive en un campo, así que `itemToString`/`itemToKey` son
+   * totales y no hay que discriminar en cada callback.
+   */
+  const [envFilter, setEnvFilter] = useState<EnvironmentFilterOption | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
   const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
@@ -68,6 +107,17 @@ export function ManagedDatabasesPage() {
   const servers = useServerOptions()
   const models = useDatabaseModelOptions()
   const owners = useServerUserOptions(serverFilter?.id ?? null)
+  const environments = useEnvironmentOptions()
+  const environmentMap = useEnvironmentMap()
+  const environmentFilterOptions = useMemo<EnvironmentFilterOption[]>(
+    () => [
+      UNASSIGNED_ENVIRONMENT,
+      ...(environments.data ?? [])
+        .filter((env) => env.is_active)
+        .map((env) => ({ key: String(env.id), label: env.name, environment: env })),
+    ],
+    [environments.data],
+  )
 
   const serverNameById = useMemo(() => {
     const map = new Map<number, string>()
@@ -88,6 +138,10 @@ export function ManagedDatabasesPage() {
     status: statusFilter?.value,
     model_id: modelFilter?.id,
     owner_id: ownerFilter?.id,
+    environment_id: envFilter?.environment?.id,
+    // `undefined` y NO `false`: `buildUrl` serializa el `false` explícito, y mandarlo junto a
+    // `environment_id` es el 422 que el control único existe para evitar.
+    only_unassigned: envFilter === UNASSIGNED_ENVIRONMENT ? true : undefined,
   })
 
   const columns = useMemo<ColumnDef<ManagedDatabaseOut>[]>(
@@ -108,6 +162,17 @@ export function ManagedDatabasesPage() {
             {row.original.origin === 'adopted' && (
               <AdoptionBadge status="adopted" className="shrink-0" />
             )}
+            {/*
+              INLINE en la celda del nombre y NO como octava columna. La tabla ya tiene 7,
+              `DataTable` lleva `overflow-x-auto` y el proyecto prohíbe depender de scroll
+              horizontal; peor: con `enableColumnVisibility` una columna se puede OCULTAR, y una
+              etiqueta de seguridad ocultable es un fallo silencioso. Además así aparece gratis
+              en la vista de tarjeta móvil. Precedente: el `AdoptionBadge` de arriba.
+            */}
+            <EnvironmentBadge
+              state={resolveEnvironmentState(row.original.environment_id, environmentMap)}
+              className="shrink-0"
+            />
           </div>
         ),
       },
@@ -194,7 +259,7 @@ export function ManagedDatabasesPage() {
         ),
       },
     ],
-    [serverNameById, ownerNameById],
+    [serverNameById, ownerNameById, environmentMap],
   )
 
   const resetPage = () => setPage(1)
@@ -234,11 +299,11 @@ export function ManagedDatabasesPage() {
             searchPlaceholder="Buscar base de datos…"
             enableColumnVisibility
             toolbar={
-              /* Sin ancho mínimo fijo: `lg:min-w-[48rem]` sumado al buscador (`sm:max-w-xs`)
-                 exigía ~1100px de barra, más de lo que deja el contenido en `lg` con el sidebar
-                 abierto, y desbordaba la página en horizontal. Las cuatro columnas esperan a
-                 `xl`, que es donde caben sin apretarse. */
-              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              /* Sin ancho mínimo fijo: `lg:min-w-[60rem]` sumado al buscador (`sm:max-w-xs`)
+                 exigía más barra de la que deja el contenido en `lg` con el sidebar abierto, y
+                 desbordaba la página en horizontal. Las cinco columnas —la quinta es el filtro
+                 de entorno— esperan a `xl`, que es donde caben sin apretarse. */
+              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <Combobox<ServerOut>
                   items={servers.data ?? []}
                   value={serverFilter}
@@ -293,6 +358,20 @@ export function ManagedDatabasesPage() {
                   itemToKey={(m) => m.id}
                   label="Blueprint"
                   placeholder="Todos"
+                  clearable
+                />
+                <Combobox<EnvironmentFilterOption>
+                  items={environmentFilterOptions}
+                  value={envFilter}
+                  onChange={(option) => {
+                    setEnvFilter(option)
+                    resetPage()
+                  }}
+                  itemToString={(o) => o.label}
+                  itemToKey={(o) => o.key}
+                  label="Entorno"
+                  placeholder="Todos"
+                  isLoading={environments.isLoading}
                   clearable
                 />
               </div>

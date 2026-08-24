@@ -1,0 +1,88 @@
+/**
+ * code.css — estructura de los visores de SQL (`CodeBlock` y la capa resaltada de `SqlEditor`).
+ *
+ * Aquí vive lo que Tailwind no sabe expresar y, sobre todo, lo que NO debe depender de un
+ * re-render:
+ *
+ *   - `[data-sql-wrap]` (lo escribe `SqlWrapProvider`) conmuta entre ajuste de línea y scroll
+ *     horizontal cambiando solo el `white-space`. Igual que las paletas de `syntax-themes.css`,
+ *     alternar el modo no re-renderiza ni un bloque de código.
+ *   - La numeración se pinta como pseudo-elemento con `content: attr(data-line)`. Es deliberado:
+ *     el contenido generado NUNCA entra en la selección, así que copiar varias líneas con el ratón
+ *     devuelve SQL limpio, sin números intercalados. `attr()` además evita duplicar la fuente de
+ *     verdad — el número solo existe en el DOM, como atributo.
+ *
+ * Sin regla vertical entre la numeración y el código: la separación la hacen el color apagado de
+ * los dígitos y el hueco. Un borde de 1px obligaría a que las dos capas superpuestas del editor
+ * cuadraran al píxel, y esa diferencia es justo la que descoloca el punto de corte del ajuste de
+ * línea y hace que el cursor deje de coincidir con el texto.
+ */
+
+@layer components {
+  /* Una fila por línea LÓGICA: es lo que permite numerar y envolver a la vez sin que los números
+     se desalineen (un `div` por línea en una columna aparte solo funciona si nada envuelve). */
+  .code-line {
+    display: flex;
+    /* Una línea en blanco no tiene contenido que le dé alto, y sin esto se colapsaría y
+       descuadraría la numeración. El valor es el `leading-5` que usan las dos superficies. */
+    min-height: 1.25rem;
+  }
+
+  .code-lines--numbered .code-line::before {
+    content: attr(data-line);
+    /* Sigue a la vista al desplazarse en horizontal, igual que la antigua columna fija. */
+    position: sticky;
+    left: 0;
+    flex: 0 0 var(--code-gutter-w);
+    padding-inline: 0.5rem 0.75rem;
+    text-align: right;
+    user-select: none;
+    background-color: var(--color-syntax-bg);
+    color: var(--color-syntax-gutter);
+  }
+
+  .code-text {
+    /* La sangría francesa sale sola: el número es un ítem flex de ancho fijo, así que la
+       continuación de una línea envuelta se alinea con el código y nunca invade la numeración. */
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-right: 0.75rem;
+    white-space: pre-wrap;
+  }
+
+  /* Sin numeración (fragmento de una línea) el código necesita su propio margen izquierdo. */
+  .code-lines:not(.code-lines--numbered) .code-text {
+    padding-left: 0.75rem;
+  }
+
+  [data-sql-wrap='off'] .code-text {
+    white-space: pre;
+  }
+
+  /* En modo scroll la fila mide lo que mida su línea, para que el fondo de la numeración cubra
+     todo el ancho desplazable y las líneas cortas no dejen un hueco a la derecha. */
+  [data-sql-wrap='off'] .code-line {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /*
+   * Editor (`SqlEditor`): las dos capas superpuestas —el `<pre>` resaltado y el `<textarea>` real,
+   * transparente— tienen que envolver EXACTAMENTE en la misma columna, o el cursor deja de
+   * coincidir con el texto que se ve. Por eso el `white-space` de ambas se decide aquí, con un
+   * único selector: es imposible cambiar una y olvidar la otra.
+   *
+   * `scrollbar-gutter: stable` es la otra mitad: sin él, en cuanto aparece la barra de scroll
+   * vertical el textarea pierde ancho útil y envuelve una columna antes que el `<pre>`, que tiene
+   * `overflow: hidden` y no reserva hueco. (Safari lo soporta desde 18.2; en versiones anteriores
+   * habría desfase con scroll vertical presente.)
+   */
+  .sql-editor-layer {
+    white-space: pre-wrap;
+    scrollbar-gutter: stable;
+  }
+
+  [data-sql-wrap='off'] .sql-editor-layer {
+    white-space: pre;
+  }
+}

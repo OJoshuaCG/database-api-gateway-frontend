@@ -6,6 +6,7 @@ import { MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
 import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
 import { Badge, Button, Checkbox, Input } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { MigrationValidationPanel } from './MigrationValidationPanel'
 import { SqlField } from './SqlField'
 
 const SQL_MAX = 262144
@@ -75,6 +76,10 @@ type OverrideChoice = 'resend' | 'clear'
 
 interface ModelMigrationFormProps {
   mode: 'create' | 'edit'
+  /** Sin él no se ofrece la validación: el endpoint cuelga del blueprint. */
+  modelId?: number
+  /** Collation de referencia del blueprint, para explicar un COLLATE forzado que difiera. */
+  blueprintCollation?: string | null
   defaultValues?: Partial<ModelMigrationFormValues>
   isSubmitting?: boolean
   /** Mensaje de error del backend (detail.msg) a mostrar en línea (edit). */
@@ -92,6 +97,8 @@ interface ModelMigrationFormProps {
 
 export function ModelMigrationForm({
   mode,
+  modelId,
+  blueprintCollation,
   defaultValues,
   isSubmitting,
   submitError,
@@ -217,9 +224,9 @@ export function ModelMigrationForm({
         </div>
         {willResetReview && (
           <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
-            Al guardar, esta versión quedará <strong>sin revisar</strong> (necesitará un
-            «Revisar y aprobar» aparte): activar la captura por primera vez —o reactivarla—
-            siempre resetea la revisión, aunque se apruebe en el mismo paso.
+            Al guardar, esta versión quedará <strong>sin revisar</strong> (necesitará un «Revisar y
+            aprobar» aparte): activar la captura por primera vez —o reactivarla— siempre resetea la
+            revisión, aunque se apruebe en el mismo paso.
           </p>
         )}
       </div>
@@ -357,6 +364,16 @@ export function ModelMigrationForm({
         <p className="rounded-lg border border-error/40 bg-error/5 p-3 text-xs text-error">
           {submitError}
         </p>
+      )}
+
+      {/* La validación va ANTES de la botonera: el orden de lectura es escribir → comprobar →
+          guardar, y ponerla después invitaría a guardar sin haberla mirado. */}
+      {modelId !== undefined && (
+        <MigrationValidationPanel
+          modelId={modelId}
+          upSql={currentUpSql}
+          blueprintCollation={blueprintCollation}
+        />
       )}
 
       <div className="flex justify-end gap-2 pt-2">

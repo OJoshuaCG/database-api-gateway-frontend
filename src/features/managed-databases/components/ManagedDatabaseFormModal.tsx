@@ -27,9 +27,12 @@ export function ManagedDatabaseFormModal({
   const update = useUpdateManagedDatabase(database?.id ?? 0)
   const isSubmitting = create.isPending || update.isPending
 
-  const handleSubmit = (values: ManagedDatabaseFormValues) => {
+  const handleSubmit = (
+    values: ManagedDatabaseFormValues,
+    dirtyFields: Partial<Record<keyof ManagedDatabaseFormValues, unknown>>,
+  ) => {
     if (database) {
-      update.mutate(toManagedDatabaseUpdate(values), { onSuccess: onClose })
+      update.mutate(toManagedDatabaseUpdate(values, dirtyFields), { onSuccess: onClose })
     } else {
       create.mutate(
         { body: toManagedDatabaseCreate(values), provision: values.provision },
@@ -57,6 +60,10 @@ export function ManagedDatabaseFormModal({
             ? {
                 model_id: database.model_id ?? null,
                 model_version: database.model_version ?? '',
+                // PRECARGA OBLIGATORIA. Sin esto el campo arrancaría en el `null` de DEFAULTS y,
+                // en cuanto react-hook-form lo marcara como tocado, el PATCH desclasificaría la
+                // base. La otra mitad de la defensa es que el body va por `dirtyFields`.
+                environment_id: database.environment_id ?? null,
                 notes: database.notes ?? '',
               }
             : { server_id: defaultServerId ?? 0 }

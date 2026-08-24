@@ -103,8 +103,18 @@ export const migrationApplyOutSchema = z.object({
   /** Reconciliación automática de la migración fallida (§9); `null`/ausente = no aplicó. */
   reconciliation: migrationReconciliationSchema.nullish(),
   // Compatibilidad / campos auxiliares.
-  database_name: z.string().optional(),
-  server_id: z.number().int().optional(),
+  // `.nullish()` y no `.optional()`: el backend los tipa `str | None` / `int | None`, y
+  // `.optional()` NO acepta `null` (los None anidados no los filtra el envelope). Mismo defecto
+  // que tenía `applyAllItemSchema`.
+  database_name: z.string().nullish(),
+  server_id: z.number().int().nullish(),
+  /** Entorno de esta BD; `null` si no está clasificada. */
+  environment_slug: z.string().nullish(),
+  /**
+   * Solo en dry-run: versiones pendientes que el entorno bloquearía por ser destructivas.
+   * INFORMATIVO — el dry-run no falla, justamente para que se pueda ver qué frena el apply.
+   */
+  blocked_by: z.array(z.string()).optional().default([]),
   current_version: z.string().nullable().optional(),
   pending_count: z.number().int().optional(),
   /**

@@ -69,6 +69,15 @@ export const queryKeys = {
     list: (params: QueryParams) => ['permission-profiles', 'list', params] as const,
     detail: (id: number) => ['permission-profiles', 'detail', id] as const,
   },
+  /**
+   * Catálogo de entornos. La key de `list` se usa con un objeto de params CONSTANTE (ver
+   * `useEnvironmentOptions`): es el punto de deduplicación de los 5 consumidores, y un hook
+   * parametrizado produciría una entrada de cache por argumento y dos requests.
+   */
+  environments: {
+    all: ['environments'] as const,
+    list: (params: QueryParams) => ['environments', 'list', params] as const,
+  },
   charsetCollationOptions: {
     all: ['charset-collation-options'] as const,
     list: (params: QueryParams) => ['charset-collation-options', 'list', params] as const,

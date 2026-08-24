@@ -81,6 +81,30 @@ import { useTheme } from '@/lib/theme/use-theme'
 const { theme, toggleTheme, setTheme } = useTheme()
 ```
 
+## Preferencias del usuario
+
+Tres, todas en `localStorage` y todas aplicadas por un atributo en `<html>` — nunca
+credenciales:
+
+| Clave | Atributo en `<html>` | Qué controla | Provider |
+|---|---|---|---|
+| `gw-theme` | `data-theme` | Claro / oscuro de la app | `ThemeProvider` |
+| `gw-sql-theme` | `data-sql-theme` | Paleta de resaltado de SQL | `SqlThemeProvider` |
+| `gw-sql-wrap` | `data-sql-wrap` | Ajuste de línea del SQL (`on` por omisión / `off`) | `SqlWrapProvider` |
+
+Las dos de SQL siguen el mismo patrón, y ahí está su valor: el provider **solo escribe el
+atributo**, y el efecto lo hace el CSS (`syntax-themes.css` para la paleta, `code.css` para
+el ajuste). Cambiar cualquiera de las dos no re-renderiza ni un bloque de código, y ningún
+componente necesita conocer la preferencia.
+
+```tsx
+import { useSqlWrap } from '@/lib/theme/use-sql-wrap'
+const { wrap, toggleWrap } = useSqlWrap()
+```
+
+Solo `gw-theme` tiene script anti-FOUC en `index.html`: un destello de paleta o de ajuste
+de línea no justifica bloquear el primer pintado.
+
 ## Accesibilidad
 
 - Los colores interactivos (marca y estados) usan variantes con **contraste WCAG AA

@@ -26,6 +26,44 @@ export const migrationTranslatedSchema = z.object({
 export type MigrationTranslated = z.infer<typeof migrationTranslatedSchema>
 
 /**
+ * Motivo por el que una versión está restringida. `not_tip` **solo** impide borrarla: editarla
+ * sigue permitido, y confundir las dos cosas es lo que hacía que la UI mintiera sobre lo que se
+ * podía hacer.
+ */
+export const migrationBlockReasonSchema = z.enum(['applied', 'partial', 'not_tip'])
+export type MigrationBlockReason = z.infer<typeof migrationBlockReasonSchema>
+
+/**
+ * Banderas de política que el backend calcula y publica (§8).
+ *
+ * Son la DECISIÓN, no sus insumos: el backend no manda «en cuántas BDs se aplicó» para que el
+ * cliente deduzca la regla, porque entonces la misma política viviría escrita a los dos lados
+ * del contrato y se desincronizarían. Con esto la UI puede bloquear el campo *antes* de que se
+ * escriba, en vez de rechazarlo al guardar.
+ *
+ * Los tres son opcionales con default permisivo: un backend anterior a este contrato no los
+ * envía, y en ese caso la UI se comporta como antes (todo editable, el 409 sigue de red).
+ */
+const migrationPolicyFields = {
+  sql_frozen: z.boolean().optional().default(false),
+  deletable: z.boolean().optional().default(true),
+  block_reason: migrationBlockReasonSchema.nullable().optional(),
+}
+
+/**
+ * Hechos derivados del SQL, para las insignias del listado (api-reference-v11).
+ *
+ * El backend los calcula con heurísticas de texto —baratas, se pagan por fila— y no con el
+ * análisis completo: parsear hasta 256 KB por versión solo para decidir si se dibuja una
+ * plantita no se sostiene. El veredicto fino lo da el endpoint de validación cuando se pide.
+ */
+const migrationSqlFactFields = {
+  has_seed: z.boolean().optional().default(false),
+  forced_collations: z.array(z.string()).optional().default([]),
+  destructive: z.boolean().optional().default(false),
+}
+
+/**
  * `ModelMigrationOut` — detalle completo de una migración (§8). Plan 09 añade los campos de
  * baseline de snapshot: `source_engine`, `is_baseline`, `has_non_portable` y `reviewed`
  * (un baseline de snapshot nace `reviewed=false` y no se puede aplicar hasta aprobarlo).
@@ -52,6 +90,8 @@ export const modelMigrationOutSchema = z.object({
    * (en la creación o en un PATCH posterior) fuerza `reviewed` a `false` — ver §2.3/§4.1.
    */
   capture_selects: z.boolean().optional().default(false),
+  ...migrationPolicyFields,
+  ...migrationSqlFactFields,
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -76,6 +116,8 @@ export const modelMigrationSummarySchema = z.object({
   reviewed: z.boolean().optional(),
   /** Ver `modelMigrationOutSchema.capture_selects` (api-reference-v9 §7). */
   capture_selects: z.boolean().optional().default(false),
+  ...migrationPolicyFields,
+  ...migrationSqlFactFields,
   checksum: z.string(),
   created_at: z.string(),
 })
@@ -131,8 +173,22 @@ export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
  */
 export const applyAllItemSchema = z.object({
   managed_database_id: z.number().int(),
-  database_name: z.string(),
-  server_id: z.number().int(),
+  /**
+   * `.nullish()` y NO requerido: el backend los tipa `str | None` / `int | None`.
+   *
+   * Esto era un defecto real, no una precaución: `ApiResponse._exclude_none` filtra solo las
+   * claves del ENVELOPE, así que los `None` anidados salen como `null`, y `apiRequest` hace
+   * `safeParse` del envelope completo. Un solo `null` en un solo ítem de un lote de 50 BDs
+   * descartaba TODA la respuesta —"La API devolvió una respuesta inesperada."— después de que el
+   * apply YA ejecutó DDL, dejando al operador sin ver qué pasó en ninguna. Es el peor modo de
+   * fallo del módulo. `migrationApplyOutSchema` tenía el mismo defecto (allá con `.optional()`,
+   * que tampoco acepta `null`).
+   *
+   * Al renderizar hay que pasar por `databaseLabel(item)`: TypeScript no fuerza el fallback
+   * porque `ReactNode` acepta `null`, y una fila fallada sin nombre es inaccionable.
+   */
+  database_name: z.string().nullish(),
+  server_id: z.number().int().nullish(),
   ok: z.boolean(),
   applied: z
     .array(
@@ -149,14 +205,99 @@ export const applyAllItemSchema = z.object({
     .optional(),
   pending_versions: z.array(z.string()).optional(),
   error: z.string().nullable().optional(),
+  /**
+   * Código estable del rechazo. Va APARTE de `error`, que es prosa para mostrar: el `except` del
+   * lote en el backend conserva solo `exc.message` y descarta el `public_context`, y la ruta
+   * responde 200 con los ítems adentro — así que para los rechazos POR BD este campo es el
+   * único transporte del código, y `extractEnvironmentContext` (que opera sobre `ApiError`)
+   * nunca lo ve. La clasificación de filas se hace con el mapa de `environments/messages.ts`.
+   *
+   * `.nullish()` obligatorio: es `null` en TODOS los ítems OK, así que con `.optional()` fallaría
+   * el parseo en CADA `apply-all`.
+   */
+  error_code: z.string().nullish(),
+  /** Entorno de esta BD; `null` en toda BD sin clasificar (de ahí el `.nullish()`). */
+  environment_slug: z.string().nullish(),
+  /**
+   * Versiones que el entorno bloquea. En dry-run es INFORMATIVO (el plan no falla); en un apply
+   * real acompaña al rechazo. `default_factory=list` en el backend, nunca `null`.
+   */
+  blocked_by: z.array(z.string()).optional().default([]),
+  /**
+   * Paridad con el apply por BD (api-reference-v11 §3). Sin estos campos, tras un apply
+   * masivo no había forma de saber en qué BDs quedaron capturas ni cómo llegar a ellas.
+   */
+  captured_select_count: z.number().int().optional().default(0),
+  select_results_available: z.boolean().optional().default(false),
 })
 export type ApplyAllItem = z.infer<typeof applyAllItemSchema>
 
 /** Respuesta de `POST .../migrations/apply-all` (§8). */
 export const applyAllResultSchema = z.object({
   model_id: z.number().int(),
+  /** TODAS las BDs del blueprint. NO refleja los filtros del lote. */
   total_databases: z.number().int(),
+  /**
+   * BDs que coincidieron con los filtros ANTES del tope `max_databases`. Comparado con
+   * `processed` dice si hubo recorte: sin este número, "3 de 40 procesadas" no distingue
+   * "sobraron 37" de "en ese entorno solo había 3". `int = 0` en el backend, nunca `null`.
+   */
+  matched_databases: z.number().int().optional().default(0),
   processed: z.number().int(),
   results: z.array(applyAllItemSchema),
 })
 export type ApplyAllResult = z.infer<typeof applyAllResultSchema>
+
+/**
+ * Validación estática del SQL de una migración (api-reference-v11 §1).
+ *
+ * La forma de `statements` es deliberadamente la misma que la del preview de la consola SQL,
+ * para poder reutilizar su panel de clasificación en vez de inventar otra presentación.
+ */
+export const validateStatementSchema = z.object({
+  seq: z.number().int(),
+  sql: z.string(),
+  kind: z.string(),
+  danger: z.string(),
+  reasons: z.array(z.object({ code: z.string(), message: z.string() })).default([]),
+  seeds: z.boolean().default(false),
+  destructive: z.boolean().default(false),
+  collations: z.array(z.string()).default([]),
+  parse_error: z.string().nullable().optional(),
+})
+export type ValidateStatement = z.infer<typeof validateStatementSchema>
+
+export const migrationValidateOutSchema = z.object({
+  statements: z.array(validateStatementSchema).default([]),
+  has_seed: z.boolean().default(false),
+  forced_collations: z.array(z.string()).default([]),
+  destructive_statements: z.array(z.number().int()).default([]),
+  parse_errors: z.array(z.object({ seq: z.number().int(), message: z.string() })).default([]),
+  gateway_internal_tables: z.array(z.string()).default([]),
+  /** No vacío = el apply contra PostgreSQL dará 422 salvo que se defina `up_sql_postgresql`. */
+  postgresql_blockers: z.array(z.string()).default([]),
+  resumable: z.boolean().default(true),
+  /** Tablas que el SQL necesita PREEXISTENTES (no las que él mismo crea). */
+  referenced_tables: z.array(z.string()).default([]),
+  /**
+   * Versiones que la BD comprobada tiene pendientes ANTES de la validada. Si no está vacío,
+   * las tablas que ESAS versiones crean todavía no existen: lo que falla es la premisa de la
+   * comprobación, no el SQL.
+   */
+  pending_before: z.array(z.string()).default([]),
+  /** Solo si se pidió verificar contra una BD concreta. */
+  checked_database: z.string().nullable().optional(),
+  missing_tables: z.array(z.string()).default([]),
+  /** El motor no era alcanzable: el análisis estático viene igual. */
+  catalog_error: z.string().nullable().optional(),
+  blueprint_collation: z.string().nullable().optional(),
+  collation_conflicts: z.array(z.string()).default([]),
+})
+export type MigrationValidateOut = z.infer<typeof migrationValidateOutSchema>
+
+export const migrationValidateInSchema = z.object({
+  up_sql: z.string().max(SQL_MAX).optional(),
+  version: z.string().optional(),
+  managed_database_id: z.number().int().optional(),
+})
+export type MigrationValidateIn = z.infer<typeof migrationValidateInSchema>

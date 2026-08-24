@@ -99,18 +99,19 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`) |
+| 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`). `GET .../databases` trae además el **estado de despliegue** por BD y lo consume la pestaña «Estado en las BDs» de `BlueprintMigrationsPage` (`?tab=estado`); el refresco 🔌 es `POST .../databases/refresh` |
 | 63 | `POST /database-models/from-snapshot` 🔌 | ✅ | Asistente `/database-models/from-snapshot` y CTA del panel de reconciliación |
 | 48–50 | Listar/crear/detallar migraciones | ✅ | `BlueprintMigrationsPage` (`/database-models/:modelId/migrations`); al crear, `version` va vacía = autoasignada |
 | 51 | `PATCH .../migrations/{version}` | ✅ | Confirmar `down_sql` sugerido, overrides por motor, y **aprobar el baseline** (`reviewed`, gate R1) |
-| 52 | `DELETE .../migrations/{version}` | ✅ | Solo habilitado en la punta de la secuencia |
-| 53 | `POST .../migrations/apply-all` 🔌 | ✅ | `ApplyAllDialog` (dry-run, `max_databases`, `force`, `on_failure`, resultado por BD) |
+| 52 | `DELETE .../migrations/{version}` | ✅ | Habilitado según `deletable` del backend; el 409 se explica en línea con su `block_reason` |
+| 52b | `POST .../migrations/validate` | ✅ | `MigrationValidationPanel` dentro de `ModelMigrationForm`: sintaxis, traducción a PostgreSQL, siembra, COLLATE forzado y sentencias destructivas. Con una BD elegida (🔌) comprueba además que las tablas referenciadas existan |
+| 53 | `POST .../migrations/apply-all` 🔌 | ✅ | `ApplyMigrationsDialog`: selector de destinos (todas / los que elija, vía `database_ids`), **filtro por entorno** (`environment_id`, que el backend aplica antes del tope), dry-run, `force`, `on_failure`, y resultado por BD con enlace a sus resultados capturados. El resultado distingue **tres** estados (aplicada / bloqueada por política, en ámbar / con error) usando `error_code`, ordena errores primero, y usa `matched_databases` en la cabecera |
 
 ## Bases de datos gestionadas y migraciones por BD
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint y estado; borrado remoto exige reescribir el nombre. El nombre de cada fila enlaza a la ficha unificada `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`) |
+| 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint, estado y **entorno** (`environment_id` / `only_unassigned`, en un solo control para que la combinación ilegal sea inexpresable); borrado remoto exige reescribir el nombre. El nombre de cada fila enlaza a la ficha unificada `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`) |
 | 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal`: incluye *stamp-on-adopt* (blueprint + versión de partida). Se abre tanto desde `ServerReconcilePanel` como desde el CTA "Adoptar" de `ServerDatabaseDetailPage` cuando la BD física todavía no está en el inventario |
 | 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsContent`, compartido por la ruta de compatibilidad `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) y por la pestaña "Migraciones" de `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database?tab=migrations`, solo si la BD está adoptada) (versión actual, pendientes y **banner de aplicación parcial**) |
 | 55 | `POST .../migrations/apply` 🔌 | ✅ | Previsualizar (dry-run) + aplicar; selector `on_failure`; resultado por versión con retomas y sentencia de fallo; mensaje de auto-reconciliación |
@@ -118,6 +119,8 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 | 57 | `POST .../migrations/stamp` 🔌 | ✅ | Con `force` y la advertencia del anti-patrón (no arregla un apply a medias) |
 | 81 | `POST .../migrations/reconcile-partial` 🔌 | ✅ | `ReconcilePartialSection` (sección de ese mismo contenido, vía `?reconcile=`): previsualiza los reversos, avisa de los no demostrablemente seguros y exige confirmar la versión |
 | 58 | `GET .../migrations/history` 🔌 | ✅ | Tab "Historial" (paginado) |
+| 58b | `GET .../migrations/{version}/select-results` | ✅ | `SelectResultsPage` (`/managed-databases/:databaseId/migrations/:version/select-results`). Faltaba en esta tabla pese a estar implementada. `rows` es POSICIONAL (`rows[i][j]` ↔ `columns[j]`) y solo guarda la corrida más reciente |
+| 58c | `DELETE .../migrations/{version}/select-results` | ✅ | Botón "Purgar ahora" de esa misma pantalla, con confirmación |
 
 ## Comparación de esquemas
 
@@ -143,6 +146,27 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 | 42–46 | CRUD de `/permission-profiles` | ✅ | `PermissionProfilesPage` (`/permission-profiles`) |
 | 44 | `GET /permission-profiles/{id}` | 🧩 | El modal de edición reutiliza los datos de la fila; el hook queda disponible por si hace falta una vista de detalle. |
 | 47 | `POST /admin/crypto/rotate` | ✅ | `AdminPage` (`/admin`), con confirmación |
+
+## Entornos de despliegue
+
+Clasifican cada BD gestionada y llevan la política que el backend hace cumplir (hoy:
+`blocks_destructive_migrations`). Contrato del backend: `docs/features/environments.md`.
+
+**Los entornos son un conjunto FIJO de cuatro** (`local`, `development`, `staging`, `production`)
+y la administración es **por API a propósito**: no hay pantalla de CRUD, y no es un olvido. La
+política se cambia editando una fila por API sin desplegar, cosa que sigue siendo posible; lo que
+no existe es la superficie de UI para mutarla. Ver las filas ⛔ de abajo.
+
+⚠️ No confundir con el campo `environment` de `GET /health`: ese es el `APP_ENV` del **proceso**
+del gateway, no la clasificación de una base de datos.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| — | `GET /environments` | ✅ | `useEnvironmentOptions` / `useEnvironmentMap` (catálogo compartido por 5 consumidores, `staleTime` infinito): badge de entorno en `ManagedDatabasesPage`, selector en `ManagedDatabaseForm`, filtro «Entorno» del inventario y filtro del `ApplyMigrationsDialog`. Se pide **completo** (sin `only_active`): el selector filtra los activos en cliente, pero el badge tiene que poder resolver un entorno desactivado |
+| — | `POST /environments` | ⛔ | Los cuatro entornos son un conjunto fijo; crear uno nuevo es una decisión de política, no de operación diaria. Por API. |
+| — | `GET /environments/{id}` | ⛔ | El listado ya trae todos los campos (son 4 filas), así que un detalle no aportaría nada. |
+| — | `PATCH /environments/{id}` | ⛔ | Cambiar la política —y sobre todo **debilitarla**— exige repetir el slug (`confirm_slug`) y queda auditado con `record_intent`. Se hace por API a propósito: darlo por UI abarataría un gesto que el backend encareció deliberadamente. |
+| — | `DELETE /environments/{id}` | ⛔ | Exige cero BDs asignadas (409 con el conteo) y no tiene `force`. Por API. |
 
 ## Catálogo de charset/collation
 
