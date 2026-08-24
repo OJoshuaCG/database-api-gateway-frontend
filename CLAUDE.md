@@ -63,14 +63,30 @@ esperar a la derivada.
     trabajo propio del fe   to do → in progress(fe) → complete(fe)
     el backend no cumple    update required → in progress(fe) → on hold (BLOQUEADO POR BACKEND)
                             → in progress(be) → update required (FIN BACKEND (DESBLOQUEO)) → in progress(fe) → complete(fe)
-    fix de algo que cerramos  complete → in progress(fe) → complete(fe)
+    fix de algo que cerramos  complete → in progress(fe) → complete(fe)   [solo si cerró hace ≤ 30 días]
+    fix de algo viejo         complete (> 30 días) → NO se reabre → tarea nueva T-… vinculada
     re-entrega              update required → in progress(be) → update required → in progress(fe) → complete(fe)
 
-**Un fix de algo ya `complete` NO crea tarea nueva: se reabre la existente.** Tarea nueva solo
-cuando el trabajo no se puede describir sin cambiar el objetivo declarado de la original, y en ese
-caso se vincula con `clickup_add_task_link`.
+**Un fix de algo `complete` de hace ≤ 30 días NO crea tarea nueva: se reabre la existente.** Tarea
+nueva solo cuando el trabajo no se puede describir sin cambiar el objetivo declarado de la
+original, y en ese caso se vincula con `clickup_add_task_link`.
 
-**Cinco reglas que si se saltan rompen el mecanismo en silencio:** (1) el trabajo propio del
+**La ventana de 30 días — qué se reabre y qué no.** Antes de la prueba del objetivo declarado va
+la pregunta de antigüedad, porque puede cerrar el caso sola: si la tarea se cerró hace **más de 30
+días**, **no se reabre aunque sea un fix de eso mismo** — va tarea nueva `T-…` vinculada. Un hilo
+de hace meses ya no describe el estado del código, y reabrirlo mete dos trabajos separados por
+meses en la misma tarea, dejando su `FIN` original describiendo algo que ya no es. La fecha de
+corte sale de `date -d '30 days ago' +%Y-%m-%d`, no se calcula a ojo.
+
+**Pero la ventana es de DECISIÓN, no de búsqueda, y confundirlo rompe dos cosas a la vez.** La
+búsqueda de validación sigue yendo con `include_closed: true` **sin filtro de fecha**: (a)
+`date_closed_from` devuelve **solo tareas cerradas** —verificado contra la API—, así que en la
+búsqueda principal haría desaparecer todo lo que está en `update required`, `in progress`, `to do`
+y `on hold`; y (b) el ID tiene que seguir siendo único contra **todo** el historial — si existe una
+`P-07` cerrada hace un año, no se crea otra `P-07`. Por eso el trabajo derivado de algo viejo usa
+un ID **nuevo** y se vincula, en vez de reciclar el original.
+
+**Seis reglas que si se saltan rompen el mecanismo en silencio:** (1) el trabajo propio del
 frontend se llama **`T-<YYMMDD>-<iniciales>-<slug>`** — **nunca** el siguiente `P-XX` libre, que es
 secuencial y dos personas simultáneas calculan el mismo; (2) toda búsqueda va con
 **`include_closed: true`** (viene apagado por defecto, y sin él una tarea ya terminada no aparece y
@@ -79,7 +95,8 @@ trabajar, porque la ventana entre buscar y crear no se puede cerrar (gana la de 
 antiguo); (4) la **identidad del ejecutor (que es el EMAIL de `git config user.email`, NUNCA el
 nombre) va dentro del texto** del comentario, porque el campo "autor" de ClickUp siempre dice la
 cuenta del token; (5) **no se renombra una tarea que vino del backend** — su nombre es la clave de
-identidad de los dos lados.
+identidad de los dos lados; (6) **`date_closed_from` nunca va en la búsqueda de validación**, solo
+como segunda llamada cuando se quiere listar lo cerrado reciente.
 
 ## Qué es y por qué existe
 

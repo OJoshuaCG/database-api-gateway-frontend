@@ -100,8 +100,18 @@ avisa que ya la estás haciendo y lo que le dice al backend que no la toque.
        Retomarla ahora es volver a chocar contra lo mismo. **Avisá desde cuándo está parada** en
        vez de reclamarla.
      - Si quedó a medias por nuestro lado → paso 5.
-   - **`complete`** → **no es un portazo.** Informá el resumen del comentario `FIN` y aplicá la
-     prueba del objetivo declarado:
+   - **`complete`** → **no es un portazo.** Informá el resumen del comentario `FIN`. Después van
+     **dos** preguntas, en este orden — la antigüedad primero, porque puede cerrar el caso sola:
+
+     **a) ¿Hace cuánto se cerró?** Mirá `date_closed` contra
+     `date -d '30 days ago' +%Y-%m-%d`.
+     - **Más de 30 días** → **no se reabre, aunque sea un fix de eso mismo.** Tarea nueva
+       `T-<YYMMDD>-<iniciales>-<slug>` + `clickup_add_task_link` a la vieja. Un hilo de hace meses
+       ya no describe el estado del código, y reabrirlo mete dos trabajos distintos en la misma
+       tarea. **No recicles el ID viejo**: si era `P-07`, la nueva NO se llama `P-07`.
+     - **30 días o menos** → seguí a (b).
+
+     **b) Prueba del objetivo declarado:**
      - Es un **fix** de lo que esa tarea entregó → **REABRÍ** la misma: `in progress` + comentario
        `REAPERTURA` con motivo y alcance. Sin ID nuevo.
      - Es trabajo **distinto** o rehacer desde cero → **tarea nueva vinculada** con
@@ -228,23 +238,41 @@ local** (`rm -f .claude/.tarea-actual`): ya no la estás trabajando.
 
 ## Modo CONSULTAR
 
+Son **dos** llamadas, y no se pueden fusionar en una:
+
 ```
+# 1. El panorama de lo VIVO (y la base para detectar duplicados de ID)
 clickup_filter_tasks
   list_ids:       ["901716272178"]
   include_closed: true
   subtasks:       true
+
+# 2. Lo cerrado RECIENTE, para no listar el archivo entero
+clickup_filter_tasks
+  list_ids:         ["901716272178"]
+  include_closed:   true
+  subtasks:         true
+  date_closed_from: "<date -d '30 days ago' +%Y-%m-%d>"
 ```
 
-Paginá hasta `has_more: false` y presentá:
+**Por qué dos y no una con el filtro de fecha:** verificado contra la API, `date_closed_from`
+devuelve **solo tareas cerradas**. Si lo ponés en la llamada principal desaparece todo lo que está
+en `update required`, `in progress`, `to do` y `on hold` — o sea, todo lo que importa.
+
+Paginá cada una hasta `has_more: false` y presentá:
 
 - Qué está en **`update required`** — o sea, **lo que te toca a vos ahora**
 - Qué está **`in progress`**, con quién la tiene y **con qué rol** (del comentario `INICIO`)
 - Qué está **`on hold`**, con el motivo y dónde quedó; separá los `BLOQUEADO POR BACKEND`
 - Qué hay en **`to do`**, distinguiendo backlog del backend (no es tuyo) de trabajo propio del
   frontend sin reclamar
+- Qué se cerró en los **últimos 30 días** (de la segunda llamada). Ese es el tramo donde un fix
+  todavía **reabre** la tarea original; más viejo que eso va como tarea nueva vinculada
 - **Duplicados sospechosos**: dos o más subtareas con el mismo ID, o con slugs equivalentes
   creados el mismo día. Es el residuo de una carrera perdida que nadie detectó a tiempo —
-  reportalos con sus `date_created` para que se pueda decidir cuál sobrevive
+  reportalos con sus `date_created` para que se pueda decidir cuál sobrevive. **Esto sale de la
+  PRIMERA llamada, la que no tiene ventana**: un duplicado de ID hay que verlo contra todo el
+  historial, no contra los últimos 30 días
 - Si aparece alguna en **`reviewed`**: señalala como anomalía, ese estado no se usa
 
 ---
@@ -253,6 +281,12 @@ Paginá hasta `has_more: false` y presentá:
 
 - **`include_closed: true`** en toda búsqueda. Viene apagado por defecto y sin él una tarea ya
   terminada no aparece → se crea un duplicado exacto.
+- **`date_closed_from` NUNCA va en la búsqueda de validación.** Devuelve **solo tareas cerradas**
+  (verificado contra la API), así que ahí haría desaparecer todo lo que está en `update required`,
+  `in progress`, `to do` y `on hold`. Solo se usa como **segunda** llamada en CONSULTAR.
+- **La ventana de 30 días es de DECISIÓN, no de búsqueda.** Un `complete` de hace más de 30 días
+  **no se reabre**: va tarea nueva `T-…` vinculada. Pero el ID sigue siendo único contra **todo**
+  el historial — si existe una `P-07` cerrada hace un año, no se crea otra `P-07`.
 - **La identidad del ejecutor es el EMAIL** (`git config user.email`), no el nombre, y va DENTRO
   del texto del comentario. El campo "autor" de ClickUp siempre dice la cuenta del token, así que
   no sirve para detectar colisiones.
