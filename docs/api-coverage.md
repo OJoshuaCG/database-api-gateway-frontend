@@ -102,10 +102,27 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 | 28–33 | CRUD de `/database-models` + `/databases` | ✅ | `DatabaseModelsPage` (`/database-models`). `GET .../databases` trae además el **estado de despliegue** por BD y lo consume la pestaña «Estado en las BDs» de `BlueprintMigrationsPage` (`?tab=estado`); el refresco 🔌 es `POST .../databases/refresh` |
 | 63 | `POST /database-models/from-snapshot` 🔌 | ✅ | Asistente `/database-models/from-snapshot` y CTA del panel de reconciliación |
 | 48–50 | Listar/crear/detallar migraciones | ✅ | `BlueprintMigrationsPage` (`/database-models/:modelId/migrations`); al crear, `version` va vacía = autoasignada |
-| 51 | `PATCH .../migrations/{version}` | ✅ | Confirmar `down_sql` sugerido, overrides por motor, y **aprobar el baseline** (`reviewed`, gate R1) |
+| 51 | `PATCH .../migrations/{version}` | ✅ | Confirmar `down_sql` sugerido, overrides por motor, y **aprobar el baseline** (`reviewed`, gate R1). Con `sql_frozen` se deshabilitan `up_sql` y los overrides pero **`down_sql` sigue editable** (v15 §4.bis): bloquearlo cerraría la única salida del 409 de rollback y dejaría la versión sin forma de revertirse. El 409 se clasifica por `public_context.code` —ya no por la prosa— y `sql_frozen` ofrece las dos salidas de `MigrationFreezePanel` |
+| v15 §3 | `POST .../migrations/{version}/edit-preview` 🔌 | ✅ | `MigrationEditOverrideDialog`, paso 1 de la vía de excepción para editar una versión **ya aplicada**. Lee la versión de cada BD del motor en vivo (de ahí el rate limit 20/min) y emite el `confirm_token`. Se llega desde la salida «Editar igual…» de `MigrationFreezePanel`, que solo se renderiza si el 409 trae `override_available: true` |
 | 52 | `DELETE .../migrations/{version}` | ✅ | Habilitado según `deletable` del backend; el 409 se explica en línea con su `block_reason` |
 | 52b | `POST .../migrations/validate` | ✅ | `MigrationValidationPanel` dentro de `ModelMigrationForm`: sintaxis, traducción a PostgreSQL, siembra, COLLATE forzado y sentencias destructivas. Con una BD elegida (🔌) comprueba además que las tablas referenciadas existan |
 | 53 | `POST .../migrations/apply-all` 🔌 | ✅ | `ApplyMigrationsDialog`: selector de destinos (todas / los que elija, vía `database_ids`), **filtro por entorno** (`environment_id`, que el backend aplica antes del tope), dry-run, `force`, `on_failure`, y resultado por BD con enlace a sus resultados capturados. El resultado distingue **tres** estados (aplicada / bloqueada por política, en ámbar / con error) usando `error_code`, ordena errores primero, y usa `matched_databases` en la cabecera. **Sin consentimiento por corrida** (el backend lo retiró, v13 §1): en su lugar se avisa qué versiones van a capturar y cuáles frenarían el lote por no estar aprobadas. El rechazo por captura sin revisar llega **por ítem dentro de un 200** y se clasifica con `error_code: migration.capture_unreviewed`; el enlace a lo capturado usa `captured_versions` y ya no adivina con la última versión aplicada |
+
+## Proyectos (agrupadores de blueprints)
+
+Relación **N:M** contra `database_models`. No tocan ningún motor: ninguna fila lleva 🔌.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| v16 §3.1 | `GET /projects` | ✅ | Pestaña «Proyectos» de `DatabaseModelsPage` (`/database-models`, pestaña **por defecto**) → `ProjectsPanel`. La columna «Blueprints» usa el `blueprint_count` que ya viene calculado; **0 no se pinta como advertencia** — es el estado normal del alta recomendada |
+| v16 §3.2 | `POST /projects` | ✅ | `ProjectFormModal`. Se envía **sin `model_ids`** a propósito: con ids inválidos el 422 deja el proyecto YA creado y reintentar el alta daría 409 por el nombre. El 409 `project.name_taken` se muestra **inline en Nombre**, sin CTA de reintentar |
+| v16 §3.3 | `GET /projects/{id}` | ✅ | `ProjectDetailPage` (`/projects/:projectId`), cabecera |
+| v16 §3.4 | `PATCH /projects/{id}` | ✅ | `ProjectFormModal` en modo edición. `description: null` **vacía** la descripción (botón «Vaciar la descripción»); `""` guardaría una cadena vacía |
+| v16 §3.5 | `DELETE /projects/{id}` | ✅ | `DeleteProjectDialog`: confirmación **simple**, sin re-tipear el nombre — no es destructivo. El `message` del backend se muestra **tal cual** porque es lo que reafirma que los blueprints no se borraron; el 404 se trata como éxito idempotente |
+| v16 §3.6 | `GET /projects/{id}/blueprints` | ✅ | Tabla de `ProjectDetailPage`. **Sin paginador**: el endpoint no acepta `page`/`size`. Se reordena por nombre en cliente |
+| v16 §3.7 | `POST /projects/{id}/blueprints` | ✅ | `LinkBlueprintsModal`. Se manda la selección completa sin calcular el delta (es idempotente); `already_linked` se comunica como **éxito**. El 422 marca las filas de `missing_model_ids` y ofrece «Reintentar solo con los válidos»; el 409 `project.link_conflict` ofrece **reintentar** (transitorio), a diferencia del 409 de nombre |
+| v16 §3.8 | `DELETE /projects/{id}/blueprints/{model_id}` | ✅ | «Quitar del proyecto» en la tabla del detalle y en la vista inversa. **Sin confirmación, con deshacer** (barra inline); el 404 `project.blueprint_not_linked` es éxito idempotente |
+| v16 §3.9 | `GET /database-models/{model_id}/projects` | ✅ | `BlueprintProjectsSection`, dentro de `BlueprintMigrationsPage`. Sin paginador; lista vacía es un estado normal, no un dato faltante |
 
 ## Bases de datos gestionadas y migraciones por BD
 
