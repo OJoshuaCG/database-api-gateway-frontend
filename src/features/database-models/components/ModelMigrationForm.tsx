@@ -141,6 +141,8 @@ export function ModelMigrationForm({
   const currentPostgresqlOverride = watch('up_sql_postgresql')
   const currentCaptureSelects = watch('capture_selects')
   const upSqlChanged = mode === 'edit' && currentUpSql !== originalUpSql
+  const originalDownSql = defaultValues?.down_sql ?? ''
+  const downSqlChanged = mode === 'edit' && currentDownSql !== originalDownSql
   const originalCaptureSelects = defaultValues?.capture_selects ?? false
   // Solo se manda `capture_selects` en el PATCH si realmente cambió: reenviar el mismo valor no
   // debería tener efecto, pero evitamos depender de que el backend lo trate como no-op (§3.1).
@@ -148,6 +150,15 @@ export function ModelMigrationForm({
   // Activarlo por primera vez (o reactivarlo) resetea `reviewed` a `false` en la respuesta
   // (§2.3/§4.1): avisamos ANTES de guardar, no después de que el operador se sorprenda.
   const willResetReview = captureSelectsChanged && currentCaptureSelects
+  /**
+   * El OTRO camino al mismo reseteo (api-reference-v15 §4.bis): editar `down_sql` en una versión
+   * que ya captura purga sus capturas de dirección `down` —sus índices de sentencia dejarían de
+   * apuntar a lo mismo— y revoca la aprobación, porque lo que se aprobó era una consulta concreta.
+   *
+   * Se avisa aparte de `willResetReview`: aquel cubre el toggle de la captura, y quien confirma un
+   * rollback no está pensando en la captura ni espera perder la aprobación por hacerlo.
+   */
+  const downSqlWillResetReview = downSqlChanged && currentCaptureSelects
 
   // Resolución de overrides al cambiar up_sql: cada override existente debe reenviarse o limpiarse.
   const [mysqlChoice, setMysqlChoice] = useState<OverrideChoice | null>(null)
@@ -312,6 +323,14 @@ export function ModelMigrationForm({
         }
         error={errors.down_sql?.message}
       />
+
+      {downSqlWillResetReview && (
+        <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-foreground">
+          Esta versión tiene la captura de <code>SELECT</code> activada. Al guardar el rollback se
+          eliminan sus capturas de dirección <code>down</code> y la versión queda{' '}
+          <strong>sin revisar</strong>: habrá que volver a aprobarla antes de poder aplicarla.
+        </div>
+      )}
 
       {needMysqlResolution || needPostgresqlResolution ? (
         <div className="flex flex-col gap-4 rounded-lg border border-border p-3">

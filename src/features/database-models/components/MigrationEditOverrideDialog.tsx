@@ -34,6 +34,10 @@ interface MigrationEditOverrideDialogProps {
    * sincronizar estado con props. Las re-previsualizaciones sí nacen acá, pero de un clic.
    */
   initialPreview: MigrationEditPreviewOut
+  /** ¿La versión tiene la captura de `SELECT` activada? Gobierna dos efectos colaterales. */
+  capturesSelects: boolean
+  /** ¿El cuerpo enviado cambia `down_sql` respecto del valor del servidor? */
+  downSqlChanged: boolean
   onClose: () => void
   /** Se llama tras el 200, cuando el usuario cierra el resultado. */
   onApplied: () => void
@@ -69,6 +73,8 @@ export function MigrationEditOverrideDialog({
   sqlBody,
   restBody,
   initialPreview,
+  capturesSelects,
+  downSqlChanged,
   onClose,
   onApplied,
 }: MigrationEditOverrideDialogProps) {
@@ -294,6 +300,36 @@ export function MigrationEditOverrideDialog({
                 Lo que sí se corrige: toda base que aplique esta versión de aquí en adelante.
               </p>
             </div>
+
+            {/* Efectos colaterales de la §4.bis, solo los que apliquen. No es letra chica: quien
+                confirma un rollback no está pensando en la captura, y perder la aprobación sin
+                aviso convierte un guardado en una versión que de golpe no se puede aplicar. */}
+            {(capturesSelects || downSqlChanged) && (
+              <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface-muted p-3">
+                <span className="text-sm font-medium text-foreground">
+                  Además de la divergencia, esta edición provoca:
+                </span>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                  {downSqlChanged && capturesSelects && (
+                    <li>
+                      Se eliminan las capturas de resultados de <code>SELECT</code> de dirección{' '}
+                      <code>down</code> de esta versión: sus índices de sentencia dejarían de
+                      apuntar a lo mismo.
+                    </li>
+                  )}
+                  {capturesSelects && (
+                    <li>
+                      La aprobación para aplicar se <strong>revoca</strong>: habrá que volver a
+                      aprobar la versión antes de poder usarla.
+                    </li>
+                  )}
+                  <li>
+                    El rollback <em>sugerido</em> se regenera a partir del SQL nuevo. El rollback
+                    confirmado no se toca.
+                  </li>
+                </ul>
+              </div>
+            )}
 
             {onlyUnreadable && (
               <p className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground">

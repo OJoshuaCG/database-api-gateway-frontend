@@ -28,6 +28,7 @@ import { ModelMigrationForm } from './ModelMigrationForm'
 import { MigrationSqlView } from './MigrationSqlView'
 import { MigrationFreezePanel } from './MigrationFreezePanel'
 import { MigrationEditOverrideDialog } from './MigrationEditOverrideDialog'
+import { MigrationPartialProgressPanel } from './MigrationPartialProgressPanel'
 
 interface ModelMigrationDetailPanelProps {
   modelId: number
@@ -140,6 +141,15 @@ export function ModelMigrationDetailPanel({
   const [frozen, setFrozen] = useState<FrozenConflict | null>(null)
   const [overridePreview, setOverridePreview] = useState<MigrationEditPreviewOut | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  /**
+   * El 409 `partial_application`, con su `incomplete_progress`. Va en estado propio y no en
+   * `submitError` porque no es un texto: es una lista de bases con su punto de corte, y ese
+   * detalle es lo único que permite decidir entre retomar el apply y limpiarlo con un stamp.
+   */
+  const [partial, setPartial] = useState<{
+    rows: { managed_database_id: number; last_statement_index: number; total_statements: number }[]
+    message: string
+  } | null>(null)
 
   // Al cambiar de versión se descarta todo el estado de la anterior y se vuelve a lectura. Se
   // ajusta el estado en render (patrón recomendado por React) en vez de con un efecto, para no
@@ -154,6 +164,7 @@ export function ModelMigrationDetailPanel({
     setFrozen(null)
     setOverridePreview(null)
     setPreviewError(null)
+    setPartial(null)
   }
 
   if (!open) {
@@ -193,6 +204,7 @@ export function ModelMigrationDetailPanel({
   const handleSubmitEdit = (body: ModelMigrationPatch) => {
     setSubmitError(null)
     setFrozen(null)
+    setPartial(null)
     update.mutate(
       { version: data.version, body },
       {
@@ -232,10 +244,12 @@ export function ModelMigrationDetailPanel({
           if (apiError.code === MIGRATION_ERROR_CODES.partialApplication) {
             // Este 409 NO tiene override, y ofrecérselo por analogía sería inventar una salida:
             // un `resume` posterior interpretaría los índices del checkpoint contra un SQL que no
-            // es el que corrió.
-            setSubmitError(
-              `${apiError.message} Resuelve primero la aplicación a medias; esta versión no tiene vía de excepción.`,
-            )
+            // es el que corrió. Se pinta con su propio panel porque `incomplete_progress` nombra
+            // la base y la sentencia en la que quedó, y eso es accionable; el mensaje suelto no.
+            setPartial({
+              rows: apiError.incompleteProgress ?? [],
+              message: apiError.message,
+            })
             return
           }
           setSubmitError(apiError.message)
@@ -373,6 +387,15 @@ export function ModelMigrationDetailPanel({
 
               {/* Inline y debajo del formulario, no en un modal encima: el borrador tiene que
                   seguir montado y a la vista. */}
+              {partial && (
+                <MigrationPartialProgressPanel
+                  modelId={modelId}
+                  version={data.version}
+                  rows={partial.rows}
+                  message={partial.message}
+                />
+              )}
+
               {frozen && (
                 <MigrationFreezePanel
                   modelId={modelId}
@@ -481,6 +504,12 @@ export function ModelMigrationDetailPanel({
           sqlBody={split.sqlBody}
           restBody={split.restBody}
           initialPreview={overridePreview}
+          capturesSelects={capturesSelects}
+          // El formulario manda `down_sql` SIEMPRE, así que "cambió" se decide comparando con el
+          // valor del servidor y no con la presencia de la clave. Ojo: cuando la versión no tiene
+          // rollback confirmado el formulario nace con el SUGERIDO, así que guardar sin tocar nada
+          // ya es una edición de `down_sql` — y lo es de verdad: confirma el sugerido.
+          downSqlChanged={(frozen?.body.down_sql ?? null) !== (data.down_sql ?? null)}
           onClose={() => setOverridePreview(null)}
           onApplied={() => {
             setOverridePreview(null)

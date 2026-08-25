@@ -178,6 +178,23 @@ export interface ApiBlockingDatabase {
   current_version?: string
 }
 
+/**
+ * Progreso a medias de una versión en UNA base (`public_context.incomplete_progress` del 409
+ * `model_migration.partial_application`, api-reference-v15 §4).
+ *
+ * Los nombres de campo salen de `incomplete_progress_for_migration` del backend, que solo
+ * devuelve filas con `0 < last_statement_index < total_statements`: por definición, algo que
+ * quedó a mitad de camino.
+ *
+ * Es el dato que convierte «hay una aplicación parcial» en «la BD 7 quedó en la sentencia 12 de
+ * 40», que es lo único que permite decidir si se retoma o se limpia.
+ */
+export interface ApiIncompleteProgress {
+  managed_database_id: number
+  last_statement_index: number
+  total_statements: number
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -267,6 +284,12 @@ export class ApiError extends Error {
    */
   readonly staleOverrides?: string[]
   /**
+   * Bases que quedaron a mitad de una aplicación de esta versión (409
+   * `model_migration.partial_application`). Este 409 **no tiene override**: su salida es
+   * reintentar el apply sobre la base que nombra, o limpiarlo con `stamp`.
+   */
+  readonly incompleteProgress?: ApiIncompleteProgress[]
+  /**
    * `public_context.code`: identificador estable del fallo, independiente del texto del mensaje y
    * visible **también en producción** (a diferencia de `context`, que solo existe en desarrollo).
    * Es la única forma fiable de clasificar un error para decidir el CTA de recuperación.
@@ -300,6 +323,7 @@ export class ApiError extends Error {
     blockingDatabases?: ApiBlockingDatabase[]
     overrideAvailable?: boolean
     staleOverrides?: string[]
+    incompleteProgress?: ApiIncompleteProgress[]
     code?: string
     exportContext?: DatabaseExportErrorContext
     environmentContext?: EnvironmentErrorContext
@@ -326,6 +350,7 @@ export class ApiError extends Error {
     this.blockingDatabases = args.blockingDatabases
     this.overrideAvailable = args.overrideAvailable
     this.staleOverrides = args.staleOverrides
+    this.incompleteProgress = args.incompleteProgress
     this.code = args.code
     this.exportContext = args.exportContext
     this.environmentContext = args.environmentContext
@@ -546,6 +571,35 @@ function extractStaleOverrides(publicContext: unknown): string[] | undefined {
     (field): field is string => typeof field === 'string',
   )
   return fields.length > 0 ? fields : undefined
+}
+
+/**
+ * Extrae `public_context.incomplete_progress` (409 `model_migration.partial_application`, v15 §4).
+ *
+ * Igual que con `blocking_databases`, se filtra fila a fila: cada una nombra una base que quedó a
+ * medias, y perder la lista entera por un elemento raro deja al operador sin saber sobre cuál
+ * reintentar el apply.
+ */
+function extractIncompleteProgress(publicContext: unknown): ApiIncompleteProgress[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.incomplete_progress)) {
+    return undefined
+  }
+  const rows = publicContext.incomplete_progress.flatMap((row): ApiIncompleteProgress[] => {
+    if (!isRecord(row)) return []
+    const id = row.managed_database_id
+    const last = row.last_statement_index
+    const total = row.total_statements
+    if (
+      typeof id !== 'number' ||
+      typeof last !== 'number' ||
+      typeof total !== 'number' ||
+      !Number.isFinite(id)
+    ) {
+      return []
+    }
+    return [{ managed_database_id: id, last_statement_index: last, total_statements: total }]
+  })
+  return rows.length > 0 ? rows : undefined
 }
 
 /**
@@ -794,6 +848,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         blockingDatabases: extractBlockingDatabases(d.public_context),
         overrideAvailable: extractOverrideAvailable(d.public_context),
         staleOverrides: extractStaleOverrides(d.public_context),
+        incompleteProgress: extractIncompleteProgress(d.public_context),
         reasons: extractReasons(d.public_context),
         blockedStatements: extractBlockedStatements(d.public_context),
         charsetRejected: extractCharsetRejected(d.public_context),

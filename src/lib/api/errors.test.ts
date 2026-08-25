@@ -196,3 +196,44 @@ describe('public_context de proyectos y de versiones de blueprint', () => {
     expect(mismatch.status).toBe(422)
   })
 })
+
+describe('incomplete_progress del 409 de aplicación parcial', () => {
+  it('extrae la base y su punto de corte (api-reference-v15 §4)', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'Hay una aplicación parcial sin resolver.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.partial_application',
+          incomplete_progress: [
+            { managed_database_id: 7, last_statement_index: 12, total_statements: 40 },
+          ],
+        },
+      },
+    })
+    expect(error.code).toBe('model_migration.partial_application')
+    expect(error.incompleteProgress).toEqual([
+      { managed_database_id: 7, last_statement_index: 12, total_statements: 40 },
+    ])
+    // Este 409 NO tiene override: si alguna vez llegara uno, sería un cambio de contrato.
+    expect(error.overrideAvailable).toBeUndefined()
+  })
+
+  it('descarta filas incompletas sin perder las buenas', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.partial_application',
+          incomplete_progress: [
+            { managed_database_id: 7, last_statement_index: 12, total_statements: 40 },
+            { managed_database_id: 9 },
+            null,
+          ],
+        },
+      },
+    })
+    expect(error.incompleteProgress).toHaveLength(1)
+  })
+})
