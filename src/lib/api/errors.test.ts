@@ -90,3 +90,109 @@ describe('networkError / toApiError', () => {
     expect(toApiError(existing)).toBe(existing)
   })
 })
+
+describe('public_context de proyectos y de versiones de blueprint', () => {
+  it('extrae `missing_model_ids` del 422 de vinculación (api-reference-v16 §4)', () => {
+    const error = normalizeApiError(422, {
+      detail: {
+        msg: 'Hay blueprints inexistentes en la selección; no se vinculó ninguno: 99, 120',
+        type: 'AppHttpException',
+        public_context: { code: 'project.blueprints_not_found', missing_model_ids: [99, 120] },
+      },
+    })
+    expect(error.code).toBe('project.blueprints_not_found')
+    expect(error.missingModelIds).toEqual([99, 120])
+  })
+
+  it('distingue los dos 409 de proyectos por código, no por la prosa', () => {
+    const nameTaken = normalizeApiError(409, {
+      detail: {
+        msg: 'Ya existe un proyecto con ese nombre.',
+        type: 'AppHttpException',
+        public_context: { code: 'project.name_taken' },
+      },
+    })
+    const linkConflict = normalizeApiError(409, {
+      detail: {
+        msg: 'Otro proceso vinculó estos blueprints al mismo tiempo; reintentá.',
+        type: 'AppHttpException',
+        public_context: { code: 'project.link_conflict' },
+      },
+    })
+    // Mismo status, CTAs opuestos: uno se arregla cambiando un dato, el otro repitiendo la
+    // llamada. El código es lo único que los separa.
+    expect(nameTaken.status).toBe(linkConflict.status)
+    expect(nameTaken.code).not.toBe(linkConflict.code)
+  })
+
+  it('extrae `blocking_databases` y `override_available` del 409 sql_frozen (v14 §2 / v15 §4)', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'No se puede modificar el SQL: la BD 7 está en la versión 0005…',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.sql_frozen',
+          version: '0001',
+          blocking_databases: [
+            { managed_database_id: 7, reason: 'still_applied', current_version: '0005' },
+            { managed_database_id: 9, reason: 'unreadable' },
+          ],
+          override_available: true,
+        },
+      },
+    })
+    expect(error.code).toBe('model_migration.sql_frozen')
+    expect(error.overrideAvailable).toBe(true)
+    expect(error.blockingDatabases).toHaveLength(2)
+    expect(error.blockingDatabases?.[0]?.current_version).toBe('0005')
+    // `current_version` viaja AUSENTE (no `null`) cuando el motivo no es `still_applied`.
+    expect(error.blockingDatabases?.[1]?.current_version).toBeUndefined()
+  })
+
+  it('descarta solo las filas malformadas, no la lista entera', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.sql_frozen',
+          blocking_databases: [
+            { managed_database_id: 7, reason: 'still_applied' },
+            { reason: 'still_applied' },
+            'basura',
+          ],
+        },
+      },
+    })
+    // Cada fila es una base que va a quedar divergente: perder la lista completa por un elemento
+    // raro dejaría al operador con un 409 sin explicación.
+    expect(error.blockingDatabases).toHaveLength(1)
+  })
+
+  it('`override_available` ausente NO se interpreta como disponible', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: { code: 'model_migration.sql_frozen' },
+      },
+    })
+    // Un backend anterior a v15 no manda el campo: ahí la única salida sigue siendo fix-forward,
+    // y ofrecer la vía de excepción mandaría al operador contra un 409 sin escape.
+    expect(error.overrideAvailable).toBeUndefined()
+    expect(error.overrideAvailable === true).toBe(false)
+  })
+
+  it('los errores del token no traen `code`: se clasifican por status', () => {
+    const expired = normalizeApiError(410, {
+      detail: { msg: 'El token de confirmación expiró; vuelve a solicitar el preview.', type: 'AppHttpException' },
+    })
+    const mismatch = normalizeApiError(422, {
+      detail: { msg: 'El token de confirmación no corresponde a esta operación.', type: 'AppHttpException' },
+    })
+    expect(expired.code).toBeUndefined()
+    expect(mismatch.code).toBeUndefined()
+    expect(expired.status).toBe(410)
+    expect(mismatch.status).toBe(422)
+  })
+})

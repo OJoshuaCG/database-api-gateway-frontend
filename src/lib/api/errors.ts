@@ -160,6 +160,24 @@ export interface DatabaseExportErrorContext {
   jobStatus?: string
 }
 
+/**
+ * BD que bloquea editar o borrar una versión de blueprint (`public_context.blocking_databases`,
+ * api-reference-v14 §2).
+ *
+ * Se declara en snake_case **a propósito**, aunque el resto de contextos de este archivo use
+ * camelCase: es la misma forma que devuelve `MigrationEditPreviewOut.blocking_databases`, y
+ * mantenerlas idénticas permite que un solo componente pinte la lista tanto cuando viene del 409
+ * como cuando viene del preview. Renombrar aquí obligaría a un adaptador cuyo único trabajo sería
+ * deshacer el renombrado.
+ *
+ * `current_version` solo viene con `reason: "still_applied"` (ausente, no `null`).
+ */
+export interface ApiBlockingDatabase {
+  managed_database_id: number
+  reason: string
+  current_version?: string
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -222,6 +240,33 @@ export class ApiError extends Error {
    */
   readonly postgresCollationRejected?: PostgresCollationRejectedContext
   /**
+   * Ids de blueprint inexistentes del 422 `project.blueprints_not_found` (api-reference-v16 §4).
+   * La vinculación es **todo-o-nada**: cuando llega este error no se vinculó NINGUNO, y el valor
+   * entero del dato está en poder señalar las filas concretas del selector en vez de invalidar la
+   * selección completa.
+   */
+  readonly missingModelIds?: number[]
+  /**
+   * BDs que bloquean editar/borrar una versión de blueprint (409 `model_migration.sql_frozen` y
+   * `model_migration.still_applied`, v14 §2). En un 409 **nunca viene vacío**: si lo estuviera, la
+   * operación habría devuelto 200.
+   */
+  readonly blockingDatabases?: ApiBlockingDatabase[]
+  /**
+   * `public_context.override_available` del 409 `model_migration.sql_frozen` (v15 §4).
+   *
+   * Es lo que distingue «no se puede» de «se puede confirmando», sin interpretar la prosa del
+   * `msg`. Se compara con `=== true` y NO se asume `true` por defecto: si llegara ausente o
+   * `false` —un backend anterior a v15—, la UI tiene que caer al comportamiento de v14 y ofrecer
+   * solo fix-forward. Inventar la salida sería prometer algo que el backend va a rechazar.
+   */
+  readonly overrideAvailable?: boolean
+  /**
+   * Campos de override que quedarían obsoletos al cambiar `up_sql`
+   * (`public_context.stale_overrides` del 409 `model_migration.stale_overrides`, v15 §4).
+   */
+  readonly staleOverrides?: string[]
+  /**
    * `public_context.code`: identificador estable del fallo, independiente del texto del mensaje y
    * visible **también en producción** (a diferencia de `context`, que solo existe en desarrollo).
    * Es la única forma fiable de clasificar un error para decidir el CTA de recuperación.
@@ -251,6 +296,10 @@ export class ApiError extends Error {
     charsetRejected?: CharsetRejectedContext
     charsetDuplicate?: CharsetDuplicateContext
     postgresCollationRejected?: PostgresCollationRejectedContext
+    missingModelIds?: number[]
+    blockingDatabases?: ApiBlockingDatabase[]
+    overrideAvailable?: boolean
+    staleOverrides?: string[]
     code?: string
     exportContext?: DatabaseExportErrorContext
     environmentContext?: EnvironmentErrorContext
@@ -273,6 +322,10 @@ export class ApiError extends Error {
     this.charsetRejected = args.charsetRejected
     this.charsetDuplicate = args.charsetDuplicate
     this.postgresCollationRejected = args.postgresCollationRejected
+    this.missingModelIds = args.missingModelIds
+    this.blockingDatabases = args.blockingDatabases
+    this.overrideAvailable = args.overrideAvailable
+    this.staleOverrides = args.staleOverrides
     this.code = args.code
     this.exportContext = args.exportContext
     this.environmentContext = args.environmentContext
@@ -424,6 +477,75 @@ function extractSuggestedItemIds(publicContext: unknown): number[] | undefined {
     (id): id is number => typeof id === 'number' && Number.isFinite(id),
   )
   return ids.length > 0 ? ids : undefined
+}
+
+/**
+ * Extrae `public_context.missing_model_ids` (422 `project.blueprints_not_found`, v16 §3.7).
+ * Modelado igual que el resto de arrays de `public_context`: se filtra a números finitos para
+ * que un elemento raro no rompa el marcado de filas del selector.
+ */
+function extractMissingModelIds(publicContext: unknown): number[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.missing_model_ids)) {
+    return undefined
+  }
+  const ids = publicContext.missing_model_ids.filter(
+    (id): id is number => typeof id === "number" && Number.isFinite(id),
+  )
+  return ids.length > 0 ? ids : undefined
+}
+
+/**
+ * Extrae `public_context.blocking_databases` (409 al editar o borrar una versión de blueprint,
+ * api-reference-v14 §2).
+ *
+ * Se filtra elemento a elemento en vez de descartar el array entero ante una fila rara: cada fila
+ * es una base que va a quedar divergente —o que impide el borrado—, y perder la lista completa por
+ * un elemento inesperado dejaría al operador con un 409 sin explicación. `current_version` solo se
+ * copia cuando es string: el contrato lo declara «ausente», no `null`.
+ */
+function extractBlockingDatabases(publicContext: unknown): ApiBlockingDatabase[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.blocking_databases)) {
+    return undefined
+  }
+  const rows = publicContext.blocking_databases.flatMap((row): ApiBlockingDatabase[] => {
+    if (!isRecord(row)) return []
+    const id = row.managed_database_id
+    const reason = row.reason
+    if (typeof id !== 'number' || !Number.isFinite(id) || typeof reason !== 'string') return []
+    return [
+      {
+        managed_database_id: id,
+        reason,
+        ...(typeof row.current_version === 'string'
+          ? { current_version: row.current_version }
+          : {}),
+      },
+    ]
+  })
+  return rows.length > 0 ? rows : undefined
+}
+
+/**
+ * Extrae `public_context.override_available` (409 `model_migration.sql_frozen`, v15 §4).
+ *
+ * Devuelve el booleano solo si de verdad vino como booleano. Un `undefined` aquí significa
+ * «backend anterior a v15» y la UI lo trata como «sin override», que es el lado seguro: ofrecer
+ * una salida que el backend no implementa manda al operador contra un 409 sin escape.
+ */
+function extractOverrideAvailable(publicContext: unknown): boolean | undefined {
+  if (!isRecord(publicContext) || typeof publicContext.override_available !== 'boolean') {
+    return undefined
+  }
+  return publicContext.override_available
+}
+
+/** Extrae `public_context.stale_overrides` (409 `model_migration.stale_overrides`, v15 §4). */
+function extractStaleOverrides(publicContext: unknown): string[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.stale_overrides)) return undefined
+  const fields = publicContext.stale_overrides.filter(
+    (field): field is string => typeof field === 'string',
+  )
+  return fields.length > 0 ? fields : undefined
 }
 
 /**
@@ -668,6 +790,10 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         missingDependencies: extractMissingDependencies(d.public_context),
         suggestedItemIds: extractSuggestedItemIds(d.public_context),
         unreviewedCapture: extractUnreviewedCapture(d.public_context),
+        missingModelIds: extractMissingModelIds(d.public_context),
+        blockingDatabases: extractBlockingDatabases(d.public_context),
+        overrideAvailable: extractOverrideAvailable(d.public_context),
+        staleOverrides: extractStaleOverrides(d.public_context),
         reasons: extractReasons(d.public_context),
         blockedStatements: extractBlockedStatements(d.public_context),
         charsetRejected: extractCharsetRejected(d.public_context),
