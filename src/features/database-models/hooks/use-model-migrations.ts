@@ -6,6 +6,7 @@ import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
 import type {
+  MigrationEditPreviewIn,
   MigrationValidateIn,
   ModelMigrationCreate,
   ModelMigrationPatch,
@@ -16,6 +17,7 @@ import {
   deleteModelMigration,
   getModelMigration,
   listModelMigrations,
+  previewModelMigrationEdit,
   updateModelMigration,
   validateModelMigration,
   type ApplyAllOptions,
@@ -146,5 +148,51 @@ export function useApplyAllMigrations(modelId: number) {
 export function useValidateModelMigration(modelId: number) {
   return useMutation({
     mutationFn: (body: MigrationValidateIn) => validateModelMigration(modelId, body),
+  })
+}
+
+/**
+ * Paso 1 de la edición de una versión ya aplicada (api-reference-v15 §3).
+ *
+ * Es una **mutación y no una query**, y no por comodidad: abre conexiones a los motores, está
+ * limitada a 20/min, queda auditada y emite un token con vencimiento. Como query, TanStack la
+ * refetchearía al reenfocar la ventana —gastando intentos del rate limit y rotando el token que
+ * el usuario está a punto de usar—, y la cachearía, que es justo lo contrario de lo que se quiere:
+ * cada previsualización tiene que leer el estado de AHORA.
+ *
+ * Sin `onError` con toast: los fallos de este paso se explican en el panel, en contexto, y cada
+ * uno lleva un CTA distinto (reintentar, arreglar la conexión, volver a previsualizar).
+ */
+export function usePreviewModelMigrationEdit(modelId: number) {
+  return useMutation({
+    mutationFn: ({ version, body }: { version: string; body: MigrationEditPreviewIn }) =>
+      previewModelMigrationEdit(modelId, version, body),
+  })
+}
+
+/**
+ * Paso 2 de la edición de una versión ya aplicada: el PATCH con el doble factor.
+ *
+ * Hook aparte de `useUpdateModelMigration` y no un flag suyo, porque el feedback es de otra
+ * naturaleza. Aquel avisa con toasts; aquí **la pantalla de resultado ES el feedback** —tiene que
+ * decir, con el mismo peso visual, qué cambió y qué NO cambió— y cada error lleva su propio CTA en
+ * contexto (volver a previsualizar, corregir un override, reintentar el apply). Un toast encima
+ * taparía justo eso.
+ *
+ * Sí invalida la caché: la insignia `sql_diverged` y el checksum nuevo tienen que releerse del
+ * backend, no deducirse de la respuesta de esta llamada.
+ */
+export function useConfirmModelMigrationEdit(modelId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ version, body }: { version: string; body: ModelMigrationPatch }) =>
+      updateModelMigration(modelId, version, body),
+    onSuccess: (migration) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.migrations(modelId) })
+      queryClient.setQueryData(
+        queryKeys.databaseModels.migrationDetail(modelId, migration.version),
+        migration,
+      )
+    },
   })
 }

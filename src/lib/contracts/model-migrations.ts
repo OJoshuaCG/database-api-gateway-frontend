@@ -58,6 +58,17 @@ const migrationPolicyFields = {
  * plantita no se sostiene. El veredicto fino lo da el endpoint de validación cuando se pide.
  */
 const migrationSqlFactFields = {
+  /**
+   * El SQL de esta versión se editó DESPUÉS de que alguna BD la aplicara (api-reference-v15 §5).
+   *
+   * Es un hecho persistido derivado de la auditoría, no una bandera de política: **no restringe
+   * ninguna acción** y no debe deshabilitar controles. Va aquí y no en `migrationPolicyFields`
+   * justamente para que esa diferencia quede escrita: aquello decide, esto solo informa.
+   *
+   * El detalle de QUÉ bases divergieron y cuándo vive en `audit_log`, que no tiene endpoint
+   * público: la UI puede decir que hubo divergencia, no reconstruir su historia.
+   */
+  sql_diverged: z.boolean().optional().default(false),
   has_seed: z.boolean().optional().default(false),
   forced_collations: z.array(z.string()).optional().default([]),
   destructive: z.boolean().optional().default(false),
@@ -153,7 +164,10 @@ export type ModelMigrationCreate = z.infer<typeof modelMigrationCreateSchema>
  */
 export const modelMigrationPatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  up_sql: z.string().min(1, 'Requerido').max(SQL_MAX, 'Máximo 256 KB').optional(),
+  // `.nullable()` porque el contrato lo declara así (un `null` se ignora, el SQL base no puede
+  // quedar vacío). Importa para el tipo, no para la UI: es lo que permite que el mismo objeto
+  // alimente el `edit-preview` y el PATCH sin adaptadores, que es lo que el token exige.
+  up_sql: z.string().min(1, 'Requerido').max(SQL_MAX, 'Máximo 256 KB').nullable().optional(),
   down_sql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_mysql: z.string().max(SQL_MAX).nullable().optional(),
   up_sql_postgresql: z.string().max(SQL_MAX).nullable().optional(),
@@ -164,6 +178,18 @@ export const modelMigrationPatchSchema = z.object({
    * se manda `reviewed: true` en la misma llamada, gana el reset (§2.3/§3.1).
    */
   capture_selects: z.boolean().optional(),
+  /**
+   * Doble factor para atravesar el freeze (api-reference-v15 §3). **Van los dos o no va ninguno**,
+   * y cubren cosas distintas:
+   *
+   * - `confirm_version` obliga a identificar conscientemente QUÉ versión se toca — mismo molde
+   *   que el `confirm_target_name` al borrar una base.
+   * - `confirm_token` da frescura y anti-replay, y por su firma ata la autorización al SQL
+   *   EXACTO que se previsualizó. Sin él se podría previsualizar una corrección inocua, mirar un
+   *   `blocking_databases` tranquilizador y mandar otra cosa en el PATCH.
+   */
+  confirm_version: z.string().optional(),
+  confirm_token: z.string().optional(),
 })
 export type ModelMigrationPatch = z.infer<typeof modelMigrationPatchSchema>
 
@@ -313,3 +339,101 @@ export const migrationValidateInSchema = z.object({
   managed_database_id: z.number().int().optional(),
 })
 export type MigrationValidateIn = z.infer<typeof migrationValidateInSchema>
+
+// ── Editar una versión ya aplicada (api-reference-v15) ──────────────────────────
+
+/**
+ * Por qué una BD bloquea editar o borrar una versión (api-reference-v14 §2). Vocabulario cerrado.
+ *
+ * `unreadable` es el que más fácil se diseña mal: **no significa «no se puede», significa «no se
+ * pudo comprobar»**. El backend falla cerrado —motor caído, base sin aprovisionar o credenciales
+ * rotas cuentan como bloqueante— porque tratar un fallo de lectura como «esa BD ya no la tiene»
+ * convertiría un corte de red en autorización para destruir metadata. Presentarlo como «error
+ * transitorio, reintentá» lleva al operador a reintentar hasta que la fila desaparezca, y a leer
+ * esa desaparición como permiso.
+ */
+export const migrationBlockingReasonSchema = z.enum([
+  'still_applied',
+  'unreadable',
+  'unknown_database',
+  'unknown_blueprint',
+])
+export type MigrationBlockingReason = z.infer<typeof migrationBlockingReasonSchema>
+
+/**
+ * Una BD que bloquea la operación (v14 §2).
+ *
+ * El backend **nunca manda el nombre**, solo el id: el mensaje nativo del motor puede arrastrar
+ * host, usuario o fragmentos de sentencia. El nombre lo resuelve la UI por su cuenta y, si no
+ * puede, muestra «BD #7» y sigue — un nombre que falta no es un fallo de la operación.
+ *
+ * `current_version` es `.optional()` y NO `.nullable()`: el contrato dice «string | ausente», y
+ * solo viene con `reason: "still_applied"`.
+ */
+export const blockingDatabaseSchema = z.object({
+  managed_database_id: z.number().int(),
+  reason: migrationBlockingReasonSchema,
+  current_version: z.string().optional(),
+})
+export type BlockingDatabase = z.infer<typeof blockingDatabaseSchema>
+
+/**
+ * `MigrationEditPreviewIn` (v15 §3) — cuerpo del preview de edición.
+ *
+ * ⚠️ Tiene que construirse desde **el mismo objeto** que después va al PATCH, con exactamente las
+ * mismas claves y los mismos valores: el checksum resultante se calcula por **presencia de clave**
+ * (única excepción: `up_sql: null`, que se ignora). Mandar `up_sql_postgresql: null` en uno y
+ * omitirlo en el otro cambia el checksum y el token deja de validar (422).
+ */
+export const migrationEditPreviewInSchema = z.object({
+  up_sql: z.string().min(1).max(SQL_MAX).nullable().optional(),
+  down_sql: z.string().max(SQL_MAX).nullable().optional(),
+  up_sql_mysql: z.string().max(SQL_MAX).nullable().optional(),
+  up_sql_postgresql: z.string().max(SQL_MAX).nullable().optional(),
+})
+export type MigrationEditPreviewIn = z.infer<typeof migrationEditPreviewInSchema>
+
+/**
+ * `MigrationEditPreviewOut` (v15 §3).
+ *
+ * `confirm_token` y `expires_at` son `.nullable()` y **no** `.optional()`: la omisión de claves
+ * nulas del backend solo ocurre en el nivel superior del envelope, así que dentro de `data` un
+ * nulo viaja como `null` explícito. Vienen en `null` cuando `requires_confirmation` es `false`
+ * — y en ese caso el PATCH va **sin** los dos factores: mandar un token que no hace falta entrena
+ * al cliente a mandarlo siempre, y ese hábito vacía la confirmación de sentido.
+ *
+ * El token es opaco (`"{epoch}.{hmac}"`): no se parsea. La cuenta atrás sale de `expires_at`,
+ * nunca de una constante local — el TTL no viaja en la respuesta.
+ */
+export const migrationEditPreviewOutSchema = z.object({
+  model_id: z.number().int(),
+  version: z.string(),
+  requires_confirmation: z.boolean(),
+  blocking_databases: z.array(blockingDatabaseSchema).default([]),
+  resulting_checksum: z.string(),
+  confirm_version: z.string(),
+  confirm_token: z.string().nullable(),
+  expires_at: z.string().nullable(),
+})
+export type MigrationEditPreviewOut = z.infer<typeof migrationEditPreviewOutSchema>
+
+/**
+ * Códigos estables de `detail.public_context.code` de las versiones de blueprint (v14 §2 y
+ * v15 §4).
+ *
+ * `sqlFrozen` es el único con **override**: trae `override_available: true` y habilita la vía de
+ * excepción. Los otros dos 409 **no lo tienen**, y ofrecérsela por analogía sería inventar una
+ * salida que el backend no da:
+ *
+ * - `partialApplication`: su CTA es reintentar el apply, nunca «editar igual» — un `resume`
+ *   posterior interpretaría los índices del checkpoint contra un SQL que no es el que corrió.
+ * - `stillApplied` (el DELETE): borrar la descripción de cambios que están físicamente en una BD
+ *   dejaría esa base con objetos que ninguna versión del blueprint describe.
+ */
+export const MIGRATION_ERROR_CODES = {
+  sqlFrozen: 'model_migration.sql_frozen',
+  stillApplied: 'model_migration.still_applied',
+  partialApplication: 'model_migration.partial_application',
+  staleOverrides: 'model_migration.stale_overrides',
+  editConfirmMismatch: 'model_migration.edit_confirm_mismatch',
+} as const

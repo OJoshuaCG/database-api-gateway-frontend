@@ -24,6 +24,7 @@ function migration(version: string, id: number): ModelMigrationSummary {
     has_seed: false,
     forced_collations: [],
     destructive: false,
+    sql_diverged: false,
     checksum: `sha-${id}`,
     created_at: '2026-07-01T10:00:00Z',
   }

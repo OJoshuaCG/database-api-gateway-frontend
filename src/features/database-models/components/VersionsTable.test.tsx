@@ -23,6 +23,7 @@ function version(overrides: Partial<ModelMigrationSummary> = {}): ModelMigration
     has_seed: false,
     forced_collations: [],
     destructive: false,
+    sql_diverged: false,
     checksum: 'sha-1',
     created_at: '2026-07-01T10:00:00Z',
     ...overrides,

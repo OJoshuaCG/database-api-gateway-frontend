@@ -29,6 +29,7 @@ function detail(overrides: Record<string, unknown> = {}) {
     has_seed: false,
     forced_collations: [],
     destructive: false,
+    sql_diverged: false,
     created_at: '2026-07-01T10:00:00Z',
     updated_at: '2026-07-01T10:00:00Z',
     ...overrides,

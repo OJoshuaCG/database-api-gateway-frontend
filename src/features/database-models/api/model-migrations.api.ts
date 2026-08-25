@@ -1,6 +1,7 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
   applyAllResultSchema,
+  migrationEditPreviewOutSchema,
   migrationValidateOutSchema,
   modelMigrationOutSchema,
   modelMigrationSummarySchema,
@@ -9,6 +10,8 @@ import {
   type MigrationValidateOut,
   type ModelMigrationCreate,
   type ModelMigrationOut,
+  type MigrationEditPreviewIn,
+  type MigrationEditPreviewOut,
   type ModelMigrationPatch,
   type ModelMigrationSummary,
   type OnFailureMode,
@@ -123,4 +126,30 @@ export function validateModelMigration(
     body,
     signal,
   })
+}
+
+/**
+ * `POST .../migrations/{version}/edit-preview` 🔌 (api-reference-v15 §3) — paso 1 de la vía de
+ * excepción para editar una versión **ya aplicada**.
+ *
+ * Lee la versión de cada BD **del motor en vivo**, no de la caché del inventario: por eso abre
+ * conexiones y por eso tiene rate limit (20/min). Devuelve a quién va a dejar divergente y, si
+ * hace falta confirmar, el `confirm_token` que autoriza el PATCH.
+ *
+ * ⚠️ El cuerpo tiene que ser **exactamente el mismo** que después va al PATCH: el checksum
+ * resultante se calcula por presencia de clave, así que una clave de más o de menos invalida el
+ * token. Un 502/504 aquí no es «una BD ilegible» —eso viaja como `reason: "unreadable"` dentro de
+ * `blocking_databases`— sino un fallo de la llamada entera: sin token, el flujo no puede seguir.
+ */
+export function previewModelMigrationEdit(
+  modelId: number,
+  version: string,
+  body: MigrationEditPreviewIn,
+): Promise<MigrationEditPreviewOut> {
+  return mutateData(
+    'POST',
+    `${base(modelId)}/${encodeURIComponent(version)}/edit-preview`,
+    migrationEditPreviewOutSchema,
+    { body },
+  )
 }
