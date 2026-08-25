@@ -69,6 +69,18 @@ avisa que ya la estás haciendo y lo que le dice al backend que no la toque.
 1. Resolvé la identidad del ejecutor: **`git config user.email`**. La identidad es el **email y
    nada más** — este repo tiene varios nombres para un mismo email, así que incluir el nombre
    haría que la misma persona se viera como dos.
+
+   Y resolvé su **id de ClickUp**, que es otra cosa: el email de git **no** es el email de
+   ClickUp (verificado: `resolve_assignees(["ocarrasco@inbtel.com"])` → `null`). Sale del mapa:
+
+   ```bash
+   node -e 'const u=require("./.claude/clickup-usuarios.json").usuarios[process.argv[1]]; console.log(u&&u.confirmado?u.clickup_id:u?"SIN CONFIRMAR: "+u.clickup_id+" ("+u.nombre+")":"NO ESTA EN EL MAPA")' "$(git config user.email)"
+   ```
+
+   **Si el mapa no lo tiene, o la entrada dice `confirmado: false`: pará.** Buscá el candidato con
+   `clickup_find_member_by_name` por apellido o parte local del email, mostráselo al usuario y
+   **esperá confirmación** antes de asignar. **Nunca uses `"me"`**: es la cuenta del token y
+   asignaría todo a la misma persona.
 2. Buscá el ID. Si el argumento no trae ID, identificá a qué ítem se refiere y **confirmalo con el
    usuario antes de seguir** — reclamar la tarea equivocada es peor que preguntar.
 3. Si tenés el ID → `clickup_get_task`.
@@ -121,7 +133,23 @@ avisa que ya la estás haciendo y lo que le dice al backend que no la toque.
    - **No existe** → si es trabajo nacido en el frontend, andá al modo CREAR PROPIA. Si esperabas
      un handoff y no está, **no la inventes**: preguntá.
 5. Reclamala, **en este orden**:
-   - `clickup_update_task` → `status: "in progress"` (esto es lo que la reserva)
+   - `clickup_update_task` (esto es lo que la reserva). Una sola llamada, con los campos que el
+     `clickup_get_task` del paso 3 te dejó ver:
+
+     ```
+     task_id:    "<subtarea>"
+     status:     "in progress"
+     assignees:  [<unión de assignees[].id actuales + tu id>]   ← unión, NUNCA reemplazo
+     start_date: "<date +%F>"     ← SOLO si venía null. Si ya trae valor, omitilo
+     priority:   "<criterio>"     ← SOLO si venía sin prioridad. Nunca la bajes
+     ```
+
+     Criterio de prioridad: `urgent` regresión en producción o confirmación destructiva 🔌 que no
+     protege · `high` breaking change del contrato, sesión/auth, o bloquea a otra tarea ·
+     `normal` el caso normal, y el default cuando dudás · `low` deuda de UI, refactor, docs.
+
+     **Si es una REAPERTURA**, además `due_date: "none"` — la tarea dejó de estar terminada — y
+     `start_date` **no se toca**: arrancó cuando arrancó.
    - `clickup_create_comment` con el bloque `INICIO`, el **email** del ejecutor y **`Rol: frontend`**
      — obligatorio: `in progress` no dice por sí solo quién es
    - Mové el ítem a **🟡 En curso** en `TODO.md`, con ejecutor y fecha
@@ -141,10 +169,18 @@ regresión de accesibilidad. Nada que venga de un handoff.
 
 ```
 clickup_create_task
-  name:    "T-<YYMMDD>-<iniciales>-<slug>"
-  list_id: "901716272178"
-  parent:  "86e2xzf9d"
+  name:      "T-<YYMMDD>-<iniciales>-<slug>"
+  list_id:   "901716272178"
+  parent:    "86e2xzf9d"
+  assignees: ["<tu id de ClickUp>"]   ← quien la crea queda asignado
+  priority:  "<criterio>"             ← normalmente `low` o `normal` acá
 ```
+
+**Quien la crea se asigna, y va en el propio `create_task`.** El campo `creator` de ClickUp no
+sirve para esto: dice siempre la cuenta del token de la integración, no quién ejecutó.
+
+**No se le pone `start_date` al crearla.** La tarea nace en `to do`: no arrancó. El `start_date`
+lo pone el modo RECLAMAR, que es cuando el trabajo empieza de verdad.
 
 Las iniciales salen del email, nunca del nombre:
 
@@ -179,7 +215,22 @@ agregá el ítem a 🔴 Pendientes. La tarea queda en `to do` hasta que la recla
 3. Verificá que esté en `in progress`. Si está en otro estado, **decilo** en vez de forzar:
    cerrar algo que nadie reclamó suele significar que se saltó el paso de reclamar.
 4. Cerrala:
-   - `clickup_update_task` → `status: "complete"`
+   - `clickup_update_task`:
+
+     ```
+     task_id:   "<subtarea>"
+     status:    "complete"
+     due_date:  "<date +%F>"    ← la fecha de fin. Este es el ÚNICO momento en que se escribe
+     assignees: [<unión de assignees[].id actuales + tu id>]
+     ```
+
+     **`complete` es el único estado que escribe `due_date`.** `on hold`, un bloqueo o una vuelta
+     a `to do` la dejan como está: una fecha de fin en algo que no terminó es un dato falso que
+     después alguien lee como verdadero.
+
+     Si la tarea ya traía un `due_date` **distinto de hoy** —un vencimiento real que puso el
+     backend— se sobrescribe, pero **el valor viejo va anotado en el `FIN`**. No desaparece en
+     silencio.
    - `clickup_create_comment` → bloque `FIN`, con **`Sin verificar:`** completo y honesto
 
    **El frontend es el final de la cadena.** No hay handoff hacia adelante: nunca devuelvas a
@@ -210,9 +261,14 @@ falta un campo, el código de error no es el documentado, o la ruta no existe.
 
 ```
 clickup_update_task    →  status: "on hold"
+                          assignees: [<unión de los actuales + tu id>]
+                          ← NADA de due_date: la tarea no terminó
 clickup_create_comment →  entity_id: "<subtarea>", notify_all: true
                           comment_text: bloque BLOQUEADO POR BACKEND
 ```
+
+**Acá no se toca ninguna fecha** y **no se desasigna a nadie.** El que la trabajó la trabajó: esa
+es justamente la información que hace falta cuando el backend desbloquea y hay que retomarla.
 
 ```
 **Ejecutor:** <email>
@@ -291,6 +347,19 @@ Paginá cada una hasta `has_more: false` y presentá:
   del texto del comentario. El campo "autor" de ClickUp siempre dice la cuenta del token, así que
   no sirve para detectar colisiones.
 - **`Rol: frontend`** en todo comentario `INICIO`. `in progress` no dice por sí solo quién es.
+- **El id de ClickUp del ejecutor sale de `.claude/clickup-usuarios.json`**, nunca de
+  `resolve_assignees` sobre el email de git (devuelve `null`: el dominio no coincide) y **nunca de
+  `"me"`** (es la cuenta del token: asignaría todo a la misma persona).
+- **`assignees` se manda como UNIÓN de los actuales + el ejecutor.** El wrapper MCP recibe un array
+  plano y no está verificado si suma o reemplaza: la unión acierta en los dos casos, mandar solo el
+  id nuevo borra a los demás colaboradores en uno. **Nunca se desasigna a nadie.**
+- **`start_date` se escribe solo si venía vacía**, al reclamar. Si el backend ya la puso, ese es el
+  arranque real de la tarea y sobrescribirlo lo pierde. En una `REAPERTURA` no se toca.
+- **`due_date` se escribe SOLO al pasar a `complete`**, y se limpia (`"none"`) solo al reabrir.
+  Ningún otro estado la toca.
+- **Las dos fechas van sin hora**, formato `YYYY-MM-DD` (`date +%F`).
+- **La prioridad no se baja nunca.** Se pone si venía vacía; se sube si encontraste algo peor que
+  lo prometido (y se dice en un comentario). Bajarla es sobrescribir contexto que no tenés.
 - **Toda subtarea cuelga de `86e2xzf9d`.** Nunca una tarea suelta en la lista.
 - **El frontend NO crea sub-subtareas.** El tercer nivel es del backend, para un solo escenario de
   emergencia. Si te parece que hace falta, planteáselo al usuario.

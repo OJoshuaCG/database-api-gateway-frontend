@@ -97,6 +97,118 @@ LeoZubiri@outlook.com → leozubir
 ocarrasco@inbtel.com  → ocarrasc
 ```
 
+## Fechas, asignados y prioridad
+
+Tres campos de ClickUp que el protocolo ahora mantiene. Los tres se mueven **junto al cambio de
+estado**, y donde se pueda en la **misma** llamada `clickup_update_task`.
+
+### El puente de identidad: `git config user.email` NO es el email de ClickUp
+
+Verificado contra la API: `clickup_resolve_assignees(["ocarrasco@inbtel.com"])` devuelve `null`.
+El miembro real del workspace es `ocarrasco@cero208.com.mx`, id `138069418`. **El dominio del
+email de git no es el dominio de la cuenta de ClickUp**, así que resolver por email no funciona —
+y por nombre tampoco, porque este repo tiene varios nombres para un mismo email.
+
+El puente es explícito: **`.claude/clickup-usuarios.json`**.
+
+```bash
+# node, no python3: en este entorno (WSL2) python3 no existe; node sí, es un repo de React
+node -e 'const u=require("./.claude/clickup-usuarios.json").usuarios[process.argv[1]]; console.log(u&&u.confirmado?u.clickup_id:u?"SIN CONFIRMAR: "+u.clickup_id+" ("+u.nombre+")":"NO ESTA EN EL MAPA")' "$(git config user.email)"
+```
+
+**Si el email no está en el mapa, o su entrada tiene `confirmado: false`: pará y preguntá.** Buscá
+el candidato con `clickup_find_member_by_name` usando el apellido o la parte local del email,
+mostráselo al usuario, esperá la confirmación, y recién entonces escribí —o marcá como
+confirmada— la entrada del mapa.
+
+**`confirmado: false` no es "casi sí".** Significa que el mapeo lo dedujo un agente y nadie lo
+validó. El email de git y el de ClickUp pueden no parecerse en nada: en este repo el autor del 95%
+de los commits es `ojoshuacg@gmail.com` y su cuenta de ClickUp es `ocarrasco@cero208.com.mx`. Con
+esa distancia, "se parece" no es evidencia de nada.
+
+**Nunca uses `"me"` como reemplazo.** `"me"` es la cuenta del token de la integración: asignaría
+todas las tareas a la misma persona, que es exactamente el error que este protocolo evita poniendo
+la identidad dentro del texto del comentario. Una asignación al equivocado no falla, no avisa, y
+se descubre semanas después, cuando alguien filtra el tablero por asignado.
+
+### Asignados: acumulativo, y nunca se desasigna
+
+**Todo el que colabora en la tarea queda asignado**, y una tarea puede tener varios. `assignees`
+es el registro de **quién la tocó**, no de quién la tiene ahora — para eso están `in progress` y
+el comentario `INICIO`.
+
+El procedimiento es **leer y mandar la unión**, siempre:
+
+1. `clickup_get_task` → `assignees[].id` (array de objetos: sacá el `id` y pasalo a string).
+2. Unión de esos ids con el id del ejecutor.
+3. `clickup_update_task` → `assignees: [<la unión completa>]`.
+
+**Por qué la unión y no solo el id nuevo:** el wrapper MCP recibe un array plano de ids, no el
+`{add, rem}` de la API v2 de ClickUp, y **no está verificado si suma o si reemplaza**. La unión da
+el resultado correcto en los dos casos. Mandar solo el id nuevo acierta en uno y **borra a los
+demás colaboradores** en el otro.
+
+**Nunca saques a nadie de `assignees`**: ni al cerrar, ni al reabrir, ni "porque ya no está
+trabajando". Si alguien quedó asignado por error, se plantea; no se corrige por cuenta propia.
+
+Quien **crea** una tarea propia del frontend se asigna en el propio `clickup_create_task`
+(`assignees: ["<id>"]`). El campo `creator` de ClickUp no sirve para esto: dice siempre la cuenta
+del token.
+
+### Fecha de inicio (`start_date`): al reclamar, y solo si está vacía
+
+Se pone al pasar a `in progress`, en formato **`YYYY-MM-DD`, sin hora** (el campo acepta las dos
+formas; sin hora es la que queremos).
+
+```bash
+date +%F
+```
+
+**Solo se escribe si `start_date` viene `null`.** El tablero es compartido con el backend: si ya
+trae valor, ese valor es el arranque real del trabajo sobre esa tarea, y sobrescribirlo lo pierde.
+El arranque del frontend ya queda registrado en el `INICIO`, que sí es por rol.
+
+**En una `REAPERTURA` no se toca nunca.** La tarea arrancó cuando arrancó.
+
+### Fecha de fin (`due_date`): solo al pasar a `complete`
+
+```
+clickup_update_task  →  status: "complete", due_date: "<date +%F>"
+```
+
+**Ningún otro cambio de estado la toca.** `on hold`, `BLOQUEADO POR BACKEND` y una vuelta a `to
+do` la dejan exactamente como estaba. Una fecha de fin en una tarea que no terminó es una mentira
+que después alguien lee como dato.
+
+**Al reabrir (`complete → in progress`) se limpia: `due_date: "none"`.** Es el inverso exacto: la
+tarea dejó de estar terminada. Con la fecha vieja puesta, cualquier vista filtrada por fecha de fin
+muestra como cerrado algo que está abierto. Se vuelve a poner al cerrarla de nuevo.
+
+**Si la tarea ya traía un `due_date` distinto de hoy** —un vencimiento real puesto por el backend—
+se sobrescribe igual, porque acá `due_date` es la fecha de fin, **pero el valor anterior se anota
+en el comentario `FIN`**. Así no desaparece en silencio.
+
+**Sobre `date_closed`:** ClickUp ya lo estampa solo cuando la tarea entra a un estado cerrado, y no
+se puede escribir vía API. Es exacto pero poco visible; `due_date` es el campo que sí entra en
+columnas, filtros y vistas de calendario. Por eso la fecha de fin del protocolo va en `due_date`, y
+`date_closed` queda como respaldo automático.
+
+### Prioridad: criterio fijo, y nunca se baja
+
+Se pone al **crear** una tarea propia, y al **reclamar** una que viene sin prioridad.
+
+| Prioridad | Cuándo |
+| --- | --- |
+| `urgent` | Regresión en producción; el frontend quedó roto por un breaking change ya desplegado; o una confirmación destructiva (🔌) que no protege lo que dice proteger |
+| `high` | Handoff con **breaking change** en el contrato; cualquier cosa de sesión / auth (401, login); una tarea que bloquea a otra |
+| `normal` | El caso de todos los días: handoff sin breaking change, endpoint nuevo, pantalla nueva. **Es el default cuando dudás** |
+| `low` | Deuda de UI, refactor sin cambio de comportamiento, docs, cosmética, accesibilidad no bloqueante |
+
+**Si la tarea ya trae prioridad puesta por el backend, no la bajes.** Subila si al implementar
+encontraste algo peor de lo que prometía el handoff —y decilo en un comentario—, o dejala como
+está. Bajarla es sobrescribir contexto que no tenés: el backend sabe qué depende de esa tarea del
+otro lado.
+
 ## Los dos orígenes del trabajo en este repo
 
 ### A) Handoff del backend — el caso normal
@@ -253,7 +365,7 @@ Sin este paso el duplicado es **invisible** hasta el merge.
 | Situación | Qué se hace |
 | --- | --- |
 | **Fix** de algo que la tarea entregó mal, y la tarea sigue abierta | **Misma tarea.** Comentario explicando el fix. Sin ID nuevo |
-| **Fix** de algo que ya está `complete` **hace 30 días o menos** | **Misma tarea: se REABRE** a `in progress` con un comentario `REAPERTURA`. Cerrarla de nuevo al terminar |
+| **Fix** de algo que ya está `complete` **hace 30 días o menos** | **Misma tarea: se REABRE** a `in progress` con un comentario `REAPERTURA`, **`due_date: "none"`** (ya no está terminada) y `assignees` con tu id sumado. `start_date` **no se toca**. Cerrarla de nuevo al terminar, con `due_date` nuevo |
 | **Fix** de algo `complete` de **hace más de 30 días** | **NO se reabre nunca. Tarea nueva `T-…`, vinculada** (ver "La ventana de 30 días") |
 | **Feature** que extiende la tarea sin cambiar su objetivo | **Misma tarea.** Se actualiza la descripción + comentario |
 | **Feature** que cambia el objetivo, o toca pantallas que la original no tocaba | **Tarea nueva, vinculada** |
@@ -310,10 +422,16 @@ partida en dos cuando era una sola pierde la historia.
 
 ## Paso 2 — Al empezar
 
+El `clickup_get_task` del paso 1 ya te dio `assignees`, `start_date` y `priority`. Con eso armás
+**una sola** llamada:
+
 ```
 clickup_update_task
-  task_id: "<subtarea>"
-  status:  "in progress"
+  task_id:    "<subtarea>"
+  status:     "in progress"
+  assignees:  [<unión de los assignees[].id actuales + el id del ejecutor>]
+  start_date: "<date +%F>"      ← SOLO si start_date venía null; si no, omitilo
+  priority:   "<del criterio>"  ← SOLO si venía sin prioridad; nunca la bajes
 ```
 
 **Esto es lo que reserva la tarea.** Va **antes** de escribir la primera línea de código.
@@ -326,9 +444,17 @@ el ítem a **🟡 En curso** en `TODO.md`.
 El frontend es el **final de la cadena**. No hay bifurcación de handoff hacia adelante.
 
 ```
-clickup_update_task  →  status: "complete"
+clickup_update_task
+  task_id:   "<subtarea>"
+  status:    "complete"
+  due_date:  "<date +%F>"   ← la fecha de fin, solo acá
+  assignees: [<unión: los actuales + el id del ejecutor>]
+
 clickup_create_comment  →  bloque FIN
 ```
+
+Si la tarea traía un `due_date` distinto de hoy, anotá el valor viejo en el `FIN`: se sobrescribe,
+pero no en silencio.
 
 Mové el ítem a **🟢 Realizadas** en `TODO.md`, con el detalle completo: archivos tocados,
 decisiones, y muy especialmente **qué quedó sin verificar**.
@@ -342,6 +468,10 @@ dicho. Si escribiste tests y no los corriste, el comentario lo dice así, con to
 ## Paso 4 — Si se abandona a mitad, o si el backend no cumple
 
 Nunca se deja en `in progress`. Una tarea colgada ahí bloquea a todos los demás por nada.
+
+**Acá NO se toca `due_date`.** Ni al dejarla a medias, ni al bloquearla. La fecha de fin se pone
+**solo** al pasar a `complete`: una tarea trabada no terminó. `assignees` tampoco se limpia — el
+que la trabajó la trabajó, y esa es la información que hace falta cuando se retoma.
 
 ### 4a. Quedó a medias por tu lado → `on hold` + comentario que diga **dónde quedó**
 
@@ -378,6 +508,7 @@ la deja en tu propio filtro de pendientes y nadie del backend se entera de que e
 **Pantallas / componentes tocados:** <rutas concretas>
 **Endpoints consumidos:** <los del handoff que quedaron efectivamente integrados>
 **Sin verificar:** <lo que quedó sin probar, o "nada". Si hay tests escritos y no ejecutados, decilo acá>
+**Fecha de fin anterior:** <solo si la tarea traía un due_date distinto de hoy y lo sobrescribiste>
 ```
 
 ```
@@ -459,13 +590,16 @@ Todos los cambios de estado ocurren en **ClickUp vía MCP**. Ningún estado vive
 | Momento | ClickUp | `TODO.md` |
 | --- | --- | --- |
 | Llega un handoff | — (lo puso el backend) | Ítem → 🔵 Pendiente de frontend, con el resumen |
-| **Frontend reclama** | `in progress` + `INICIO` (**rol frontend**) | Ítem → 🟡 En curso |
-| Frontend termina | `complete` + `FIN` | Ítem → 🟢 Realizadas |
-| Trabajo propio nuevo | `create_task` (`parent: 86e2xzf9d`) en `to do` + re-verificación | Ítem nuevo en 🔴 Pendientes con su ID `T-…` |
-| Se abandona a mitad | `on hold` + comentario con dónde quedó | Ítem vuelve a 🔴 Pendientes |
-| El backend no cumple | `on hold` + `BLOQUEADO POR BACKEND` (`notify_all`) | Ítem → 🔴 Pendientes, marcado como bloqueado |
-| Fix de algo que cerraste | `in progress` + `REAPERTURA` → después `complete` | 🟢 → 🟡 → 🟢 |
+| **Frontend reclama** | `in progress` + `INICIO` (**rol frontend**) + `assignees` (unión) + `start_date` si estaba vacía + `priority` si venía sin | Ítem → 🟡 En curso |
+| Frontend termina | `complete` + `FIN` + **`due_date` = hoy** + `assignees` (unión) | Ítem → 🟢 Realizadas |
+| Trabajo propio nuevo | `create_task` (`parent: 86e2xzf9d`) en `to do`, con `assignees: [creador]` y `priority` + re-verificación | Ítem nuevo en 🔴 Pendientes con su ID `T-…` |
+| Se abandona a mitad | `on hold` + comentario con dónde quedó. **`due_date` no se toca** | Ítem vuelve a 🔴 Pendientes |
+| El backend no cumple | `on hold` + `BLOQUEADO POR BACKEND` (`notify_all`). **`due_date` no se toca** | Ítem → 🔴 Pendientes, marcado como bloqueado |
+| Fix de algo que cerraste | `in progress` + `REAPERTURA` + **`due_date: "none"`** + `assignees` (unión) → después `complete` con `due_date` nuevo | 🟢 → 🟡 → 🟢 |
 | Aparece `HANDOFF INVALIDADO` | No la toques | Ítem se queda en 🔵, anotado como invalidado |
+
+**La única fila que escribe `due_date` es "Frontend termina".** La única que lo borra es la
+reapertura. Todo lo demás lo deja como está.
 
 ## Qué NO va a ClickUp
 

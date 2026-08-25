@@ -50,6 +50,15 @@ a un bloqueo nuestro: leé **`Sigue sin resolverse`** (si no dice "nada", parte 
 se arregló) y **`Lo que NO cambió`** (había media implementación hecha y probablemente sigue
 válida).
 
+**Fechas, asignados y prioridad.** `start_date` se escribe al reclamar y **solo si venía vacía**;
+`due_date` es la fecha de fin y se escribe **solo al pasar a `complete`** (se limpia únicamente al
+reabrir) — ningún otro estado toca ninguna de las dos, y las dos van **sin hora** (`date +%F`).
+`assignees` es acumulativo: se manda la **unión** de los actuales más el ejecutor y **nunca se
+desasigna a nadie**; quien crea una tarea propia queda asignado en el `create_task`. El id de
+ClickUp del ejecutor sale de **`.claude/clickup-usuarios.json`**, porque el email de git no es el
+de ClickUp y `"me"` es la cuenta del token. La prioridad se pone si venía vacía y **nunca se baja**.
+El detalle y el criterio están en la skill.
+
 **REGLA DURA — el frontend NO crea sub-subtareas.** La jerarquía es de dos niveles: tarea paraguas
 → subtareas. El tercer nivel existe para un solo escenario de emergencia y **es del backend**: que
 necesite cambiar algo de una tarea que nosotros estamos haciendo en ese momento. Cuando eso pasa,
