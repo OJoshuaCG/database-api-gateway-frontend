@@ -487,4 +487,17 @@ Verificados, no asumidos:
 - Las herramientas de ClickUp son **deferred**: antes de invocarlas hay que traer su esquema con
   `ToolSearch(query: "select:clickup_filter_tasks,clickup_update_task,…")`.
 - **Todos los comentarios se publican con la cuenta del token**, sin importar quién ejecute. Por
-  eso la identidad va dentro del texto.
+  eso la identidad va dentro del texto. Lo mismo vale para el campo `creator` de una tarea.
+- **`clickup_resolve_assignees` NO resuelve el email de git.** Verificado:
+  `["ocarrasco@inbtel.com"]` → `[null]`. La cuenta de ClickUp vive en otro dominio
+  (`ocarrasco@cero208.com.mx`, id `138069418`). De ahí el mapa
+  **`.claude/clickup-usuarios.json`**.
+- **`"me"` en `resolve_assignees` devuelve la cuenta del token** (`138069418`), no la del ejecutor.
+  Nunca lo uses para asignar.
+- `assignees` en `clickup_update_task` es un **array plano de ids**, no el `{add, rem}` de la API
+  v2. **No está verificado si suma o si reemplaza** → mandá siempre la unión completa.
+- `priority` **se lee** como objeto (`{"priority": "high", "color": "…"}`) y **se escribe** como
+  string (`"high"`). No son la misma forma.
+- `start_date` y `due_date` aceptan `YYYY-MM-DD` (sin hora) y se leen como timestamp en
+  milisegundos. `"none"` los limpia.
+- **`date_closed` no se puede escribir**: ClickUp lo estampa solo al entrar a un estado cerrado.
