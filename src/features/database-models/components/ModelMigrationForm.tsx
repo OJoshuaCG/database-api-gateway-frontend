@@ -86,6 +86,12 @@ interface ModelMigrationFormProps {
   submitError?: string | null
   /** `409` caso A: el `up_sql` ya se aplicó con éxito ⇒ bloquear su edición (fix-forward). */
   upSqlLocked?: boolean
+  /**
+   * Desbloquea `up_sql` para la vía de excepción (api-reference-v15). No guarda nada por sí solo:
+   * al enviar, el backend responde 409 y ese 409 es el que dice —vía `override_available`— si la
+   * excepción está disponible y abre el flujo de dos pasos.
+   */
+  onUnlockUpSql?: () => void
   /** CTA de fix-forward: crear una nueva migración en vez de editar la aplicada. */
   onCreateNewVersion?: () => void
   /** create: recibe los valores crudos (el llamador arma el `ModelMigrationCreate`). */
@@ -103,6 +109,7 @@ export function ModelMigrationForm({
   isSubmitting,
   submitError,
   upSqlLocked = false,
+  onUnlockUpSql,
   onCreateNewVersion,
   onSubmit,
   onSubmitEdit,
@@ -233,17 +240,32 @@ export function ModelMigrationForm({
 
       {upSqlReadOnly && (
         <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-foreground">
+          <p className="text-sm font-semibold">El SQL de esta versión está congelado</p>
           <p>
-            Esta versión ya se <strong>aplicó con éxito</strong> en al menos una BD, por lo que su
-            SQL base no puede modificarse (fix-forward). Crea una nueva migración con la corrección.
+            Alguna base de datos está en esta versión o en una posterior. El camino normal para
+            corregir es crear una versión nueva. Si la corrección tiene que quedar en{' '}
+            <strong>esta</strong> versión —por ejemplo, para que las bases nuevas no se creen con el
+            defecto—, hay una vía de excepción que pide confirmación explícita.
           </p>
-          {onCreateNewVersion && (
-            <div>
-              <Button type="button" variant="outline" size="sm" onClick={onCreateNewVersion}>
-                Nueva migración
+          {/* El freeze mira SOLO `up_sql` y los overrides por motor. Decirlo aquí no es un detalle:
+              el `down_sql` se confirma con este mismo formulario, y si el operador cree que está
+              todo bloqueado no lo intenta — dejando la versión sin forma de revertirse nunca. */}
+          <p>
+            El rollback (<code>down_sql</code>) <strong>no</strong> está congelado: se puede
+            confirmar aquí mismo, sin ninguna confirmación adicional.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {onCreateNewVersion && (
+              <Button type="button" size="sm" onClick={onCreateNewVersion}>
+                Crear versión correctiva
               </Button>
-            </div>
-          )}
+            )}
+            {onUnlockUpSql && (
+              <Button type="button" variant="outline" size="sm" onClick={onUnlockUpSql}>
+                Editar de todos modos…
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -283,7 +305,11 @@ export function ModelMigrationForm({
         registration={register('down_sql')}
         rows={8}
         emptyLabel="Sin rollback confirmado."
-        hint="Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí."
+        hint={
+          upSqlReadOnly
+            ? 'Confirmar el rollback después de aplicar la versión es un flujo soportado: este campo no está congelado.'
+            : 'Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí.'
+        }
         error={errors.down_sql?.message}
       />
 

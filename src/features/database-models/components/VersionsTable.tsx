@@ -81,8 +81,19 @@ export function VersionsTable({
       cell: ({ row }) => (
         <span className="flex flex-wrap items-center gap-1.5">
           {row.original.reviewed === false && <Badge tone="warning">sin revisar</Badge>}
+          {/* Informativa, nunca restrictiva: el SQL nuevo es el que se aplica de aquí en más.
+              Deshabilitar algo por esta insignia sería inventarse una regla que el backend no
+              tiene. */}
+          {row.original.sql_diverged && (
+            <Badge
+              tone="warning"
+              title="El SQL de esta versión se editó después de que alguna base la aplicara. Esas bases conservan el esquema anterior: esta versión ya no describe el plano de todas sus bases."
+            >
+              ⚠ SQL editado tras aplicarse
+            </Badge>
+          )}
           {row.original.sql_frozen && (
-            <Badge tone="neutral" title="Alguna BD ya depende de ella: su SQL no se edita">
+            <Badge tone="neutral" title="Alguna base está hoy en esta versión o en una posterior: editar su SQL pide confirmación explícita">
               SQL congelado
             </Badge>
           )}
