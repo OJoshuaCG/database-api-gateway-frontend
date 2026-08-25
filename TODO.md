@@ -112,6 +112,117 @@ También van acá las tareas que quedaron **bloqueadas por backend** (`on hold` 
 
 | # | Ítem | Qué se hizo | Qué quedó SIN verificar | Subtarea |
 | --- | --- | --- | --- | --- |
+| T-260822-oc-projects-agrupar-blueprints | Módulo Proyectos: dos pestañas en la vista de blueprints | Feature `src/features/projects/` completa (9 endpoints de la v16). `/database-models` pasa a tener dos pestañas —«Proyectos» por defecto y «Blueprints» con el catálogo completo— y el detalle del proyecto vive en `/projects/:projectId`. Vista inversa dentro de la pantalla del blueprint. | **Los tests no se ejecutaron** (política del repo): 6 casos escritos en `use-projects.test.tsx` + ampliación de `errors.test.ts`, ninguno corrido. **Nada probado contra el backend real**: los contratos Zod se escribieron a mano desde la v16, así que una diferencia de forma fallará en runtime. Sin comprobar que `description` viaje como `null` explícito dentro de `data`. | [86e2y0zq9](https://app.clickup.com/t/86e2y0zq9) |
+| T-260824-ojoshuac-editar-version-aplicada | Editar el SQL de una versión ya aplicada (doble factor) | El 409 `sql_frozen` se clasifica por código y ofrece dos salidas si trae `override_available`. La segunda abre el flujo de dos pasos (`edit-preview` → confirmación) con la lista de BDs divergentes, cuenta atrás del token e insignia `sql_diverged`. Corregido el copy que negaba que `down_sql` fuera editable. | **Los tests no se ejecutaron**; además **no se escribieron tests de componente del flujo de dos pasos** — es lo que más falta. **Nada probado contra el backend real**: no se ha visto una respuesta real de `edit-preview`. Sin verificar el camino `requires_confirmation: false` ni el 410 real por caducidad. | [86e2z0gmj](https://app.clickup.com/t/86e2z0gmj) |
+
+### Detalle — T-260822-oc-projects-agrupar-blueprints
+
+**Qué se pidió.** La vista de blueprints pasa a tener **dos pestañas**: «Proyectos» (lo primero
+que se ve; de ahí se entra a los blueprints asignados) y «Blueprints» (el catálogo **completo**,
+tengan proyecto o no). Cada pestaña con sus acciones propias.
+
+**Qué es un proyecto.** Nombre + descripción + una lista de blueprints, en relación **N:M**. No
+tiene servidor, ni credenciales, ni versión, ni entorno. **No toca ningún motor de BD**: es
+organización pura. Un blueprint puede estar en varios proyectos, en uno, o en ninguno.
+
+**Los 9 endpoints** (ninguno nuevo — nunca se habían documentado para frontend):
+
+- `GET /api/v1/projects` — paginado, con `blueprint_count` ya calculado (una sola query por página)
+- `POST /api/v1/projects` → 201
+- `GET /api/v1/projects/{id}`
+- `PATCH /api/v1/projects/{id}` — parcial de verdad
+- `DELETE /api/v1/projects/{id}` — **no borra blueprints**
+- `GET /api/v1/projects/{id}/blueprints` — **sin paginar**
+- `POST /api/v1/projects/{id}/blueprints` — idempotente y todo-o-nada
+- `DELETE /api/v1/projects/{id}/blueprints/{model_id}`
+- `GET /api/v1/database-models/{model_id}/projects` — vista inversa, **sin paginar**
+
+**La regla dura que la UI tiene que comunicar.** Borrar un proyecto **NO borra blueprints**: borra
+la entidad y sus vínculos. Está implementada en tres capas del backend, con tests en los dos
+sentidos. Consecuencia de diseño: el `DELETE` **no** es destructivo y **no** pide confirmación por
+nombre — un `confirm()` simple alcanza. Tratarlo con el ceremonial de re-tipear el nombre le
+enseña al operador que todo es peligroso y desgasta la fricción donde sí hace falta.
+
+**La trampa más importante del módulo.** `POST /projects` con `model_ids` inválidos devuelve
+**422 `project.blueprints_not_found`** pero **el proyecto YA quedó creado**, vacío. Reintentar el
+alta da **409 `project.name_taken`**. Recomendación del contrato: mandar el alta **sin**
+`model_ids` y vincular en una segunda llamada.
+
+**Dos pares de códigos que NO son intercambiables:**
+
+- `project.name_taken` (409) vs `project.link_conflict` (409) — el primero se arregla cambiando un
+  dato que el usuario escribió; el segundo, **repitiendo la misma llamada**. Ofrecer «reintentar»
+  en el primero manda al usuario a un bucle.
+- `project.blueprint_not_linked` (404) vs `project.blueprint_not_found` (404) — el primero es la
+  **relación**, el segundo el **recurso**.
+
+**Otras reglas.** `already_linked` es **éxito**, no advertencia (es lo que hace la vinculación
+reintentable). `description: null` **vacía** la descripción; `""` guarda cadena vacía. No poner
+paginador en los dos endpoints que no la aceptan. Clasificar siempre por
+`detail.public_context.code`, **nunca** por `detail.context` (solo llega en `development`).
+
+**Contrato:** `docs/api-reference-v16.md` (checklist de SPA en §5).
+**Plan de UI:** `docs/frontend/plan-proyectos.md` — 6 vistas, wireframes, estados, copy propuesto,
+matriz de errores → CTA y 6 preguntas abiertas en §8.
+
+### Detalle — T-260824-ojoshuac-editar-version-aplicada
+
+**Qué se pidió.** Poder **editar el SQL de una versión de blueprint que ya está aplicada** en una
+o más BDs. Hoy eso da 409 `model_migration.sql_frozen` sin salida. El freeze sigue siendo el
+default; lo que se agrega es la **única vía para atravesarlo**.
+
+**Endpoints:**
+
+- `POST /api/v1/database-models/{id}/migrations/{version}/edit-preview` — **NUEVO**. Body: los
+  mismos campos de SQL que va a llevar el PATCH. Devuelve `requires_confirmation`,
+  `blocking_databases[]` (leído **del motor**), `confirm_token`, `expires_at`,
+  `resulting_checksum`. Rate limit 20/min.
+- `PATCH .../migrations/{version}` — dos campos **opcionales** nuevos: `confirm_version` y
+  `confirm_token`. **Van los dos o no va ninguno.**
+- Listado y detalle de versiones — campo nuevo `sql_diverged` (bool).
+
+**Doble factor, no un switch.** La segunda salida del 409 es un **flujo de dos pasos**
+(preview → confirmar) que muestra `blocking_databases[]` **antes** de pedir la confirmación. Un
+botón «Forzar» de un click convierte en trámite algo irreversible.
+
+**⚠️ `down_sql` NO está congelado** (v15 §4.bis). El freeze mira **solo** `up_sql` y los overrides
+por motor. `down_sql` se puede editar **siempre**, incluso con `sql_frozen: true` y sin ningún
+factor de confirmación. No es un descuido: confirmar el rollback después de aplicar es un flujo
+soportado. **Si la UI deshabilita el formulario entero cuando `sql_frozen` es true, cierra la
+única salida de ese otro 409 y deja la versión sin forma de revertirse nunca.**
+
+**El malentendido más probable de toda la feature.** Editar `up_sql` **no re-ejecuta nada**. Las
+BDs listadas en `blocking_databases[]` **conservan físicamente** lo que ya se les aplicó y siguen
+necesitando corrección **por otra vía** (para collation, el módulo de conversión — tarea
+`86e2ywnrg`). La pantalla de confirmación tiene que decirlo explícitamente.
+
+**Token.** Reenviar en el PATCH **el mismo SQL** que se mandó al preview; si el usuario lo retoca,
+volver a pedir preview (si no, 422). El **410** (vencido) y el **422 sin code** (el token no
+corresponde al SQL/versión) no llevan `code` — salen del servicio de tokens, compartido. Se
+clasifican por **status**, y en los dos casos el CTA es el mismo: **volver a pedir el preview**.
+**Nunca re-previsualizar en silencio:** el usuario tiene que volver a ver a quién deja divergente.
+
+**`sql_diverged`** se muestra como **insignia informativa**. **NO** deshabilitar acciones por ella:
+no restringe nada.
+
+**Corrección a la v14.** Ese documento decía «No hay force» y «No ofrecer ‘Forzar’: ninguno de los
+dos 409 tiene escape». Sigue siendo cierto para `model_migration.still_applied` (el DELETE), pero
+**ya no** para `model_migration.sql_frozen` (el PATCH): ese 409 ahora trae
+`public_context.override_available: true`.
+
+**Contrato:** `docs/api-reference-v15.md` — commit `89380ce` (checklist de SPA en §7).
+**Plan de UI:** `docs/frontend/plan-editar-version-aplicada.md` — 6 vistas, wireframes, estados,
+copy literal de los 11 mensajes delicados, ciclo de vida del `confirm_token`, tabla «Qué revisar si
+ya se implementó según v14» y 7 preguntas abiertas en §8.
+
+**Sigue sin resolverse (dicho por el backend).** No hay endpoint público de auditoría, así que la
+UI **no puede** explicar qué bases divergieron históricamente ni cuándo — solo lo que vio en el
+preview de esa sesión. Es lo que convertiría `sql_diverged` de insignia en explicación. Si hace
+falta, hay que abrir tarea.
+
+**Fuera de alcance de esta tanda:** `86e2yx2pq` (desbloquear versión no aplicada), por decisión
+del usuario. Describe **el mismo 409**: aporta `blocking_databases[]` con su vocabulario de
+`reason` y el CTA fino entre fix-forward y revertir.
 
 **La columna "Qué quedó SIN verificar" no es opcional.** En este repo los tests **no se ejecutan
 por rutina** (ver «Tests: escribirlos sí, ejecutarlos no» en `CLAUDE.md`), así que es normal que
