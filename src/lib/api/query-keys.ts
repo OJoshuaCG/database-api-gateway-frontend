@@ -48,6 +48,19 @@ export const queryKeys = {
     migrationDetail: (modelId: number, version: string) =>
       ['database-models', modelId, 'migrations', 'detail', version] as const,
   },
+  /**
+   * Proyectos (api-reference-v16). `blueprints` y la vista inversa `ofBlueprint` NO llevan
+   * params: sus endpoints no aceptan `page`/`size` y devuelven la lista completa.
+   */
+  projects: {
+    all: ['projects'] as const,
+    list: (params: QueryParams) => ['projects', 'list', params] as const,
+    detail: (id: number) => ['projects', 'detail', id] as const,
+    blueprints: (id: number) => ['projects', id, 'blueprints'] as const,
+    /** Proyectos a los que pertenece UN blueprint (§3.9). Cuelga de `projects` para que
+     *  vincular/desvincular la invalide con una sola llamada. */
+    ofBlueprint: (modelId: number) => ['projects', 'of-blueprint', modelId] as const,
+  },
   managedDatabases: {
     all: ['managed-databases'] as const,
     list: (params: QueryParams) => ['managed-databases', 'list', params] as const,
