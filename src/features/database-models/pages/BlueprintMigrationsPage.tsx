@@ -13,6 +13,7 @@ import {
   Spinner,
   TabButton,
 } from '@/components/ui'
+import { BlueprintProjectsSection } from '@/features/projects'
 import { PAGINATION, type ModelDatabaseStatus } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
@@ -125,6 +126,11 @@ export function BlueprintMigrationsPage() {
           </Badge>
         </div>
       </div>
+
+      {/* A qué proyectos pertenece este blueprint (api-reference-v16 §3.9). Va con la cabecera y
+          fuera de las pestañas porque describe al blueprint en sí, no a sus versiones ni a su
+          estado en las BDs. Su carga no bloquea nada: si falla, el resto de la pantalla sigue. */}
+      <BlueprintProjectsSection modelId={modelId} />
 
       <div role="tablist" className="flex items-center gap-1 border-b border-border">
         <TabButton active={tab === 'versiones'} onClick={() => setTab('versiones')}>

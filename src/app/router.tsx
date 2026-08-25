@@ -47,6 +47,7 @@ const NewModelMigrationPage = lazyPage(
   () => import('@/features/database-models'),
   'NewModelMigrationPage',
 )
+const ProjectDetailPage = lazyPage(() => import('@/features/projects'), 'ProjectDetailPage')
 const ManagedDatabasesPage = lazyPage(
   () => import('@/features/managed-databases'),
   'ManagedDatabasesPage',
@@ -101,6 +102,9 @@ export const router = createBrowserRouter([
           { path: 'server-users', element: <ServerUsersPage /> },
           { path: 'server-users/:userId/grants', element: <ServerUserGrantsPage /> },
           { path: 'database-models', element: <DatabaseModelsPage /> },
+          // El LISTADO de proyectos no tiene ruta propia: es la pestaña por defecto de
+          // `/database-models`. Solo el detalle necesita una, porque es una pantalla completa.
+          { path: 'projects/:projectId', element: <ProjectDetailPage /> },
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
           {
