@@ -95,6 +95,19 @@ export function BlueprintsPanel() {
             <Button variant="ghost" size="sm" onClick={() => setDatabasesTarget(row.original)}>
               Ver BDs
             </Button>
+            {/*
+              Entrada al lote de conversión de collation. Va acá y no en el menú de una base
+              porque el conjunto a convertir lo define el BLUEPRINT: son todas sus bases activas.
+              La pestaña de deriva de esa misma pantalla responde la pregunta previa —¿hace falta
+              convertir algo?— así que este botón también es el camino a "ver si hay deriva".
+            */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/database-models/${row.original.id}/collation-batches`)}
+            >
+              Collation
+            </Button>
             <IconButton
               label="Editar"
               icon={<PencilIcon />}

@@ -133,6 +133,15 @@ export const queryKeys = {
     preview: (id: number, body: unknown) => ['collation-conversions', id, 'preview', body] as const,
     items: (id: number, params: QueryParams) =>
       ['collation-conversions', id, 'items', params] as const,
+    /**
+     * Lote por blueprint. Se cuelga de `database-models` y no de `collation-conversions` a
+     * propósito: la clave la invalida el blueprint (planificar, ejecutar, cancelar, versionar),
+     * no un job suelto, y así `collationConversions.all` no arrastra los lotes al invalidarse.
+     */
+    batch: (modelId: number, batchId: number) =>
+      ['database-models', modelId, 'collation-batches', batchId] as const,
+    /** Deriva declarada vs. inventario. No toca el motor: puede refrescarse sin costo. */
+    drift: (modelId: number) => ['database-models', modelId, 'collation-drift'] as const,
   },
   databaseExports: {
     all: ['database-exports'] as const,

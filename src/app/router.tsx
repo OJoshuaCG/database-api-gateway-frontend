@@ -47,6 +47,10 @@ const NewModelMigrationPage = lazyPage(
   () => import('@/features/database-models'),
   'NewModelMigrationPage',
 )
+const BlueprintCollationBatchPage = lazyPage(
+  () => import('@/features/collation-conversions'),
+  'BlueprintCollationBatchPage',
+)
 const ProjectDetailPage = lazyPage(() => import('@/features/projects'), 'ProjectDetailPage')
 const ManagedDatabasesPage = lazyPage(
   () => import('@/features/managed-databases'),
@@ -107,6 +111,13 @@ export const router = createBrowserRouter([
           { path: 'projects/:projectId', element: <ProjectDetailPage /> },
           { path: 'database-models/from-snapshot', element: <SnapshotWizardPage /> },
           { path: 'database-models/:modelId/migrations', element: <BlueprintMigrationsPage /> },
+          // Conversión de collation de TODAS las bases del blueprint. Cuelga del blueprint —y no
+          // de `/collation-conversions` como el asistente por base— porque el `modelId` no es un
+          // filtro: es lo que define el conjunto a convertir. Reentrada por `?batchId=`.
+          {
+            path: 'database-models/:modelId/collation-batches',
+            element: <BlueprintCollationBatchPage />,
+          },
           {
             path: 'database-models/:modelId/migrations/new',
             element: <NewModelMigrationPage />,
