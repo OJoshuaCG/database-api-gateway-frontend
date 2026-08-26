@@ -129,7 +129,7 @@ function ItemStatusCell({ item }: { item: CollationConversionItemOut }) {
  * empezar de nuevo) viven acá.
  */
 export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
-  const { job, items, mode, savedTotals } = wizard
+  const { job, items, mode } = wizard
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
 
   if (job.isLoading && !job.data) {
@@ -155,7 +155,15 @@ export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
 
   const tablesDone = data.progress?.tables_done ?? 0
   const objectsDone = data.progress?.objects_done ?? 0
-  const showObjectsCounter = mode === 'universal' && (savedTotals?.objectsToRecreate ?? 0) > 0
+
+  // Los totales vienen del SERVIDOR (v17 §2), no de estado local. Antes se guardaba el total del
+  // preview en React, y se perdía al recargar justo en una operación que dura horas: al volver, la
+  // barra pasaba de "3 de 40" a "3 procesadas". Son `null` solo si el job nunca se previsualizó,
+  // caso que este paso no alcanza (no se puede ejecutar sin preview), pero el fallback se conserva
+  // para no romper un deep-link a un job en un estado raro.
+  const tablesTotal = data.tables_total
+  const objectsTotal = data.objects_total
+  const showObjectsCounter = mode === 'universal' && (objectsTotal ?? 0) > 0
 
   const singlePage = items.data && items.data.pagination.pages === 1
   const problemCount = singlePage
@@ -208,9 +216,7 @@ export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
               Tablas
             </span>
             <span className="text-lg font-semibold text-foreground">
-              {savedTotals
-                ? `${tablesDone} de ${savedTotals.tablesToConvert}`
-                : `${tablesDone} procesadas`}
+              {tablesTotal !== null ? `${tablesDone} de ${tablesTotal}` : `${tablesDone} procesadas`}
             </span>
           </div>
           {showObjectsCounter && (
@@ -219,8 +225,8 @@ export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
                 Objetos
               </span>
               <span className="text-lg font-semibold text-foreground">
-                {savedTotals
-                  ? `${objectsDone} de ${savedTotals.objectsToRecreate}`
+                {objectsTotal !== null
+                  ? `${objectsDone} de ${objectsTotal}`
                   : `${objectsDone} procesados`}
               </span>
             </div>

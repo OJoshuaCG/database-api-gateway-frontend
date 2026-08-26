@@ -92,7 +92,6 @@ export interface CollationConversionWizard {
   preview: ReturnType<typeof useCollationConversionPreview>
   refreshPreview: () => void
   savedConfirmToken: string | null
-  savedTotals: { tablesToConvert: number; objectsToRecreate: number } | null
   confirmTargetName: string
   setConfirmTargetName: (value: string) => void
   force: boolean
@@ -191,10 +190,6 @@ export function useCollationConversionWizard(
   const [confirmTargetName, setConfirmTargetName] = useState('')
   const [force, setForce] = useState(false)
   const [savedConfirmToken, setSavedConfirmToken] = useState<string | null>(null)
-  const [savedTotals, setSavedTotals] = useState<{
-    tablesToConvert: number
-    objectsToRecreate: number
-  } | null>(null)
 
   // ── Paso 4 — progreso ────────────────────────────────────────────────────────────
   const [itemsPage, setItemsPageState] = useState(1)
@@ -256,7 +251,6 @@ export function useCollationConversionWizard(
     setForce(false)
     setConfirmTargetName('')
     setSavedConfirmToken(null)
-    setSavedTotals(null)
     setItemsPageState(1)
     setActionCooldown(0)
     clearCooldownTimer()
@@ -359,15 +353,15 @@ export function useCollationConversionWizard(
     setForce(true)
   }, [])
 
-  // Guarda el `confirm_token`/totales del ÚLTIMO preview EXITOSO (patrón "ajustar estado durante
-  // el render"): `progress` del polling nunca trae totales (§3.2), así que sin esto la barra de
-  // avance del monitor no tendría de dónde sacar "de cuántos".
+  // Guarda el `confirm_token` del ÚLTIMO preview EXITOSO (patrón "ajustar estado durante el
+  // render").
+  //
+  // Acá se guardaban también los TOTALES, porque `progress` del polling solo cuenta lo hecho y
+  // nunca el total. Ese parche se perdía al recargar, justo en una operación que dura horas.
+  // Desde v17 §2 los totales vienen del servidor (`tables_total`/`objects_total` del summary)
+  // y sobreviven la recarga, así que el estado local dejó de hacer falta.
   if (preview.data && preview.data.confirm_token !== savedConfirmToken) {
     setSavedConfirmToken(preview.data.confirm_token)
-    setSavedTotals({
-      tablesToConvert: preview.data.tables_to_convert,
-      objectsToRecreate: preview.data.objects_to_recreate,
-    })
   }
 
   const execute = useWrapMutation<
@@ -462,7 +456,6 @@ export function useCollationConversionWizard(
     preview,
     refreshPreview,
     savedConfirmToken,
-    savedTotals,
     confirmTargetName,
     setConfirmTargetName,
     force,
