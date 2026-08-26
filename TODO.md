@@ -91,6 +91,56 @@ reconstruir cuál era el plan, justo cuando se usa «Replanear». Y `severity` s
 
 | # | Ítem | Ejecutor | Rol | Desde | Subtarea |
 | --- | --- | --- | --- | --- | --- |
+| T-260824-lz-collation-lote-y-version | Wizard de conversión de collation **en lote por blueprint**, panel de deriva y CTA de versión de contabilidad | LeoZubiri@outlook.com | frontend | 2026-08-25 | [86e2ywnrg](https://app.clickup.com/t/86e2ywnrg) |
+
+
+### Detalle — T-260824-lz-collation-lote-y-version
+
+**Contrato: `docs/api-reference-v17.md` del repo de backend — NO v14.** El handoff original
+apuntaba a v14; un comentario posterior lo corrige. El número se reasignó al bajar cambios del
+remoto porque v14, v15 y v16 ya estaban tomados. Si alguien empezó a leer v14 para esta tarea, ese
+no es el documento.
+
+**Seis endpoints nuevos** (todos bajo `/database-models/{id}`):
+
+- `POST /collation-conversions` — planifica el lote: un job por BD activa, ya previsualizado, + `batch_token`
+- `POST /collation-conversions/{batch_id}/execute` — confirma y encola
+- `GET  /collation-conversions/{batch_id}` — polling del lote
+- `POST /collation-conversions/{batch_id}/cancel` — frena lo que no arrancó
+- `POST /collation-conversions/{batch_id}/blueprint-version` — versión de contabilidad
+- `GET  /collation-drift` — deriva, sin conexiones al motor
+
+**Cambiado:** `GET /collation-conversions/{id}` gana `batch_id`, `batch_seq`, `tables_total`,
+`objects_total` — los cuatro **nullable**. **Sin breaking changes**: todo es aditivo y los
+contratos Zod no usan `.strict()`.
+
+**Dos trampas de contrato, antes de escribir un solo schema**
+
+1. Cada campo nullable va `.nullable()`, **no** `.optional()`. `ApiResponse` filtra los `None`
+   solo del envelope; los anidados salen como `null` explícito y Zod `.optional()` los rechaza. Es
+   la causa raíz de `T-260822-lz-contratos-nullish`. Y el `safeParse` corre sobre el envelope
+   entero: **una divergencia de un campo cuesta la respuesta completa**.
+2. v17 supersede la afirmación del §3.0 de v8 de que este módulo no usa `public_context`. Los
+   rechazos nuevos traen `public_context.code`. El parser no se toca: `errors.ts` ya lo extrae
+   genéricamente. El §5 del contrato trae los **14 códigos con su texto en español ya redactado**
+   — el mapa de mensajes sale de ahí, no se inventa copy.
+
+**Lo que la UI tiene que decir, y son decisiones de producto, no de estilo**
+
+- **`runs_serially`**: los jobs corren **en serie** (1 worker por default) y un lote de 12 tarda
+  horas. Sin decirlo, el monitor parece colgado. `batch.counts` da el agregado y `batch_seq`
+  permite mostrar "la 4 de 12".
+- La confirmación pide **tres cosas juntas**: slug del blueprint, `database_ids` echado de vuelta,
+  y el nombre re-tipeado de cada BD de entorno protegido (`requires_confirmation` viene en el 422).
+- En deriva, **`unknown` NO es `ok`**: pintarlos igual afirmaría que todo está bien sobre bases de
+  las que no se sabe nada. `source_note` va **textual** — es una caché, no el motor.
+- El CTA de versión lleva `note` visible: la versión **se stampea y NO se aplica**.
+
+**Limpieza que habilita el backend:** se puede borrar el `savedTotals` de
+`use-collation-conversion-wizard.ts` — los totales ahora vienen del servidor y sobreviven la
+recarga.
+
+**No olvidar:** las filas nuevas de `docs/api-coverage.md` (ese archivo vive en este repo).
 
 ---
 

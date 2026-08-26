@@ -247,6 +247,32 @@ sin entrada de sidebar propia — mismo criterio que el borrado de una base. Con
 | `GET /collation-conversions/{id}/items` | ✅ | `MonitorStep` — paginado, con polling mientras el job no sea terminal |
 | `POST /collation-conversions/{id}/cancel` | ✅ | `MonitorStep` — cooperativa, no revierte lo ya aplicado |
 
+### Lote por blueprint, versión de contabilidad y deriva (v17)
+
+Contratos en `lib/contracts/collation-conversions.ts`; códigos y tonos en
+`features/collation-conversions/messages.ts`. Se llega desde el botón **Collation** de cada fila
+de `BlueprintsPanel`, en `/database-models`.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `POST /database-models/{id}/collation-conversions` 🔌 | ✅ | `BatchPlanStep` — planifica un job por BD activa (toca el motor una vez por base: 10/min) |
+| `POST /database-models/{id}/collation-conversions/{batchId}/execute` 🔌 | ✅ | `BatchConfirmStep` — pide las tres confirmaciones (slug, conjunto echado de vuelta, re-tipeo por BD de entorno protegido). 3/min |
+| `GET /database-models/{id}/collation-conversions/{batchId}` | ✅ | `BatchMonitorStep` — polling cada 5 s (no 2 s: el endpoint es 30/min y el lote dura horas) |
+| `POST /database-models/{id}/collation-conversions/{batchId}/cancel` | ✅ | `BatchMonitorStep` — las bases en cola no llegan a tocar el motor; la que convierte corta en el próximo punto seguro |
+| `POST /database-models/{id}/collation-conversions/{batchId}/blueprint-version` | ✅ | `BlueprintVersionCard` — se **stampea, no se aplica**; el `note` del backend se muestra textual |
+| `GET /database-models/{id}/collation-drift` | ✅ | `CollationDriftPanel` — pestaña "Deriva". Sin 🔌 ni rate limit: lee la caché del gateway, no el motor |
+
+> **`unknown` no comparte tono con `ok` en el panel de deriva.** Pintarlos igual afirmaría que
+> todo está bien sobre bases de las que el inventario no tiene registrada la collation, que es una
+> afirmación distinta de "coincide" — y la diferencia importa justo cuando se decide si convertir.
+> Por el mismo motivo `source_note` se muestra **textual**: esa pantalla es una caché, no el motor.
+
+> **Los cuatro campos nuevos del summary de un job** (`batch_id`, `batch_seq`, `tables_total`,
+> `objects_total`) permitieron **borrar** el `savedTotals` de `use-collation-conversion-wizard.ts`.
+> Ese estado existía porque `progress` solo cuenta lo hecho y nunca el total, y se perdía al
+> recargar justo en una operación que dura horas: al volver, el monitor pasaba de "3 de 40" a
+> "3 procesadas". Ahora el total viene del servidor.
+
 > **PostgreSQL — huevo y gallina del catálogo de collations (`[SUPUESTO F1]` del addendum v8).**
 > `available_collations` sale del inventario de un plan ya creado, pero crear un plan ya exige una
 > collation válida. `PlanStep` resuelve esto con la opción que el propio addendum asume del
