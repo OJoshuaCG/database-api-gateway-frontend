@@ -299,6 +299,13 @@ export class ApiError extends Error {
   readonly exportContext?: DatabaseExportErrorContext
   /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
   readonly environmentContext?: EnvironmentErrorContext
+  /**
+   * Contexto del módulo de conversión de collation (v17 §5). Los códigos `collation.*` traen
+   * datos que la UI necesita para ser accionable en vez de solo informativa: sin
+   * `requiresConfirmation` no se sabe QUÉ bases hay que re-tipear, y el operador queda mirando
+   * un mensaje que le pide algo sin decirle sobre qué.
+   */
+  readonly collationContext?: CollationErrorContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
 
@@ -327,6 +334,7 @@ export class ApiError extends Error {
     code?: string
     exportContext?: DatabaseExportErrorContext
     environmentContext?: EnvironmentErrorContext
+    collationContext?: CollationErrorContext
     requestId?: string
   }) {
     super(args.message)
@@ -354,6 +362,7 @@ export class ApiError extends Error {
     this.code = args.code
     this.exportContext = args.exportContext
     this.environmentContext = args.environmentContext
+    this.collationContext = args.collationContext
     this.requestId = args.requestId
   }
 
@@ -773,6 +782,67 @@ export interface EnvironmentErrorContext {
   databaseIdsOutside?: number[]
 }
 
+/**
+ * Datos accionables de un rechazo `collation.*` (contrato v17 §5).
+ *
+ * Cada campo lo trae un código distinto; ninguno viene siempre. La razón de tiparlos acá y no
+ * leerlos a mano en cada componente es que `public_context` es `unknown` en el borde: sin un
+ * extractor, cada pantalla se escribiría su propio casteo y la primera que se equivoque rompe en
+ * runtime, no al compilar.
+ */
+export interface CollationErrorContext {
+  /** `batch_confirmation_required`: IDs de las bases cuyo entorno exige re-tipear el nombre. */
+  readonly requiresConfirmation?: number[]
+  /** `batch_database_set_mismatch`: el conjunto que el servidor había planificado. */
+  readonly plannedDatabaseIds?: number[]
+  /** `batch_database_set_mismatch`: el que mandó el cliente. */
+  readonly receivedDatabaseIds?: number[]
+  /** `version_batch_not_complete`: bases que no terminaron bien. */
+  readonly unfinished?: string[]
+  /** `version_blueprint_has_other_engines`: motores presentes que impiden versionar. */
+  readonly engines?: string[]
+  /** `version_databases_missing_from_batch`: activas que no participaron del lote. */
+  readonly missingDatabaseIds?: number[]
+  /** `version_not_at_head`. */
+  readonly headVersion?: number
+  readonly databasesBehind?: number[]
+  /** `version_partial_selection`: la base que convirtió solo una parte. */
+  readonly databaseName?: string
+  /** `version_too_large`. */
+  readonly bytes?: number
+  readonly maxBytes?: number
+  /** `version_quarantined_before_batch`. */
+  readonly quarantinedDatabaseIds?: number[]
+}
+
+/** Filtra un array desconocido dejando solo sus números finitos; `undefined` si no queda ninguno. */
+function numberList(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const items = value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
+  return items.length > 0 ? items : undefined
+}
+
+function extractCollationContext(
+  code: string | undefined,
+  publicContext: unknown,
+): CollationErrorContext | undefined {
+  if (!code?.startsWith('collation.') || !isRecord(publicContext)) return undefined
+  return {
+    requiresConfirmation: numberList(publicContext.requires_confirmation),
+    plannedDatabaseIds: numberList(publicContext.planned_database_ids),
+    receivedDatabaseIds: numberList(publicContext.received_database_ids),
+    unfinished: stringList(publicContext.unfinished),
+    engines: stringList(publicContext.engines),
+    missingDatabaseIds: numberList(publicContext.missing_database_ids),
+    headVersion: finiteNumber(publicContext.head_version),
+    databasesBehind: numberList(publicContext.databases_behind),
+    databaseName: nonEmptyString(publicContext.database_name),
+    bytes: finiteNumber(publicContext.bytes),
+    maxBytes: finiteNumber(publicContext.max_bytes),
+    quarantinedDatabaseIds: numberList(publicContext.quarantined_database_ids),
+  }
+}
+
 function extractEnvironmentContext(
   code: string | undefined,
   publicContext: unknown,
@@ -857,6 +927,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         code,
         exportContext: extractDatabaseExportContext(code, d.public_context),
         environmentContext: extractEnvironmentContext(code, d.public_context),
+        collationContext: extractCollationContext(code, d.public_context),
         requestId,
       })
     }
