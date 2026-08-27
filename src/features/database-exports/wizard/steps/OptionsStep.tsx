@@ -2,7 +2,8 @@ import { useId } from 'react'
 import { Button, ErrorState, Input, Spinner, Switch } from '@/components/ui'
 import { cn, formatBytes, formatInteger } from '@/lib/utils'
 import type { ExportCapabilities, ExportSpec } from '@/lib/contracts'
-import { Callout, WarningList } from '../../components/Callout'
+import { Callout } from '@/components/ui'
+import { WarningList } from '../../components/Callout'
 import {
   EXPORT_FILENAME_TOKENS,
   readSpecValue,

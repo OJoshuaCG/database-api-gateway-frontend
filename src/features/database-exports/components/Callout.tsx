@@ -1,61 +1,10 @@
-import type { ReactNode } from 'react'
-import { cn } from '@/lib/utils'
+import { Callout } from '@/components/ui'
 
 /**
- * Banda de aviso con tono. No existe un componente compartido para esto —el resto del repo inlinea
- * el `div`— pero esta feature tiene ocho bandas distintas que el contrato exige mostrar (extracción
- * en claro, consistencia asimétrica del motor, `.zip` implícito, entrega en línea no viable, esquema
- * cambiado durante la corrida, artefacto parcial, garantías degradadas y los avisos de la matriz).
- * Repetir el mismo `div` ocho veces con clases a mano es donde se cuela la banda roja que debía ser
- * ámbar — y en esta pantalla el color ES la información.
- *
- * Los colores salen solo de tokens del tema; nunca hex ni rgb.
+ * Bandas propias de la exportación de bases. El `Callout` genérico vive en
+ * `src/components/ui/Callout.tsx` desde que las versiones de blueprint necesitaron bandas
+ * también; acá quedan las dos que son de ESTA feature y no tienen sentido fuera de ella.
  */
-export type CalloutTone = 'info' | 'warning' | 'danger' | 'success'
-
-const TONE_CLASSES: Record<CalloutTone, string> = {
-  info: 'border-primary/30 bg-primary/10 text-foreground',
-  warning: 'border-warning/30 bg-warning/10 text-foreground',
-  danger: 'border-error/40 bg-error/10 text-foreground',
-  success: 'border-success/30 bg-success/10 text-foreground',
-}
-
-const TITLE_CLASSES: Record<CalloutTone, string> = {
-  info: 'text-primary',
-  warning: 'text-warning',
-  danger: 'text-error',
-  success: 'text-success',
-}
-
-interface CalloutProps {
-  tone: CalloutTone
-  title: string
-  children?: ReactNode
-  /** Acción de recuperación, cuando el aviso tiene una salida concreta que ofrecer. */
-  action?: ReactNode
-  className?: string
-}
-
-export function Callout({ tone, title, children, action, className }: CalloutProps) {
-  return (
-    <div
-      // `role="alert"` solo en lo que exige atención inmediata: un `info` permanente anunciado como
-      // alerta convierte al lector de pantalla en ruido de fondo y se deja de escuchar.
-      role={tone === 'danger' || tone === 'warning' ? 'alert' : undefined}
-      className={cn(
-        'flex flex-col gap-2 rounded-card border px-4 py-3 text-sm',
-        TONE_CLASSES[tone],
-        className,
-      )}
-    >
-      <p className={cn('font-semibold', TITLE_CLASSES[tone])}>{title}</p>
-      {children ? (
-        <div className="flex flex-col gap-1 text-muted-foreground">{children}</div>
-      ) : null}
-      {action ? <div className="flex flex-wrap gap-2 pt-1">{action}</div> : null}
-    </div>
-  )
-}
 
 /**
  * Lista de avisos del preview. **Se muestran todos, no solo el primero**: ahí viven a la vez el

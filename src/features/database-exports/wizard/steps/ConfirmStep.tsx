@@ -1,6 +1,7 @@
 import { Badge, Button, EmptyState, Input, Spinner } from '@/components/ui'
 import { engineLabel, formatBytes, formatInteger } from '@/lib/utils'
-import { Callout, PlainDataNotice, WarningList } from '../../components/Callout'
+import { Callout } from '@/components/ui'
+import { PlainDataNotice, WarningList } from '../../components/Callout'
 import { readSpecValue } from '../../logic'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { DatabaseExportWizard } from '../use-database-export-wizard'

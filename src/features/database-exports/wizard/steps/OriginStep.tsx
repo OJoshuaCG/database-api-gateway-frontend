@@ -3,7 +3,8 @@ import { Badge, EmptyState, ErrorState, RadioCardGroup, Spinner } from '@/compon
 import { toApiError } from '@/lib/api/errors'
 import { engineLabel } from '@/lib/utils'
 import type { ExportFormatCapability } from '@/lib/contracts'
-import { Callout, PlainDataNotice } from '../../components/Callout'
+import { Callout } from '@/components/ui'
+import { PlainDataNotice } from '../../components/Callout'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { DatabaseExportWizard } from '../use-database-export-wizard'
 
