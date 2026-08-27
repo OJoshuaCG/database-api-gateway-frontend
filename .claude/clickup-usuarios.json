@@ -39,8 +39,8 @@
       "clickup_id": "180236627",
       "clickup_email": "hzubiri@cero208.com.mx",
       "nombre": "Hedson Zubiri",
-      "confirmado": false,
-      "nota": "INFERIDO, sin confirmar, y más flojo que el anterior: coincide el apellido (es el único Zubiri del workspace) pero NO el nombre de pila (Leo vs Hedson). Confirmalo antes de asignarle nada."
+      "confirmado": true,
+      "nota": "Confirmado por el usuario en sesión (2026-08-27). El email de git (LeoZubiri@outlook.com) no se parece al de ClickUp, pero el de la sesión sí: hzubiri@inbtel.com comparte la parte local con hzubiri@cero208.com.mx, y las tareas T-…-lz-… del tablero ya están asignadas a este id."
     }
   }
 }
