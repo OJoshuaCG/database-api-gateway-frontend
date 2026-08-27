@@ -47,6 +47,13 @@ export function useCreateModelMigration(modelId: number) {
     mutationFn: (body: ModelMigrationCreate) => createModelMigration(modelId, body),
     onSuccess: (migration) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.migrations(modelId) })
+      // Y las vistas de BDs, que NO comparten prefijo con la anterior: la de migraciones es
+      // `['database-models', id, 'migrations']` y la de bases `['database-models', id, 'databases']`.
+      // Hace falta porque el backend calcula `pending_versions` a partir del catálogo de versiones:
+      // una versión nueva sube el pendiente de TODAS las bases del blueprint. Antes no se notaba
+      // porque ese número no se mostraba en ninguna parte; ahora lo dice la ficha de la versión, a
+      // 40 px del selector.
+      invalidateDatabaseViews(queryClient)
       toast.success('Migración creada', `${migration.version} · ${migration.name}`)
     },
     onError: (error) => toast.error('No se pudo crear la migración', toApiError(error).message),
@@ -79,6 +86,9 @@ export function useDeleteModelMigration(modelId: number) {
     mutationFn: (version: string) => deleteModelMigration(modelId, version),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.migrations(modelId) })
+      // Simétrico a la creación: borrar la punta BAJA el pendiente de todas las bases. Ver el
+      // comentario de `useCreateModelMigration`.
+      invalidateDatabaseViews(queryClient)
       toast.success('Migración eliminada')
     },
     onError: (error) => toast.error('No se pudo eliminar la migración', toApiError(error).message),
@@ -97,6 +107,15 @@ export function useApplyAllMigrations(modelId: number) {
         // aplicada, y hasta ahora quedaba rancia después de un apply masivo. Bug preexistente
         // que esta feature vuelve visible al agregarle la columna de entorno.
         invalidateDatabaseViews(queryClient)
+
+        // Y el catálogo de versiones, que este hook no invalidaba: el apply cambia `deletable`,
+        // `block_reason` y `sql_frozen` de las versiones que acaba de aplicar. Sin esto, la ficha
+        // ofrecía «Eliminar» HABILITADO sobre una versión recién aplicada — el backend la rechaza
+        // con 409, pero un botón destructivo cuya habilitación se decide con datos viejos es
+        // precisamente lo que no puede pasar en el card que se lee como «la verdad de esta versión».
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.databaseModels.migrations(modelId),
+        })
 
         // Tres cubos, no dos. Una BD "bloqueada por política" NO es un fallo: es el sistema
         // funcionando, y mezclarla con los errores reales obliga a leer cada fila para saber
