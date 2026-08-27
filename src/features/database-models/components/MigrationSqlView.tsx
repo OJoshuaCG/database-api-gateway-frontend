@@ -42,9 +42,6 @@ export function MigrationSqlView({ migration }: { migration: ModelMigrationOut }
           Sin rollback. El rollback responderá 409 hasta que confirmes un down_sql.
         </p>
       )}
-      {/* `break-all` aquí sí: un checksum es un hex sin puntos de corte, y partirlo no cambia lo
-          que se lee (a diferencia de un identificador SQL). */}
-      <p className="break-all text-xs text-muted-foreground">checksum: {migration.checksum}</p>
     </div>
   )
 }

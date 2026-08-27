@@ -303,10 +303,21 @@ Dos niveles: **definir** los deltas SQL en el blueprint (inventario) y **aplicar
 # Definir (no toca motores)
 DatabaseModelsPage: "Versiones" → /database-models/{modelId}/migrations   features/database-models/pages/BlueprintMigrationsPage.tsx
   ├─ useModelMigrations(modelId, {page,size})  → GET  .../migrations            (resúmenes paginados)
+  │     El listado alimenta TRES piezas, todas sin petición extra:
+  │       · VersionAlertsBar   ← versionAlerts(sorted)      (avisos del catálogo, con su lista y su consecuencia)
+  │       · VersionNavigator   ← desplegable + flechas      (insignias de migration-badges.ts, densidad compacta)
+  │       · VersionFactsCard   ← el resumen de la elegida   (identidad, insignias, fechas, huella, acciones)
+  ├─ useModelDatabases(modelId)                → GET  .../databases            (para «pendiente en N de M» de la ficha)
+  │     Misma clave que la pestaña «Estado en las BDs». La ficha NO deriva «aplicada»: ver version-adoption.ts
+  ├─ useModelMigration(modelId, version)       → GET  .../migrations/{version} (una sola vez: ficha y panel comparten clave)
   ├─ Nueva migración → useCreateModelMigration → POST .../migrations
   │     (la respuesta trae `translated` {mysql,postgresql} + `down_sql_suggested`; se muestran para revisión)
-  ├─ Detalle/edición → useUpdateModelMigration → PATCH .../migrations/{version} (confirmar down_sql / overrides)
-  └─ Aplicar a todas → ApplyAllDialog → useApplyAllMigrations → POST .../migrations/apply-all 🔌 (dry-run/force/max_databases)
+  │     invalida migrations Y databases: una versión nueva sube el pendiente de todas las BDs
+  ├─ Detalle/edición → useUpdateModelMigration → PATCH .../migrations/{version} (confirmar down_sql / overrides / reviewed)
+  ├─ Eliminar (pie de la ficha) → useDeleteModelMigration → DELETE .../migrations/{version}
+  │     doble confirmación reescribiendo el número de versión; invalida migrations Y databases
+  └─ Aplicar a todas → ApplyMigrationsDialog → useApplyAllMigrations → POST .../migrations/apply-all 🔌 (dry-run/force/max_databases)
+        invalida databases Y migrations: el apply cambia deletable/block_reason/sql_frozen de lo aplicado
 
 # Aplicar sobre UNA BD (🔌)
 ManagedDatabasesPage: "Migraciones" → /managed-databases/{databaseId}/migrations   features/managed-databases/pages/ManagedDatabaseMigrationsPage.tsx

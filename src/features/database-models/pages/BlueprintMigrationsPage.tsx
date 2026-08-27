@@ -21,14 +21,24 @@ import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-
 import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPanel'
 import { ApplyMigrationsDialog } from '../components/ApplyMigrationsDialog'
 import { ModelDatabasesStatusTable } from '../components/ModelDatabasesStatusTable'
-import { VersionsTable } from '../components/VersionsTable'
 import { VersionNavigator } from '../components/VersionNavigator'
+import { VersionAlertsBar } from '../components/VersionAlertsBar'
+import { VersionFactsCard } from '../components/VersionFactsCard'
 import { latestVersionOf, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
+import { versionAlerts } from '../version-alerts'
 
 /**
- * Página de versiones de un blueprint (Plan 09 §7-ter), a todo el ancho: arriba un desplegable con
- * las versiones; al elegir una, un card delgado con su estado y, debajo, un card con el SQL y la
- * edición. Sustituye al antiguo modal y al layout maestro-detalle de dos columnas.
+ * Página de versiones de un blueprint (Plan 09 §7-ter), a todo el ancho.
+ *
+ * Cuatro piezas apiladas, en este orden: la barra de avisos del catálogo, el desplegable de versión
+ * (sticky), la **ficha de la versión seleccionada** y el card con su SQL y la edición.
+ *
+ * **Ya no hay tabla de versiones.** Existió para escanear el catálogo, pero acabó siendo el tercer
+ * sitio donde se pintaban las mismas insignias —con tres vocabularios que divergieron— y empujaba
+ * el detalle fuera de la primera pantalla. Lo que aportaba se reparte: el escaneo va a
+ * `VersionAlertsBar` (qué versiones están sin revisar, sin rollback, con el SQL editado o
+ * congelado, con su lista y su consecuencia) y el estado de UNA versión va a `VersionFactsCard`,
+ * que además absorbió el antiguo «card delgado» del panel de detalle.
  */
 export function BlueprintMigrationsPage() {
   const params = useParams()
@@ -82,7 +92,15 @@ export function BlueprintMigrationsPage() {
 
   // Versión punta: solo ella se puede eliminar (Cambio 3); el backend recalcula
   // `current_version` al borrarla.
-  const latestVersion = latestVersionOf(sorted)
+  //
+  // `null` si el catálogo vino RECORTADO por el tope de página: entonces la punta real puede no
+  // estar entre las cargadas, y una pista que nombre la versión equivocada al lado del botón de
+  // borrar es peor que no dar pista. El navegador avisa del recorte.
+  const latestVersion = total > sorted.length ? null : latestVersionOf(sorted)
+
+  // Avisos del catálogo: lógica pura sobre `sorted`, que ya está en memoria. Mismo criterio de
+  // dependencia que el memo de arriba — la dep es el array ordenado, no un `?? []` intermedio.
+  const alerts = useMemo(() => versionAlerts(sorted), [sorted])
 
   if (Number.isNaN(modelId)) {
     return <ErrorState error={new Error('Identificador de blueprint inválido.')} />
@@ -152,9 +170,22 @@ export function BlueprintMigrationsPage() {
         />
       ) : (
         <>
-          {/* Selector de versión: sticky, para no perder de vista cuál se está mirando al
-              bajar por el detalle (que es largo). La tabla de abajo sirve para ESCANEAR las
-              versiones y comparar sus insignias; el navegador, para moverse entre ellas. */}
+          {/* Avisos del catálogo ANTES del selector: dicen si hay algo que resolver en el
+              blueprint —versiones sin revisar que el apply va a rechazar, versiones sin rollback que
+              romperían una reversión— y eso se decide antes de elegir una versión concreta. Es lo
+              que repone el escaneo que daba la tabla eliminada. Si no hay avisos, no se pinta. */}
+          {sorted.length > 0 && (
+            <VersionAlertsBar
+              alerts={alerts}
+              selectedVersion={selected?.version ?? null}
+              onSelect={setSelectedVersion}
+            />
+          )}
+
+          {/* Selector de versión: sticky, para no perder de vista cuál se está mirando al bajar por
+              el detalle (que es largo). Sirve para MOVERSE entre versiones; para escanearlas está la
+              barra de avisos de arriba, porque las insignias del desplegable solo existen mientras
+              el menú está abierto y el menú se cierra al elegir. */}
           {sorted.length > 0 ? (
             <VersionNavigator
               sorted={sorted}
@@ -181,12 +212,17 @@ export function BlueprintMigrationsPage() {
             </Card>
           )}
 
-          {sorted.length > 0 && (
-            <VersionsTable
-              versions={sorted}
-              isLoading={migrations.isLoading}
-              selectedVersion={selected?.version ?? null}
-              onSelect={setSelectedVersion}
+          {/* Ficha de la versión seleccionada: el ÚNICO lugar donde vive su estado. Recibe el
+              resumen que ya está en memoria, así que se pinta al instante al cambiar de versión y
+              solo dos de sus datos esperan al detalle. */}
+          {selected && (
+            <VersionFactsCard
+              modelId={modelId}
+              summary={selected}
+              blueprintCurrentVersion={model.data.current_version}
+              blueprintCollation={model.data.collation}
+              latestVersion={latestVersion}
+              onRequestDelete={setDeleteTarget}
             />
           )}
 
@@ -194,9 +230,7 @@ export function BlueprintMigrationsPage() {
             <ModelMigrationDetailPanel
               modelId={modelId}
               version={selected?.version ?? null}
-              latestVersion={latestVersion}
               blueprintCollation={model.data.collation}
-              onRequestDelete={setDeleteTarget}
               onCreateNewVersion={() => void navigate(newVersionPath)}
             />
           )}
@@ -253,6 +287,12 @@ export function BlueprintMigrationsPage() {
         }}
         title="Eliminar la última versión"
         description={`Se eliminará la versión ${deleteTarget} del blueprint. Es irreversible, y solo es posible en la última versión y mientras ninguna BD la haya aplicado con éxito.`}
+        // El botón vivía al pie del card de SQL: había que bajar por todo el delta para llegar, y
+        // ESE scroll era la fricción. Al subirlo a la ficha —donde se decide, junto al estado de la
+        // versión— hay que reponerla acá, con el mismo molde `confirm_target_name` que el resto de
+        // la app usa para lo irreversible. Sin esto, borrar pasaría a ser dos clics seguidos a dos
+        // dedos del selector que cambia de versión.
+        confirmWord={deleteTarget ?? undefined}
         confirmLabel="Eliminar"
         isLoading={deleteMigration.isPending}
       >

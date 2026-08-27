@@ -52,15 +52,33 @@ describe('VersionNavigator', () => {
   })
 
   it('en la más reciente no se puede avanzar', () => {
+    // `aria-disabled` y NO `disabled`: un botón enfocado que se deshabilita pierde el foco —cae a
+    // `<body>` y el siguiente Tab reinicia el documento—, y con estas flechas como navegación
+    // principal eso se nota en cada recorrido hasta el extremo.
     renderNavigator(null)
-    expect(screen.getByRole('button', { name: 'Versión siguiente' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Versión anterior' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Versión siguiente' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'Versión anterior' })).toHaveAttribute(
+      'aria-disabled',
+      'false',
+    )
+  })
+
+  it('en el extremo la flecha no navega, aunque siga siendo enfocable', async () => {
+    const user = userEvent.setup()
+    const { onSelect } = renderNavigator(null)
+    await user.click(screen.getByRole('button', { name: 'Versión siguiente' }))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('en la más antigua no se puede retroceder', () => {
     renderNavigator('0001')
-    expect(screen.getByRole('button', { name: 'Versión anterior' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Versión siguiente' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Versión anterior' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(screen.getByText('1 de 3')).toBeInTheDocument()
     expect(screen.queryByText('más reciente')).not.toBeInTheDocument()
   })
@@ -80,11 +98,30 @@ describe('VersionNavigator', () => {
     expect(onSelect).toHaveBeenCalledWith('0010')
   })
 
-  it('avisa cuando el backend tiene más versiones de las cargadas', () => {
+  it('con el catálogo recortado avisa y RETIRA la afirmación de «más reciente»', () => {
+    // Si el backend tiene 120 versiones y solo llegaron 3, la punta real puede no estar entre
+    // ellas: afirmar «más reciente» al lado de la ficha que ofrece borrar sería inventar.
     const sorted = sortVersionsAscending(RAW)
     renderWithProviders(
       <VersionNavigator sorted={sorted} index={2} onSelect={vi.fn()} total={120} />,
     )
-    expect(screen.getByText('· 120 versión(es) en total')).toBeInTheDocument()
+    expect(screen.getByText('Se cargaron 3 de 120 versiones')).toBeInTheDocument()
+    expect(screen.queryByText('más reciente')).not.toBeInTheDocument()
+  })
+
+  it('anuncia la versión ENTERA con su estado, no solo la posición', () => {
+    // La región live decía «3 de 12» y nada más: quien navega con lector de pantalla pulsaba la
+    // flecha y no se enteraba ni de qué versión ni de si estaba sin rollback.
+    renderNavigator(null)
+    expect(
+      screen.getByText(/Versión 0010, paso 0010\. sin rollback\. Posición 3 de 3\./),
+    ).toBeInTheDocument()
+  })
+
+  it('el desplegable pinta «sin rollback», que antes no existía en ninguna vista', async () => {
+    const user = userEvent.setup()
+    renderNavigator(null)
+    await user.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    expect(screen.getAllByText('sin rollback').length).toBeGreaterThan(0)
   })
 })

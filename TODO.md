@@ -155,6 +155,11 @@ También van acá las tareas que quedaron **bloqueadas por backend** (`on hold` 
 
 | # | Ítem | Detalle | Estado | Subtarea |
 | --- | --- | --- | --- | --- |
+| T-260827-lz-placeholder-version-guard | `keepPreviousData` en `useModelMigration` **con** el guard de versión | Es la única query de la pantalla sin `keepPreviousData` (la convención del repo: 12 hooks lo tienen). **Las dos mitades van juntas:** hay tres escrituras que usan `data.version` —PATCH, DELETE y los enlaces de capturas— y con placeholder activo un clic en la ventana de carga actúa sobre la versión ANTERIOR, en un motor real. Hace falta `const stale = data.version !== version`, cerrar las acciones mientras `stale`, y un early return en `handleSubmitEdit`. Opcional en el mismo terreno: prefetch de la versión vecina al hover de las flechas (con retardo; el detalle puede rondar 1 MB). | 🔴 `to do` · high | [86e30jejc](https://app.clickup.com/t/86e30jejc) |
+| T-260827-lz-prism-details-eager | El `<details>` de SQL traducido monta Prism eagerly | El coste de cambiar de versión no es la red: son **cinco** `CodeBlock` tokenizando con Prism en el render, tres de ellos dentro del `<details ... open>` de `ModelMigrationDetailPanel.tsx:476`. Con `up_sql` de hasta 256 KB, el peor caso es ~1 MB tokenizado en el hilo principal por clic. Quitar el `open` **no basta**: `<details>` cerrado sigue montando sus hijos en React, hay que montar `MigrationSqlView` condicionalmente. | 🔴 `to do` · normal | [86e30jep5](https://app.clickup.com/t/86e30jep5) |
+| T-260827-lz-panel-colapsa-al-cambiar-version | El `return` temprano del panel colapsa el detalle y clampa el scroll | `ModelMigrationDetailPanel.tsx:182-192` devuelve un card de una línea mientras carga: miles de píxeles pasan a ~64 y vuelven, y si había scroll la página salta al principio. Arreglo: mantener la altura del `CodeBlock` y pintar el spinner dentro del card. Se descubrió al verificar la ficha — el card nuevo no salta, pero el salto seguía un card más abajo. | 🔴 `to do` · normal | [86e30jeqz](https://app.clickup.com/t/86e30jeqz) |
+| T-260827-lz-badge-title-no-accesible | Barrido: el `title` de `Badge` no es texto accesible | `Badge.tsx:29` lo pone en un `<span>` no interactivo: no es nombre accesible, no se enfoca, y en táctil no existe. Auditar los `Badge` con `title` de toda la app y mover a `Callout` lo que decida algo. Ídem el patrón `<span title>` envolviendo un botón `disabled`. Ya resuelto en `VersionFactsCard` y `MigrationBadges`; esto es aplicarlo al resto. | 🔴 `to do` · low | [86e30jeww](https://app.clickup.com/t/86e30jeww) |
+| T-260827-lz-pedir-applied-database-count | **Petición al backend:** `applied_database_count` en `ModelMigrationSummary` | Para poder decir «aplicada en 7 de 12» en vez de «pendiente en 4 de 12». El frontend NO puede derivarlo: `model_version >= version` no distingue aplicada de declarada (`stamp` con `force`, `adopt`, el alta declarando versión, versiones intermedias creadas después), y `pending_versions` sale del mismo escalar. El backend ya lo calcula en `_still_applied_cached`, dentro de `_policy_flags`, para cada fila del listado — y descarta el resultado. **NO está en `on hold`**: nada quedó trabado, la ficha se entregó sin el campo. | 🔴 `to do` · normal | [86e30jf6f](https://app.clickup.com/t/86e30jf6f) |
 
 ---
 
@@ -162,8 +167,93 @@ También van acá las tareas que quedaron **bloqueadas por backend** (`on hold` 
 
 | # | Ítem | Qué se hizo | Qué quedó SIN verificar | Subtarea |
 | --- | --- | --- | --- | --- |
+| T-260827-lz-ficha-version-blueprint | Ficha de la versión seleccionada en la pestaña «Versiones» del blueprint | Se eliminó `VersionsTable` **reponiendo lo que se llevaba**: vocabulario único de insignias en `migration-badges.ts` (el desplegable gana `sin rollback`, `no portable`, `SQL congelado` y `SQL editado`), nueva `VersionAlertsBar` con las listas filtradas y su consecuencia, y `VersionFactsCard` bajo el selector, que absorbe el «card delgado» del panel de detalle (−112 líneas). Adopción **sin derivar**: «pendiente en N de M» + los booleanos de `block_reason`. Entran tres arreglos que la ficha volvía peligrosos: invalidar `databases` al crear/borrar versión, invalidar `migrations` tras `apply-all`, y `confirmWord` en el borrado. | **Los tests no se ejecutaron** (política del repo): 48 casos escritos/actualizados en 7 archivos, ninguno corrido. `typecheck`, `eslint` y `build` sí pasan. **Nada probado contra el backend real** — en particular `pending_versions` para BDs sin `model_version`, y el 404 del detalle que dispara la banda «esta versión ya no existe». Sin verificar en `< md` ni con lector de pantalla real. | [86e30hemx](https://app.clickup.com/t/86e30hemx) |
 | T-260822-oc-projects-agrupar-blueprints | Módulo Proyectos: dos pestañas en la vista de blueprints | Feature `src/features/projects/` completa (9 endpoints de la v16). `/database-models` pasa a tener dos pestañas —«Proyectos» por defecto y «Blueprints» con el catálogo completo— y el detalle del proyecto vive en `/projects/:projectId`. Vista inversa dentro de la pantalla del blueprint. | **Los tests no se ejecutaron** (política del repo): 6 casos escritos en `use-projects.test.tsx` + ampliación de `errors.test.ts`, ninguno corrido. **Nada probado contra el backend real**: los contratos Zod se escribieron a mano desde la v16, así que una diferencia de forma fallará en runtime. Sin comprobar que `description` viaje como `null` explícito dentro de `data`. | [86e2y0zq9](https://app.clickup.com/t/86e2y0zq9) |
 | T-260824-ojoshuac-editar-version-aplicada | Editar el SQL de una versión ya aplicada (doble factor) | El 409 `sql_frozen` se clasifica por código y ofrece dos salidas si trae `override_available`. La segunda abre el flujo de dos pasos (`edit-preview` → confirmación) con la lista de BDs divergentes, cuenta atrás del token e insignia `sql_diverged`. Corregido el copy que negaba que `down_sql` fuera editable. **Reapertura del mismo día:** auditoría contra el checklist de la §7 que cerró tres huecos — `incomplete_progress` para nombrar la BD del 409 parcial, los efectos colaterales de la §4.bis en el paso 1, y el aviso del reseteo de `reviewed` al editar el rollback de una versión que captura. | **Los tests no se ejecutaron**; además **no se escribieron tests de componente del flujo de dos pasos** — es lo que más falta. **Nada probado contra el backend real**: no se ha visto una respuesta real de `edit-preview`. Sin verificar el camino `requires_confirmation: false` ni el 410 real por caducidad. La forma de `incomplete_progress` se leyó del código del backend (`incomplete_progress_for_migration`), no de una respuesta real. | [86e2z0gmj](https://app.clickup.com/t/86e2z0gmj) |
+
+### Detalle — T-260827-lz-ficha-version-blueprint
+
+Trabajo propio del frontend. Pantalla: `/database-models/:modelId/migrations`, pestaña
+«Versiones» (`src/features/database-models/pages/BlueprintMigrationsPage.tsx`).
+
+**Los dos problemas que resuelve.** (1) Las insignias de una versión viven en **tres** sitios con
+vocabularios ya divergidos: el `renderItem` del `Combobox` en `VersionNavigator` (7 insignias, sin
+`no portable`, `SQL congelado`, `SQL editado` ni `sin rollback`), la fila de `VersionsTable` (8) y el
+«card delgado» del `ModelMigrationDetailPanel` (5). (2) No hay ficha de la versión seleccionada:
+`updated_at` no se muestra en **ninguna** pantalla de la app, aunque es el dato que le da sentido a
+la insignia `⚠ SQL editado tras aplicarse`.
+
+**Qué se hace.** Se elimina `VersionsTable` **reponiendo lo que se lleva**: el Combobox gana las
+insignias que le faltaban y aparece una `VersionAlertsBar` con chips contadores («2 sin revisar»,
+«3 sin rollback») que despliegan la lista de esas versiones — es el destino al que apuntan los dos
+textos que hoy mandan «a la tabla de versiones» (`ApplyMigrationsDialog` y, la fuente real del
+mensaje, `capture.ts`). Bajo el selector va `VersionFactsCard`, que **absorbe el card delgado**.
+Vocabulario único en `MigrationBadges`.
+
+**La decisión que más importa: NO se cuenta «aplicada en N de M BDs».** La regla
+`model_version >= version` no distingue *aplicada* de *declarada*. `pending_versions` **no** es una
+señal independiente: el backend la calcula del mismo escalar
+(`database_model_controller.py:210-217`). Y hay cinco caminos que escriben `model_version` sin
+ejecutar una sentencia — alta declarando versión, `adopt`, `stamp` (con `force`), versiones
+intermedias creadas después (nada exige que la versión sea > max) y punta borrada y recreada —, así
+que una BD registrada y **vacía** contaría como aplicada. El backend define «aplicada» como
+conjunción de fila de historial `status=applied` **y** alcance de versión
+(`model_migration_controller.py:307-321`) y **decidió no publicar los insumos**, por escrito
+(`:400-407`): «se devuelve la DECISIÓN, no sus insumos… si no, tendríamos la misma política escrita
+a los dos lados del contrato».
+
+Por eso la ficha se queda con lo que el backend sí afirma: **«pendiente en N BDs»**
+(`pending_versions.includes(version)`, lectura directa) y los dos booleanos por versión del
+summary — `block_reason === applied` («vigente en alguna BD») y `block_reason === partial`. **No**
+se usa `has_partial_application`: es por BD, no por versión, y atribuiría a la versión seleccionada
+un parcial de otra.
+
+**Bloqueo al backend, en paralelo:** pedir `applied_database_count` (o `applied_database_ids`) en
+`ModelMigrationSummary`, calculado con `_still_applied_cached` — que **ya corre** dentro de
+`_policy_flags` para cada fila del listado y cuyo resultado se descarta. Coste marginal ≈ 0.
+
+**Tres arreglos que entran porque la ficha los vuelve peligrosos.**
+
+1. `useCreateModelMigration` y `useDeleteModelMigration` invalidan solo `migrations(modelId)`; la
+   clave de las BDs es `[database-models, id, databases]` — tercer elemento distinto, sin
+   prefijo común. Pero el backend calcula `pending_versions` desde el catálogo de versiones, así que
+   crear o borrar una versión mueve el pendiente de **todas** las BDs. Hoy no se nota porque el
+   número no se muestra. → `invalidateDatabaseViews`, que ya está importado en ese archivo.
+2. `useApplyAllMigrations` no invalida `migrations(modelId)`, y el apply cambia `deletable` /
+   `block_reason` / `sql_frozen`: sin eso **la ficha ofrece «Eliminar» habilitado sobre una versión
+   recién aplicada**.
+3. El `ConfirmDialog` del borrado no pasa `confirmWord`, aunque lo soporta. El scroll por todo el
+   SQL *era* la fricción; al subir el botón hay que reponerla.
+
+Y dos guardas de la propia ficha: las **mutaciones van cerradas si el detalle no está `success`**
+(la versión puede haber desaparecido y quedaría una ficha entera con acciones activas sobre una
+versión fantasma), y **ninguna fila aparece o desaparece según la carga** — en un card de hechos la
+ausencia se lee como un hecho, así que «editada» existe siempre, con esqueleto de alto fijo y
+«sin ediciones» explícito.
+
+**Detalle físico que condiciona el layout:** el menú del `Combobox` es `absolute`, `max-h-60`
+(240 px) y `z-30`, y se cierra al seleccionar. Nada destructivo puede vivir en esa franja: el botón
+de borrar va al **pie** de la ficha, `danger-soft`, con el número de versión en el texto y el motivo
+del bloqueo como texto visible (no como `title` de un `<span>`, que no funciona con teclado ni en
+táctil).
+
+**Aviso de catálogo recortado:** `PAGINATION.maxSize` es **50**. Con 51+ versiones,
+`latestVersionOf(sorted)` puede no ser la punta real, así que «más reciente» y la pista `not_tip`
+mentirían al lado del botón de borrar. Cuando `total > sorted.length` se avisa y `latestVersion` va
+como `null`.
+
+**Fuera de alcance — tareas nuevas `T-…` a abrir:** (a) `placeholderData: keepPreviousData` en
+`useModelMigration` **junto con** el guard `data.version !== version` en PATCH, DELETE y los enlaces
+de capturas — sin el guard, un clic en la ventana de placeholder actúa sobre la versión anterior en
+un motor real, así que no se entrega lo uno sin lo otro; (b) el `<details ... open>` que monta
+`MigrationSqlView` eagerly y paga 3 de las 5 tokenizaciones de Prism en cada cambio de versión, con
+`up_sql` de hasta 256 KB por bloque; (c) el `return` temprano del panel, que colapsa miles de
+píxeles a ~64 y clampa el scroll al principio; (d) el `title` de `Badge` como texto no accesible,
+transversal a toda la app.
+
+**No olvidar:** `docs/api-coverage.md` (filas de `GET .../databases` y de `BlueprintMigrationsPage`,
+más las de aprobar baseline y del `DELETE`, cuya superficie cambia de componente) y
+`docs/data-flow.md`.
 
 ### Detalle — T-260822-oc-projects-agrupar-blueprints
 

@@ -39,13 +39,7 @@ function detail(overrides: Record<string, unknown> = {}) {
 function mount(overrides: Record<string, unknown> = {}) {
   server.use(http.get(BASE, () => HttpResponse.json({ data: detail(overrides) })))
   renderWithProviders(
-    <ModelMigrationDetailPanel
-      modelId={3}
-      version="0001"
-      latestVersion="0001"
-      onRequestDelete={vi.fn()}
-      onCreateNewVersion={vi.fn()}
-    />,
+    <ModelMigrationDetailPanel modelId={3} version="0001" onCreateNewVersion={vi.fn()} />,
   )
 }
 
@@ -83,44 +77,7 @@ describe('ModelMigrationDetailPanel', () => {
     expect(screen.getByText(/aplicó con éxito/)).toBeInTheDocument()
   })
 
-  it('deshabilita eliminar según `deletable`, y explica el motivo del backend', async () => {
-    mount({ deletable: false, block_reason: 'partial' })
-    const button = await screen.findByRole('button', { name: 'Eliminar esta versión' })
-    expect(button).toBeDisabled()
-    expect(button.parentElement).toHaveAttribute(
-      'title',
-      expect.stringContaining('aplicación parcial'),
-    )
-  })
-
-  it('una versión sin captura no ofrece resultados capturados', async () => {
-    mount()
-    await screen.findByRole('button', { name: 'Editar' })
-    expect(screen.queryByText('Resultados capturados')).not.toBeInTheDocument()
-  })
-
-  it('una versión con captura enlaza a los resultados de cada BD', async () => {
-    server.use(
-      http.get('http://localhost/api/v1/database-models/3/databases', () =>
-        HttpResponse.json({
-          data: [
-            {
-              id: 7,
-              name: 'app_prod',
-              server_id: 1,
-              owner_id: 1,
-              model_id: 3,
-              status: 'active',
-              model_version: '0001',
-              created_at: '2026-07-01T10:00:00Z',
-              updated_at: '2026-07-01T10:00:00Z',
-            },
-          ],
-        }),
-      ),
-    )
-    mount({ capture_selects: true })
-    const link = await screen.findByRole('link', { name: /app_prod/ })
-    expect(link).toHaveAttribute('href', '/managed-databases/7/migrations/0001/select-results')
-  })
+  // El borrado, los resultados capturados y las insignias de estado se mudaron a
+  // `VersionFactsCard`: sus casos viven en `VersionFactsCard.test.tsx`. Acá queda lo que el panel
+  // sigue siendo dueño de hacer — abrirse en lectura y el ciclo de edición.
 })

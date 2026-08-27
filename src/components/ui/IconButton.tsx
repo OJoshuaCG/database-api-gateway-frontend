@@ -20,8 +20,10 @@ export interface IconButtonProps extends Omit<ButtonProps, 'children' | 'size' |
  * Para acciones de dominio —«Adoptar», «Reconciliar», «Aplicar a todas»— usa `Button` con texto:
  * ningún icono las comunica, y sustituirlas por uno hace la interfaz menos entendible, no más.
  *
- * Ojo: un botón `disabled` no dispara el tooltip nativo. Si el motivo de la deshabilitación es
- * importante, envuélvelo en un `<span title="…">`, como ya hace `ModelMigrationDetailPanel`.
+ * Ojo: un botón `disabled` no dispara el tooltip nativo — y un `<span title="…">` alrededor
+ * tampoco llega por teclado ni en táctil. Si el motivo de la deshabilitación es importante,
+ * **escríbelo visible** al lado del control, como hace `VersionFactsCard` con la pista de por qué
+ * no se puede eliminar una versión.
  */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
   { label, icon, size = 'icon-sm', variant = 'ghost', ...props },

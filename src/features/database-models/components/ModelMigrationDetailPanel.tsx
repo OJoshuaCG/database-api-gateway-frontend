@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -13,12 +12,10 @@ import {
 import { toApiError } from '@/lib/api/errors'
 import {
   MIGRATION_ERROR_CODES,
-  type MigrationBlockReason,
   type MigrationEditPreviewIn,
   type MigrationEditPreviewOut,
   type ModelMigrationPatch,
 } from '@/lib/contracts'
-import { useModelDatabases } from '../hooks/use-database-models'
 import {
   useModelMigration,
   usePreviewModelMigrationEdit,
@@ -33,30 +30,10 @@ import { MigrationPartialProgressPanel } from './MigrationPartialProgressPanel'
 interface ModelMigrationDetailPanelProps {
   modelId: number
   version: string | null
-  /** Versión punta (mayor número) del blueprint, solo para redactar la pista del botón. */
-  latestVersion: string | null
   /** Collation de referencia del blueprint, para explicar un COLLATE forzado que difiera. */
   blueprintCollation?: string | null
-  onRequestDelete: (version: string) => void
   /** Fix-forward: abre el formulario de nueva migración (cuando el up_sql ya se aplicó). */
   onCreateNewVersion: () => void
-}
-
-/**
- * Por qué no se puede eliminar la versión, según el `block_reason` del backend. `not_tip` es el
- * único que no impide editarla.
- */
-const DELETE_BLOCK_HINT: Record<
-  MigrationBlockReason | 'none',
-  (latestVersion: string | null) => string | undefined
-> = {
-  none: () => undefined,
-  applied: () =>
-    'Alguna base de datos está hoy en esta versión o en una posterior. Crea una migración compensatoria.',
-  partial: () =>
-    'Tiene una aplicación parcial sin resolver: reconcilia esa BD o completa el apply antes de eliminarla.',
-  not_tip: (latestVersion) =>
-    `Solo se puede eliminar la última versión${latestVersion ? ` (${latestVersion})` : ''}.`,
 }
 
 /**
@@ -115,9 +92,7 @@ interface FrozenConflict {
 export function ModelMigrationDetailPanel({
   modelId,
   version,
-  latestVersion,
   blueprintCollation,
-  onRequestDelete,
   onCreateNewVersion,
 }: ModelMigrationDetailPanelProps) {
   const open = version !== null
@@ -128,10 +103,6 @@ export function ModelMigrationDetailPanel({
   )
   const update = useUpdateModelMigration(modelId)
   const previewEdit = usePreviewModelMigrationEdit(modelId)
-  // Condicionado a que la versión capture: en el resto no se muestra la lista, y pedirla sería
-  // una llamada de más. Comparte clave con la pestaña de estado, así que si ya se cargó allí
-  // esto no dispara nada.
-  const databases = useModelDatabases(modelId, data?.capture_selects === true)
 
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [upSqlLocked, setUpSqlLocked] = useState(false)
@@ -279,70 +250,14 @@ export function ModelMigrationDetailPanel({
     )
   }
 
-  const approveBaseline = () => {
-    update.mutate({ version: data.version, body: { reviewed: true } })
-  }
-
-  const needsReview = data.reviewed === false
   const capturesSelects = data.capture_selects === true
-  const deleteHint = DELETE_BLOCK_HINT[data.block_reason ?? 'none'](latestVersion)
   const split = frozen ? splitPatchBody(frozen.body) : null
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Card delgado: estado de la versión */}
-      <Card>
-        <CardContent className="py-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">{data.version}</code>
-            <span className="font-medium text-foreground">{data.name}</span>
-            <span className="flex flex-wrap items-center gap-1.5">
-              {data.is_baseline && <Badge tone="info">baseline</Badge>}
-              {data.has_non_portable && (
-                <Badge tone="warning">🔒 {data.source_engine ?? 'motor específico'}</Badge>
-              )}
-              {/* Insignia informativa: NO deshabilita ninguna acción. El SQL nuevo es el que se
-                  aplica de aquí en más; esto solo dice que alguna base se quedó con el viejo. */}
-              {data.sql_diverged && (
-                <Badge
-                  tone="warning"
-                  title="El SQL de esta versión se editó después de que alguna base la aplicara. Esas bases conservan el esquema anterior: esta versión ya no describe el plano de todas sus bases."
-                >
-                  ⚠ SQL editado tras aplicarse
-                </Badge>
-              )}
-              {capturesSelects ? (
-                data.reviewed === false ? (
-                  <Badge tone="warning">⚠️ Captura sin revisar</Badge>
-                ) : (
-                  <Badge tone="info">🔒 Captura aprobada</Badge>
-                )
-              ) : data.reviewed === false ? (
-                <Badge tone="warning">⚠ pendiente de revisión</Badge>
-              ) : data.reviewed === true ? (
-                <Badge tone="success">revisado</Badge>
-              ) : null}
-            </span>
-            {needsReview && (
-              <Button
-                size="sm"
-                className="ml-auto"
-                isLoading={update.isPending}
-                onClick={approveBaseline}
-              >
-                Revisar y aprobar
-              </Button>
-            )}
-          </div>
-          {needsReview && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {capturesSelects
-                ? 'Esta versión tiene activada la captura de resultados de SELECT y aún no fue revisada: el SQL de arriba guardará filas de la BD destino (cifradas) en el gateway. No se podrá aplicar/revertir/stampear (el backend responde 409) hasta aprobarla.'
-                : 'Este baseline se capturó del motor y nace sin revisar: no se podrá aplicar a ninguna BD (el backend responde 409) hasta aprobarlo.'}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* El estado de la versión —insignias, avisos y la aprobación del baseline— vive en
+          `VersionFactsCard`, arriba, junto al selector. Acá solo queda el SQL: había un «card
+          delgado» que repetía las mismas insignias con un vocabulario propio, y era el tercero. */}
 
       {/* Card de detalles: SQL en lectura y, bajo demanda, edición */}
       <Card>
@@ -449,30 +364,6 @@ export function ModelMigrationDetailPanel({
             </div>
           )}
 
-          {/* Puente que faltaba: una versión con captura decía "🔒 captura aprobada" pero no
-              ofrecía ningún camino hacia lo capturado — solo se llegaba entrando a la ficha de
-              cada BD. No se consulta nada por adelantado: la pantalla de destino ya muestra
-              vacío si esa BD no tiene capturas de esta versión (el backend no da error). */}
-          {capturesSelects && (databases.data?.length ?? 0) > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-              <span className="text-sm font-medium text-foreground">Resultados capturados</span>
-              <p className="text-xs text-muted-foreground">
-                Solo se conserva la corrida más reciente por BD, y caduca sola.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {(databases.data ?? []).map((db) => (
-                  <Link
-                    key={db.id}
-                    to={`/managed-databases/${db.id}/migrations/${data.version}/select-results`}
-                    className="rounded-md border border-border px-2 py-1 text-xs text-primary hover:bg-primary/10"
-                  >
-                    {db.name} →
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
           <details className="rounded-lg border border-border p-3" open>
             <summary className="cursor-pointer text-sm font-medium text-foreground">
               SQL traducido por motor (referencia)
@@ -482,18 +373,6 @@ export function ModelMigrationDetailPanel({
             </div>
           </details>
 
-          <div className="flex justify-end border-t border-border pt-3">
-            <span title={deleteHint} className={data.deletable ? undefined : 'cursor-not-allowed'}>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!data.deletable}
-                onClick={() => onRequestDelete(data.version)}
-              >
-                Eliminar esta versión
-              </Button>
-            </span>
-          </div>
         </CardContent>
       </Card>
 

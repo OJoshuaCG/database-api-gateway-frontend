@@ -283,7 +283,8 @@ export function ApplyMigrationsDialog({
                 Captura sin aprobar: {blockedByReview.join(', ')}
               </strong>{' '}
               — el backend va a rechazar (409) cada BD que tenga esas versiones pendientes.
-              Revisá qué consultan y aprobalas en la tabla de versiones antes de aplicar.
+              Revisá qué consultan y aprobalas antes de aplicar: el aviso «sin revisar» de la
+              pantalla del blueprint las lista y lleva a cada una.
             </p>
           </div>
         )}

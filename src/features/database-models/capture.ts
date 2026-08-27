@@ -74,7 +74,7 @@ export function describeCaptureRejection(versions: readonly string[]): string {
   const lista = versions.length > 0 ? ` (${versions.join(', ')})` : ''
   return (
     `No se intentó: no se ejecutó ningún DDL en esta base. Hay versiones con captura de ` +
-    `SELECT sin aprobar${lista}. Revisá qué consultan y aprobalas en la tabla de versiones ` +
-    `antes de reintentar.`
+    `SELECT sin aprobar${lista}. Revisá qué consultan y aprobalas —el aviso «sin revisar» de ` +
+    `la pantalla del blueprint las lista— antes de reintentar.`
   )
 }

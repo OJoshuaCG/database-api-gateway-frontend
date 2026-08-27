@@ -56,7 +56,7 @@ function mockDrift(declared: { charset: string | null; collation: string | null 
  * `DataTable` renderiza cada fila DOS veces: la tabla (`md` para arriba) y una tarjeta por fila
  * (debajo de `md`), que es cómo el repo evita el scroll horizontal. En jsdom las dos existen a la
  * vez, así que toda consulta por texto de celda encuentra dos nodos. Mismo criterio que
- * `VersionsTable.test.tsx`.
+ * `VersionAlertsBar.test.tsx`.
  */
 function primerNodo(texto: string | RegExp): HTMLElement {
   return screen.getAllByText(texto)[0]!
