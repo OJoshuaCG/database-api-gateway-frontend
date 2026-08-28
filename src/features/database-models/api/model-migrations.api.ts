@@ -1,11 +1,15 @@
-import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
+import { fetchData, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
 import {
   applyAllResultSchema,
+  migrationDeletePlanOutSchema,
+  migrationDeleteResultSchema,
   migrationEditPreviewOutSchema,
   migrationValidateOutSchema,
   modelMigrationOutSchema,
   modelMigrationSummarySchema,
   type ApplyAllResult,
+  type MigrationDeletePlanOut,
+  type MigrationDeleteResult,
   type MigrationValidateIn,
   type MigrationValidateOut,
   type ModelMigrationCreate,
@@ -64,12 +68,58 @@ export function updateModelMigration(
   )
 }
 
-/** `DELETE .../migrations/{version}` — solo si no tiene historial de aplicación (§8). */
+/**
+ * `GET .../migrations/{version}/delete-plan` (api-reference-v18 §2) — paso 1 del borrado de una
+ * versión **intermedia**.
+ *
+ * Es un GET y no modifica nada, pero **abre conexión a cada BD del blueprint** para leer en qué
+ * versión está parada de verdad. Por eso su veredicto es autoritativo y las banderas del listado
+ * (`deletable`, `delete_requires_stamps`) son solo una pista de caché para elegir el diálogo.
+ *
+ * Devuelve el renumerado del blueprint, los punteros que habría que mover en BDs reales
+ * (`stamp_plan` 🔌) y, si hace falta confirmar, el `confirm_token` que autoriza el DELETE. Ese
+ * token vive **2 minutos**: no se guarda para «después», se pide y se usa.
+ */
+export function getModelMigrationDeletePlan(
+  modelId: number,
+  version: string,
+  signal?: AbortSignal,
+): Promise<MigrationDeletePlanOut> {
+  return fetchData(
+    `${base(modelId)}/${encodeURIComponent(version)}/delete-plan`,
+    migrationDeletePlanOutSchema,
+    { signal },
+  )
+}
+
+/**
+ * `DELETE .../migrations/{version}` 🔌 (api-reference-v18 §3) — borra la versión, renumera el
+ * blueprint y, si el plan lo exige, **mueve punteros de versión en BDs reales**.
+ *
+ * `confirmToken` sale del `delete-plan` y es obligatorio **solo** cuando el plan mueve punteros;
+ * mandarlo cuando no hace falta entrena al cliente a mandarlo siempre y vacía la confirmación de
+ * sentido. Va como query param, y `buildUrl` descarta el `undefined`, así que un token ausente no
+ * llega a la URL como la cadena "undefined".
+ *
+ * El schema es `.nullable().optional()` y eso es compatibilidad, no adorno: un gateway anterior a
+ * v18 responde sin cuerpo útil para el borrado de la punta —y `ApiResponse` **omite del envelope**
+ * las claves nulas de primer nivel, así que ese `data: null` llega directamente como clave
+ * ausente—. Con un schema estricto, un borrado que el backend YA ejecutó terminaría en «La API
+ * devolvió una respuesta inesperada.», que es el peor modo de fallo posible: la operación
+ * destructiva pasó y el operador no ve qué hizo. Un `null` de vuelta significa «se borró, el
+ * gateway no cuenta el detalle», no «no se borró».
+ */
 export function deleteModelMigration(
   modelId: number,
   version: string,
-): Promise<string | undefined> {
-  return mutateVoid('DELETE', `${base(modelId)}/${encodeURIComponent(version)}`)
+  confirmToken?: string | null,
+): Promise<MigrationDeleteResult | null> {
+  return mutateData(
+    'DELETE',
+    `${base(modelId)}/${encodeURIComponent(version)}`,
+    migrationDeleteResultSchema.nullable().optional(),
+    { query: { confirm_token: confirmToken ?? undefined } },
+  ).then((result) => result ?? null)
 }
 
 export interface ApplyAllOptions {

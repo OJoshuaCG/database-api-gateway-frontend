@@ -16,6 +16,7 @@ import {
   createModelMigration,
   deleteModelMigration,
   getModelMigration,
+  getModelMigrationDeletePlan,
   listModelMigrations,
   previewModelMigrationEdit,
   updateModelMigration,
@@ -79,19 +80,38 @@ export function useUpdateModelMigration(modelId: number) {
   })
 }
 
+/**
+ * Borra una versión del blueprint (api-reference-v18 §3).
+ *
+ * `confirmToken` sale del `delete-plan` y solo hace falta cuando el plan mueve punteros de versión
+ * en BDs reales; por eso la mutación recibe un objeto y no el `version` pelado.
+ */
 export function useDeleteModelMigration(modelId: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
   return useMutation({
-    mutationFn: (version: string) => deleteModelMigration(modelId, version),
+    mutationFn: ({ version, confirmToken }: { version: string; confirmToken?: string | null }) =>
+      deleteModelMigration(modelId, version, confirmToken),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.migrations(modelId) })
+      // El detalle del blueprint, que hasta v18 no se invalidaba acá porque el borrado solo podía
+      // ser el de la punta y nadie miraba el número después. Ahora se puede borrar una versión
+      // INTERMEDIA: el renumerado cambia `current_version` del blueprint, que la página pinta.
+      // Sin esta invalidación la ficha sigue anunciando una versión que ya se llama de otra forma.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.detail(modelId) })
       // Simétrico a la creación: borrar la punta BAJA el pendiente de todas las bases. Ver el
-      // comentario de `useCreateModelMigration`.
+      // comentario de `useCreateModelMigration`. En v18 cubre además las BDs a las que el borrado
+      // les movió el puntero (`stamped`): su versión aplicada cambió en el motor, no solo acá.
       invalidateDatabaseViews(queryClient)
       toast.success('Migración eliminada')
     },
-    onError: (error) => toast.error('No se pudo eliminar la migración', toApiError(error).message),
+    // SIN toast de error, a diferencia del resto de mutaciones de este archivo. El único llamador
+    // es `MigrationDeletePlanDialog`, que clasifica los siete códigos del 409 por
+    // `public_context.code` y cae al `message` como último recurso: el toast no añadiría nada, y en
+    // un caso MIENTE. Ante `model_migration.renumber_stamp_failed` sin compensar, un «No se pudo
+    // eliminar la migración» se lee como «no pasó nada», cuando lo que pasó es que quedaron BDs con
+    // el puntero movido esperando un `stamp` manual — justo lo que el panel explica debajo. De dos
+    // mensajes simultáneos que se contradicen, gana el más corto.
   })
 }
 
@@ -186,6 +206,27 @@ export function usePreviewModelMigrationEdit(modelId: number) {
   return useMutation({
     mutationFn: ({ version, body }: { version: string; body: MigrationEditPreviewIn }) =>
       previewModelMigrationEdit(modelId, version, body),
+  })
+}
+
+/**
+ * Paso 1 del borrado de una versión intermedia (api-reference-v18 §2).
+ *
+ * Es una **mutación y no una query, aunque el endpoint sea un GET**, y la excepción tiene un
+ * motivo concreto: este plan se calcula leyendo la versión de cada BD **del motor en vivo** y emite
+ * un `confirm_token` que vive **2 minutos**. Cachearlo —o dejar que TanStack lo refetchee al
+ * reenfocar la ventana— sería servir un veredicto vencido sobre una realidad que ya cambió, y
+ * rotar por debajo el token que el usuario está a punto de usar. Cada apertura del diálogo tiene
+ * que leer el estado de AHORA.
+ *
+ * Sin toast de éxito: el resultado del plan **es** el contenido del diálogo. Un toast anunciando
+ * que «el plan se calculó» no aporta nada sobre lo que el usuario ya está mirando. Los fallos
+ * tampoco van por toast: cada uno lleva su propio CTA en contexto (reintentar, arreglar la
+ * conexión, resolver la aplicación parcial).
+ */
+export function useModelMigrationDeletePlan(modelId: number) {
+  return useMutation({
+    mutationFn: (version: string) => getModelMigrationDeletePlan(modelId, version),
   })
 }
 

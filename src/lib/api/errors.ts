@@ -195,6 +195,49 @@ export interface ApiIncompleteProgress {
   total_statements: number
 }
 
+/**
+ * Puntero de versión que hay que mover —o que quedó mal movido— en una BD real
+ * (`public_context.stamp_plan` del 409 `model_migration.renumber_confirmation_required` y
+ * `public_context.left_moved` del 409 `model_migration.renumber_stamp_failed`, api-reference-v18
+ * §4).
+ *
+ * snake_case por el mismo motivo que `ApiBlockingDatabase`: es la misma forma que
+ * `migrationStampStepSchema` del contrato Zod, y mantenerlas idénticas permite que un solo
+ * componente pinte el plan de stamps tanto cuando viene del `delete-plan` como cuando viene del
+ * 409. Renombrar aquí obligaría a un adaptador cuyo único trabajo sería deshacer el renombrado.
+ *
+ * `database_name` y `server_id` son opcionales porque el contrato los muestra en `stamp_plan` pero
+ * no los garantiza en `left_moved`: una fila sin nombre degrada a «BD #3», no se descarta.
+ */
+export interface ApiMigrationStampStep {
+  managed_database_id: number
+  database_name?: string
+  server_id?: number
+  from_version: string
+  to_version: string
+}
+
+/**
+ * BD a la que no se le pudo mover el puntero porque la versión destino no existe en su historial
+ * (`public_context.unstampable_databases` del 409 `model_migration.renumber_target_missing`,
+ * api-reference-v18 §4).
+ *
+ * snake_case por el mismo motivo que `ApiBlockingDatabase`: comparte forma con
+ * `migrationUnstampableDatabaseSchema` para que el `delete-plan` y el 409 se pinten con el mismo
+ * componente.
+ *
+ * El par `current_version` / `missing_target` es lo único que hace accionable el error: dice dónde
+ * está parada la base y a dónde habría que llevarla. Sin él, «no se pudo re-marcar la BD 3» no
+ * permite decidir si falta aplicar migraciones ahí o si su historial está corrupto.
+ */
+export interface ApiUnstampableDatabase {
+  managed_database_id: number
+  database_name?: string
+  server_id?: number
+  current_version: string
+  missing_target: string
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -290,6 +333,45 @@ export class ApiError extends Error {
    */
   readonly incompleteProgress?: ApiIncompleteProgress[]
   /**
+   * Punteros de versión que el borrado necesita mover en BDs reales
+   * (`public_context.stamp_plan` del 409 `model_migration.renumber_confirmation_required`,
+   * api-reference-v18 §4).
+   *
+   * Es el «falta el `confirm_token`» con el plan adjunto: la UI puede mostrar exactamente qué bases
+   * se van a re-marcar sin volver a pedir el `delete-plan` solo para poder redactar la pregunta.
+   * Confirmar, en cambio, sí exige un token fresco: el de este 409 no existe.
+   */
+  readonly stampPlan?: ApiMigrationStampStep[]
+  /**
+   * `public_context.compensated` del 409 `model_migration.renumber_stamp_failed` (v18 §4).
+   *
+   * Se compara con `=== true` y **no se asume `true` por defecto**, igual que `overrideAvailable`:
+   * `true` significa que el backend deshizo los stamps que alcanzó a hacer y todo volvió a su
+   * lugar, así que se puede reintentar sin más. Ausente o `false` significa que quedaron BDs mal
+   * marcadas —las de `leftMoved`— y que hay trabajo manual antes de reintentar. Asumir `true`
+   * cuando el campo no vino sería decirle al operador que no hay nada que arreglar justo cuando sí
+   * lo hay, y ese es el mensaje que hace que nadie mire.
+   */
+  readonly renumberCompensated?: boolean
+  /**
+   * `public_context.left_moved` del 409 `model_migration.renumber_stamp_failed` (v18 §4).
+   *
+   * Son **solo** las BDs que quedaron mal marcadas: no es el plan completo ni las que salieron
+   * bien. Cada una necesita un `stamp` manual **antes** de reintentar el borrado, porque el
+   * reintento vuelve a calcular el plan sobre punteros que ya no son los que el backend cree.
+   *
+   * En los dos desenlaces de este 409 —compensado o no— **el blueprint NO se modificó**: la
+   * versión sigue existiendo y el renumerado no ocurrió. Lo único que puede haber quedado torcido
+   * está en las BDs de esta lista.
+   */
+  readonly leftMoved?: ApiMigrationStampStep[]
+  /**
+   * `public_context.unstampable_databases` del 409 `model_migration.renumber_target_missing`
+   * (v18 §4). Bases cuyo puntero no se puede mover porque la versión destino no existe en su
+   * historial; el blueprint tampoco se modificó.
+   */
+  readonly unstampableDatabases?: ApiUnstampableDatabase[]
+  /**
    * `public_context.code`: identificador estable del fallo, independiente del texto del mensaje y
    * visible **también en producción** (a diferencia de `context`, que solo existe en desarrollo).
    * Es la única forma fiable de clasificar un error para decidir el CTA de recuperación.
@@ -331,6 +413,10 @@ export class ApiError extends Error {
     overrideAvailable?: boolean
     staleOverrides?: string[]
     incompleteProgress?: ApiIncompleteProgress[]
+    stampPlan?: ApiMigrationStampStep[]
+    renumberCompensated?: boolean
+    leftMoved?: ApiMigrationStampStep[]
+    unstampableDatabases?: ApiUnstampableDatabase[]
     code?: string
     exportContext?: DatabaseExportErrorContext
     environmentContext?: EnvironmentErrorContext
@@ -359,6 +445,10 @@ export class ApiError extends Error {
     this.overrideAvailable = args.overrideAvailable
     this.staleOverrides = args.staleOverrides
     this.incompleteProgress = args.incompleteProgress
+    this.stampPlan = args.stampPlan
+    this.renumberCompensated = args.renumberCompensated
+    this.leftMoved = args.leftMoved
+    this.unstampableDatabases = args.unstampableDatabases
     this.code = args.code
     this.exportContext = args.exportContext
     this.environmentContext = args.environmentContext
@@ -523,7 +613,7 @@ function extractMissingModelIds(publicContext: unknown): number[] | undefined {
     return undefined
   }
   const ids = publicContext.missing_model_ids.filter(
-    (id): id is number => typeof id === "number" && Number.isFinite(id),
+    (id): id is number => typeof id === 'number' && Number.isFinite(id),
   )
   return ids.length > 0 ? ids : undefined
 }
@@ -607,6 +697,114 @@ function extractIncompleteProgress(publicContext: unknown): ApiIncompleteProgres
       return []
     }
     return [{ managed_database_id: id, last_statement_index: last, total_statements: total }]
+  })
+  return rows.length > 0 ? rows : undefined
+}
+
+/**
+ * Convierte una fila suelta de `stamp_plan` / `left_moved` (v18 §4) en `ApiMigrationStampStep`, o
+ * la descarta devolviendo `[]` para que el `flatMap` del llamador la saltee sin perder el resto.
+ *
+ * Solo el id y el par de versiones son obligatorios: son lo que identifica el movimiento. El
+ * nombre y el servidor se copian si vinieron como string/número, porque el contrato los muestra en
+ * `stamp_plan` pero no los garantiza en `left_moved` — y `left_moved` es justo la lista que dice
+ * qué bases quedaron mal marcadas, el peor sitio donde quedarse sin filas por un campo de adorno.
+ */
+function toStampStep(row: unknown): ApiMigrationStampStep[] {
+  if (!isRecord(row)) return []
+  const id = row.managed_database_id
+  const from = row.from_version
+  const to = row.to_version
+  if (
+    typeof id !== 'number' ||
+    !Number.isFinite(id) ||
+    typeof from !== 'string' ||
+    typeof to !== 'string'
+  ) {
+    return []
+  }
+  return [
+    {
+      managed_database_id: id,
+      ...(typeof row.database_name === 'string' ? { database_name: row.database_name } : {}),
+      ...(typeof row.server_id === 'number' && Number.isFinite(row.server_id)
+        ? { server_id: row.server_id }
+        : {}),
+      from_version: from,
+      to_version: to,
+    },
+  ]
+}
+
+/**
+ * Extrae `public_context.stamp_plan` (409 `model_migration.renumber_confirmation_required`,
+ * v18 §4): las BDs cuyo puntero hay que mover para poder borrar la versión.
+ */
+function extractStampPlan(publicContext: unknown): ApiMigrationStampStep[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.stamp_plan)) return undefined
+  const rows = publicContext.stamp_plan.flatMap(toStampStep)
+  return rows.length > 0 ? rows : undefined
+}
+
+/**
+ * Extrae `public_context.compensated` (409 `model_migration.renumber_stamp_failed`, v18 §4).
+ *
+ * Devuelve el booleano solo si de verdad vino como booleano. Un `undefined` aquí NO se puede leer
+ * como «se compensó»: el lado seguro es el contrario —asumir que quedaron BDs mal marcadas— y por
+ * eso la UI compara con `=== true`. Ver `ApiError.renumberCompensated`.
+ */
+function extractRenumberCompensated(publicContext: unknown): boolean | undefined {
+  if (!isRecord(publicContext) || typeof publicContext.compensated !== 'boolean') return undefined
+  return publicContext.compensated
+}
+
+/**
+ * Extrae `public_context.left_moved` (409 `model_migration.renumber_stamp_failed`, v18 §4): las
+ * BDs que quedaron con el puntero movido y necesitan un `stamp` manual antes de reintentar.
+ */
+function extractLeftMoved(publicContext: unknown): ApiMigrationStampStep[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.left_moved)) return undefined
+  const rows = publicContext.left_moved.flatMap(toStampStep)
+  return rows.length > 0 ? rows : undefined
+}
+
+/**
+ * Extrae `public_context.unstampable_databases` (409 `model_migration.renumber_target_missing`,
+ * v18 §4).
+ *
+ * Igual que con `blocking_databases`, se filtra fila a fila: cada una nombra una base cuyo
+ * historial no tiene la versión destino, y perder la lista entera por un elemento raro deja al
+ * operador con un 409 que no dice sobre qué base actuar. El par `current_version` /
+ * `missing_target` es obligatorio porque sin él la fila no es accionable.
+ */
+function extractUnstampableDatabases(publicContext: unknown): ApiUnstampableDatabase[] | undefined {
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.unstampable_databases)) {
+    return undefined
+  }
+  const rows = publicContext.unstampable_databases.flatMap((row): ApiUnstampableDatabase[] => {
+    if (!isRecord(row)) return []
+    const id = row.managed_database_id
+    const current = row.current_version
+    const missing = row.missing_target
+    if (
+      typeof id !== 'number' ||
+      !Number.isFinite(id) ||
+      typeof current !== 'string' ||
+      typeof missing !== 'string'
+    ) {
+      return []
+    }
+    return [
+      {
+        managed_database_id: id,
+        ...(typeof row.database_name === 'string' ? { database_name: row.database_name } : {}),
+        ...(typeof row.server_id === 'number' && Number.isFinite(row.server_id)
+          ? { server_id: row.server_id }
+          : {}),
+        current_version: current,
+        missing_target: missing,
+      },
+    ]
   })
   return rows.length > 0 ? rows : undefined
 }
@@ -818,7 +1016,9 @@ export interface CollationErrorContext {
 /** Filtra un array desconocido dejando solo sus números finitos; `undefined` si no queda ninguno. */
 function numberList(value: unknown): number[] | undefined {
   if (!Array.isArray(value)) return undefined
-  const items = value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
+  const items = value.filter(
+    (item): item is number => typeof item === 'number' && Number.isFinite(item),
+  )
   return items.length > 0 ? items : undefined
 }
 
@@ -919,6 +1119,10 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         overrideAvailable: extractOverrideAvailable(d.public_context),
         staleOverrides: extractStaleOverrides(d.public_context),
         incompleteProgress: extractIncompleteProgress(d.public_context),
+        stampPlan: extractStampPlan(d.public_context),
+        renumberCompensated: extractRenumberCompensated(d.public_context),
+        leftMoved: extractLeftMoved(d.public_context),
+        unstampableDatabases: extractUnstampableDatabases(d.public_context),
         reasons: extractReasons(d.public_context),
         blockedStatements: extractBlockedStatements(d.public_context),
         charsetRejected: extractCharsetRejected(d.public_context),

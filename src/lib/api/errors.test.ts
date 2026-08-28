@@ -35,7 +35,13 @@ describe('normalizeApiError', () => {
         type: 'AppHttpException',
         context: {
           violations: [
-            { object: 'monedas', object_type: 'data', version: 0, reason: 'unassigned_data_table', hint: 'Agrega un bucket…' },
+            {
+              object: 'monedas',
+              object_type: 'data',
+              version: 0,
+              reason: 'unassigned_data_table',
+              hint: 'Agrega un bucket…',
+            },
           ],
           skipped_tables: [{ table: 'tags', reason: 'no_primary_key' }],
         },
@@ -185,10 +191,16 @@ describe('public_context de proyectos y de versiones de blueprint', () => {
 
   it('los errores del token no traen `code`: se clasifican por status', () => {
     const expired = normalizeApiError(410, {
-      detail: { msg: 'El token de confirmación expiró; vuelve a solicitar el preview.', type: 'AppHttpException' },
+      detail: {
+        msg: 'El token de confirmación expiró; vuelve a solicitar el preview.',
+        type: 'AppHttpException',
+      },
     })
     const mismatch = normalizeApiError(422, {
-      detail: { msg: 'El token de confirmación no corresponde a esta operación.', type: 'AppHttpException' },
+      detail: {
+        msg: 'El token de confirmación no corresponde a esta operación.',
+        type: 'AppHttpException',
+      },
     })
     expect(expired.code).toBeUndefined()
     expect(mismatch.code).toBeUndefined()
@@ -235,5 +247,219 @@ describe('incomplete_progress del 409 de aplicación parcial', () => {
       },
     })
     expect(error.incompleteProgress).toHaveLength(1)
+  })
+})
+
+describe('public_context del borrado de una versión intermedia (api-reference-v18 §4)', () => {
+  it('extrae el `stamp_plan` completo del 409 que pide confirmación', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'El borrado necesita mover punteros de versión en bases reales.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_confirmation_required',
+          stamp_plan: [
+            {
+              managed_database_id: 7,
+              database_name: 'app_prod',
+              server_id: 1,
+              from_version: '0020',
+              to_version: '0019',
+            },
+            {
+              managed_database_id: 9,
+              database_name: 'app_stage',
+              server_id: 2,
+              from_version: '0018',
+              to_version: '0017',
+            },
+          ],
+        },
+      },
+    })
+    expect(error.code).toBe('model_migration.renumber_confirmation_required')
+    expect(error.stampPlan).toHaveLength(2)
+    expect(error.stampPlan?.[0]).toEqual({
+      managed_database_id: 7,
+      database_name: 'app_prod',
+      server_id: 1,
+      from_version: '0020',
+      to_version: '0019',
+    })
+  })
+
+  it('descarta solo la fila malformada del `stamp_plan`, no la lista entera', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_confirmation_required',
+          stamp_plan: [
+            { managed_database_id: 7, from_version: '0020', to_version: '0019' },
+            // Sin `from_version`: no se sabe de dónde sale el puntero.
+            { managed_database_id: 8, to_version: '0019' },
+            // El id no es numérico: no se puede enlazar a ninguna base.
+            { managed_database_id: '9', from_version: '0018', to_version: '0017' },
+            { managed_database_id: 11, from_version: '0016', to_version: '0015' },
+          ],
+        },
+      },
+    })
+    // Cada fila es una escritura remota que el operador tiene que ver antes de autorizarla:
+    // perder la lista completa por un elemento raro le pediría confirmar a ciegas.
+    expect(error.stampPlan).toHaveLength(2)
+    expect(error.stampPlan?.map((row) => row.managed_database_id)).toEqual([7, 11])
+  })
+
+  it('una fila sin `database_name` ni `server_id` sigue siendo válida', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_stamp_failed',
+          compensated: false,
+          left_moved: [{ managed_database_id: 3, from_version: '0020', to_version: '0019' }],
+        },
+      },
+    })
+    // El contrato muestra el nombre en `stamp_plan` pero NO lo garantiza en `left_moved`, que es
+    // justo la lista que dice qué bases quedaron mal marcadas. Degrada a «BD #3»; no se descarta.
+    expect(error.leftMoved).toEqual([
+      { managed_database_id: 3, from_version: '0020', to_version: '0019' },
+    ])
+    expect(error.leftMoved?.[0]?.database_name).toBeUndefined()
+    expect(error.leftMoved?.[0]?.server_id).toBeUndefined()
+  })
+
+  it('`compensated` ausente NO se interpreta como que se deshizo todo', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'Falló al mover los punteros de versión.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_stamp_failed',
+          left_moved: [{ managed_database_id: 3, from_version: '0020', to_version: '0019' }],
+        },
+      },
+    })
+    // Asumir `true` diría «los punteros volvieron a su sitio, no hay nada que arreglar» justo
+    // cuando quedaron bases mal marcadas que necesitan un stamp manual: es el mensaje que hace
+    // que nadie mire. El lado seguro es el contrario, y por eso la UI compara con `=== true`.
+    expect(error.renumberCompensated).toBeUndefined()
+    expect(error.renumberCompensated === true).toBe(false)
+    expect(error.leftMoved).toHaveLength(1)
+  })
+
+  it('`compensated: false` llega junto a las bases que quedaron mal marcadas', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_stamp_failed',
+          compensated: false,
+          left_moved: [
+            {
+              managed_database_id: 3,
+              database_name: 'app_prod',
+              from_version: '0020',
+              to_version: '0019',
+            },
+            { managed_database_id: 4, from_version: '0018', to_version: '0017' },
+          ],
+        },
+      },
+    })
+    expect(error.renumberCompensated).toBe(false)
+    expect(error.leftMoved).toHaveLength(2)
+  })
+
+  it('extrae `unstampable_databases` con el par dónde está / a dónde iría', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'Alguna base quedaría apuntando a una versión inexistente.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_target_missing',
+          unstampable_databases: [
+            {
+              managed_database_id: 5,
+              database_name: 'app_qa',
+              current_version: '0020',
+              missing_target: '0019',
+            },
+          ],
+        },
+      },
+    })
+    expect(error.code).toBe('model_migration.renumber_target_missing')
+    // Sin el par, «no se pudo re-marcar la BD 5» no permite decidir si le faltan migraciones o si
+    // su historial está corrupto.
+    expect(error.unstampableDatabases).toEqual([
+      {
+        managed_database_id: 5,
+        database_name: 'app_qa',
+        current_version: '0020',
+        missing_target: '0019',
+      },
+    ])
+  })
+
+  it('descarta la fila sin `missing_target` sin perder las buenas', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.renumber_target_missing',
+          unstampable_databases: [
+            { managed_database_id: 5, current_version: '0020', missing_target: '0019' },
+            // Sin destino la fila no es accionable, pero la otra sí lo es.
+            { managed_database_id: 6, current_version: '0018' },
+          ],
+        },
+      },
+    })
+    expect(error.unstampableDatabases).toHaveLength(1)
+    expect(error.unstampableDatabases?.[0]?.managed_database_id).toBe(5)
+  })
+
+  it('un `public_context` sin estas claves deja los cuatro campos en `undefined`', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: { code: 'model_migration.affected_partial_application' },
+      },
+    })
+    // `undefined` y no `[]`: una lista vacía se leería como «se comprobó y no hay ninguna», que es
+    // una afirmación que este error no hizo.
+    expect(error.stampPlan).toBeUndefined()
+    expect(error.renumberCompensated).toBeUndefined()
+    expect(error.leftMoved).toBeUndefined()
+    expect(error.unstampableDatabases).toBeUndefined()
+  })
+
+  it('el 409 `version_in_use` trae `blocking_databases` con el motivo `in_use`', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'Hay bases paradas exactamente en esta versión.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'model_migration.version_in_use',
+          blocking_databases: [
+            { managed_database_id: 7, reason: 'in_use', current_version: '0007' },
+          ],
+        },
+      },
+    })
+    expect(error.code).toBe('model_migration.version_in_use')
+    // `in_use` (`==`) no es sinónimo de `still_applied` (`>=`): una base más adelante NO bloquea
+    // el borrado, porque el renumerado le mueve el puntero.
+    expect(error.blockingDatabases).toEqual([
+      { managed_database_id: 7, reason: 'in_use', current_version: '0007' },
+    ])
   })
 })

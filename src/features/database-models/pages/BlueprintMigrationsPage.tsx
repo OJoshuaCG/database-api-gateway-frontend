@@ -3,9 +3,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
-  ConfirmDialog,
   EmptyState,
   ErrorState,
   FullPageSpinner,
@@ -14,12 +14,18 @@ import {
   TabButton,
 } from '@/components/ui'
 import { BlueprintProjectsSection } from '@/features/projects'
-import { PAGINATION, type ModelDatabaseStatus } from '@/lib/contracts'
-import { toApiError } from '@/lib/api/errors'
+import {
+  MIGRATION_ERROR_CODES,
+  PAGINATION,
+  type MigrationDeletePlanOut,
+  type ModelDatabaseStatus,
+} from '@/lib/contracts'
+import { toApiError, type ApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
-import { useDeleteModelMigration, useModelMigrations } from '../hooks/use-model-migrations'
+import { useModelMigrationDeletePlan, useModelMigrations } from '../hooks/use-model-migrations'
 import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPanel'
 import { ApplyMigrationsDialog } from '../components/ApplyMigrationsDialog'
+import { MigrationDeletePlanDialog } from '../components/MigrationDeletePlanDialog'
 import { ModelDatabasesStatusTable } from '../components/ModelDatabasesStatusTable'
 import { VersionNavigator } from '../components/VersionNavigator'
 import { VersionAlertsBar } from '../components/VersionAlertsBar'
@@ -61,7 +67,15 @@ export function BlueprintMigrationsPage() {
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [applyAllOpen, setApplyAllOpen] = useState(false)
   const [applyTargets, setApplyTargets] = useState<ModelDatabaseStatus[]>([])
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  /**
+   * Plan de borrado ya comprobado, con la versión a la que pertenece. Es lo que abre el diálogo:
+   * mientras es `null` no hay diálogo, y no existe un estado intermedio de «diálogo abierto sin
+   * plan». Así el diálogo nunca tiene que pedir nada al montar.
+   */
+  const [deletePlanned, setDeletePlanned] = useState<{
+    version: string
+    plan: MigrationDeletePlanOut
+  } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const model = useDatabaseModel(modelId)
@@ -72,7 +86,34 @@ export function BlueprintMigrationsPage() {
     Number.isFinite(modelId),
   )
 
-  const deleteMigration = useDeleteModelMigration(modelId)
+  const deletePlan = useModelMigrationDeletePlan(modelId)
+
+  /**
+   * Pedir el plan de borrado ANTES de abrir nada (api-reference-v18 §2).
+   *
+   * El `delete-plan` es un GET que no modifica nada, pero abre conexión a cada BD del blueprint:
+   * es la única lectura autoritativa de si esta versión se puede borrar y de a qué bases habría
+   * que escribirles. Se lanza desde el clic y no desde el montaje del diálogo, que es el mismo
+   * criterio que ya sigue `MigrationEditOverrideDialog` con su `initialPreview`.
+   *
+   * Si falla, el diálogo **no se abre**: sin plan no hay nada que confirmar, y un diálogo vacío
+   * con un error dentro invita a reintentar el borrado a ciegas.
+   */
+  const requestDelete = (version: string) => {
+    setDeleteError(null)
+    deletePlan.mutate(version, {
+      onSuccess: (plan) => setDeletePlanned({ version, plan }),
+      onError: (err) => {
+        const apiError = toApiError(err)
+        // Se clasifica por `public_context.code`, nunca leyendo el `message`: el backend no
+        // transcribe el error del motor a propósito (puede llevar host, usuario o fragmentos de
+        // sentencia). El 409 se refleja además en el listado, porque `deletable` de la caché
+        // acaba de quedar desmentido por la lectura en vivo.
+        if (apiError.status === 409) void migrations.refetch()
+        setDeleteError(deletePlanErrorText(apiError))
+      },
+    })
+  }
 
   // El backend no garantiza el orden de la lista y las versiones se ordenan NUMÉRICAMENTE (§8),
   // así que se ordena en cliente antes de navegarla. La dependencia es `migrations.data`, que sí
@@ -90,8 +131,12 @@ export function BlueprintMigrationsPage() {
   const index = resolveVersionIndex(sorted, selectedVersion)
   const selected = sorted[index] ?? null
 
-  // Versión punta: solo ella se puede eliminar (Cambio 3); el backend recalcula
-  // `current_version` al borrarla.
+  // Versión punta. **Ya no es «la única que se puede eliminar»**: desde api-reference-v18 el
+  // backend deja borrar cualquier versión, punta o intermedia —renumera las posteriores y mueve
+  // el puntero de las BDs que estén más adelante—, así que ser la punta dejó de ser un requisito.
+  //
+  // Sigue haciendo falta para UNA cosa: redactar la pista del `block_reason` legado `not_tip`,
+  // que solo devuelve un gateway anterior a v18.
   //
   // `null` si el catálogo vino RECORTADO por el tope de página: entonces la punta real puede no
   // estar entre las cargadas, y una pista que nombre la versión equivocada al lado del botón de
@@ -222,8 +267,36 @@ export function BlueprintMigrationsPage() {
               blueprintCurrentVersion={model.data.current_version}
               blueprintCollation={model.data.collation}
               latestVersion={latestVersion}
-              onRequestDelete={setDeleteTarget}
+              onRequestDelete={requestDelete}
             />
+          )}
+
+          {/* La comprobación abre conexión a CADA BD del blueprint, así que puede tardar. Sin
+              este aviso el clic en «Eliminar…» no produce ningún cambio visible durante segundos
+              y el operador vuelve a pulsar, lanzando una segunda lectura del parque entero. */}
+          {deletePlan.isPending && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4" /> Comprobando el plan de borrado contra las bases de
+              datos…
+            </div>
+          )}
+
+          {/* El fallo de la COMPROBACIÓN vive aquí, en línea y junto a la ficha desde donde se
+              pidió: el diálogo no llega a abrirse, así que no hay dónde meterlo dentro. Se
+              conserva hasta el siguiente intento —no se va solo como un toast— porque cada
+              motivo lleva a una acción distinta y hay que poder leerlo mientras se hace. */}
+          {deleteError && (
+            <Callout
+              tone="danger"
+              title="No se pudo comprobar el borrado"
+              action={
+                <Button size="sm" variant="ghost" onClick={() => setDeleteError(null)}>
+                  Entendido
+                </Button>
+              }
+            >
+              <p>{deleteError}</p>
+            </Callout>
           )}
 
           {sorted.length > 0 && (
@@ -256,60 +329,54 @@ export function BlueprintMigrationsPage() {
         onClose={() => setApplyAllOpen(false)}
       />
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onClose={() => {
-          setDeleteTarget(null)
-          setDeleteError(null)
-        }}
-        onConfirm={() => {
-          if (!deleteTarget) return
-          setDeleteError(null)
-          deleteMigration.mutate(deleteTarget, {
-            onSuccess: () => {
-              setDeleteTarget(null)
-              // También el error: si no, tras un 409 y un reintento con éxito, el mensaje
-              // viejo reaparecía al abrir el diálogo para otra versión.
-              setDeleteError(null)
-            },
-            onError: (err) => {
-              // El 409 se muestra AQUÍ, no solo como toast: su mensaje es la única forma de
-              // saber cuál de las tres reglas se incumplió (aplicada con éxito / aplicación
-              // parcial sin resolver / dejó de ser la punta), y cada una lleva a una acción
-              // distinta. Cerrar el diálogo dejaba al operador con un toast que se va solo.
-              const apiError = toApiError(err)
-              if (apiError.status === 409) {
-                setDeleteError(apiError.message)
-                void migrations.refetch()
-              }
-            },
-          })
-        }}
-        title="Eliminar la última versión"
-        description={`Se eliminará la versión ${deleteTarget} del blueprint. Es irreversible, y solo es posible en la última versión y mientras ninguna BD la haya aplicado con éxito.`}
-        // El botón vivía al pie del card de SQL: había que bajar por todo el delta para llegar, y
-        // ESE scroll era la fricción. Al subirlo a la ficha —donde se decide, junto al estado de la
-        // versión— hay que reponerla acá, con el mismo molde `confirm_target_name` que el resto de
-        // la app usa para lo irreversible. Sin esto, borrar pasaría a ser dos clics seguidos a dos
-        // dedos del selector que cambia de versión.
-        confirmWord={deleteTarget ?? undefined}
-        confirmLabel="Eliminar"
-        isLoading={deleteMigration.isPending}
-      >
-        <div className="flex flex-col gap-2">
-          {/* Un intento fallido no impide borrar, pero su rastro sí se va: al eliminar la
-              versión se pierden sus filas de historial (queda constancia en la auditoría). */}
-          <p className="text-sm text-muted-foreground">
-            Si esta versión llegó a intentarse y falló, se descartará también el registro de esos
-            intentos por BD.
-          </p>
-          {deleteError && (
-            <p className="rounded-lg border border-error/40 bg-error/5 p-3 text-sm text-error">
-              {deleteError}
-            </p>
-          )}
-        </div>
-      </ConfirmDialog>
+      {/* Diálogo del borrado, montado SOLO cuando ya hay un plan comprobado. Recibe el plan por
+          props y no lo pide al montar: la llamada nace del clic en «Eliminar…», que es donde el
+          operador la pidió. La `key` con la versión lo remonta al cambiar de objetivo, así que no
+          arrastra ni el reconocimiento ni la reescritura de la versión anterior. */}
+      {deletePlanned && (
+        <MigrationDeletePlanDialog
+          key={deletePlanned.version}
+          modelId={modelId}
+          version={deletePlanned.version}
+          initialPlan={deletePlanned.plan}
+          onClose={() => setDeletePlanned(null)}
+          onDeleted={() => {
+            setDeletePlanned(null)
+            // La selección vuelve a la derivada por defecto (la más reciente). No se puede
+            // conservar: tras un borrado con renumerado, el número que estaba elegido puede
+            // designar ahora OTRA migración, y quedarse en él mostraría un delta distinto bajo el
+            // mismo rótulo.
+            setSelectedVersion(null)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+/**
+ * Texto del fallo del `GET .../delete-plan`, clasificado por `public_context.code`.
+ *
+ * **Nunca se parsea el `message` del backend para decidir la rama**: no transcribe el error del
+ * motor a propósito (puede llevar host, usuario o fragmentos de sentencia), así que su prosa no es
+ * un dato estable. Se clasifica por código y se cae al `message` solo como último recurso, que es
+ * cuando ya no hay nada mejor que decir.
+ *
+ * La comprobación abre conexión a cada BD del blueprint, así que puede devolver 409 aunque sea un
+ * GET: eso significa que la caché del inventario —de donde salió el `deletable` que habilitó el
+ * botón— acaba de quedar desmentida por la lectura en vivo. Manda el plan, siempre.
+ */
+function deletePlanErrorText(apiError: ApiError): string {
+  switch (apiError.code) {
+    case MIGRATION_ERROR_CODES.versionInUse:
+      return 'Alguna base de datos está exactamente en esta versión, así que borrarla dejaría su puntero apuntando a algo que no existe. Muévela con un apply o un rollback y vuelve a intentarlo.'
+    case MIGRATION_ERROR_CODES.unreadableDatabases:
+      return 'No se pudo leer la versión de alguna base de datos, y el gateway prefiere negarse a suponer dónde está. Es un problema de acceso a esa base —motor caído, base sin aprovisionar o credenciales rotas—, no del blueprint. Arregla la conexión y vuelve a intentarlo.'
+    case MIGRATION_ERROR_CODES.affectedPartialApplication:
+      return 'Hay una base con una aplicación a medio camino que este borrado afectaría. Reconcilia esa aplicación parcial o termina el apply antes de eliminar la versión.'
+    case MIGRATION_ERROR_CODES.renumberTargetMissing:
+      return 'Al renumerar, alguna base quedaría apuntando a una versión que no figura en su historial. Revisa el historial de esas bases —lo habitual es que les falte aplicar migraciones— antes de volver a intentarlo.'
+    default:
+      return apiError.message
+  }
 }
