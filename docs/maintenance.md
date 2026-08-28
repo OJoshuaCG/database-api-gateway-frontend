@@ -130,6 +130,18 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
   formulario se resetea `owner_id` (si no, el backend responde **409**).
 - **`/health`:** vive fuera de `/api/v1` y puede no tener CORS; el `HealthBadge` se degrada
   en silencio.
+- **`data: null` no llega como `null`, llega como clave AUSENTE.** `ApiResponse._exclude_none`
+  del backend omite del envelope las claves nulas de primer nivel, y `envelope()` declara `data`
+  como clave **requerida**. Así que un endpoint que antes respondía vacío y ahora devuelve un
+  objeto no se tipa con `schema.nullable()`: eso rechaza al gateway viejo y convierte una
+  operación **ya ejecutada** en «La API devolvió una respuesta inesperada». Va
+  `schema.nullable().optional()`, normalizado a `null` en la capa de servicio para que arriba
+  haya una sola forma de «ausente». Precedente: el `DELETE` de migraciones de blueprint (v18).
+- **Enums de Zod sobre vocabularios que el backend puede ampliar o renombrar:** un `z.enum`
+  rechaza el valor desconocido y el `safeParse` corre sobre el envelope entero, así que **una
+  palabra nueva en un campo de ayuda tumba la respuesta completa**. Cuando el valor solo gobierna
+  un texto —`block_reason`, `reason` de una lista bloqueante— acepta también los valores viejos y
+  deja el legado documentado, en vez de estrechar el enum al vocabulario del día.
 - **Validación de contrato (Zod) en runtime:** si el backend cambia un shape, verás en
   consola `[api] Respuesta no conforme al contrato` y un error "respuesta inesperada".
   Es la señal de que hay que actualizar `lib/contracts/`.

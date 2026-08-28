@@ -93,7 +93,6 @@ reconstruir cuál era el plan, justo cuando se usa «Replanear». Y `severity` s
 | --- | --- | --- | --- | --- | --- |
 | T-260824-lz-collation-lote-y-version | Wizard de conversión de collation **en lote por blueprint**, panel de deriva y CTA de versión de contabilidad | LeoZubiri@outlook.com | frontend | 2026-08-25 | [86e2ywnrg](https://app.clickup.com/t/86e2ywnrg) |
 
-
 ### Detalle — T-260824-lz-collation-lote-y-version
 
 **Contrato: `docs/api-reference-v17.md` del repo de backend — NO v14.** El handoff original
@@ -144,6 +143,9 @@ recarga.
 
 ---
 
+
+---
+
 ## 🔴 Pendientes — trabajo propio del frontend
 
 Trabajo nacido en esta SPA que no viene de ningún handoff: fix visual, refactor de componente,
@@ -167,6 +169,7 @@ También van acá las tareas que quedaron **bloqueadas por backend** (`on hold` 
 
 | # | Ítem | Qué se hizo | Qué quedó SIN verificar | Subtarea |
 | --- | --- | --- | --- | --- |
+| T-260828-ojoshuac-borrar-version-intermedia | Borrar una versión **intermedia** de un blueprint (v18) | Se puede eliminar **cualquier** versión, no solo la punta: `MigrationDeletePlanDialog` pide el `delete-plan` (veredicto **en vivo**, abre conexión a cada BD), muestra los `warnings[]` del contrato **sin resumir**, el renumerado y **una fila por escritura remota** antes de pedir nada, y confirma con `confirm_token` + reescritura de la versión. Los siete 409 se clasifican por `public_context.code`; el 422/410 dice que **el parque cambió**, no que el operador se equivocó. `deletable` se separó de `sql_frozen`, que ya no se mueven juntos. Dos hallazgos con alcance más allá de la feature, ya en `docs/maintenance.md`: `data: null` llega como **clave ausente** (`_exclude_none` + `data` requerido en `envelope()`) y un `z.enum` estricto sobre un vocabulario renombrable **tumba la respuesta entera**. | **Los tests no se ejecutaron** (política del repo): 27 casos escritos en 4 archivos, ninguno corrido. `typecheck`, `lint` (0 errores) y `build` sí pasan. **Nada probado contra el backend real**: los contratos de `delete-plan` y del `DELETE` se escribieron a mano desde el documento, así que una diferencia de forma fallará en runtime. La forma de `partial_applications[]` está **deducida**, no observada — el contrato solo compromete que cada entrada enlaza a `reconcile-partial`. Sin verificar ningún render en navegador, ni el 410 real por caducidad, ni el camino `data` ausente contra un gateway pre-v18. | [86e310tk5](https://app.clickup.com/t/86e310tk5) |
 | T-260827-lz-ficha-version-blueprint | Ficha de la versión seleccionada en la pestaña «Versiones» del blueprint | Se eliminó `VersionsTable` **reponiendo lo que se llevaba**: vocabulario único de insignias en `migration-badges.ts` (el desplegable gana `sin rollback`, `no portable`, `SQL congelado` y `SQL editado`), nueva `VersionAlertsBar` con las listas filtradas y su consecuencia, y `VersionFactsCard` bajo el selector, que absorbe el «card delgado» del panel de detalle (−112 líneas). Adopción **sin derivar**: «pendiente en N de M» + los booleanos de `block_reason`. Entran tres arreglos que la ficha volvía peligrosos: invalidar `databases` al crear/borrar versión, invalidar `migrations` tras `apply-all`, y `confirmWord` en el borrado. | **Los tests no se ejecutaron** (política del repo): 48 casos escritos/actualizados en 7 archivos, ninguno corrido. `typecheck`, `eslint` y `build` sí pasan. **Nada probado contra el backend real** — en particular `pending_versions` para BDs sin `model_version`, y el 404 del detalle que dispara la banda «esta versión ya no existe». Sin verificar en `< md` ni con lector de pantalla real. | [86e30hemx](https://app.clickup.com/t/86e30hemx) |
 | T-260822-oc-projects-agrupar-blueprints | Módulo Proyectos: dos pestañas en la vista de blueprints | Feature `src/features/projects/` completa (9 endpoints de la v16). `/database-models` pasa a tener dos pestañas —«Proyectos» por defecto y «Blueprints» con el catálogo completo— y el detalle del proyecto vive en `/projects/:projectId`. Vista inversa dentro de la pantalla del blueprint. | **Los tests no se ejecutaron** (política del repo): 6 casos escritos en `use-projects.test.tsx` + ampliación de `errors.test.ts`, ninguno corrido. **Nada probado contra el backend real**: los contratos Zod se escribieron a mano desde la v16, así que una diferencia de forma fallará en runtime. Sin comprobar que `description` viaje como `null` explícito dentro de `data`. | [86e2y0zq9](https://app.clickup.com/t/86e2y0zq9) |
 | T-260824-ojoshuac-editar-version-aplicada | Editar el SQL de una versión ya aplicada (doble factor) | El 409 `sql_frozen` se clasifica por código y ofrece dos salidas si trae `override_available`. La segunda abre el flujo de dos pasos (`edit-preview` → confirmación) con la lista de BDs divergentes, cuenta atrás del token e insignia `sql_diverged`. Corregido el copy que negaba que `down_sql` fuera editable. **Reapertura del mismo día:** auditoría contra el checklist de la §7 que cerró tres huecos — `incomplete_progress` para nombrar la BD del 409 parcial, los efectos colaterales de la §4.bis en el paso 1, y el aviso del reseteo de `reviewed` al editar el rollback de una versión que captura. | **Los tests no se ejecutaron**; además **no se escribieron tests de componente del flujo de dos pasos** — es lo que más falta. **Nada probado contra el backend real**: no se ha visto una respuesta real de `edit-preview`. Sin verificar el camino `requires_confirmation: false` ni el 410 real por caducidad. La forma de `incomplete_progress` se leyó del código del backend (`incomplete_progress_for_migration`), no de una respuesta real. | [86e2z0gmj](https://app.clickup.com/t/86e2z0gmj) |
@@ -368,3 +371,75 @@ del usuario. Describe **el mismo 409**: aporta `blocking_databases[]` con su voc
 por rutina** (ver «Tests: escribirlos sí, ejecutarlos no» en `CLAUDE.md`), así que es normal que
 algo quede sin probar. Lo que no es aceptable es que no esté dicho. Si escribiste tests y no los
 corriste, se anota así, con todas las letras.
+
+---
+
+### Detalle — T-260828-ojoshuac-borrar-version-intermedia
+
+**Contrato: «API Reference v18 — Eliminar una versión intermedia de un blueprint»** del repo de
+backend. Continúa la v14 (que fijó el criterio «aplicada hoy») y **convive** con la v15: el freeze
+de la *edición* no cambia, solo el del *borrado*.
+
+**No hubo tarea de handoff del backend para este contrato.** Por eso esta se abre acá con ID
+`T-…` en vez de reclamar una en `update required`, y queda **vinculada a
+[86e2yx2pq](https://app.clickup.com/t/86e2yx2pq)** (v14), cuya mitad de borrado v18 reescribe.
+
+**El límite que ataca:** solo se podía borrar la **punta**. Una versión intermedia que ya no
+describía nada útil no tenía forma de salir del blueprint.
+
+**Qué hace el borrado ahora**
+
+1. La versión desaparece. Las posteriores **bajan un escalón** (`0016`→`0015`); las anteriores no
+   se tocan.
+2. A las BDs que están **adelante** se les mueve el puntero a la etiqueta nueva de **la misma**
+   migración. Una BD en `0020` queda en `0019`: **no retrocede de esquema, sigue un renombre**.
+3. **No se ejecuta ningún SQL. No es un rollback.** Las BDs que ya aplicaron esa versión conservan
+   **FÍSICAMENTE** sus objetos y el borrado **no los revierte** — la cadena simplemente deja de
+   describirlos. Es el primero de los `warnings` del plan, y no es opinable.
+4. Mover el puntero **escribe dentro de cada base gestionada** (`UPDATE` de la tabla de versión de
+   Alembic, con conexión y advisory lock). **No es una operación local del gateway**, y por eso ese
+   caso exige `confirm_token` y va marcado 🔌.
+
+**Endpoints**
+
+- `GET .../migrations/{version}/delete-plan` — **NUEVO**. Preview autoritativo: abre conexión a
+  cada BD, así que manda sobre las banderas del listado, que salen de caché. Trae `deletable`,
+  `renumber[]`, `stamp_plan[]`, `blockers[]`, `unstampable[]`, `partial_applications[]`,
+  `requires_confirmation`, `confirm_token` (TTL 2 min), `expires_at` y `warnings[]`.
+- `DELETE .../migrations/{version}` — gana el query param `confirm_token` (obligatorio **solo** si
+  el plan mueve punteros; borrar la punta sin BDs adelante sigue funcionando sin token) y deja de
+  responder vacío: ahora trae `renumbered[]` y `stamped[]`.
+
+**Cambios de contrato que rompían supuestos de la SPA**
+
+- `block_reason`: `"not_tip"` **eliminado**; el vocabulario v18 es `"in_use"`, `"partial"`, `null`.
+  El enum de Zod del repo declaraba `['applied','partial','not_tip']`, y **un enum de Zod rechaza
+  el valor desconocido y tumba la respuesta entera del listado** — por un texto de ayuda. Se dejó
+  tolerante (`['in_use','partial','applied','not_tip']`) para que un gateway sin actualizar no
+  rompa la pantalla.
+- `deletable` **deja de moverse junto a `sql_frozen`**, y no es un bug: una versión con una BD
+  *adelante* tiene `sql_frozen: true` (describe lo que ya corrió allí) y `deletable: true` (el
+  borrado le mueve el puntero). Ningún control puede derivar una bandera de la otra.
+- `delete_requires_stamps` — **NUEVO**. Marca el botón con 🔌, pero es **pista de caché, no
+  veredicto**: el autoritativo es `delete-plan`. La divergencia va siempre en la dirección «el
+  listado ofrece el botón y el plan después lo rechaza», nunca al revés.
+- El 409 del DELETE pasa de `model_migration.still_applied` (`>=`) a
+  `model_migration.version_in_use` (`==`). `still_applied` queda como `reason` de la **edición**:
+  los dos criterios **divergen a propósito**.
+
+**Un hallazgo del envelope que valía la tarea entera.** `envelope()` declara `data` como clave
+**requerida**, y `ApiResponse._exclude_none` del backend **omite del envelope las claves nulas de
+primer nivel**. O sea: el `data: null` de un gateway pre-v18 no llega como `null`, llega como
+**clave ausente**, y un `.nullable()` a secas habría convertido un borrado **ya ejecutado** en «La
+API devolvió una respuesta inesperada». Se resolvió con `.nullable().optional()` normalizado a
+`null`.
+
+**Errores clasificados por `public_context.code`** — nunca por la prosa del `message`, que no
+transcribe el error del motor a propósito (puede llevar host, usuario o fragmentos de sentencia):
+`version_in_use`, `unreadable_databases` (fail-closed: es un problema de acceso a esa BD, **no**
+del blueprint), `renumber_confirmation_required`, `renumber_stamp_failed` (en los dos casos el
+blueprint **no se modificó**: con `compensated: true` todo volvió a su lugar; si no, `left_moved[]`
+lista **solo** las BDs mal marcadas, que necesitan un `stamp` manual antes de reintentar),
+`renumber_target_missing` y `affected_partial_application`. El 422/410 del token no lleva `code`
+y significa que **el parque cambió** —un apply concurrente— así que el plan congelado ya no
+describe la realidad: se vuelve a planificar, y el texto no culpa al operador.

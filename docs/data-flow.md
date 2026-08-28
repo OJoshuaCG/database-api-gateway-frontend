@@ -314,8 +314,16 @@ DatabaseModelsPage: "Versiones" → /database-models/{modelId}/migrations   feat
   │     (la respuesta trae `translated` {mysql,postgresql} + `down_sql_suggested`; se muestran para revisión)
   │     invalida migrations Y databases: una versión nueva sube el pendiente de todas las BDs
   ├─ Detalle/edición → useUpdateModelMigration → PATCH .../migrations/{version} (confirmar down_sql / overrides / reviewed)
-  ├─ Eliminar (pie de la ficha) → useDeleteModelMigration → DELETE .../migrations/{version}
-  │     doble confirmación reescribiendo el número de versión; invalida migrations Y databases
+  ├─ Eliminar (pie de la ficha) → useModelMigrationDeletePlan → GET .../migrations/{version}/delete-plan 🔌
+  │     Veredicto EN VIVO: abre conexión a cada BD del blueprint, así que MANDA sobre las banderas del
+  │     listado, que salen de caché. Se pide desde el CLIC, nunca al montar el diálogo (v15 dejó el molde).
+  │     └─ MigrationDeletePlanDialog → useDeleteModelMigration → DELETE .../migrations/{version}?confirm_token=… 🔌
+  │           Se borra CUALQUIER versión, no solo la punta: las posteriores bajan un escalón y a las BDs que
+  │           están ADELANTE se les mueve el puntero. Eso es un UPDATE dentro de cada motor, no una operación
+  │           local del gateway — de ahí el token y el 🔌. No se ejecuta SQL: NO es un rollback, y lo que esas
+  │           BDs ya aplicaron sigue FÍSICAMENTE ahí. El token está atado al estado del parque: si una BD se
+  │           movió en el medio, 422 y hay que volver a planificar. Confirmación doble reescribiendo la versión.
+  │           invalida migrations, el DETALLE del blueprint (cambia current_version) Y databases
   └─ Aplicar a todas → ApplyMigrationsDialog → useApplyAllMigrations → POST .../migrations/apply-all 🔌 (dry-run/force/max_databases)
         invalida databases Y migrations: el apply cambia deletable/block_reason/sql_frozen de lo aplicado
 
