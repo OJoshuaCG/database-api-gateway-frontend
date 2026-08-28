@@ -26,8 +26,10 @@ import type { ModelDatabaseStatus } from '@/lib/contracts'
  *
  * Así que esto cuenta **solo lo que el backend afirma**: `pending_versions`, que es una lectura
  * directa. Lo demás lo dicen los booleanos por versión del propio `ModelMigrationSummary`
- * (`block_reason === 'applied'` → vigente en alguna BD; `'partial'` → aplicación parcial sin
- * resolver), que sí están decididos del lado que manda.
+ * (`block_reason === 'in_use'` → alguna BD está parada EXACTAMENTE en ella; `'partial'` →
+ * aplicación parcial sin resolver), que sí están decididos del lado que manda. El valor era
+ * `'applied'` hasta v18 y se sigue aceptando como legado, pero un backend al día no lo devuelve:
+ * quien lea solo por ese nombre va a creer que la versión no está en uso en ninguna parte.
  *
  * ## Dos límites que la UI tiene que decir, no esconder
  *

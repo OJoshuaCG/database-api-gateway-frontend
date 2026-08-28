@@ -130,9 +130,10 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
           {truncated && (
             <Callout tone="warning" title={`Se cargaron ${sorted.length} de ${total} versiones`}>
               <p>
-                El catálogo vino recortado por el tope de página, así que no se puede afirmar cuál es
-                la última versión: ni la insignia «más reciente» ni el borrado de la punta son
-                fiables en esta vista.
+                El catálogo vino recortado por el tope de página, así que no se puede afirmar cuál
+                es la última versión y la insignia «más reciente» no es fiable en esta vista. El
+                borrado sí lo es: ya no depende de cuál sea la punta, sino de la comprobación que se
+                hace en vivo contra cada base al pulsarlo.
               </p>
             </Callout>
           )}
