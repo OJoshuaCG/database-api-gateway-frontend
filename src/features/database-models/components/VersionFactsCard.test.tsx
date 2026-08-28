@@ -21,6 +21,7 @@ function summary(overrides: Partial<ModelMigrationSummary> = {}): ModelMigration
     capture_selects: false,
     sql_frozen: false,
     deletable: true,
+    delete_requires_stamps: false,
     block_reason: null,
     sql_diverged: false,
     has_seed: false,
@@ -218,15 +219,65 @@ describe('VersionFactsCard', () => {
 
   it('deshabilita eliminar según `deletable` y explica el motivo VISIBLE', async () => {
     mount({ summaryOverrides: { deletable: false, block_reason: 'partial' } })
-    expect(
-      await screen.findByRole('button', { name: 'Eliminar la versión 0007' }),
-    ).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Eliminar la versión 0007' })).toBeDisabled()
     // Antes el motivo era el `title` de un `<span>` envolviendo el botón: no llegaba por teclado
     // ni en táctil, y es la única forma de saber cuál de las tres reglas se incumplió.
-    expect(screen.getByText(/aplicación parcial sin resolver/)).toBeInTheDocument()
+    // El texto va COMPLETO y no como fragmento: «aplicación parcial sin resolver» aparece también
+    // en la insignia de la fila de adopción, y un match parcial encuentra las dos.
+    expect(
+      screen.getByText(
+        'Tiene una aplicación parcial sin resolver: reconcilia esa BD o completa el apply antes de eliminarla.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('aplicación parcial sin resolver')).toBeInTheDocument()
   })
 
-  it('sin poder afirmar cuál es la punta, la pista del borrado no nombra ninguna versión', () => {
+  it('`in_use` explica que la base está EXACTAMENTE en esta versión', async () => {
+    // El motivo de v18, y el único vigente para el borrado: el criterio es `==`, no `>=`. Una BD
+    // más adelante ya no bloquea nada — el borrado le mueve el puntero.
+    mount({ summaryOverrides: { deletable: false, block_reason: 'in_use', sql_frozen: true } })
+    expect(await screen.findByRole('button', { name: 'Eliminar la versión 0007' })).toBeDisabled()
+    expect(
+      screen.getByText(
+        'Alguna base de datos está exactamente en esta versión. Muévela con un apply o un rollback antes de eliminarla.',
+      ),
+    ).toBeInTheDocument()
+    // Y la insignia, que comparte con el legado `applied` porque describen el mismo hecho.
+    expect(screen.getByText('vigente en alguna BD')).toBeInTheDocument()
+  })
+
+  it('`delete_requires_stamps` marca el borrado con 🔌 y avisa de la escritura en el motor', async () => {
+    mount({ summaryOverrides: { delete_requires_stamps: true } })
+    // La pista sale de la caché del inventario y sirve para avisar ANTES de pulsar; el veredicto
+    // autoritativo lo da el `delete-plan`, que abre conexión a cada base.
+    expect(
+      await screen.findByRole('button', { name: 'Eliminar la versión 0007 🔌' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Eliminarla implicaría escribir en el motor de alguna BD/),
+    ).toBeInTheDocument()
+  })
+
+  it('con el borrado bloqueado, el motivo manda sobre el aviso de escritura', () => {
+    // Los dos ocupan el mismo hueco: avisar de una escritura que no va a llegar a ocurrir solo
+    // taparía la razón por la que no se puede borrar.
+    mount({
+      summaryOverrides: {
+        deletable: false,
+        block_reason: 'in_use',
+        delete_requires_stamps: true,
+      },
+    })
+    expect(screen.getByText(/está exactamente en esta versión/)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Eliminarla implicaría escribir en el motor de alguna BD/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('LEGADO `not_tip`: sin saber cuál es la punta, la pista no nombra ninguna versión', () => {
+    // Desde v18 se puede eliminar cualquier versión, punta o intermedia: `not_tip` YA NO describe
+    // una regla vigente. Se conserva porque es lo que un gateway sin actualizar sigue diciendo, y
+    // traducirlo a la regla nueva le pondría en la boca algo que no dijo.
     // Catálogo recortado por el tope de página: `latestVersion` llega `null`.
     mount({
       summaryOverrides: { deletable: false, block_reason: 'not_tip' },

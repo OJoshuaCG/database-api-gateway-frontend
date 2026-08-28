@@ -49,7 +49,16 @@ export function resolveVersionIndex(
   return index === -1 ? sorted.length - 1 : index
 }
 
-/** Versión punta (la de mayor número): la única que el backend deja eliminar. */
+/**
+ * Versión punta: la de mayor número.
+ *
+ * **Ya NO es «la única que se puede eliminar».** Desde api-reference-v18 el backend deja borrar
+ * cualquier versión, punta o intermedia: al borrar una intermedia renumera las posteriores y mueve
+ * el puntero de las BDs que estén más adelante. Ser la punta dejó de ser un requisito.
+ *
+ * Lo que sigue haciendo falta de esta función es redactar la pista del bloqueo `not_tip`, que es
+ * legado de un gateway anterior a v18 y que un backend actualizado ya no devuelve.
+ */
 export function latestVersionOf(sorted: readonly VersionLike[]): string | null {
   return sorted.at(-1)?.version ?? null
 }
@@ -66,10 +75,7 @@ export interface VersionNeighbors {
 }
 
 /** Vecinos de la versión actual, para habilitar o no las flechas de navegación. */
-export function versionNeighbors(
-  sorted: readonly VersionLike[],
-  index: number,
-): VersionNeighbors {
+export function versionNeighbors(sorted: readonly VersionLike[], index: number): VersionNeighbors {
   const total = sorted.length
   if (index < 0 || total === 0) {
     return { previous: null, next: null, position: 0, total, isLatest: false }

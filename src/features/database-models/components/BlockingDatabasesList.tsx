@@ -24,17 +24,34 @@ interface BlockingDatabasesListProps {
 
 const REASON_TONE: Record<string, 'warning' | 'error' | 'neutral'> = {
   still_applied: 'warning',
+  // `in_use` es un motivo LEGÍTIMO, no una inconsistencia: sin esta entrada caería en el `??
+  // 'neutral'` de abajo y, peor, en el texto «inconsistencia interna» — que dice exactamente lo
+  // contrario de lo que pasa y manda al operador a reportar un bug en vez de a mover su base.
+  in_use: 'warning',
   unreadable: 'neutral',
   unknown_database: 'error',
   unknown_blueprint: 'error',
 }
 
 /**
- * Las BDs que bloquean editar o borrar una versión (api-reference-v14 §2).
+ * Las BDs que bloquean editar o borrar una versión (api-reference-v14 §2 y v18 §4).
  *
  * Se usa en los tres sitios donde aparece la misma lista —el panel del 409, el paso 1 de la
  * confirmación y la pantalla de resultado—, porque son literalmente las mismas filas y
  * duplicarlas terminaría con tres textos distintos para el mismo hecho.
+ *
+ * **Sirve a dos 409 con criterios que divergen a propósito**, y por eso los motivos no se pueden
+ * unificar en uno solo:
+ *
+ * - `still_applied` es el de la **edición**, con criterio `>=`: la base está en esta versión **o
+ *   en una posterior**, o sea que ya ejecutó este SQL y editarlo la dejaría divergente.
+ * - `in_use` es el del **borrado** (v18), con criterio `==`: la base está parada
+ *   **exactamente** aquí. Una base más adelante no bloquea el borrado —se le mueve el puntero—,
+ *   así que el `>=` de la edición prohibiría cosas que el borrado sí permite.
+ *
+ * Redactarlos con el mismo texto haría que «está en la versión 0007» significara dos cosas
+ * distintas según qué diálogo lo pintó, que es justo el malentendido que lleva a mover una base
+ * que no hacía falta mover.
  *
  * **Los nombres no vienen en el payload**: el backend manda solo el id, porque el mensaje nativo
  * del motor puede arrastrar host, usuario o fragmentos de sentencia. Se resuelven contra las BDs
@@ -70,9 +87,11 @@ export function BlockingDatabasesList({ modelId, rows, requestId }: BlockingData
               <Badge tone={REASON_TONE[row.reason] ?? 'neutral'}>
                 {row.reason === 'still_applied'
                   ? `está en la versión ${row.current_version ?? '—'}`
-                  : row.reason === 'unreadable'
-                    ? 'no se pudo verificar'
-                    : 'inconsistencia interna'}
+                  : row.reason === 'in_use'
+                    ? `está exactamente en la versión ${row.current_version ?? '—'}`
+                    : row.reason === 'unreadable'
+                      ? 'no se pudo verificar'
+                      : 'inconsistencia interna'}
               </Badge>
             </div>
 

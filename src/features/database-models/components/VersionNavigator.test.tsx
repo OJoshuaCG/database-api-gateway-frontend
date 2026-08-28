@@ -21,6 +21,7 @@ function migration(version: string, id: number): ModelMigrationSummary {
     capture_selects: false,
     sql_frozen: false,
     deletable: true,
+    delete_requires_stamps: false,
     has_seed: false,
     forced_collations: [],
     destructive: false,

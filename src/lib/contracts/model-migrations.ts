@@ -26,11 +26,19 @@ export const migrationTranslatedSchema = z.object({
 export type MigrationTranslated = z.infer<typeof migrationTranslatedSchema>
 
 /**
- * Motivo por el que una versión está restringida. `not_tip` **solo** impide borrarla: editarla
- * sigue permitido, y confundir las dos cosas es lo que hacía que la UI mintiera sobre lo que se
- * podía hacer.
+ * Motivo por el que una versión está restringida (api-reference-v18 §5).
+ *
+ * El vocabulario que v18 declara es **`'in_use' | 'partial' | null`**: `not_tip` desapareció
+ * porque borrar dejó de exigir ser la punta, y `applied` nunca llegó a estar en v18. Los dos se
+ * conservan aquí a propósito, y no porque el contrato los use.
+ *
+ * El motivo es que un `z.enum` **rechaza el valor desconocido y con él la respuesta ENTERA del
+ * listado**: apuntar contra un gateway sin actualizar dejaría la pantalla de versiones en blanco
+ * —"La API devolvió una respuesta inesperada."— por un texto de ayuda que solo matiza un botón ya
+ * deshabilitado por `deletable`. Aceptar los dos valores legado cuesta dos strings; no aceptarlos
+ * cuesta la pantalla.
  */
-export const migrationBlockReasonSchema = z.enum(['applied', 'partial', 'not_tip'])
+export const migrationBlockReasonSchema = z.enum(['in_use', 'partial', 'applied', 'not_tip'])
 export type MigrationBlockReason = z.infer<typeof migrationBlockReasonSchema>
 
 /**
@@ -48,6 +56,22 @@ const migrationPolicyFields = {
   sql_frozen: z.boolean().optional().default(false),
   deletable: z.boolean().optional().default(true),
   block_reason: migrationBlockReasonSchema.nullable().optional(),
+  /**
+   * Borrar esta versión implicaría **escribir en el motor** de alguna BD (api-reference-v18 §5):
+   * mover el puntero de versión de las bases que están más adelante, para que el renumerado no
+   * las deje apuntando a una versión que ya no existe.
+   *
+   * Es una **pista de caché, no un veredicto**. Sale del inventario del gateway, que puede estar
+   * rancio; el veredicto autoritativo —el que abre conexión a cada BD— lo da
+   * `GET .../migrations/{version}/delete-plan`. Sirve para elegir QUÉ diálogo abrir (el simple o
+   * el que muestra el plan de stamps), nunca para decidir si la operación va a proceder.
+   *
+   * La divergencia entre la pista y el plan siempre va en la misma dirección: el listado ofrece el
+   * botón y el plan lo rechaza. Nunca al revés, porque el plan lee la realidad de ahora y la
+   * caché solo puede quedarse corta. Por eso el flujo es «abrir el diálogo → pedir el plan →
+   * obedecer al plan», y no «confiar en la bandera».
+   */
+  delete_requires_stamps: z.boolean().optional().default(false),
 }
 
 /**
@@ -351,8 +375,19 @@ export type MigrationValidateIn = z.infer<typeof migrationValidateInSchema>
  * convertiría un corte de red en autorización para destruir metadata. Presentarlo como «error
  * transitorio, reintentá» lleva al operador a reintentar hasta que la fila desaparezca, y a leer
  * esa desaparición como permiso.
+ *
+ * `in_use` y `still_applied` **divergen a propósito** y no son sinónimos con distinto nombre:
+ *
+ * - `in_use` es el motivo del **borrado** (v18 §5): la BD está parada EXACTAMENTE en esa versión
+ *   (`==`). Borrarla dejaría a esa base apuntando a una versión que ya no existe.
+ * - `still_applied` es el motivo de la **edición** (v14 §2): la BD está en esa versión **o en una
+ *   posterior** (`>=`), es decir, ya ejecutó ese SQL. Cambiarlo la volvería divergente.
+ *
+ * Colapsarlos en uno haría que una BD adelantada bloqueara un borrado que v18 permite, o que una
+ * BD parada justo ahí pasara por editable. Son la misma lista con dos preguntas distintas.
  */
 export const migrationBlockingReasonSchema = z.enum([
+  'in_use',
   'still_applied',
   'unreadable',
   'unknown_database',
@@ -417,9 +452,138 @@ export const migrationEditPreviewOutSchema = z.object({
 })
 export type MigrationEditPreviewOut = z.infer<typeof migrationEditPreviewOutSchema>
 
+// ── Borrar una versión intermedia (api-reference-v18) ───────────────────────────
+
 /**
- * Códigos estables de `detail.public_context.code` de las versiones de blueprint (v14 §2 y
- * v15 §4).
+ * Un paso del **renumerado del blueprint** (v18 §2): la versión `from_version` pasa a llamarse
+ * `to_version` para tapar el hueco que deja la borrada.
+ *
+ * Es un cambio de metadata del blueprint, no del motor: ninguna BD se toca por esto. Lo que sí
+ * toca el motor es `migrationStampStepSchema`, y la diferencia importa al redactar la
+ * confirmación — mezclarlos haría que un renumerado inocuo se lea como una escritura remota.
+ */
+export const migrationRenumberStepSchema = z.object({
+  from_version: z.string(),
+  to_version: z.string(),
+})
+export type MigrationRenumberStep = z.infer<typeof migrationRenumberStepSchema>
+
+/**
+ * Un puntero de versión que hay que **mover en una BD real** (v18 §2/§4): esa base quedó parada en
+ * `from_version` y, tras el renumerado, esa misma migración se llama `to_version`. Sin el stamp, la
+ * base apuntaría a una versión inexistente.
+ *
+ * `database_name` y `server_id` son **opcionales a propósito**, y no por prudencia genérica: el
+ * contrato los muestra en `stamp_plan`, pero **no los garantiza en `left_moved`** (el 409
+ * `renumber_stamp_failed`). Exigirlos invalidaría justamente la lista que dice qué bases quedaron
+ * mal marcadas, que es el peor momento posible para quedarse sin datos. Una fila sin nombre tiene
+ * que degradar a «BD #3» y seguir mostrándose.
+ */
+export const migrationStampStepSchema = z.object({
+  managed_database_id: z.number().int(),
+  database_name: z.string().optional(),
+  server_id: z.number().int().optional(),
+  from_version: z.string(),
+  to_version: z.string(),
+})
+export type MigrationStampStep = z.infer<typeof migrationStampStepSchema>
+
+/**
+ * BD a la que **no se le puede mover el puntero** porque la versión destino no existe en su
+ * historial (409 `model_migration.renumber_target_missing`, v18 §4).
+ *
+ * `current_version` es dónde está parada y `missing_target` es a dónde habría que moverla. Los dos
+ * son requeridos porque sin el par el mensaje no dice nada accionable: «no se pudo re-marcar la BD
+ * 3» no permite decidir si falta aplicar migraciones ahí o si su historial está corrupto.
+ */
+export const migrationUnstampableDatabaseSchema = z.object({
+  managed_database_id: z.number().int(),
+  database_name: z.string().optional(),
+  server_id: z.number().int().optional(),
+  current_version: z.string(),
+  missing_target: z.string(),
+})
+export type MigrationUnstampableDatabase = z.infer<typeof migrationUnstampableDatabaseSchema>
+
+/**
+ * BD con una aplicación **a medias** que el borrado afectaría (v18 §2, `partial_applications[]`).
+ *
+ * ⚠️ **Esta forma está DEDUCIDA del contrato, no observada en un payload real.** v18 no fija los
+ * campos de `partial_applications[]` más allá de que cada entrada enlaza a `reconcile-partial` de
+ * esa BD — o sea, lo único que el contrato compromete es el `managed_database_id`. Por eso todo lo
+ * demás va `.optional()`: si el backend manda otro juego de claves, la fila degrada a «BD #3, con
+ * aplicación parcial» en vez de tumbar el plan entero y dejar al operador sin ver por qué el
+ * borrado está bloqueado. Cuando se vea un payload real, esto se ajusta con datos, no con
+ * suposiciones.
+ */
+export const migrationAffectedPartialApplicationSchema = z.object({
+  managed_database_id: z.number().int(),
+  database_name: z.string().optional(),
+  version: z.string().optional(),
+  last_statement_index: z.number().int().optional(),
+  total_statements: z.number().int().optional(),
+})
+export type MigrationAffectedPartialApplication = z.infer<
+  typeof migrationAffectedPartialApplicationSchema
+>
+
+/**
+ * `MigrationDeletePlanOut` (v18 §2) — previsualización de borrar una versión **intermedia**.
+ *
+ * Es un GET que no modifica nada, pero **abre conexión a cada BD del blueprint**: por eso su
+ * veredicto es autoritativo en vivo, a diferencia de `deletable` / `delete_requires_stamps` del
+ * listado, que salen de la caché del inventario. Ante discrepancia manda el plan, siempre.
+ *
+ * `deletable: false` va acompañado de `blockers` (BDs paradas exactamente ahí o ilegibles),
+ * `unstampable` (BDs a las que no se les puede mover el puntero) o `partial_applications`; los
+ * tres son las tres formas distintas de «no» y cada una tiene su propia salida.
+ *
+ * `confirm_token` y `expires_at` son `.nullable()` y **no** `.optional()` por el mismo motivo que
+ * en el preview de edición: dentro de `data` un nulo viaja como `null` explícito. Vienen en `null`
+ * cuando no hace falta confirmar **y también cuando el plan está bloqueado** — un plan bloqueado
+ * no emite autorización. El TTL es de 2 minutos y no viaja en la respuesta: la cuenta atrás sale
+ * de `expires_at`, nunca de una constante local.
+ *
+ * `warnings` no es decorado: ahí viaja el hecho de que las BDs ya stampeadas **conservan
+ * FÍSICAMENTE** los objetos que creó la versión borrada. El blueprint deja de describirlos, el
+ * motor los sigue teniendo. Ocultar eso convierte un borrado de metadata en una divergencia
+ * silenciosa entre lo que el gateway dice y lo que la base es.
+ */
+export const migrationDeletePlanOutSchema = z.object({
+  model_id: z.number().int(),
+  version: z.string(),
+  deletable: z.boolean(),
+  renumber: z.array(migrationRenumberStepSchema).default([]),
+  stamp_plan: z.array(migrationStampStepSchema).default([]),
+  blockers: z.array(blockingDatabaseSchema).default([]),
+  unstampable: z.array(migrationUnstampableDatabaseSchema).default([]),
+  partial_applications: z.array(migrationAffectedPartialApplicationSchema).default([]),
+  requires_confirmation: z.boolean(),
+  confirm_token: z.string().nullable(),
+  expires_at: z.string().nullable(),
+  warnings: z.array(z.string()).default([]),
+})
+export type MigrationDeletePlanOut = z.infer<typeof migrationDeletePlanOutSchema>
+
+/**
+ * Resultado del `DELETE .../migrations/{version}` en v18 §3, que **dejó de ser vacío**.
+ *
+ * Dice qué se hizo de verdad, no qué se había planeado: `renumbered` son las versiones del
+ * blueprint que cambiaron de número y `stamped` los punteros que se movieron en BDs reales. La UI
+ * tiene que pintar lo ejecutado y no el plan previo, porque entre el `delete-plan` y el DELETE
+ * pasaron hasta 2 minutos y el resultado puede diferir.
+ */
+export const migrationDeleteResultSchema = z.object({
+  model_id: z.number().int(),
+  version: z.string(),
+  renumbered: z.array(migrationRenumberStepSchema).default([]),
+  stamped: z.array(migrationStampStepSchema).default([]),
+})
+export type MigrationDeleteResult = z.infer<typeof migrationDeleteResultSchema>
+
+/**
+ * Códigos estables de `detail.public_context.code` de las versiones de blueprint (v14 §2,
+ * v15 §4 y v18 §4).
  *
  * `sqlFrozen` es el único con **override**: trae `override_available: true` y habilita la vía de
  * excepción. Los otros dos 409 **no lo tienen**, y ofrecérsela por analogía sería inventar una
@@ -429,6 +593,24 @@ export type MigrationEditPreviewOut = z.infer<typeof migrationEditPreviewOutSche
  *   posterior interpretaría los índices del checkpoint contra un SQL que no es el que corrió.
  * - `stillApplied` (el DELETE): borrar la descripción de cambios que están físicamente en una BD
  *   dejaría esa base con objetos que ninguna versión del blueprint describe.
+ *
+ * Los seis códigos de v18 §4 son del borrado de una versión **intermedia** y **ninguno tiene
+ * override**: cada uno tiene una salida distinta y confundirlas es lo caro.
+ *
+ * - `versionInUse` y `unreadableDatabases` traen `blocking_databases[]`. El segundo es
+ *   **fail-closed**: no significa «esa BD no la tiene», significa «no se pudo comprobar». Tratarlo
+ *   como reintentable lleva al operador a insistir hasta que la fila desaparezca y a leer esa
+ *   desaparición como permiso.
+ * - `renumberConfirmationRequired` trae `stamp_plan[]`: es el «falta el `confirm_token`», y su
+ *   salida es pedir el `delete-plan` otra vez, no reintentar el DELETE tal cual.
+ * - `renumberStampFailed` trae `compensated` y `left_moved[]`. En este 409 **el blueprint no se
+ *   modificó**; lo que puede haber quedado mal son punteros de BDs.
+ * - `renumberTargetMissing` trae `unstampable_databases[]`, y tampoco modificó el blueprint.
+ * - `affectedPartialApplication` no trae contexto extra: su salida es resolver la aplicación
+ *   parcial (`reconcile-partial`) antes de volver a intentar el borrado.
+ *
+ * `stillApplied` **sigue vigente**: es el `reason` de la EDICIÓN (`>=`), no del borrado (`==`).
+ * Borrarlo de aquí rompería la clasificación del 409 de `edit-preview`/PATCH.
  */
 export const MIGRATION_ERROR_CODES = {
   sqlFrozen: 'model_migration.sql_frozen',
@@ -436,4 +618,10 @@ export const MIGRATION_ERROR_CODES = {
   partialApplication: 'model_migration.partial_application',
   staleOverrides: 'model_migration.stale_overrides',
   editConfirmMismatch: 'model_migration.edit_confirm_mismatch',
+  versionInUse: 'model_migration.version_in_use',
+  unreadableDatabases: 'model_migration.unreadable_databases',
+  renumberConfirmationRequired: 'model_migration.renumber_confirmation_required',
+  renumberStampFailed: 'model_migration.renumber_stamp_failed',
+  renumberTargetMissing: 'model_migration.renumber_target_missing',
+  affectedPartialApplication: 'model_migration.affected_partial_application',
 } as const

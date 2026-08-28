@@ -14,6 +14,7 @@ function summary(overrides: Partial<ModelMigrationSummary> = {}): ModelMigration
     capture_selects: false,
     sql_frozen: false,
     deletable: true,
+    delete_requires_stamps: false,
     block_reason: null,
     sql_diverged: false,
     has_seed: false,
@@ -40,7 +41,9 @@ describe('versionAlerts', () => {
   })
 
   it('una versión puede caer en varios cubos a la vez', () => {
-    const alerts = versionAlerts([summary({ version: '0007', reviewed: false, has_rollback: false })])
+    const alerts = versionAlerts([
+      summary({ version: '0007', reviewed: false, has_rollback: false }),
+    ])
     expect(alerts.unreviewed).toEqual(['0007'])
     expect(alerts.withoutRollback).toEqual(['0007'])
   })

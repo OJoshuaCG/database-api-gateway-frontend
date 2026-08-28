@@ -37,14 +37,25 @@ interface VersionFactsCardProps {
 }
 
 /**
- * Por qué no se puede eliminar la versión, según el `block_reason` del backend. `not_tip` es el
- * único que no impide editarla.
+ * Por qué no se puede eliminar la versión, según el `block_reason` del backend.
+ *
+ * `in_use` es el motivo de v18 y el único vigente para el borrado: la BD está parada
+ * **exactamente** aquí (criterio `==`), no «aquí o más adelante». Una base más adelante ya no
+ * bloquea nada — el borrado le mueve el puntero.
+ *
+ * `applied` y `not_tip` se conservan como **legado de un gateway sin actualizar**: un backend en
+ * v18 no los devuelve. El texto de `not_tip` en particular **ya no describe una regla vigente**
+ * (desde v18 se puede borrar cualquier versión, punta o intermedia), pero se mantiene tal cual
+ * porque es lo que ESE backend viejo está diciendo, y traducirlo a la regla nueva le pondría en
+ * la boca algo que no dijo.
  */
 const DELETE_BLOCK_HINT: Record<
   MigrationBlockReason | 'none',
   (latestVersion: string | null) => string | undefined
 > = {
   none: () => undefined,
+  in_use: () =>
+    'Alguna base de datos está exactamente en esta versión. Muévela con un apply o un rollback antes de eliminarla.',
   applied: () =>
     'Alguna base de datos está hoy en esta versión o en una posterior. Crea una migración compensatoria.',
   partial: () =>
@@ -113,6 +124,22 @@ export function VersionFactsCard({
   const canMutate = detail.isSuccess && !vanished
 
   const deleteHint = DELETE_BLOCK_HINT[summary.block_reason ?? 'none'](latestVersion)
+
+  /*
+   * `deletable` y `sql_frozen` YA NO se mueven juntos, y no es un bug del backend.
+   *
+   * Los dos criterios divergen desde v18: `sql_frozen` es `>=` (hay una base en esta versión **o
+   * en una posterior**, así que alguien ya ejecutó este SQL) y `deletable` es `==` (solo bloquea
+   * una base parada exactamente aquí, porque a las de más adelante el borrado les mueve el
+   * puntero). El caso normal de la pareja es una versión con una base ADELANTE:
+   * `sql_frozen: true` y `deletable: true` a la vez. Es coherente — su SQL no se puede reescribir
+   * porque ya corrió, y aun así la versión se puede sacar de la cadena.
+   *
+   * Por eso ningún control puede derivar uno del otro: deshabilitar «Eliminar» por `sql_frozen`
+   * prohibiría un borrado que el backend acepta, y pintar el aviso de congelado por `!deletable`
+   * lo escondería justo en el caso en que hace falta.
+   */
+  const requiresStamps = summary.delete_requires_stamps === true
   const collationDiffers =
     blueprintCollation != null &&
     summary.forced_collations.some(
@@ -205,8 +232,8 @@ export function VersionFactsCard({
           <Callout tone="warning" title="El SQL se editó después de que alguna base lo aplicara">
             <p>
               Esas bases conservan el esquema anterior: esta versión ya no describe el plano de
-              todas sus bases. No restringe nada —el SQL nuevo es el que se aplica de aquí en
-              más—, pero para alinearlas hace falta una versión compensatoria.
+              todas sus bases. No restringe nada —el SQL nuevo es el que se aplica de aquí en más—,
+              pero para alinearlas hace falta una versión compensatoria.
             </p>
           </Callout>
         )}
@@ -214,6 +241,14 @@ export function VersionFactsCard({
         {summary.sql_frozen && (
           <Callout tone="info" title="El SQL base de esta versión está congelado">
             <p>
+              {/* Este ternario sigue siendo correcto con el vocabulario de v18, y se deja escrito
+                  para que nadie lo "arregle" derivándolo de `deletable`: la rama por defecto
+                  redacta el criterio de `sql_frozen`, que es `>=` («en esta versión o en una
+                  posterior»), y ese enunciado cubre tanto `in_use` (la base está exactamente
+                  aquí) como `null` (está más adelante, que es el caso en el que el backend
+                  congela el SQL sin bloquear el borrado). La única rama que necesita texto propio
+                  es `partial`, porque ahí no se congela por dónde está ninguna base sino por un
+                  apply a medio camino. */}
               {summary.block_reason === 'partial'
                 ? 'Tiene una aplicación parcial sin resolver.'
                 : 'Alguna base está hoy en esta versión o en una posterior.'}{' '}
@@ -246,7 +281,9 @@ export function VersionFactsCard({
                 size="sm"
                 isLoading={update.isPending}
                 disabled={!canMutate}
-                onClick={() => update.mutate({ version: summary.version, body: { reviewed: true } })}
+                onClick={() =>
+                  update.mutate({ version: summary.version, body: { reviewed: true } })
+                }
               >
                 Revisar y aprobar
               </Button>
@@ -284,6 +321,31 @@ export function VersionFactsCard({
                 botón deshabilitado: no llega por teclado ni en táctil, y es la única forma de saber
                 cuál de las tres reglas se incumplió. */}
             {deleteHint && <p className="mr-auto text-xs text-muted-foreground">{deleteHint}</p>}
+            {/*
+              `delete_requires_stamps` marca el botón con 🔌 porque eliminar esta versión
+              implicaría ESCRIBIR en el motor de alguna BD: mover el puntero de versión de las
+              bases que están más adelante para que el renumerado no las deje apuntando a una
+              etiqueta que ya no existe.
+
+              Es una **pista de caché, no un veredicto**. Sale del inventario del gateway, que
+              puede estar rancio; el autoritativo es el `delete-plan`, que abre conexión a cada
+              base. Sirve para avisar ANTES de pulsar, nunca para decidir si la operación va a
+              proceder — eso lo decide el plan, y el diálogo obedece al plan.
+
+              La divergencia entre pista y plan va siempre en la misma dirección: el listado
+              ofrece el botón y el plan después lo rechaza. Nunca al revés, porque el plan lee la
+              realidad de ahora y la caché solo puede quedarse corta.
+
+              Se calla cuando hay `deleteHint`: los dos ocupan el mismo hueco a la izquierda, y si
+              el borrado está bloqueado el motivo del bloqueo manda — avisar de una escritura que
+              no va a llegar a ocurrir solo tapa la razón por la que no se puede.
+            */}
+            {requiresStamps && !deleteHint && (
+              <p className="mr-auto text-xs text-muted-foreground">
+                Eliminarla implicaría escribir en el motor de alguna BD: hay bases más adelante y
+                habría que mover su puntero de versión. El plan lo confirma antes de tocar nada.
+              </p>
+            )}
             <Button
               variant="danger-soft"
               size="sm"
@@ -291,6 +353,7 @@ export function VersionFactsCard({
               onClick={() => onRequestDelete(summary.version)}
             >
               Eliminar la versión {summary.version}
+              {requiresStamps ? ' 🔌' : ''}
             </Button>
           </div>
         </div>
@@ -382,7 +445,9 @@ function AdoptionRow({
           <span>Entornos con pendientes:</span>
           {adoption.byEnvironment.map((entry) => (
             <span key={entry.environmentId ?? 'sin-clasificar'} className="flex items-center gap-1">
-              <EnvironmentBadge state={resolveEnvironmentState(entry.environmentId, environmentMap)} />
+              <EnvironmentBadge
+                state={resolveEnvironmentState(entry.environmentId, environmentMap)}
+              />
               <span className="tabular-nums">({entry.pending})</span>
             </span>
           ))}
@@ -390,7 +455,11 @@ function AdoptionRow({
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        {blockReason === 'applied' && (
+        {/* `in_use` es el motivo de v18 y `applied` su equivalente legado (un gateway sin
+            actualizar). Se pintan los dos con la misma insignia porque describen el mismo hecho
+            para el operador —hay una base parada en esta versión— y tener uno sin insignia haría
+            que la misma situación se viera distinta según la versión del backend. */}
+        {(blockReason === 'in_use' || blockReason === 'applied') && (
           <Badge tone="info" title="Por eso su SQL base está congelado y no se puede eliminar.">
             vigente en alguna BD
           </Badge>
@@ -403,8 +472,8 @@ function AdoptionRow({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Es la copia local del gateway, no una lectura del motor: una BD stampeada, adoptada o dada de
-        alta declarando su versión aparece al día <strong>sin haber ejecutado este SQL</strong>.
+        Es la copia local del gateway, no una lectura del motor: una BD stampeada, adoptada o dada
+        de alta declarando su versión aparece al día <strong>sin haber ejecutado este SQL</strong>.
         {adoption.excluded > 0 &&
           ` ${adoption.excluded} BD(s) quedan fuera del conteo por no estar activas.`}{' '}
         <Link to={statusUrl} className="text-primary hover:underline">
