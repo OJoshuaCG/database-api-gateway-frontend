@@ -33,5 +33,10 @@ dist-ssr
 .claude/*.tmp
 .claude/worktrees/
 
+# Registro de skills del tooling de agentes: se REGENERA en cada máquina y arrastra su propia
+# caché, así que versionarlo produce conflictos por un índice que nadie lee a mano. El repo de
+# backend ya lo ignora; esta línea faltaba sólo aquí.
+.atl/
+
 # Environment variables
 .env
