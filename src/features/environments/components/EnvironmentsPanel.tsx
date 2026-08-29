@@ -93,8 +93,8 @@ export function EnvironmentsPanel() {
                         // Enlace al inventario SIN query param: los filtros de esa página viven
                         // en `useState`, no en la URL, así que un `?environment_id=` no se
                         // aplicaría y el link prometería un filtro que no ocurre. Cuando los
-                        // filtros se sincronicen con la URL (ítem propio en TODO.md), acá se
-                        // agrega el param y el título deja de hacer falta.
+                        // filtros se sincronicen con la URL, acá se agrega el param y el título
+                        // deja de hacer falta.
                         <Link
                           to="/managed-databases"
                           className="text-primary hover:underline"
