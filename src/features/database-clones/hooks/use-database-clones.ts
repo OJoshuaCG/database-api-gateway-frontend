@@ -10,6 +10,7 @@ import {
   previewDatabaseClone,
   resolveCloneSelection,
 } from '../api/database-clones.api'
+import { buildPreviewBody, selectionPlanKey, type CloneSelectionPlan } from '../wizard/logic'
 
 /** Estados terminales del job: ninguna vista debe seguir haciendo polling una vez alcanzados. */
 export const CLONE_TERMINAL_STATUSES = new Set<CloneStatus>([
@@ -80,20 +81,18 @@ export function useCloneResolveSelection(id: number, selection: CloneObjectRef[]
 }
 
 /**
- * Preview autoritativo del plan (Vista 4): `selection: null` = clon completo. El `confirm_token`
- * que devuelve es el único válido para `execute`; se difiere igual que el cierre para no
- * recomputar en cada cambio de selección.
+ * Preview autoritativo del plan (Vista 4). Recibe el plan de selección YA CONFIRMADO —clon
+ * completo, refs exactas o regla declarativa— y deja que `buildPreviewBody` elija el idioma:
+ * mandar los dos en el mismo body es un 422 del backend. El `confirm_token` que devuelve es el
+ * único válido para `execute`.
  */
-export function useClonePreview(id: number, selection: CloneObjectRef[] | null, enabled: boolean) {
-  const deferredSelection = useDeferredValue(selection)
-  const keys = useMemo(
-    () => (deferredSelection ? sortedKeys(deferredSelection) : null),
-    [deferredSelection],
-  )
+export function useClonePreview(id: number, plan: CloneSelectionPlan, enabled: boolean) {
+  const deferredPlan = useDeferredValue(plan)
+  const planKey = useMemo(() => selectionPlanKey(deferredPlan), [deferredPlan])
 
   return useQuery({
-    queryKey: queryKeys.databaseClones.preview(id, keys),
-    queryFn: ({ signal }) => previewDatabaseClone(id, { selection: deferredSelection }, signal),
+    queryKey: queryKeys.databaseClones.preview(id, planKey),
+    queryFn: ({ signal }) => previewDatabaseClone(id, buildPreviewBody(deferredPlan), signal),
     enabled: enabled && Number.isFinite(id) && id > 0,
   })
 }

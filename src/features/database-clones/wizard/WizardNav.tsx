@@ -34,17 +34,22 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
       )
       break
 
-    case 'selection':
+    case 'selection': {
+      // `closure.isStale` solo frena en el modo manual: el modo por regla no pide el cierre de
+      // dependencias (lo resuelve el backend al congelar el plan), así que ahí queda siempre
+      // en `false` y no tiene por qué bloquear nada.
+      const resolvingClosure = wizard.selectionKind === 'manual' && wizard.closure.isStale
       left = <BackButton wizard={wizard} disabled={busy} onClick={() => wizard.goToStep('plan')} />
       right = (
         <Button
           onClick={wizard.confirmSelection}
-          disabled={wizard.checkedSelection.size === 0 || wizard.closure.isStale}
+          disabled={wizard.selectionEmpty || resolvingClosure}
         >
-          {wizard.closure.isStale ? 'Resolviendo dependencias…' : 'Previsualizar selección →'}
+          {resolvingClosure ? 'Resolviendo dependencias…' : 'Previsualizar selección →'}
         </Button>
       )
       break
+    }
 
     case 'preview': {
       const nameMatches =

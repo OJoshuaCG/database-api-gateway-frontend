@@ -13,8 +13,8 @@ const STAGE_LABELS: Partial<Record<WizardStep, string>> = {
  * `summary`, una pantalla de tránsito, no una etapa del flujo) en vez de una lista fija: `order`
  * ya excluye `selection` para un clon COMPLETO (nunca se visita), así que el indicador nunca la
  * marca como "completada"/navegable para un plan que nunca pasó por ahí — evitar eso importa
- * porque saltar a esa vista permitiría sobrescribir `finalSelection` (que debía quedar `null`
- * para un clon completo) con una selección parcial no pedida. Los pasos ya visitados son
+ * porque saltar a esa vista permitiría sobrescribir `finalSelectionPlan` (que debía quedar en
+ * `kind: 'full'`) con una selección parcial no pedida. Los pasos ya visitados son
  * navegables hacia atrás; el monitor, una vez alcanzado, es terminal.
  */
 export function WizardStepper({ wizard }: { wizard: DatabaseCloneWizard }) {

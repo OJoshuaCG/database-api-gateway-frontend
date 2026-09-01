@@ -122,8 +122,10 @@ export const queryKeys = {
     objects: (id: number) => ['database-clones', id, 'objects'] as const,
     resolveSelection: (id: number, selection: string[]) =>
       ['database-clones', id, 'resolve-selection', selection] as const,
-    preview: (id: number, selection: string[] | null) =>
-      ['database-clones', id, 'preview', selection] as const,
+    // `plan` es la huella del plan de selección (`selectionPlanKey`), no la lista de objetos: el
+    // asistente puede describir la selección con refs exactas O con una regla declarativa, y las
+    // dos formas tienen que caer en entradas de caché distintas.
+    preview: (id: number, plan: string) => ['database-clones', id, 'preview', plan] as const,
     items: (id: number, params: QueryParams) => ['database-clones', id, 'items', params] as const,
   },
   collationConversions: {

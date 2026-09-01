@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
-import type { CloneCleanMode, CloneObjectRef, CloneTargetMode, ServerOut } from '@/lib/contracts'
+import type {
+  CloneCleanMode,
+  CloneObjectOut,
+  CloneObjectRef,
+  CloneObjectType,
+  CloneTargetMode,
+  ServerOut,
+} from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import {
@@ -26,16 +33,27 @@ import {
 } from '../hooks/use-database-clone-actions'
 import {
   INITIAL_PLAN_FORM,
+  INITIAL_RULE_SELECTION,
+  applyBulkSelection,
   buildCreateCloneBody,
   buildExecuteBody,
+  buildStructureSpec,
   canAdoptTarget,
+  countSelectableObjects,
+  countSelectedObjects,
   managedDatabasesToSourceOptions,
   reconcileItemsToSourceOptions,
   reconcileItemsToTargetOptions,
   resolveDatabaseEngine,
+  resolveRuleSelection,
+  ruleSelectsEverything,
   toggleCloneObjectSelection,
+  type BulkSelectionAction,
+  type CloneSelectionKind,
+  type CloneSelectionPlan,
   type CloneSourceOption,
   type PlanFormState,
+  type RuleSelectionState,
 } from './logic'
 
 export type WizardStep = 'summary' | 'plan' | 'selection' | 'preview' | 'monitor'
@@ -62,6 +80,10 @@ const INITIAL_PLAN_STATE: PlanState = {
   sourceServerId: null,
   planMode: 'complete',
 }
+
+// Constante de módulo, no un literal creado en cada render: `useClonePreview` la pasa por
+// `useDeferredValue`, y un objeto nuevo por render nunca terminaría de "asentarse".
+const FULL_SELECTION: CloneSelectionPlan = { kind: 'full' }
 
 export interface DatabaseCloneWizard {
   // ── Navegación ──────────────────────────────────────────────────────────────
@@ -112,13 +134,41 @@ export interface DatabaseCloneWizard {
 
   // ── Vista 3: selección de objetos ─────────────────────────────────────────────
   objects: ReturnType<typeof useCloneObjects>
+  /** Idioma de la selección: marcar a mano o describirla con una regla. Excluyentes por contrato. */
+  selectionKind: CloneSelectionKind
+  setSelectionKind: (kind: CloneSelectionKind) => void
+  /** Tipos de objeto realmente presentes en el inventario del origen. */
+  availableTypes: CloneObjectType[]
+  /** `true` si la selección actual no clonaría nada (bloquea el avance). */
+  selectionEmpty: boolean
+
+  // Modo manual
   checkedSelection: Map<string, CloneObjectRef>
   toggleObject: (ref: CloneObjectRef) => void
+  manualTypeFilter: CloneObjectType[]
+  toggleManualTypeFilter: (type: CloneObjectType) => void
+  /** Objetos visibles según el filtro por tipo; es sobre estos que actúa `bulkSelect`. */
+  visibleObjects: CloneObjectOut[]
+  visibleSelectableCount: number
+  visibleSelectedCount: number
+  bulkSelect: (action: BulkSelectionAction) => void
   closure: ReturnType<typeof useCloneResolveSelection>
+
+  // Modo regla
+  rule: RuleSelectionState
+  ruleSpec: ReturnType<typeof buildStructureSpec>
+  /** Coincidencias calculadas en el cliente: orientativas, no el plan real. */
+  ruleMatches: CloneObjectOut[]
+  ruleMatchesEverything: boolean
+  setRuleTypes: (types: CloneObjectType[]) => void
+  toggleRuleType: (type: CloneObjectType) => void
+  setRuleIncludePatterns: (value: string) => void
+  setRuleExcludePatterns: (value: string) => void
+
   confirmSelection: () => void
 
   // ── Vista 4: preview + confirmación ───────────────────────────────────────────
-  finalSelection: CloneObjectRef[] | null
+  finalSelectionPlan: CloneSelectionPlan
   preview: ReturnType<typeof useClonePreview>
   confirmTargetName: string
   setConfirmTargetName: (value: string) => void
@@ -150,7 +200,10 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
   const [plan, setPlan] = useState<PlanState>(INITIAL_PLAN_STATE)
 
   const [checkedSelection, setCheckedSelection] = useState<Map<string, CloneObjectRef>>(new Map())
-  const [finalSelection, setFinalSelection] = useState<CloneObjectRef[] | null>(null)
+  const [selectionKind, setSelectionKind] = useState<CloneSelectionKind>('manual')
+  const [rule, setRule] = useState<RuleSelectionState>(INITIAL_RULE_SELECTION)
+  const [manualTypeFilter, setManualTypeFilter] = useState<CloneObjectType[]>([])
+  const [finalSelectionPlan, setFinalSelectionPlan] = useState<CloneSelectionPlan>(FULL_SELECTION)
   const [confirmTargetName, setConfirmTargetName] = useState('')
   const [force, setForce] = useState(false)
   const [itemsPage, setItemsPageState] = useState(1)
@@ -320,7 +373,10 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
   // renderizándose falsamente en el preview de un job recién creado) al saltar a uno nuevo.
   const resetJobScopedState = useCallback(() => {
     setCheckedSelection(new Map())
-    setFinalSelection(null)
+    setSelectionKind('manual')
+    setRule(INITIAL_RULE_SELECTION)
+    setManualTypeFilter([])
+    setFinalSelectionPlan(FULL_SELECTION)
     setConfirmTargetName('')
     setForce(false)
     setItemsPageState(1)
@@ -337,10 +393,11 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
     if (!createBody) return
     createClone.mutate(createBody, {
       onSuccess: (summary) => {
+        // `resetJobScopedState` ya deja el plan de selección en "clon completo", que es lo
+        // correcto para `planMode === 'complete'`; el parcial lo define `confirmSelection`.
         resetJobScopedState()
         setJobId(summary.id)
         setStep(plan.planMode === 'partial' ? 'selection' : 'preview')
-        if (plan.planMode === 'complete') setFinalSelection(null)
       },
     })
   }, [createBody, createClone, plan.planMode, resetJobScopedState])
@@ -417,28 +474,104 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
 
   // ── Vista 3: selección de objetos ──────────────────────────────────────────────
   const objects = useCloneObjects(jobId ?? 0, jobId != null && step === 'selection')
+  const allObjects = useMemo<CloneObjectOut[]>(() => objects.data?.objects ?? [], [objects.data])
+
+  // Tipos presentes en el inventario, para no ofrecer un filtro de un tipo que no existe acá.
+  const availableTypes = useMemo<CloneObjectType[]>(() => {
+    const seen = new Set<CloneObjectType>()
+    for (const object of allObjects) seen.add(object.object_type)
+    return [...seen]
+  }, [allObjects])
+
+  // Lista visible del modo manual. Las acciones masivas operan sobre ESTO, no sobre el
+  // inventario entero: con un filtro activo, «Todo» agrega lo visible y respeta lo ya marcado
+  // en los tipos ocultos (`applyBulkSelection` parte de la selección actual).
+  const visibleObjects = useMemo(() => {
+    if (manualTypeFilter.length === 0) return allObjects
+    const wanted = new Set(manualTypeFilter)
+    return allObjects.filter((object) => wanted.has(object.object_type))
+  }, [allObjects, manualTypeFilter])
+
   const toggleObject = useCallback((ref: CloneObjectRef) => {
     setCheckedSelection((prev) => toggleCloneObjectSelection(prev, ref))
   }, [])
+  const bulkSelect = useCallback(
+    (action: BulkSelectionAction) => {
+      setCheckedSelection((prev) => applyBulkSelection(action, visibleObjects, prev))
+    },
+    [visibleObjects],
+  )
+  const toggleManualTypeFilter = useCallback((type: CloneObjectType) => {
+    setManualTypeFilter((prev) =>
+      prev.includes(type) ? prev.filter((value) => value !== type) : [...prev, type],
+    )
+  }, [])
+
+  const visibleSelectableCount = useMemo(
+    () => countSelectableObjects(visibleObjects),
+    [visibleObjects],
+  )
+  const visibleSelectedCount = useMemo(
+    () => countSelectedObjects(visibleObjects, checkedSelection),
+    [visibleObjects, checkedSelection],
+  )
+
+  // ── Modo `rule`: spec declarativo + conteo orientativo ──────────────────────────
+  const ruleSpec = useMemo(() => buildStructureSpec(rule), [rule])
+  const ruleMatches = useMemo(
+    () => (selectionKind === 'rule' ? resolveRuleSelection(allObjects, ruleSpec) : []),
+    [selectionKind, allObjects, ruleSpec],
+  )
+  const ruleMatchesEverything = ruleSelectsEverything(ruleSpec)
+  const setRuleTypes = useCallback((types: CloneObjectType[]) => {
+    setRule((prev) => ({ ...prev, types }))
+  }, [])
+  const toggleRuleType = useCallback((type: CloneObjectType) => {
+    setRule((prev) => ({
+      ...prev,
+      types: prev.types.includes(type)
+        ? prev.types.filter((value) => value !== type)
+        : [...prev.types, type],
+    }))
+  }, [])
+  const setRuleIncludePatterns = useCallback((value: string) => {
+    setRule((prev) => ({ ...prev, includePatterns: value }))
+  }, [])
+  const setRuleExcludePatterns = useCallback((value: string) => {
+    setRule((prev) => ({ ...prev, excludePatterns: value }))
+  }, [])
+
   const checkedList = useMemo(() => [...checkedSelection.values()], [checkedSelection])
+  // El cierre de dependencias es del modo manual: en el modo declarativo lo resuelve el backend
+  // al congelar el plan en `preview`, así que pedirlo acá sería gastar una llamada (10/min) para
+  // mostrar un cierre de una selección que no es la que se va a enviar.
   const closure = useCloneResolveSelection(
     jobId ?? 0,
     checkedList,
-    jobId != null && step === 'selection' && checkedList.length > 0,
+    jobId != null && step === 'selection' && selectionKind === 'manual' && checkedList.length > 0,
   )
 
+  /** `true` si la selección actual no permite avanzar (no hay nada que clonar). */
+  const selectionEmpty =
+    selectionKind === 'manual' ? checkedList.length === 0 : ruleMatches.length === 0
+
   const confirmSelection = useCallback(() => {
+    if (selectionKind === 'rule') {
+      setFinalSelectionPlan({ kind: 'rule', structure: ruleSpec })
+      setStep('preview')
+      return
+    }
     // Bloqueo por construcción: mientras `closure.isStale` sea `true`, `closure.data` todavía
     // describe una selección ANTERIOR a la que el usuario tiene marcada ahora mismo (la
     // transición diferida de `useCloneResolveSelection` no alcanzó a recomputar) — confirmar en
     // ese instante silenciosamente excluiría del clon lo que el usuario acaba de marcar.
     if (closure.isStale) return
-    setFinalSelection(closure.data?.closure ?? checkedList)
+    setFinalSelectionPlan({ kind: 'manual', refs: closure.data?.closure ?? checkedList })
     setStep('preview')
-  }, [closure.data, closure.isStale, checkedList])
+  }, [selectionKind, ruleSpec, closure.data, closure.isStale, checkedList])
 
   // ── Vista 4: preview + confirmación ────────────────────────────────────────────
-  const preview = useClonePreview(jobId ?? 0, finalSelection, jobId != null && step === 'preview')
+  const preview = useClonePreview(jobId ?? 0, finalSelectionPlan, jobId != null && step === 'preview')
 
   const handleActionError = useCallback((error: unknown) => {
     if (toApiError(error).status === 429) {
@@ -481,7 +614,7 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
   // `selection` solo forma parte del recorrido real de un clon PARCIAL: incluirla siempre haría
   // que el indicador de pasos (`WizardStepper`) la marcara como "ya completada" y navegable para
   // un clon COMPLETO que nunca pasó por ahí — permitiendo saltar a Vista 3 y sobrescribir
-  // `finalSelection` (que debía quedar `null`) con una selección parcial no pedida.
+  // `finalSelectionPlan` (que debía quedar en `kind: 'full'`) con una selección parcial no pedida.
   const order = useMemo<WizardStep[]>(() => {
     const steps: WizardStep[] = []
     if (presetJobId != null) steps.push('summary')
@@ -562,12 +695,33 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
     targetManagedDetail,
 
     objects,
+    selectionKind,
+    setSelectionKind,
+    availableTypes,
+    selectionEmpty,
+
     checkedSelection,
     toggleObject,
+    manualTypeFilter,
+    toggleManualTypeFilter,
+    visibleObjects,
+    visibleSelectableCount,
+    visibleSelectedCount,
+    bulkSelect,
     closure,
+
+    rule,
+    ruleSpec,
+    ruleMatches,
+    ruleMatchesEverything,
+    setRuleTypes,
+    toggleRuleType,
+    setRuleIncludePatterns,
+    setRuleExcludePatterns,
+
     confirmSelection,
 
-    finalSelection,
+    finalSelectionPlan,
     preview,
     confirmTargetName,
     setConfirmTargetName,

@@ -2,13 +2,24 @@ import { describe, expect, it } from 'vitest'
 import type { CloneObjectOut, CloneObjectRef, ManagedDatabaseOut, ReconcileDatabaseItem, ServerOut } from '@/lib/contracts'
 import {
   INITIAL_PLAN_FORM,
+  INITIAL_RULE_SELECTION,
+  applyBulkSelection,
   buildCreateCloneBody,
+  buildPreviewBody,
+  buildStructureSpec,
   canAdoptTarget,
   cloneRefKey,
+  countSelectableObjects,
+  countSelectedObjects,
   groupObjectsByType,
+  isGatewayInternalTable,
   managedDatabasesToSourceOptions,
+  parsePatternList,
   portabilityTone,
   reconcileItemsToSourceOptions,
+  resolveRuleSelection,
+  ruleSelectsEverything,
+  selectionPlanKey,
   toggleCloneObjectSelection,
   type PlanFormState,
 } from './logic'
@@ -210,5 +221,220 @@ describe('portabilityTone', () => {
     expect(portabilityTone({ object_type: 'routine', name: 'sp', portable: false, portability_reason: 'no portable', row_estimate: null })).toBe('error')
     expect(portabilityTone({ object_type: 'view', name: 'v', portable: true, portability_reason: 'revisar', row_estimate: null })).toBe('warning')
     expect(portabilityTone({ object_type: 'table', name: 't', portable: true, portability_reason: null, row_estimate: null })).toBe('success')
+  })
+})
+
+// ── Selección declarativa ──────────────────────────────────────────────────────────
+function makeObject(overrides: Partial<CloneObjectOut> & Pick<CloneObjectOut, 'name'>): CloneObjectOut {
+  return {
+    object_type: 'table',
+    portable: true,
+    portability_reason: null,
+    row_estimate: null,
+    ...overrides,
+  }
+}
+
+describe('parsePatternList', () => {
+  it('separa por comas y espacios, recorta y descarta vacíos', () => {
+    expect(parsePatternList(' fact_*,  dim_* \n log_? ')).toEqual(['fact_*', 'dim_*', 'log_?'])
+  })
+
+  it('deduplica preservando el orden y devuelve vacío si no hay nada', () => {
+    expect(parsePatternList('a, b, a')).toEqual(['a', 'b'])
+    expect(parsePatternList('   ')).toEqual([])
+  })
+})
+
+describe('buildStructureSpec', () => {
+  it('usa SIEMPRE mode=all: con include y names vacío el backend no seleccionaría nada', () => {
+    const spec = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 'fact_*' })
+    expect(spec.mode).toBe('all')
+    expect(spec.names).toEqual([])
+    expect(spec.include_patterns).toEqual(['fact_*'])
+  })
+
+  it('propaga tipos y patrones de exclusión', () => {
+    const spec = buildStructureSpec({
+      types: ['table', 'view'],
+      includePatterns: '',
+      excludePatterns: 'tmp_*, log_*',
+    })
+    expect(spec.types).toEqual(['table', 'view'])
+    expect(spec.exclude_patterns).toEqual(['tmp_*', 'log_*'])
+  })
+})
+
+describe('ruleSelectsEverything', () => {
+  it('es true solo si la regla no recorta nada', () => {
+    expect(ruleSelectsEverything(buildStructureSpec(INITIAL_RULE_SELECTION))).toBe(true)
+    expect(
+      ruleSelectsEverything(buildStructureSpec({ ...INITIAL_RULE_SELECTION, types: ['table'] })),
+    ).toBe(false)
+    expect(
+      ruleSelectsEverything(
+        buildStructureSpec({ ...INITIAL_RULE_SELECTION, excludePatterns: 'log_*' }),
+      ),
+    ).toBe(false)
+  })
+})
+
+describe('isGatewayInternalTable', () => {
+  it('reconoce los dos prefijos de contabilidad interna, sin distinguir mayúsculas', () => {
+    expect(isGatewayInternalTable('_gw_v_mi_bd')).toBe(true)
+    expect(isGatewayInternalTable('_GW_STG_users')).toBe(true)
+    expect(isGatewayInternalTable('gw_ventas')).toBe(false)
+    expect(isGatewayInternalTable('')).toBe(false)
+  })
+})
+
+describe('resolveRuleSelection', () => {
+  const catalog: CloneObjectOut[] = [
+    makeObject({ name: 'fact_ventas' }),
+    makeObject({ name: 'fact_compras' }),
+    makeObject({ name: 'dim_cliente' }),
+    makeObject({ name: 'log_auditoria' }),
+    makeObject({ name: '_gw_v_productos' }),
+    makeObject({ name: 'v_resumen', object_type: 'view' }),
+  ]
+
+  it('filtra por tipo antes que nada', () => {
+    const spec = buildStructureSpec({ ...INITIAL_RULE_SELECTION, types: ['view'] })
+    expect(resolveRuleSelection(catalog, spec).map((o) => o.name)).toEqual(['v_resumen'])
+  })
+
+  it('excluye siempre la contabilidad interna del gateway', () => {
+    const spec = buildStructureSpec(INITIAL_RULE_SELECTION)
+    expect(resolveRuleSelection(catalog, spec).map((o) => o.name)).not.toContain('_gw_v_productos')
+  })
+
+  it('aplica los patrones de inclusión con comodines', () => {
+    const spec = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 'fact_*' })
+    expect(resolveRuleSelection(catalog, spec).map((o) => o.name)).toEqual([
+      'fact_ventas',
+      'fact_compras',
+    ])
+  })
+
+  it('la exclusión GANA sobre la inclusión', () => {
+    const spec = buildStructureSpec({
+      ...INITIAL_RULE_SELECTION,
+      includePatterns: 'fact_*',
+      excludePatterns: '*_compras',
+    })
+    expect(resolveRuleSelection(catalog, spec).map((o) => o.name)).toEqual(['fact_ventas'])
+  })
+
+  it('distingue mayúsculas, como el fnmatchcase del backend', () => {
+    const spec = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 'FACT_*' })
+    expect(resolveRuleSelection(catalog, spec)).toEqual([])
+  })
+
+  it('soporta ? y clases de caracteres', () => {
+    const objects = [makeObject({ name: 't1' }), makeObject({ name: 't2' }), makeObject({ name: 'tx' })]
+    const single = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 't?' })
+    expect(resolveRuleSelection(objects, single)).toHaveLength(3)
+    const digits = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 't[0-9]' })
+    expect(resolveRuleSelection(objects, digits).map((o) => o.name)).toEqual(['t1', 't2'])
+    const negated = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 't[!0-9]' })
+    expect(resolveRuleSelection(objects, negated).map((o) => o.name)).toEqual(['tx'])
+  })
+
+  it('trata un patrón con un punto como literal, no como comodín de regex', () => {
+    const objects = [makeObject({ name: 'a.b' }), makeObject({ name: 'axb' })]
+    const spec = buildStructureSpec({ ...INITIAL_RULE_SELECTION, includePatterns: 'a.b' })
+    expect(resolveRuleSelection(objects, spec).map((o) => o.name)).toEqual(['a.b'])
+  })
+})
+
+describe('applyBulkSelection', () => {
+  const visible: CloneObjectOut[] = [
+    makeObject({ name: 'productos' }),
+    makeObject({ name: 'categorias' }),
+    makeObject({ name: 'sp_legacy', object_type: 'routine', portable: false }),
+  ]
+
+  it('«todo» ignora los no portables', () => {
+    const next = applyBulkSelection('all', visible, new Map())
+    expect([...next.keys()]).toEqual(['table:productos', 'table:categorias'])
+  })
+
+  it('«todo» respeta lo marcado FUERA de la lista visible', () => {
+    const previo = new Map<string, CloneObjectRef>([
+      ['view:v_oculta', { object_type: 'view', name: 'v_oculta' }],
+    ])
+    const next = applyBulkSelection('all', visible, previo)
+    expect(next.has('view:v_oculta')).toBe(true)
+    expect(next.size).toBe(3)
+  })
+
+  it('«ninguno» solo quita lo visible', () => {
+    const previo = new Map<string, CloneObjectRef>([
+      ['table:productos', { object_type: 'table', name: 'productos' }],
+      ['view:v_oculta', { object_type: 'view', name: 'v_oculta' }],
+    ])
+    const next = applyBulkSelection('none', visible, previo)
+    expect([...next.keys()]).toEqual(['view:v_oculta'])
+  })
+
+  it('«invertir» alterna cada visible portable', () => {
+    const previo = new Map<string, CloneObjectRef>([
+      ['table:productos', { object_type: 'table', name: 'productos' }],
+    ])
+    const next = applyBulkSelection('invert', visible, previo)
+    expect(next.has('table:productos')).toBe(false)
+    expect(next.has('table:categorias')).toBe(true)
+  })
+
+  it('los contadores no cuentan los no portables', () => {
+    expect(countSelectableObjects(visible)).toBe(2)
+    const seleccion = applyBulkSelection('all', visible, new Map())
+    expect(countSelectedObjects(visible, seleccion)).toBe(2)
+  })
+})
+
+describe('buildPreviewBody', () => {
+  // El backend valida sobre las claves REALMENTE enviadas: mandar `selection` junto a
+  // `structure` —aunque sea `null`— es un 422. Por eso se afirma la AUSENCIA de la clave.
+  it('clon completo manda selection: null y ninguna structure', () => {
+    const body = buildPreviewBody({ kind: 'full' })
+    expect(body).toEqual({ selection: null })
+    expect('structure' in body).toBe(false)
+  })
+
+  it('selección manual manda las refs y ninguna structure', () => {
+    const refs: CloneObjectRef[] = [{ object_type: 'table', name: 'productos' }]
+    const body = buildPreviewBody({ kind: 'manual', refs })
+    expect(body).toEqual({ selection: refs })
+    expect('structure' in body).toBe(false)
+  })
+
+  it('regla manda structure y NUNCA la clave selection', () => {
+    const structure = buildStructureSpec({ ...INITIAL_RULE_SELECTION, types: ['table'] })
+    const body = buildPreviewBody({ kind: 'rule', structure })
+    expect(body).toEqual({ structure })
+    expect('selection' in body).toBe(false)
+  })
+})
+
+describe('selectionPlanKey', () => {
+  it('es estable ante el orden de las refs marcadas', () => {
+    const a: CloneObjectRef = { object_type: 'table', name: 'a' }
+    const b: CloneObjectRef = { object_type: 'table', name: 'b' }
+    expect(selectionPlanKey({ kind: 'manual', refs: [a, b] })).toBe(
+      selectionPlanKey({ kind: 'manual', refs: [b, a] }),
+    )
+  })
+
+  it('distingue los tres idiomas y dos reglas distintas', () => {
+    const soloTablas = buildStructureSpec({ ...INITIAL_RULE_SELECTION, types: ['table'] })
+    const soloVistas = buildStructureSpec({ ...INITIAL_RULE_SELECTION, types: ['view'] })
+    const claves = new Set([
+      selectionPlanKey({ kind: 'full' }),
+      selectionPlanKey({ kind: 'manual', refs: [] }),
+      selectionPlanKey({ kind: 'rule', structure: soloTablas }),
+      selectionPlanKey({ kind: 'rule', structure: soloVistas }),
+    ])
+    expect(claves.size).toBe(4)
   })
 })
