@@ -39,6 +39,8 @@ function makeRow(
   finishedSecond: number | null,
   overrides: Partial<CloneBatchItemOut> = {},
 ): CloneBatchItemOut {
+  // Por defecto la fila no tiene preparación: el job arranca cuando arranca la fila. Los tests
+  // que miden la preparación pasan `job_started_at` explícito.
   return {
     id: nextId++,
     batch_id: 3,
@@ -56,6 +58,8 @@ function makeRow(
     reason: null,
     started_at: startedSecond == null ? null : at(startedSecond),
     finished_at: finishedSecond == null ? null : at(finishedSecond),
+    job_started_at: startedSecond == null ? null : at(startedSecond),
+    job_finished_at: finishedSecond == null ? null : at(finishedSecond),
     ...overrides,
   }
 }
@@ -109,6 +113,40 @@ describe('buildBatchTimeline', () => {
     expect(t.rowsMs).toBe(120_000)
     expect(t.gapsMs).toBe(30_000)
   })
+
+  it('parte la fila en preparación y ejecución: la preparación es el costo que estaba oculto', () => {
+    // La fila arranca en 0, el job recién se reclama en 25: esos 25 s son los dos snapshots del
+    // origen y la consulta de estadísticas. Antes caían fuera de la barra por completo.
+    const t = buildBatchTimeline(makeBatch(), [
+      makeRow(1, 0, 90, { job_started_at: at(25), job_finished_at: at(90) }),
+    ])
+
+    expect(t.rows[0]!.prepMs).toBe(25_000)
+    expect(t.rows[0]!.execMs).toBe(65_000)
+    // Y las dos partes reconstruyen la fila completa: si no cerraran, faltaría algo más.
+    expect(t.rows[0]!.prepMs! + t.rows[0]!.execMs!).toBe(t.rows[0]!.durationMs)
+  })
+
+  it('la preparación se suma en todo el lote: es el costo fijo por base', () => {
+    const t = buildBatchTimeline(makeBatch(), [
+      makeRow(1, 0, 90, { job_started_at: at(25), job_finished_at: at(90) }),
+      makeRow(2, 90, 180, { job_started_at: at(115), job_finished_at: at(180) }),
+    ])
+
+    expect(t.prepMs).toBe(50_000)
+    expect(t.execMs).toBe(130_000)
+  })
+
+  it('una fila sin job no inventa preparación', () => {
+    // Fila que nunca se materializó: sin `job_started_at` no hay nada que medir, y devolver 0
+    // la haría parecer instantánea en vez de desconocida.
+    const t = buildBatchTimeline(makeBatch(), [
+      makeRow(1, 0, 60, { clone_job_id: null, job_started_at: null, job_finished_at: null }),
+    ])
+
+    expect(t.rows[0]!.prepMs).toBeNull()
+    expect(t.rows[0]!.execMs).toBeNull()
+  })
 })
 
 describe('formatBatchDiagnosticsReport', () => {
@@ -137,5 +175,15 @@ describe('formatBatchDiagnosticsReport', () => {
 
     expect(reporte).toContain('Hueco antes')
     expect(reporte).toContain('25000 ms')
+  })
+
+  it('destaca la preparación en la cabecera, que es la conclusión del diagnóstico', () => {
+    const reporte = formatBatchDiagnosticsReport(makeBatch(), [
+      makeRow(1, 0, 90, { job_started_at: at(25), job_finished_at: at(90) }),
+    ])
+
+    expect(reporte).toContain('Preparación (plan y vista previa)')
+    expect(reporte).toContain('25000 ms')
+    expect(reporte).toContain('job_started_at')
   })
 })

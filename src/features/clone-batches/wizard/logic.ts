@@ -253,6 +253,13 @@ export interface BatchRowDuration {
   key: number
   label: string
   ms: number | null
+  /**
+   * Preparación: de que arranca la fila a que el worker reclama el job. Ahí corren el snapshot
+   * del origen de `create_plan`, el de `preview` y una consulta de estadísticas por tabla.
+   */
+  prepMs: number | null
+  /** Ejecución del job: lock, snapshot anti-TOCTOU, limpieza, DDL y copia de datos. */
+  execMs: number | null
   status: CloneBatchItemStatus | null | undefined
 }
 
@@ -260,9 +267,14 @@ export interface BatchRowDuration {
  * Duración de una fila, o `null` si no arrancó o no terminó.
  *
  * **Qué mide exactamente**: el backend marca `started_at` ANTES de `create_plan`, así que esto
- * abarca los snapshots del origen, la limpieza, el DDL y la copia — la base completa, no solo
- * la copia. La distinción no es académica: en una medición real de 17 MB en 2 m 18 s, la copia
- * valía uno o dos segundos, y llamar «copia» al total llevaba a optimizar el lugar equivocado.
+ * abarca la preparación, los snapshots del origen, la limpieza, el DDL y la copia — la base
+ * completa, no solo la copia. La distinción no es académica: en una medición real de 17 MB en
+ * 2 m 18 s, la copia valía uno o dos segundos, y llamar «copia» al total llevaba a optimizar
+ * el lugar equivocado.
+ *
+ * Hasta hace poco esto era verdad de la columna de la BD pero **no** de lo que llegaba: la API
+ * sustituía los dos campos por los del job en cuanto la fila tenía uno, así que la preparación
+ * caía fuera de la barra y aparecía como «sin atribuir». Ya no: el backend manda los dos pares.
  */
 export function rowDurationMs(row: {
   started_at?: string | null
@@ -270,6 +282,13 @@ export function rowDurationMs(row: {
 }): number | null {
   if (!row.started_at || !row.finished_at) return null
   const ms = new Date(row.finished_at).getTime() - new Date(row.started_at).getTime()
+  return Number.isFinite(ms) && ms >= 0 ? ms : null
+}
+
+/** Milisegundos entre dos marcas, o `null` si falta alguna o el orden es imposible. */
+function spanMs(from?: string | null, to?: string | null): number | null {
+  if (!from || !to) return null
+  const ms = new Date(to).getTime() - new Date(from).getTime()
   return Number.isFinite(ms) && ms >= 0 ? ms : null
 }
 
@@ -284,6 +303,8 @@ export function durationsByDatabase(
     status?: CloneBatchItemStatus | null
     started_at?: string | null
     finished_at?: string | null
+    job_started_at?: string | null
+    job_finished_at?: string | null
   }[],
 ): BatchRowDuration[] {
   return items
@@ -291,6 +312,8 @@ export function durationsByDatabase(
       key: row.id,
       label: row.target_database_name,
       ms: rowDurationMs(row),
+      prepMs: spanMs(row.started_at, row.job_started_at),
+      execMs: spanMs(row.job_started_at, row.job_finished_at),
       status: row.status,
     }))
     .sort((a, b) => (b.ms ?? -1) - (a.ms ?? -1))

@@ -141,8 +141,23 @@ export const cloneBatchItemOutSchema = z.object({
   error_code: z.string().nullish(),
   /** Solo en `needs_manual`: por qué esta fila no se puede reintentar sola. */
   reason: z.string().nullish(),
+  /**
+   * Relojes de la FILA: arranca antes de `create_plan` y cierra después del job. Restarlos da
+   * la base completa, preparación incluida.
+   */
   started_at: z.string().nullish(),
   finished_at: z.string().nullish(),
+  /**
+   * Relojes del JOB: de cuando el worker lo reclama a cuando cierra. La diferencia contra
+   * `started_at` es la preparación —el snapshot del origen de `create_plan`, el de `preview` y
+   * una consulta de estadísticas por tabla—, que no emite ningún paso y por eso aparecía como
+   * un bloque «sin atribuir» de ~25 s por base que parecía tiempo de cola y no lo era.
+   *
+   * `.nullish()` porque una fila que todavía no se materializó en job no los tiene, y porque
+   * un backend anterior no los manda.
+   */
+  job_started_at: z.string().nullish(),
+  job_finished_at: z.string().nullish(),
 })
 export type CloneBatchItemOut = z.infer<typeof cloneBatchItemOutSchema>
 

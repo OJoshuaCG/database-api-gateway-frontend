@@ -29,6 +29,16 @@ export interface BatchTimelineRow {
   durationMs: number | null
   /** Del fin de la fila anterior (o del arranque del lote, para la primera) a este arranque. */
   gapBeforeMs: number | null
+  /**
+   * Preparación: de que arranca la fila a que el worker reclama el job. Acá corren el snapshot
+   * del origen de `create_plan`, el de `preview` y una consulta de estadísticas por tabla —
+   * ninguno emite un paso, y por eso era invisible.
+   */
+  prepMs: number | null
+  /** Ejecución del job: lock, snapshot anti-TOCTOU, limpieza, DDL y copia. */
+  execMs: number | null
+  jobStartedAt: string | null
+  jobFinishedAt: string | null
 }
 
 export interface BatchTimeline {
@@ -39,6 +49,10 @@ export interface BatchTimeline {
   /** Suma de los huecos entre filas. */
   gapsMs: number
   tailMs: number | null
+  /** Suma de la preparación de todas las filas: el costo fijo que estábamos buscando. */
+  prepMs: number
+  /** Suma de la ejecución de todas las filas. */
+  execMs: number
 }
 
 function diffMs(from: string | null | undefined, to: string | null | undefined): number | null {
@@ -70,6 +84,10 @@ export function buildBatchTimeline(
       finishedAt: item.finished_at ?? null,
       durationMs: rowDurationMs(item),
       gapBeforeMs,
+      prepMs: diffMs(item.started_at, item.job_started_at),
+      execMs: diffMs(item.job_started_at, item.job_finished_at),
+      jobStartedAt: item.job_started_at ?? null,
+      jobFinishedAt: item.job_finished_at ?? null,
     }
   })
 
@@ -79,6 +97,8 @@ export function buildBatchTimeline(
     rowsMs: rows.reduce((acc, r) => acc + (r.durationMs ?? 0), 0),
     gapsMs: rows.reduce((acc, r) => acc + (r.gapBeforeMs ?? 0), 0),
     tailMs: diffMs(previousEnd, batch.finished_at),
+    prepMs: rows.reduce((acc, r) => acc + (r.prepMs ?? 0), 0),
+    execMs: rows.reduce((acc, r) => acc + (r.execMs ?? 0), 0),
   }
 }
 
@@ -108,23 +128,37 @@ export function formatBatchDiagnosticsReport(
   lines.push(`- Arrancó: ${batch.started_at ?? '—'} · terminó: ${batch.finished_at ?? '—'}`)
   lines.push(`- **Total: ${ms(t.totalMs)}**`)
   lines.push(`- Suma de las filas: ${ms(t.rowsMs)}`)
+  lines.push(`- **Preparación (plan y vista previa): ${ms(t.prepMs)}**`)
+  lines.push(`- Ejecución de los jobs: ${ms(t.execMs)}`)
   lines.push(`- Suma de los huecos entre filas: ${ms(t.gapsMs)}`)
   lines.push(`- Cola tras la última fila: ${ms(t.tailMs)}`)
   lines.push('')
   lines.push(
-    'El lote corre en SERIE, así que el total no es la suma de las filas. `hueco antes` mide ' +
-      'del fin de la fila anterior al arranque de ésta (para la primera, desde el arranque del ' +
-      'lote). Si los huecos son chicos, el tiempo está dentro de las filas: copiar el ' +
-      'diagnóstico del job más lento desde «ver detalle».',
+    'El lote corre en SERIE, así que el total no es la suma de las filas. Cada fila se parte ' +
+      'en `preparación` (de que arranca la fila a que el worker reclama el job: dos snapshots ' +
+      'completos del origen y una consulta de estadísticas por tabla, nada de lo cual emite un ' +
+      'paso) y `ejecución` (el job en sí). `hueco antes` mide del fin de la fila anterior al ' +
+      'arranque de ésta. Si la preparación domina, el costo es fijo por base y no depende de ' +
+      'qué se copie; si domina la ejecución, el diagnóstico del job más lento («ver detalle») ' +
+      'la reparte por fase.',
   )
   lines.push('')
-  lines.push('| seq | Base destino | Modo | Estado | job | Hueco antes | Duración | started_at | finished_at |')
+  lines.push('| seq | Base destino | Modo | Estado | job | Hueco antes | Preparación | Ejecución | Total fila |')
   lines.push('|---|---|---|---|---|---|---|---|---|')
   for (const r of t.rows) {
     lines.push(
       `| ${r.seq} | ${r.targetDatabase} | ${r.targetMode} | ${r.status} | ` +
-        `${r.cloneJobId ?? '—'} | ${ms(r.gapBeforeMs)} | ${ms(r.durationMs)} | ` +
-        `${r.startedAt ?? '—'} | ${r.finishedAt ?? '—'} |`,
+        `${r.cloneJobId ?? '—'} | ${ms(r.gapBeforeMs)} | ${ms(r.prepMs)} | ${ms(r.execMs)} | ` +
+        `${ms(r.durationMs)} |`,
+    )
+  }
+  lines.push('')
+  lines.push('| seq | started_at | job_started_at | job_finished_at | finished_at |')
+  lines.push('|---|---|---|---|---|')
+  for (const r of t.rows) {
+    lines.push(
+      `| ${r.seq} | ${r.startedAt ?? '—'} | ${r.jobStartedAt ?? '—'} | ` +
+        `${r.jobFinishedAt ?? '—'} | ${r.finishedAt ?? '—'} |`,
     )
   }
 
