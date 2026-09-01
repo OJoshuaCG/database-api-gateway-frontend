@@ -88,6 +88,37 @@ export function listCloneItems(
   return fetchPage(`${base(id)}/items`, cloneItemOutSchema, { query: params, signal })
 }
 
+/**
+ * Todos los pasos de un job, recorriendo la paginación hasta agotarla.
+ *
+ * Existe para el diagnóstico de rendimiento: el reparto del tiempo solo cierra con la serie
+ * COMPLETA de `executed_at`, porque lo que se busca son los huecos ENTRE pasos, y un hueco
+ * partido por el borde de una página no se puede calcular.
+ *
+ * Se llama **bajo demanda** (al apretar «Copiar diagnóstico»), nunca desde el polling del
+ * monitor: son ~10 requests para un job de 460 pasos y repetirlas cada par de segundos sería
+ * un costo gratis. El endpoint no tiene rate limit —lee la BD del gateway, no un motor—, así
+ * que el resto de las páginas van en paralelo.
+ *
+ * NO se fuerza un `size` grande: `PAGINATION_MAX_SIZE` es configurable en el backend (50 por
+ * defecto) y pedir más de su tope devuelve 422. Se usa el que el servidor decida y se recorre.
+ */
+export async function fetchAllCloneItems(
+  id: number,
+  signal?: AbortSignal,
+): Promise<CloneItemOut[]> {
+  const first = await listCloneItems(id, { page: 1 }, signal)
+  const { pages } = first.pagination
+  if (pages <= 1) return first.items
+
+  const rest = await Promise.all(
+    Array.from({ length: pages - 1 }, (_, i) => listCloneItems(id, { page: i + 2 }, signal)),
+  )
+  // Reordenar por `seq` y no confiar en el orden de llegada: `Promise.all` preserva el orden
+  // del array, pero el backend solo garantiza el orden DENTRO de cada página.
+  return [first, ...rest].flatMap((page) => page.items).sort((a, b) => a.seq - b.seq)
+}
+
 /** `POST .../cancel` — cancelación cooperativa; el worker corta en el próximo punto seguro. */
 export function cancelDatabaseClone(id: number): Promise<CloneSummaryOut> {
   return mutateData('POST', `${base(id)}/cancel`, cloneSummaryOutSchema, {})

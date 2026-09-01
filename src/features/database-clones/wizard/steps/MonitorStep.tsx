@@ -1,6 +1,7 @@
 import { Badge, Button, ErrorState, Pagination, Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import type { ClonePhase, CloneItemStatus } from '@/lib/contracts'
+import { useCopyCloneDiagnostics } from '../../hooks/use-clone-diagnostics'
 import type { DatabaseCloneWizard } from '../use-database-clone-wizard'
 
 const PHASE_ORDER: ClonePhase[] = ['clean', 'structure', 'data', 'adopt', 'done']
@@ -48,6 +49,8 @@ function PhaseBar({ phase }: { phase: ClonePhase | null }) {
  */
 export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
   const { job, items } = wizard
+  // Antes de los early returns: los hooks no pueden quedar detrás de un `return` condicional.
+  const copyDiagnostics = useCopyCloneDiagnostics(job.data)
 
   if (job.isLoading && !job.data) {
     return (
@@ -139,7 +142,25 @@ export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
       )}
 
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pasos ejecutados</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pasos ejecutados</p>
+          {/*
+            La tabla de abajo muestra una página de 50 pasos, y el reparto del tiempo solo
+            cierra con la serie completa: este botón trae TODAS las páginas y copia el
+            diagnóstico ya calculado. Se ofrece con el job terminado —mientras corre, el
+            reparto mediría un job a medio hacer y engañaría más de lo que ayuda.
+          */}
+          {!canCancel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => copyDiagnostics.mutate()}
+              isLoading={copyDiagnostics.isPending}
+            >
+              Copiar diagnóstico
+            </Button>
+          )}
+        </div>
         {items.isLoading && !items.data ? (
           <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
             <Spinner /> Cargando pasos…
