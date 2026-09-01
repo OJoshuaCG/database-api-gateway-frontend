@@ -225,6 +225,26 @@ a partir de `backend/docs/features/database-clone.md`.
 | `GET /database-clones/{id}/items` | ✅ | Monitor de pasos ejecutados |
 | `POST /database-clones/{id}/cancel` | ✅ | Cancelación cooperativa |
 
+### Lote de clonación (`/database-clones/lotes`)
+
+Contrato en `backend/docs/api-reference-v19.md`, modelado en `lib/contracts/clone-batches.ts`.
+Es la capa de **orquestación** del mismo módulo: cada fila del lote termina siendo un
+`CloneJob` real y el monitor enlaza a su pantalla de detalle (`?jobId=`).
+
+**No hay `preview`**: el plan de cada base se resuelve cuando le toca el turno, así que lo que
+se confirma es el conjunto de pares origen→destino, no el DDL.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `POST /database-clone-batches` | ✅ | Paso «Bases» → crea el plan del lote |
+| `GET /database-clone-batches` | ⬜ | El historial existe en el backend; la SPA todavía no lo lista (se entra por `?batchId=`) |
+| `GET /database-clone-batches/{id}` | ✅ | Cabecera + `counts` (poll 5 s por el límite de 30/min) |
+| `GET /database-clone-batches/{id}/items` | ✅ | Una fila por base, con link al clon hijo |
+| `POST /database-clone-batches/{id}/execute` | ✅ | Confirmación agregada: re-tipear el nombre del **servidor** destino |
+| `POST /database-clone-batches/{id}/cancel` | ✅ | Cancela el lote y la base en curso |
+| `GET /database-clone-batches/{id}/retry-candidates` | ✅ | Dos grupos: reintentables y las que requieren atención |
+| `POST /database-clone-batches/{id}/retry-failed` | ✅ | Crea un lote nuevo, que vuelve a pedir confirmación |
+
 ## Conversión de collation de una base de datos
 
 Módulo de `api-reference-v8.md`: re-alinea el charset/collation de una BD completa —tablas,
