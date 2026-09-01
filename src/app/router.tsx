@@ -69,6 +69,10 @@ const DatabaseCloneWizardPage = lazyPage(
   () => import('@/features/database-clones'),
   'DatabaseCloneWizardPage',
 )
+const CloneBatchWizardPage = lazyPage(
+  () => import('@/features/clone-batches'),
+  'CloneBatchWizardPage',
+)
 const CollationConversionWizardPage = lazyPage(
   () => import('@/features/collation-conversions'),
   'CollationConversionWizardPage',
@@ -133,6 +137,9 @@ export const router = createBrowserRouter([
           },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
           { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
+          // Lote: mismo módulo, capa de orquestación. Reentrada por `?batchId=` para
+          // volver al seguimiento, igual mecanismo que el `?jobId=` del individual.
+          { path: 'database-clones/lotes', element: <CloneBatchWizardPage /> },
           // Identidad física (servidor+BD) por query string (`?serverId=&database=`), reentrada
           // por `?jobId=` — igual mecanismo que `database-clones`. Se llega solo desde la ficha
           // de la base de datos, sin entrada de sidebar propia.

@@ -94,6 +94,30 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: '/database-clones/lotes',
+    label: 'Clonar en lote',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <ellipse cx="7" cy="5" rx="4" ry="1.8" strokeWidth="1.6" />
+        <path d="M3 5v5c0 1 1.8 1.8 4 1.8s4-.8 4-1.8V5" strokeWidth="1.6" />
+        <ellipse cx="7" cy="15" rx="4" ry="1.8" strokeWidth="1.6" />
+        <path d="M3 15v4c0 1 1.8 1.8 4 1.8s4-.8 4-1.8v-4" strokeWidth="1.6" />
+        <path
+          d="M15 8l3 3m0 0l-3 3m3-3h-4"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M15 16l3 3m0 0l-3 3m3-3h-4"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
     to: '/sql-console',
     label: 'Consola SQL',
     icon: (
