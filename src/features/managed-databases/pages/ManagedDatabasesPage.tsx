@@ -241,7 +241,7 @@ export function ManagedDatabasesPage() {
             <IconButton
               label="Clonar"
               icon={<CloneIcon />}
-              onClick={() => navigate(`/database-clones?sourceDatabaseId=${row.original.id}`)}
+              onClick={() => navigate(`/database-clones/nuevo?sourceDatabaseId=${row.original.id}`)}
             />
             <Button
               variant="ghost"

@@ -34,7 +34,16 @@ export type BatchStep = 'plan' | 'databases' | 'confirm' | 'monitor'
 
 const STEP_ORDER: BatchStep[] = ['plan', 'databases', 'confirm', 'monitor']
 
-export function useCloneBatchWizard(presetBatchId?: number) {
+export function useCloneBatchWizard(
+  presetBatchId?: number,
+  /**
+   * Se llama cuando el lote ya está ENCOLADO, para que la página navegue a la dirección propia
+   * del lote. Sin esto el id vivía solo en este estado y salirse de la vista lo volvía
+   * inalcanzable — y un lote, que corre sus bases en serie durante mucho tiempo, es justamente
+   * la operación donde más probable es irse.
+   */
+  onExecuted?: (batchId: number) => void,
+) {
   const [step, setStep] = useState<BatchStep>(presetBatchId != null ? 'monitor' : 'plan')
   const [batchId, setBatchId] = useState<number | null>(presetBatchId ?? null)
   const [plan, setPlan] = useState<BatchPlanState>(INITIAL_BATCH_PLAN)
@@ -157,20 +166,31 @@ export function useCloneBatchWizard(presetBatchId?: number) {
     if (!batch.data || !confirmMatches) return
     execute.mutate(
       { confirm_server_name: confirmServerName.trim(), confirm_token: batch.data.confirm_token },
-      { onSuccess: () => setStep('monitor') },
+      {
+        onSuccess: () => {
+          if (onExecuted && batchId != null) onExecuted(batchId)
+          else setStep('monitor')
+        },
+      },
     )
-  }, [batch.data, confirmMatches, confirmServerName, execute])
+  }, [batch.data, confirmMatches, confirmServerName, execute, onExecuted, batchId])
 
   const submitRetry = useCallback(() => {
     retry.mutate(undefined, {
       onSuccess: (nuevo) => {
+        // El lote de reintento también tiene dirección propia: vuelve a pedir confirmación,
+        // así que el operador tiene que poder volver a él si se va de la vista.
+        if (onExecuted) {
+          onExecuted(nuevo.id)
+          return
+        }
         setBatchId(nuevo.id)
         setConfirmServerName('')
         setItemsPage(1)
         setStep('confirm')
       },
     })
-  }, [retry])
+  }, [retry, onExecuted])
 
   const reset = useCallback(() => {
     setStep('plan')

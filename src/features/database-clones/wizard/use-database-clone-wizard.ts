@@ -61,10 +61,16 @@ export type PlanMode = 'complete' | 'partial'
 export type SourceMode = 'inventory' | 'server'
 
 interface WizardOptions {
-  /** Reentrada desde un link directo a un job existente (`?jobId=`). */
+  /** Reentrada desde un link directo a un job existente (ruta `/database-clones/:jobId`). */
   presetJobId?: number
   /** Prellenado desde la fila "Clonar" de una BD gestionada (`?sourceDatabaseId=`). */
   presetSourceDatabaseId?: number
+  /**
+   * Se llama cuando el job ya está ENCOLADO. Existe para que la página navegue a la dirección
+   * propia de la operación en vez de quedarse en el asistente: hasta ahora el id del job vivía
+   * solo en este estado, la URL nunca lo recibía, y salirse de la vista lo volvía inalcanzable.
+   */
+  onExecuted?: (jobId: number) => void
 }
 
 interface PlanState extends PlanFormState {
@@ -193,6 +199,7 @@ export interface DatabaseCloneWizard {
 
 export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): DatabaseCloneWizard {
   const presetJobId = wizardOptions.presetJobId
+  const onExecuted = wizardOptions.onExecuted
   const queryClient = useQueryClient()
 
   const [step, setStep] = useState<WizardStep>(presetJobId != null ? 'summary' : 'plan')
@@ -597,10 +604,15 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
       force,
     })
     execute.mutate(body, {
-      onSuccess: () => setStep('monitor'),
+      onSuccess: () => {
+        // Si el contenedor sabe navegar, la operación pasa a tener dirección propia y el
+        // asistente se desmonta. Si no (uso legacy), se cae al monitor embebido de siempre.
+        if (onExecuted && jobId != null) onExecuted(jobId)
+        else setStep('monitor')
+      },
       onError: handleActionError,
     })
-  }, [preview.data, confirmTargetName, force, execute, handleActionError])
+  }, [preview.data, confirmTargetName, force, execute, handleActionError, onExecuted, jobId])
 
   // ── Vista 6: monitor ────────────────────────────────────────────────────────────
   const itemsParams = useMemo(() => ({ page: itemsPage, size: itemsSize }), [itemsPage])

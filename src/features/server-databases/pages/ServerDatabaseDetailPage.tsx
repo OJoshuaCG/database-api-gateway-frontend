@@ -149,7 +149,7 @@ export function ServerDatabaseDetailPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => navigate(`/database-clones?sourceDatabaseId=${managed.id}`)}
+                    onClick={() => navigate(`/database-clones/nuevo?sourceDatabaseId=${managed.id}`)}
                   >
                     <CloneIcon />
                     Clonar

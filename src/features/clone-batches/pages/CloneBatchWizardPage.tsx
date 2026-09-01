@@ -1,5 +1,5 @@
-import { useSearchParams } from 'react-router-dom'
-import { Card, PageHeader } from '@/components/ui'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Button, Card, PageHeader } from '@/components/ui'
 import { useCloneBatchWizard } from '../wizard/use-clone-batch-wizard'
 import { WizardNav, WizardStepper } from '../wizard/WizardShell'
 import { PlanStep } from '../wizard/steps/PlanStep'
@@ -16,19 +16,34 @@ import { MonitorStep } from '../wizard/steps/MonitorStep'
  */
 export function CloneBatchWizardPage() {
   const [searchParams] = useSearchParams()
-  const raw = searchParams.get('batchId')
+  const routeParams = useParams()
+  // El id vive en la RUTA (`/database-clones/lotes/:batchId`); `?batchId=` se sigue aceptando
+  // porque es el único link que alguien pudo haberse guardado.
+  const raw = routeParams.batchId ?? searchParams.get('batchId')
   const presetBatchId = raw && /^\d+$/.test(raw) ? Number(raw) : undefined
   return <CloneBatchWizardContent key={presetBatchId ?? 'nuevo'} presetBatchId={presetBatchId} />
 }
 
 function CloneBatchWizardContent({ presetBatchId }: { presetBatchId?: number }) {
-  const wizard = useCloneBatchWizard(presetBatchId)
+  const navigate = useNavigate()
+  const wizard = useCloneBatchWizard(presetBatchId, (batchId) =>
+    navigate(`/database-clones/lotes/${batchId}`, { replace: true }),
+  )
 
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Clonar varias bases"
-        description="Copia N bases de datos de un servidor a otro con una sola confirmación."
+        title={presetBatchId != null ? `Lote #${presetBatchId}` : 'Clonar varias bases'}
+        description={
+          presetBatchId != null
+            ? 'Seguimiento del lote. Las bases se copian de a una por vez; esta dirección es estable.'
+            : 'Copia N bases de datos de un servidor a otro con una sola confirmación.'
+        }
+        actions={
+          <Button variant="ghost" onClick={() => navigate('/database-clones?tab=lotes')}>
+            {presetBatchId != null ? 'Volver al historial' : 'Cancelar'}
+          </Button>
+        }
       />
       <WizardStepper wizard={wizard} />
       <Card>

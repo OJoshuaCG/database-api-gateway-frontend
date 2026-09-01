@@ -7,6 +7,7 @@ import {
   itemStatusLabel,
   itemStatusTone,
 } from '../logic'
+import { DurationByDatabase } from '../DurationByDatabase'
 import type { CloneBatchWizard } from '../use-clone-batch-wizard'
 
 /**
@@ -98,7 +99,7 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
               {row.clone_job_id != null && (
                 <Link
                   className="text-xs text-primary underline-offset-2 hover:underline"
-                  to={`/database-clones?jobId=${row.clone_job_id}`}
+                  to={`/database-clones/${row.clone_job_id}`}
                 >
                   ver detalle
                 </Link>
@@ -120,6 +121,8 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
           isFetching={items.isFetching}
         />
       )}
+
+      {filas.length > 0 && <DurationByDatabase batch={data} items={filas} />}
 
       {retryCandidates.data && <RetryPanel wizard={wizard} />}
 
