@@ -51,6 +51,20 @@ export type CloneItemStatus = z.infer<typeof cloneItemStatusSchema>
 export const cloneDependencyReasonSchema = z.enum(['foreign_key', 'trigger_table', 'body_reference'])
 export type CloneDependencyReason = z.infer<typeof cloneDependencyReasonSchema>
 
+/** Qué copia el job. Es un eje propio: `include_data` (booleano) es el atajo legacy que se deriva a esto. */
+export const cloneCopyIntentSchema = z.enum(['structure_only', 'structure_and_data', 'data_only'])
+export type CloneCopyIntent = z.infer<typeof cloneCopyIntentSchema>
+
+/** Qué hacer con las filas que YA estén en la tabla destino. Solo aplica con `data_only`. */
+export const cloneDataOnExistingSchema = z.enum(['append', 'upsert'])
+export type CloneDataOnExisting = z.infer<typeof cloneDataOnExistingSchema>
+
+export const cloneSelectionModeSchema = z.enum(['all', 'include', 'all_except'])
+export type CloneSelectionMode = z.infer<typeof cloneSelectionModeSchema>
+
+export const cloneDataSelectionModeSchema = z.enum(['none', 'all', 'include', 'all_except'])
+export type CloneDataSelectionMode = z.infer<typeof cloneDataSelectionModeSchema>
+
 // ── Objetos y dependencias ───────────────────────────────────────────────────────
 export const cloneObjectRefSchema = z.object({
   object_type: cloneObjectTypeSchema,
@@ -65,6 +79,14 @@ export const cloneObjectOutSchema = z.object({
   portable: z.boolean(),
   portability_reason: z.string().nullable(),
   row_estimate: z.number().int().nullable(),
+  /**
+   * `false` = el catálogo del motor NO sabe cuántas filas hay (PostgreSQL sin `ANALYZE`,
+   * `TABLE_ROWS` en NULL). Sin este campo, `row_estimate: 0` es indistinguible de una tabla
+   * vacía y una tabla de millones se muestra como vacía.
+   */
+  row_estimate_known: z.boolean().nullish(),
+  /** Solo tablas. `false` = un `upsert` sobre ella degrada a INSERT simple. */
+  has_primary_key: z.boolean().nullish(),
 })
 export type CloneObjectOut = z.infer<typeof cloneObjectOutSchema>
 
@@ -170,10 +192,68 @@ export const cloneSummaryOutSchema = z.object({
 })
 export type CloneSummaryOut = z.infer<typeof cloneSummaryOutSchema>
 
+// ── Selección declarativa (el otro idioma del SPEC) ──────────────────────────────
+/**
+ * Selección DECLARATIVA de estructura: el backend la resuelve contra el catálogo del origen con
+ * la misma función que el export, así que `all_except` y los patrones se comportan igual en los
+ * dos módulos.
+ *
+ * **El orden de resolución importa y tiene un filo:** primero se recorta por `types`, después se
+ * aplica `mode` sobre `names`, y recién entonces los patrones FILTRAN lo ya elegido. Con
+ * `mode: 'include'` y `names: []` el conjunto base es VACÍO, así que unos `include_patterns` sin
+ * `names` no seleccionan nada. Para «los objetos que matcheen X» el modo correcto es `all` con
+ * `include_patterns` — que es lo que construye `buildStructureSpec` del asistente.
+ */
+export const cloneStructureSpecSchema = z.object({
+  mode: cloneSelectionModeSchema.optional().default('all'),
+  /** Filtro por tipo de objeto; vacío = todos los tipos del catálogo. */
+  types: z.array(cloneObjectTypeSchema).optional().default([]),
+  /** Nombres exactos. El match es por NOMBRE, sin tipo: usa `types` para desambiguar. */
+  names: z.array(z.string()).optional().default([]),
+  /** Patrones fnmatch sobre nombres del catálogo (nunca SQL): `fact_*`. */
+  include_patterns: z.array(z.string()).optional().default([]),
+  /** Patrones a quitar. La exclusión GANA sobre la inclusión. */
+  exclude_patterns: z.array(z.string()).optional().default([]),
+})
+export type CloneStructureSpec = z.infer<typeof cloneStructureSpecSchema>
+
+/** Selección de datos: eje propio, no un booleano colgado de la estructura. Solo salen de TABLAS. */
+export const cloneDataSpecSchema = z.object({
+  mode: cloneDataSelectionModeSchema.optional().default('none'),
+  names: z.array(z.string()).optional().default([]),
+  include_patterns: z.array(z.string()).optional().default([]),
+  exclude_patterns: z.array(z.string()).optional().default([]),
+  /** OBLIGATORIO con `copy_intent: 'data_only'`; no admitido en los otros modos. */
+  on_existing: cloneDataOnExistingSchema.nullish(),
+})
+export type CloneDataSpec = z.infer<typeof cloneDataSpecSchema>
+
+/** Charset/collation de la BD destino. Solo aplica cuando el job CREA la base. */
+export const cloneCharsetSpecSchema = z.object({
+  mode: z.enum(['keep', 'override']).optional().default('keep'),
+  charset: z.string().max(50).nullish(),
+  collation: z.string().max(100).nullish(),
+})
+export type CloneCharsetSpec = z.infer<typeof cloneCharsetSpecSchema>
+
 // ── Preview ──────────────────────────────────────────────────────────────────────
-/** Body de `POST .../preview`. `selection: null` = clon completo; si no, REEMPLAZA y re-persiste. */
+/**
+ * Body de `POST .../preview`. **Todos los campos son opcionales y el backend aplica solo lo que
+ * VIENE**: un campo ausente deja el valor que el plan ya tenía, no lo borra.
+ *
+ * `selection` y `structure` son los dos idiomas para decir lo mismo y son **mutuamente
+ * excluyentes**: el backend mira las claves REALMENTE enviadas, así que mandar `selection: null`
+ * junto a `structure` ya cuenta como enviar las dos y responde 422. Construye el body con
+ * `buildPreviewBody`, que garantiza un solo idioma por llamada.
+ */
 export const clonePreviewInSchema = z.object({
   selection: z.array(cloneObjectRefSchema).nullable().optional(),
+  copy_intent: cloneCopyIntentSchema.nullish(),
+  structure: cloneStructureSpecSchema.nullish(),
+  data: cloneDataSpecSchema.nullish(),
+  target_charset: cloneCharsetSpecSchema.nullish(),
+  /** ServerUser del servidor DESTINO que será OWNER de la BD creada. Solo PostgreSQL. */
+  target_owner_user_id: z.number().int().min(1).nullish(),
 })
 export type ClonePreviewIn = z.infer<typeof clonePreviewInSchema>
 
@@ -188,9 +268,42 @@ export type ClonePreviewStatementOut = z.infer<typeof clonePreviewStatementOutSc
 export const clonePreviewDataTableOutSchema = z.object({
   table: z.string(),
   row_estimate: z.number().int().nullable(),
+  row_estimate_known: z.boolean().nullish(),
+  has_primary_key: z.boolean().nullish(),
   upsert: z.boolean(),
 })
 export type ClonePreviewDataTableOut = z.infer<typeof clonePreviewDataTableOutSchema>
+
+/**
+ * Aviso con CÓDIGO estable, para mapearlo a nuestro texto y a nuestro peso visual en vez de
+ * matchear prosa con expresiones regulares (que es lo que hace `wizard/messages.ts`).
+ *
+ * `severity` lleva `.catch()` a propósito: el backend tiene pendiente sumar un nivel `danger`
+ * (`T-260822-lz-clon-contrato-frontend`), y sin la red un valor nuevo haría que el `safeParse`
+ * del envelope descarte la respuesta ENTERA del preview. Degradar a `warning` es estrictamente
+ * mejor que perder el plan.
+ */
+export const cloneNoticeOutSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  severity: z.enum(['info', 'warning']).catch('warning'),
+  detail: z.record(z.string(), z.unknown()).nullish(),
+})
+export type CloneNoticeOut = z.infer<typeof cloneNoticeOutSchema>
+
+/**
+ * Incompatibilidad entre el esquema del origen y el del DESTINO para una tabla que va a recibir
+ * filas. `reason` es de vocabulario CERRADO (nunca el mensaje del motor), pero se tipa como
+ * `string` por lo mismo que arriba: un motivo nuevo no puede costar la respuesta entera.
+ */
+export const cloneCompatIssueOutSchema = z.object({
+  table: z.string(),
+  reason: z.string(),
+  blocking: z.boolean(),
+  column: z.string().nullish(),
+  detail: z.record(z.string(), z.unknown()).nullish(),
+})
+export type CloneCompatIssueOut = z.infer<typeof cloneCompatIssueOutSchema>
 
 /** `data` de `POST .../preview` — plan resuelto SIN ejecutar + `confirm_token` autoritativo. */
 export const clonePreviewOutSchema = z.object({
@@ -203,6 +316,20 @@ export const clonePreviewOutSchema = z.object({
   skipped: z.array(cloneObjectOutSchema),
   will_adopt: z.boolean(),
   warnings: z.array(z.string()),
+  // ── Valores EFECTIVOS ya resueltos por el servidor ─────────────────────────────
+  // Se renderiza lo que el servidor decidió en vez de re-derivarlo acá: si el formulario
+  // reimplementa las reglas, las dos implementaciones divergen en silencio.
+  copy_intent: cloneCopyIntentSchema.nullish(),
+  data_on_existing: cloneDataOnExistingSchema.nullish(),
+  target_charset: z.string().nullish(),
+  target_collation: z.string().nullish(),
+  target_owner: z.string().nullish(),
+  notices: z.array(cloneNoticeOutSchema).nullish(),
+  /**
+   * Incompatibilidades que IMPIDEN ejecutar. Si viene con contenido, `confirm_token` llega
+   * VACÍO: el plan se puede ver pero no confirmar.
+   */
+  blocking_issues: z.array(cloneCompatIssueOutSchema).nullish(),
   confirm_token: z.string(),
 })
 export type ClonePreviewOut = z.infer<typeof clonePreviewOutSchema>
