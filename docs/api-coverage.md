@@ -210,12 +210,15 @@ habilitada, sin pedirlo de nuevo.
 
 ## Clonado de bases de datos
 
+> **Direccionabilidad (2026-09-01).** `/database-clones` es ahora el **historial**; el asistente vive en `/database-clones/nuevo` y cada operación tiene dirección propia (`/database-clones/:jobId`, `/database-clones/lotes/:batchId`). Los links viejos `?jobId=` / `?batchId=` / `?sourceDatabaseId=` se redirigen. Antes el id vivía solo en el estado de React y la URL nunca lo recibía: salirse de la vista dejaba la operación inalcanzable.
+
 El asistente `/database-clones` consume un módulo que **no aparece en el apéndice de
 endpoints del contrato**; su contrato está modelado en `lib/contracts/database-clones.ts`
 a partir de `backend/docs/features/database-clone.md`.
 
 | Endpoint | Estado | Dónde |
 |---|---|---|
+| `GET /database-clones` | ✅ | **Historial** (`/database-clones`), pestaña «Individuales». Filtros de estado, servidor destino, búsqueda por los dos nombres de base y `include_batch_children`. Es el punto de reentrada: sin él, un clon cuyo id se perdió del estado del navegador quedaba inalcanzable |
 | `POST /database-clones` | ✅ | Paso de plan. Se llega con `?sourceDatabaseId=` prellenado desde `ManagedDatabasesPage` y desde la acción "Clonar" de `ServerDatabaseDetailPage` (habilitada solo si la BD está adoptada) |
 | `GET /database-clones/{id}` | ✅ | Estado del trabajo (poll 2 s hasta estado terminal) |
 | `GET /database-clones/{id}/objects` | ✅ | Inventario con portabilidad y grafo de dependencias |
@@ -237,7 +240,7 @@ se confirma es el conjunto de pares origen→destino, no el DDL.
 | Endpoint | Estado | Dónde |
 |---|---|---|
 | `POST /database-clone-batches` | ✅ | Paso «Bases» → crea el plan del lote |
-| `GET /database-clone-batches` | ⬜ | El historial existe en el backend; la SPA todavía no lo lista (se entra por `?batchId=`) |
+| `GET /database-clone-batches` | ✅ | **Historial**, pestaña «Lotes». Estaba implementado y sin consumir: era el caso más grave de la inalcanzabilidad, porque un lote corre en serie durante mucho tiempo |
 | `GET /database-clone-batches/{id}` | ✅ | Cabecera + `counts` (poll 5 s por el límite de 30/min) |
 | `GET /database-clone-batches/{id}/items` | ✅ | Una fila por base, con link al clon hijo |
 | `POST /database-clone-batches/{id}/execute` | ✅ | Confirmación agregada: re-tipear el nombre del **servidor** destino |

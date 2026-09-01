@@ -245,6 +245,70 @@ export function batchStatusTone(status: CloneBatchStatus): BadgeTone {
   return BATCH_STATUS_TONES[status]
 }
 
+// ── Duración por base ─────────────────────────────────────────────────────────────
+// NO necesita ningún campo nuevo del backend: `CloneBatchItemOut` ya trae `started_at` y
+// `finished_at` por ítem. Es lo que convierte «se sintió lento» en «la base X tardó 41 min».
+
+export interface BatchRowDuration {
+  key: number
+  label: string
+  ms: number | null
+  status: CloneBatchItemStatus | null | undefined
+}
+
+/** Duración de una fila, o `null` si no arrancó o no terminó. */
+export function rowDurationMs(row: {
+  started_at?: string | null
+  finished_at?: string | null
+}): number | null {
+  if (!row.started_at || !row.finished_at) return null
+  const ms = new Date(row.finished_at).getTime() - new Date(row.started_at).getTime()
+  return Number.isFinite(ms) && ms >= 0 ? ms : null
+}
+
+/**
+ * Duraciones por base, ordenadas de mayor a menor: el orden pone al culpable primero, que es
+ * la pregunta real («¿cuál se comió el tiempo?»). Las filas sin duración van al final.
+ */
+export function durationsByDatabase(
+  items: {
+    id: number
+    target_database_name: string
+    status?: CloneBatchItemStatus | null
+    started_at?: string | null
+    finished_at?: string | null
+  }[],
+): BatchRowDuration[] {
+  return items
+    .map((row) => ({
+      key: row.id,
+      label: row.target_database_name,
+      ms: rowDurationMs(row),
+      status: row.status,
+    }))
+    .sort((a, b) => (b.ms ?? -1) - (a.ms ?? -1))
+}
+
+/**
+ * El hueco entre el total del lote y la suma de sus bases.
+ *
+ * En serie el total NO es la suma: hay arranque y espera entre bases. Sin explicitar ese
+ * hueco, una base parece lenta cuando en realidad estuvo esperando turno — que es exactamente
+ * la conclusión equivocada a la que lleva un reporte de duraciones sin contexto.
+ */
+export function batchQueueGapMs(
+  batch: { started_at?: string | null; finished_at?: string | null },
+  duraciones: BatchRowDuration[],
+): { totalMs: number | null; sumaMs: number; huecoMs: number | null } {
+  const totalMs = rowDurationMs(batch)
+  const sumaMs = duraciones.reduce((acc, d) => acc + (d.ms ?? 0), 0)
+  return {
+    totalMs,
+    sumaMs,
+    huecoMs: totalMs != null ? Math.max(0, totalMs - sumaMs) : null,
+  }
+}
+
 /** «4 de 12»: cuántas filas llegaron a un desenlace, sea cual sea. */
 export function completedCount(counts: Record<string, number>): number {
   const total = counts.total ?? 0

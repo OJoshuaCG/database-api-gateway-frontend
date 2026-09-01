@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ReconcileDatabaseItem } from '@/lib/contracts'
 import {
   applyAffixToRows,
+  batchQueueGapMs,
+  durationsByDatabase,
+  rowDurationMs,
   buildCreateBatchBody,
   clonableDatabases,
   completedCount,
@@ -16,7 +19,7 @@ import {
 } from './logic'
 
 function makeDb(name: string, overrides: Partial<ReconcileDatabaseItem> = {}): ReconcileDatabaseItem {
-  return { name, state: 'unmanaged', managed_id: null, ...overrides } as ReconcileDatabaseItem
+  return { name, state: 'unmanaged', managed_id: null, ...overrides }
 }
 
 function makeRows(...names: string[]): Map<string, BatchRowDraft> {
@@ -160,3 +163,85 @@ describe('completedCount', () => {
     expect(completedCount({})).toBe(0)
   })
 })
+
+
+// ── Duración por base: el reporte que se pidió, sin campos nuevos del backend ─────
+describe('rowDurationMs', () => {
+  it('devuelve null si la fila no arrancó o no terminó', () => {
+    expect(rowDurationMs({ started_at: null, finished_at: null })).toBeNull()
+    expect(rowDurationMs({ started_at: '2026-09-01T10:00:00', finished_at: null })).toBeNull()
+    expect(rowDurationMs({ started_at: null, finished_at: '2026-09-01T10:00:00' })).toBeNull()
+  })
+
+  it('calcula la duración en milisegundos', () => {
+    const ms = rowDurationMs({
+      started_at: '2026-09-01T10:00:00',
+      finished_at: '2026-09-01T10:02:30',
+    })
+    expect(ms).toBe(150_000)
+  })
+
+  it('descarta una duración negativa en vez de mostrarla', () => {
+    // Relojes desalineados entre el gateway y la BD darían un negativo; mostrar "-3 min" es
+    // peor que no mostrar nada.
+    expect(
+      rowDurationMs({ started_at: '2026-09-01T10:05:00', finished_at: '2026-09-01T10:00:00' }),
+    ).toBeNull()
+  })
+})
+
+describe('durationsByDatabase', () => {
+  const items = [
+    { id: 1, target_database_name: 'rapida', started_at: '2026-09-01T10:00:00', finished_at: '2026-09-01T10:00:10' },
+    { id: 2, target_database_name: 'lenta', started_at: '2026-09-01T10:00:10', finished_at: '2026-09-01T10:05:10' },
+    { id: 3, target_database_name: 'sin_arrancar', started_at: null, finished_at: null },
+  ]
+
+  it('ordena de mayor a menor para poner al culpable primero', () => {
+    expect(durationsByDatabase(items).map((d) => d.label)).toEqual([
+      'lenta',
+      'rapida',
+      'sin_arrancar',
+    ])
+  })
+
+  it('las filas sin duración van al final, no al principio como si fueran instantáneas', () => {
+    const ultima = durationsByDatabase(items).at(-1)
+    expect(ultima?.label).toBe('sin_arrancar')
+    expect(ultima?.ms).toBeNull()
+  })
+})
+
+describe('batchQueueGapMs', () => {
+  it('separa el tiempo copiando del tiempo esperando turno', () => {
+    // En serie el total NO es la suma: sin explicitar el hueco, una base parece lenta cuando
+    // en realidad estuvo esperando su turno.
+    const duraciones = durationsByDatabase([
+      { id: 1, target_database_name: 'a', started_at: '2026-09-01T10:00:00', finished_at: '2026-09-01T10:01:00' },
+      { id: 2, target_database_name: 'b', started_at: '2026-09-01T10:02:00', finished_at: '2026-09-01T10:03:00' },
+    ])
+    const { totalMs, sumaMs, huecoMs } = batchQueueGapMs(
+      { started_at: '2026-09-01T10:00:00', finished_at: '2026-09-01T10:04:00' },
+      duraciones,
+    )
+    expect(totalMs).toBe(240_000)
+    expect(sumaMs).toBe(120_000)
+    expect(huecoMs).toBe(120_000)
+  })
+
+  it('no reporta un hueco negativo si la suma supera el total', () => {
+    const duraciones = durationsByDatabase([
+      { id: 1, target_database_name: 'a', started_at: '2026-09-01T10:00:00', finished_at: '2026-09-01T10:10:00' },
+    ])
+    const { huecoMs } = batchQueueGapMs(
+      { started_at: '2026-09-01T10:00:00', finished_at: '2026-09-01T10:05:00' },
+      duraciones,
+    )
+    expect(huecoMs).toBe(0)
+  })
+
+  it('sin total del lote no inventa un hueco', () => {
+    expect(batchQueueGapMs({ started_at: null, finished_at: null }, []).huecoMs).toBeNull()
+  })
+})
+
