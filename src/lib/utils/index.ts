@@ -1,5 +1,6 @@
 export * from './clipboard'
 export * from './cn'
 export * from './download'
+export * from './filename'
 export * from './format'
 export * from './uuid'

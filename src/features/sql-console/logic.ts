@@ -599,16 +599,10 @@ export function toCsv(columns: string[], rows: unknown[][]): string {
   return [header, ...body].join('\r\n')
 }
 
-/**
- * Nombre de archivo seguro para la descarga: el nombre de la base es eco del motor ajeno.
- *
- * Un nombre que al limpiarlo queda en puros separadores (`///` → `_`) no identifica nada, así
- * que cae al genérico en vez de producir un archivo llamado `_`.
- */
-export function safeFilenamePart(value: string): string {
-  const cleaned = value.replace(/[^\w.-]+/g, '_').slice(0, 64)
-  return /[a-zA-Z0-9]/.test(cleaned) ? cleaned : 'resultado'
-}
+// `safeFilenamePart` se promovió a `@/lib/utils`: los diagnósticos de clonado necesitan lo
+// mismo y una feature no importa de otra. Se re-exporta para no romper a quien ya la importaba
+// desde acá.
+export { safeFilenamePart } from '@/lib/utils'
 
 // ── Acciones rápidas (§10.5) ──────────────────────────────────────────────────
 
