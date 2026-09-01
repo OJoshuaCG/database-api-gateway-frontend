@@ -128,6 +128,13 @@ export const queryKeys = {
     preview: (id: number, plan: string) => ['database-clones', id, 'preview', plan] as const,
     items: (id: number, params: QueryParams) => ['database-clones', id, 'items', params] as const,
   },
+  cloneBatches: {
+    all: ['clone-batches'] as const,
+    list: (params: QueryParams) => ['clone-batches', 'list', params] as const,
+    detail: (id: number) => ['clone-batches', 'detail', id] as const,
+    items: (id: number, params: QueryParams) => ['clone-batches', id, 'items', params] as const,
+    retryCandidates: (id: number) => ['clone-batches', id, 'retry-candidates'] as const,
+  },
   collationConversions: {
     all: ['collation-conversions'] as const,
     detail: (id: number) => ['collation-conversions', 'detail', id] as const,
