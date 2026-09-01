@@ -1,7 +1,7 @@
 import { Badge, Button, ErrorState, Pagination, Spinner } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn, isClipboardAvailable } from '@/lib/utils'
 import type { ClonePhase, CloneItemStatus } from '@/lib/contracts'
-import { useCopyCloneDiagnostics } from '../../hooks/use-clone-diagnostics'
+import { useCloneDiagnostics } from '../../hooks/use-clone-diagnostics'
 import type { DatabaseCloneWizard } from '../use-database-clone-wizard'
 
 const PHASE_ORDER: ClonePhase[] = ['clean', 'structure', 'data', 'adopt', 'done']
@@ -50,7 +50,7 @@ function PhaseBar({ phase }: { phase: ClonePhase | null }) {
 export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
   const { job, items } = wizard
   // Antes de los early returns: los hooks no pueden quedar detrás de un `return` condicional.
-  const copyDiagnostics = useCopyCloneDiagnostics(job.data)
+  const diagnostics = useCloneDiagnostics(job.data)
 
   if (job.isLoading && !job.data) {
     return (
@@ -145,20 +145,36 @@ export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pasos ejecutados</p>
           {/*
-            La tabla de abajo muestra una página de 50 pasos, y el reparto del tiempo solo
-            cierra con la serie completa: este botón trae TODAS las páginas y copia el
-            diagnóstico ya calculado. Se ofrece con el job terminado —mientras corre, el
-            reparto mediría un job a medio hacer y engañaría más de lo que ayuda.
+            La tabla de abajo muestra una página de 50 pasos, y el reparto del tiempo solo cierra
+            con la serie completa: estos botones traen TODAS las páginas y entregan el
+            diagnóstico ya calculado. Se ofrecen con el job terminado —mientras corre, el reparto
+            mediría un job a medio hacer y engañaría más de lo que ayuda.
+
+            La descarga va PRIMERA y como acción principal porque es la que siempre funciona:
+            este gateway se sirve por HTTP plano y ahí `navigator.clipboard` no existe. El copiar
+            solo aparece cuando el contexto es seguro, en vez de ofrecer un botón que falla.
           */}
           {!canCancel && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyDiagnostics.mutate()}
-              isLoading={copyDiagnostics.isPending}
-            >
-              Copiar diagnóstico
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => diagnostics.mutate('download')}
+                isLoading={diagnostics.isPending && diagnostics.variables === 'download'}
+              >
+                Descargar diagnóstico (.txt)
+              </Button>
+              {isClipboardAvailable() && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => diagnostics.mutate('clipboard')}
+                  isLoading={diagnostics.isPending && diagnostics.variables === 'clipboard'}
+                >
+                  Copiar
+                </Button>
+              )}
+            </div>
           )}
         </div>
         {items.isLoading && !items.data ? (
