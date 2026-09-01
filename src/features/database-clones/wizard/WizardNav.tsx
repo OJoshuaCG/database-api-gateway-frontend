@@ -55,11 +55,16 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
       const nameMatches =
         wizard.confirmTargetName.length > 0 &&
         wizard.confirmTargetName === wizard.job.data?.target_database_name
+      // Un `confirm_token` VACÍO no es un caso raro: es cómo el backend dice "este plan se puede
+      // ver pero no confirmar" cuando trae `blocking_issues`. Sin este guard el botón queda
+      // habilitado y manda un token vacío, que solo puede terminar en 422.
+      const planConfirmable = (wizard.preview.data?.confirm_token.length ?? 0) > 0
       const disabled =
         busy ||
         wizard.actionCooldown ||
         !wizard.preview.data ||
         wizard.preview.isFetching ||
+        !planConfirmable ||
         !nameMatches
       left = (
         <BackButton

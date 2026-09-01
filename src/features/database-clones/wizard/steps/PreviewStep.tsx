@@ -1,4 +1,4 @@
-import { Badge, CodeBlock, Input, Spinner, Switch } from '@/components/ui'
+import { Badge, Callout, CodeBlock, Input, Spinner, Switch } from '@/components/ui'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import { CLONE_ACTION_HINTS } from '../messages'
 import type { DatabaseCloneWizard } from '../use-database-clone-wizard'
@@ -41,6 +41,39 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
 
       {preview.data && (
         <>
+          {/*
+            Va PRIMERO y en rojo: si hay bloqueantes, el `confirm_token` llega vacío y el plan no
+            se puede ejecutar. Mostrarlo al final, después de las sentencias, dejaría al operador
+            leyendo un plan entero para descubrir recién abajo que no puede confirmarlo.
+          */}
+          {(preview.data.blocking_issues?.length ?? 0) > 0 && (
+            <Callout
+              tone="danger"
+              title={`El plan no se puede ejecutar (${preview.data.blocking_issues!.length})`}
+            >
+              <div className="flex flex-col gap-1">
+                {preview.data.blocking_issues!.map((issue, index) => (
+                  <p key={index} className="text-xs">
+                    <strong>{issue.table}</strong>
+                    {issue.column && <> · columna {issue.column}</>} — {issue.reason}
+                  </p>
+                ))}
+              </div>
+            </Callout>
+          )}
+
+          {(preview.data.notices?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-2">
+              {preview.data.notices!.map((notice, index) => (
+                <Callout
+                  key={index}
+                  tone={notice.severity === 'info' ? 'info' : 'warning'}
+                  title={notice.message}
+                />
+              ))}
+            </div>
+          )}
+
           {preview.data.clean_statements.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-sm font-semibold text-foreground">
