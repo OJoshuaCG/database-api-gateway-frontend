@@ -177,6 +177,12 @@ export const cloneSummaryOutSchema = z.object({
   target_engine: engineTypeSchema,
   target_mode: cloneTargetModeSchema,
   include_data: z.boolean(),
+  /**
+   * La intención EFECTIVA. Se lee esto y no `include_data`: ese booleano legacy no
+   * distingue `data_only` de `structure_only`, así que derivar el modo de ahí muestra mal
+   * la copia de solo datos. Va `.nullish()` porque un backend anterior no lo manda.
+   */
+  copy_intent: cloneCopyIntentSchema.nullish(),
   clean_mode: cloneCleanModeSchema,
   adopt_target: z.boolean(),
   cross_engine: z.boolean(),
@@ -235,6 +241,22 @@ export const cloneCharsetSpecSchema = z.object({
   collation: z.string().max(100).nullish(),
 })
 export type CloneCharsetSpec = z.infer<typeof cloneCharsetSpecSchema>
+
+/**
+ * Una fila del historial (`GET /database-clones`). Extiende el resumen con lo que solo tiene
+ * sentido en un listado.
+ *
+ * `batch_id`/`batch_seq` salen de un LEFT JOIN contra `clone_batch_items` del lado del
+ * backend, porque la relación vive solo de ese lado: un `CloneJob` no sabe que nació de un
+ * lote. Sin ese dato, los N hijos de un lote son N filas indistinguibles de clones sueltos.
+ */
+export const cloneListItemOutSchema = cloneSummaryOutSchema.extend({
+  batch_id: z.number().int().nullish(),
+  batch_seq: z.number().int().nullish(),
+  /** Calculado en el servidor: es lo que habilita ordenar por duración sobre el conjunto. */
+  duration_ms: z.number().int().nullish(),
+})
+export type CloneListItemOut = z.infer<typeof cloneListItemOutSchema>
 
 // ── Preview ──────────────────────────────────────────────────────────────────────
 /**
