@@ -256,7 +256,14 @@ export interface BatchRowDuration {
   status: CloneBatchItemStatus | null | undefined
 }
 
-/** Duración de una fila, o `null` si no arrancó o no terminó. */
+/**
+ * Duración de una fila, o `null` si no arrancó o no terminó.
+ *
+ * **Qué mide exactamente**: el backend marca `started_at` ANTES de `create_plan`, así que esto
+ * abarca los snapshots del origen, la limpieza, el DDL y la copia — la base completa, no solo
+ * la copia. La distinción no es académica: en una medición real de 17 MB en 2 m 18 s, la copia
+ * valía uno o dos segundos, y llamar «copia» al total llevaba a optimizar el lugar equivocado.
+ */
 export function rowDurationMs(row: {
   started_at?: string | null
   finished_at?: string | null
@@ -290,11 +297,16 @@ export function durationsByDatabase(
 }
 
 /**
- * El hueco entre el total del lote y la suma de sus bases.
+ * El total del lote, la suma de sus bases, y **el resto sin atribuir**.
  *
- * En serie el total NO es la suma: hay arranque y espera entre bases. Sin explicitar ese
- * hueco, una base parece lenta cuando en realidad estuvo esperando turno — que es exactamente
- * la conclusión equivocada a la que lleva un reporte de duraciones sin contexto.
+ * En serie el total no es la suma, así que el resto existe y hay que mostrarlo. Lo que NO se
+ * puede hacer es nombrarlo: la primera versión lo llamaba «esperando turno y arranque», y eso
+ * no está demostrado — entre el fin de una fila y el inicio de la siguiente el worker solo
+ * consulta la cancelación y abre una sesión, o sea milisegundos, no los 25 s por base que una
+ * medición real arrojó. Se llama «sin atribuir» hasta que la instrumentación permita repartirlo.
+ *
+ * Un número con una etiqueta inventada es peor que un número sin etiqueta: manda a optimizar
+ * un lugar que nadie verificó.
  */
 export function batchQueueGapMs(
   batch: { started_at?: string | null; finished_at?: string | null },

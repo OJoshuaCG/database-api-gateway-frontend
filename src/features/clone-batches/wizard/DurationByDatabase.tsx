@@ -32,6 +32,10 @@ export function DurationByDatabase({
     <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
       <div className="flex flex-col gap-1">
         <p className="text-sm font-semibold text-foreground">Cuánto tardó cada base</p>
+        <p className="text-xs text-muted-foreground">
+          Cada barra mide la base completa: fotografiar el origen, crearla, aplicar la estructura
+          y copiar los datos.
+        </p>
         {totalMs != null && (
           <p className="text-xs text-muted-foreground">
             {conDuracion.length} bases en {formatDuration(totalMs)}. La más lenta (
@@ -41,13 +45,22 @@ export function DurationByDatabase({
           </p>
         )}
         {/*
-          El hueco importa: en serie el total NO es la suma de las bases —hay arranque y espera
-          entre una y la siguiente—. Sin decirlo, una base parece lenta cuando en realidad
-          estuvo esperando turno.
+          Las dos etiquetas dicen EXACTAMENTE lo que miden, ni una palabra más.
+
+          La primera versión decía «Copiando», y era falso: `started_at` de la fila se marca
+          ANTES de `create_plan`, así que la duración por base abarca los cuatro snapshots del
+          origen, la limpieza, todo el DDL y recién después los datos. En una medición real
+          —17 MB, 2 m 18 s— la copia en sí valía uno o dos segundos: atribuirle el total llevaba
+          a optimizar el lugar equivocado.
+
+          Y el resto se llama «sin atribuir» y no «esperando turno» porque **no está demostrado
+          qué es**: entre el fin de una fila y el inicio de la siguiente el worker solo consulta
+          la cancelación y abre una sesión. Un número con una etiqueta inventada es peor que un
+          número sin etiqueta.
         */}
         {huecoMs != null && huecoMs > 0 && (
           <p className="text-xs text-muted-foreground">
-            Copiando: {formatDuration(sumaMs)} · Esperando turno y arranque:{' '}
+            Preparación y copia por base: {formatDuration(sumaMs)} · Sin atribuir:{' '}
             {formatDuration(huecoMs)}
           </p>
         )}
