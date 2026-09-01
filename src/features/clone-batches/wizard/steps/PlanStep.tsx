@@ -1,4 +1,4 @@
-import { Callout, Combobox, Input, RadioCardGroup } from '@/components/ui'
+import { Button, Callout, Combobox, Input, RadioCardGroup } from '@/components/ui'
 import type { CloneCopyIntent, CloneDataOnExisting, ServerOut } from '@/lib/contracts'
 import type { CloneBatchWizard } from '../use-clone-batch-wizard'
 
@@ -112,6 +112,45 @@ export function PlanStep({ wizard }: { wizard: CloneBatchWizard }) {
         <p className="text-xs text-muted-foreground">
           Se aplica igual a todas las bases del lote. Vacío = todo el contenido de cada base.
         </p>
+
+        {/*
+          «Solo tablas» es el caso de uso de probar con los datos: crea la base y las tablas y
+          se saltea vistas, procedimientos, funciones, triggers y eventos. Las claves, los
+          índices y las FKs SÍ vienen, porque el contrato los emite como parte de cada tabla y
+          no como tipos de objeto propios.
+
+          El botón existía en el asistente de a una desde el trabajo de selección declarativa y
+          faltaba acá, que es donde se clonan varias bases de una — justo el caso donde más
+          rinde. El hook ya tenía `setRuleTypes`; nadie lo llamaba.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={
+              plan.rule.types.length === 1 && plan.rule.types[0] === 'table'
+                ? 'primary'
+                : 'outline'
+            }
+            size="sm"
+            aria-pressed={plan.rule.types.length === 1 && plan.rule.types[0] === 'table'}
+            onClick={() => wizard.setRuleTypes(['table'])}
+          >
+            Solo tablas y datos
+          </Button>
+          <Button
+            variant={plan.rule.types.length === 0 ? 'primary' : 'outline'}
+            size="sm"
+            aria-pressed={plan.rule.types.length === 0}
+            onClick={() => wizard.setRuleTypes([])}
+          >
+            Todo el contenido
+          </Button>
+          {plan.rule.types.length === 1 && plan.rule.types[0] === 'table' && (
+            <span className="text-xs text-muted-foreground">
+              Se omiten vistas, procedimientos, funciones, triggers y eventos.
+            </span>
+          )}
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             label="Incluir solo los que coincidan"
