@@ -1,5 +1,8 @@
-import { Badge } from '@/components/ui'
+import { Badge, Button } from '@/components/ui'
+import { useToast } from '@/lib/toast/use-toast'
+import { isClipboardAvailable } from '@/lib/utils'
 import { formatDuration } from '@/lib/utils/format'
+import { formatBatchDiagnosticsReport } from './diagnostics'
 import { batchQueueGapMs, durationsByDatabase, itemStatusTone } from './logic'
 import type { CloneBatchItemOut, CloneBatchOut } from '@/lib/contracts'
 
@@ -19,9 +22,32 @@ export function DurationByDatabase({
   batch: CloneBatchOut
   items: CloneBatchItemOut[]
 }) {
+  // Antes del early return: un hook no puede quedar detrás de un `return` condicional.
+  const toast = useToast()
+
   const duraciones = durationsByDatabase(items)
   const conDuracion = duraciones.filter((d) => d.ms != null)
   if (conDuracion.length === 0) return null
+
+  // Las filas ya están en memoria (llegan por props), así que no hay nada que pedir: esto es
+  // formatear y copiar, sin estado de carga.
+  const copiarDiagnostico = () => {
+    if (!isClipboardAvailable()) {
+      toast.error(
+        'No se pudo copiar',
+        'El navegador no expone el portapapeles fuera de HTTPS. Abrí el gateway por HTTPS o por localhost.',
+      )
+      return
+    }
+    navigator.clipboard.writeText(formatBatchDiagnosticsReport(batch, items)).then(
+      () =>
+        toast.success(
+          'Diagnóstico copiado',
+          'Incluye el hueco medido antes de cada base. No lleva el texto de los errores del motor.',
+        ),
+      () => toast.error('No se pudo copiar', 'El navegador rechazó el acceso al portapapeles.'),
+    )
+  }
 
   const max = Math.max(...conDuracion.map((d) => d.ms ?? 0), 1)
   const { totalMs, sumaMs, huecoMs } = batchQueueGapMs(batch, duraciones)
@@ -31,7 +57,18 @@ export function DurationByDatabase({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold text-foreground">Cuánto tardó cada base</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-foreground">Cuánto tardó cada base</p>
+          {/*
+            El «sin atribuir» de abajo es un número sin lugar. El diagnóstico lo parte: mide el
+            hueco ANTES de cada fila (fin de la anterior → arranque de ésta), que es lo único
+            que el lote agrega por encima de sus jobs, y así se sabe si el tiempo perdido es del
+            orquestador o de adentro de cada clon.
+          */}
+          <Button variant="outline" size="sm" onClick={copiarDiagnostico}>
+            Copiar diagnóstico
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground">
           Cada barra mide la base completa: fotografiar el origen, crearla, aplicar la estructura
           y copiar los datos.
