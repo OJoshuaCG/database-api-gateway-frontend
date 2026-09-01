@@ -48,13 +48,18 @@ export function useCloneBatchItems(
   })
 }
 
-/** Historial de lotes. */
-export function useCloneBatchList(params: QueryParams, enabled = true) {
+/**
+ * Historial de lotes. `poll` lo decide el llamador con el contenido de la PÁGINA VISIBLE: sin
+ * ninguna fila en curso no hay nada que refrescar, y un intervalo fijo dejaría el historial
+ * consultando para siempre en una pantalla que nadie mira.
+ */
+export function useCloneBatchList(params: QueryParams, enabled = true, poll = false) {
   return useQuery({
     queryKey: queryKeys.cloneBatches.list(params),
     queryFn: ({ signal }) => listCloneBatches(params, signal),
     enabled,
     placeholderData: keepPreviousData,
+    refetchInterval: poll ? 10_000 : false,
   })
 }
 

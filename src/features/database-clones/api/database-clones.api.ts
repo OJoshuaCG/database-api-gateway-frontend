@@ -3,6 +3,7 @@ import {
   cloneClosureOutSchema,
   cloneInventoryOutSchema,
   cloneItemOutSchema,
+  cloneListItemOutSchema,
   clonePreviewOutSchema,
   cloneSummaryOutSchema,
   type CloneClosureOut,
@@ -10,6 +11,7 @@ import {
   type CloneExecuteIn,
   type CloneInventoryOut,
   type CloneItemOut,
+  type CloneListItemOut,
   type ClonePreviewIn,
   type ClonePreviewOut,
   type CloneResolveSelectionIn,
@@ -23,6 +25,19 @@ const base = (id: number) => `${BASE}/${id}`
 /** `POST /database-clones` 🔌 (10/min) — fotografía el origen y persiste el plan `pending`. */
 export function createDatabaseClone(body: CloneCreateIn): Promise<CloneSummaryOut> {
   return mutateData('POST', BASE, cloneSummaryOutSchema, { body })
+}
+
+/**
+ * `GET /database-clones` — historial paginado, del más nuevo al más viejo.
+ *
+ * Es el punto de reentrada del módulo: sin este listado, un clon cuyo id se perdió del estado
+ * del navegador quedaba inalcanzable. Sin rate limit (lee la BD del gateway, no un motor).
+ */
+export function listDatabaseClones(
+  params: QueryParams,
+  signal?: AbortSignal,
+): Promise<Page<CloneListItemOut>> {
+  return fetchPage(BASE, cloneListItemOutSchema, { query: params, signal })
 }
 
 /** `GET /database-clones/{id}` — resumen + estado del job (latido del polling). */

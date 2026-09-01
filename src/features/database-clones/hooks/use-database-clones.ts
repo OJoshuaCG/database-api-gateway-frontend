@@ -6,6 +6,7 @@ import type { CloneObjectRef, CloneStatus } from '@/lib/contracts'
 import {
   getCloneObjects,
   getDatabaseClone,
+  listDatabaseClones,
   listCloneItems,
   previewDatabaseClone,
   resolveCloneSelection,
@@ -34,6 +35,23 @@ export function useDatabaseClone(id: number, enabled: boolean) {
       const status = query.state.data?.status
       return status && !CLONE_TERMINAL_STATUSES.has(status) ? 2000 : false
     },
+  })
+}
+
+/**
+ * Historial de clonaciones. Es el punto de reentrada del módulo: sin él, un clon cuyo id se
+ * perdió del estado del navegador quedaba inalcanzable.
+ *
+ * `poll` refresca cada 10 s y lo decide el llamador con el contenido de la PÁGINA VISIBLE: si
+ * ninguna fila está en curso no hay nada que refrescar, y un intervalo fijo dejaría el
+ * historial consultando para siempre en una pantalla que nadie mira.
+ */
+export function useDatabaseCloneList(params: QueryParams, poll: boolean) {
+  return useQuery({
+    queryKey: queryKeys.databaseClones.list(params),
+    queryFn: ({ signal }) => listDatabaseClones(params, signal),
+    placeholderData: keepPreviousData,
+    refetchInterval: poll ? 10_000 : false,
   })
 }
 

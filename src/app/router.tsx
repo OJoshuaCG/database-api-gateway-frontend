@@ -73,6 +73,14 @@ const CloneBatchWizardPage = lazyPage(
   () => import('@/features/clone-batches'),
   'CloneBatchWizardPage',
 )
+const CloneBatchLegacyRedirect = lazyPage(
+  () => import('@/features/clone-batches'),
+  'CloneBatchLegacyRedirect',
+)
+const CloneHistoryPage = lazyPage(
+  () => import('@/features/database-clones'),
+  'CloneHistoryPage',
+)
 const CollationConversionWizardPage = lazyPage(
   () => import('@/features/collation-conversions'),
   'CollationConversionWizardPage',
@@ -136,10 +144,22 @@ export const router = createBrowserRouter([
             element: <SelectResultsPage />,
           },
           { path: 'schema-comparisons', element: <SchemaComparisonWizardPage /> },
-          { path: 'database-clones', element: <DatabaseCloneWizardPage /> },
-          // Lote: mismo módulo, capa de orquestación. Reentrada por `?batchId=` para
-          // volver al seguimiento, igual mecanismo que el `?jobId=` del individual.
-          { path: 'database-clones/lotes', element: <CloneBatchWizardPage /> },
+          // El aterrizaje del módulo es el HISTORIAL, no el asistente. Antes el encuadre
+          // estaba invertido —dos entradas de menú para "empezar algo nuevo" y ninguna para
+          // "ver lo que hay"— y con el id del job viviendo solo en el estado de React,
+          // salirse de la vista dejaba la operación inalcanzable.
+          //
+          // Ojo con el ORDEN: los segmentos estáticos (`nuevo`, `lotes`) tienen que rankear
+          // por encima del paramétrico `:jobId`. React Router v7 lo hace solo, pero el orden
+          // acá lo deja explícito para quien lea el archivo.
+          { path: 'database-clones', element: <CloneHistoryPage /> },
+          { path: 'database-clones/nuevo', element: <DatabaseCloneWizardPage /> },
+          { path: 'database-clones/lotes/nuevo', element: <CloneBatchWizardPage /> },
+          { path: 'database-clones/lotes/:batchId', element: <CloneBatchWizardPage /> },
+          // Solo traduce el link viejo `?batchId=`; sin él, manda al historial.
+          { path: 'database-clones/lotes', element: <CloneBatchLegacyRedirect /> },
+          // La operación individual, con dirección propia y estable.
+          { path: 'database-clones/:jobId', element: <DatabaseCloneWizardPage /> },
           // Identidad física (servidor+BD) por query string (`?serverId=&database=`), reentrada
           // por `?jobId=` — igual mecanismo que `database-clones`. Se llega solo desde la ficha
           // de la base de datos, sin entrada de sidebar propia.

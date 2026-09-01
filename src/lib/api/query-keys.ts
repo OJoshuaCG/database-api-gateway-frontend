@@ -118,6 +118,7 @@ export const queryKeys = {
   },
   databaseClones: {
     all: ['database-clones'] as const,
+    list: (params: QueryParams) => ['database-clones', 'list', params] as const,
     detail: (id: number) => ['database-clones', 'detail', id] as const,
     objects: (id: number) => ['database-clones', id, 'objects'] as const,
     resolveSelection: (id: number, selection: string[]) =>
