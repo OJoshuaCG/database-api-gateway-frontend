@@ -33,10 +33,10 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog` |
 | 11 | `POST /{id}/test-connection` 🔌 | ✅ | `ServerDetailPage` → "Probar conexión" (muestra `dialect` + `server_version`) |
-| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario) + tab "Introspección" + selectores de los asistentes |
+| 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario) + tab "Introspección" + selectores de los asistentes + **el selector de bases de las pantallas de permisos**: `DatabaseMultiSelect` (elegir N bases al otorgar) y `ServerDatabaseCombobox` (la BD de "Permisos efectivos" en PostgreSQL). Sustituyó a teclear el nombre a mano —lista las bases del motor en vivo, adoptadas o no— y los dos controles caen a captura manual si la introspección falla |
 | 14 | `GET .../tables` 🔌 | ✅ | `IntrospectionExplorer` |
 | 15 | `GET .../tables/{t}/schema` 🔌 | ✅ | `IntrospectionExplorer` (columnas, PK, índices, FKs) |
-| 16 | `POST /{id}/grantable` 🔌 | ✅ | `GrantManager` (pre-chequeo antes de otorgar) |
+| 16 | `POST /{id}/grantable` 🔌 | ✅ | `GrantPanel` (pre-chequeo "Comprobar delegación" antes de otorgar) |
 | 59 | `GET /{id}/reconcile` 🔌 | ✅ | Tab "Reconciliación" → `ServerReconcilePanel` (`managed`/`unmanaged`/`orphan`) |
 | 60 | `GET .../snapshot` 🔌 | ✅ | `SnapshotModal` ("Ver snapshot") + asistente de blueprint desde snapshot |
 | 13 | `GET /{id}/users` (plano) 🔌 | ⛔ | Legacy: el propio contrato recomienda la vista agrupada (#64), que sí está integrada. Repetiría un `user@host` por cuenta. |
@@ -61,16 +61,25 @@ Complementa —no reemplaza— al CRUD de `/managed-databases`.
 |---|---|---|---|
 | 17–21 | CRUD de `/server-users` | ✅ | `ServerUsersPage` (`/server-users`); `?provision` y `?drop_remote` como `Switch`; borrado remoto exige reescribir el username |
 | 22 | `GET /{id}/databases` | ✅ | "Ver BDs" → `OwnedDatabasesModal` en `ServerUsersPage`; pestaña "Bases de datos" de la ficha física (`ServerUserDetailPage`) — ambos sobre `OwnedDatabasesContent` |
-| 23 | `GET /{id}/grants` 🔌 | ✅ | Ficha física de la identidad (`ServerUserDetailPage`, `/servers/:serverId/users/:username/:host?`) → pestaña "Permisos efectivos" → `EffectiveGrantsPanel` (en PostgreSQL espera que se indique la BD antes de consultar). `ServerUserGrantsPage` (`/server-users/:userId/grants`) queda como redirect de compatibilidad hacia `?tab=grants` de la ficha |
-| 24 | `POST /{id}/grants` 🔌 | ✅ | Ficha física → pestaña "Otorgar / revocar" → `GrantManager` |
-| 25 | `DELETE /{id}/grants` 🔌 | ✅ | `GrantManager` → revocar (`cascade` solo PostgreSQL, con confirmación del grantee) |
-| 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | Ficha física → pestaña "Aplicar perfil" → `ApplyProfilePanel` (errores parciales enumerados) |
+| 23 | `GET /{id}/grants` 🔌 | ✅ | Ficha física de la identidad (`ServerUserDetailPage`, `/servers/:serverId/users/:username/:host?`) → pestaña "Permisos efectivos" → `EffectiveGrantsPanel`, **por el camino de la identidad adoptada**: cuando hay `server_user_id` se consulta por aquí, y solo sin adoptar se cae a v21 §1 (el contrato dice explícitamente que el endpoint nuevo **no** reemplaza a este). En PostgreSQL espera que se indique la BD antes de consultar, ahora elegida con `ServerDatabaseCombobox` en vez de tecleada. `ServerUserGrantsPage` (`/server-users/:userId/grants`) queda como redirect de compatibilidad hacia `?tab=grants` de la ficha |
+| 24 | `POST /{id}/grants` 🔌 | ✅ | Ficha física → pestaña "Otorgar / revocar" (`?tab=manage`) → `GrantPanel`, operación "otorgar privilegios". Con N bases seleccionadas son **N llamadas**, no una: v21 §12 dice que no existe bulk para privilegios sueltos. Se mandan **en serie**, sin abortar en el primer fallo, y cada base aparece como una fila del resultado |
+| 25 | `DELETE /{id}/grants` 🔌 | ✅ | `GrantPanel`, operación "revocar privilegios": mismo fan-out de una llamada por base y mismo resultado por base. `cascade` solo PostgreSQL, con confirmación del grantee |
+| 26 | `POST /{id}/apply-profile/{profile_id}` 🔌 | ✅ | `GrantPanel`, operación "aplicar perfil", pero **solo para perfiles 100 % globales**: si ningún item cuelga de una base no hay nada que multiseleccionar y una sola llamada basta. En cuanto el perfil tiene un item por base va por el bulk (v21 §11). Errores parciales enumerados |
+| v21 §11 | `POST /{id}/apply-profile/{profile_id}/bulk` 🔌 | ✅ | `GrantPanel`, operación "aplicar perfil" sobre las bases elegidas (1–100) en **una** llamada por tanda. **Siempre responde 200, aunque hayan fallado TODAS las bases**: el éxito se lee de `results[].ok`, nunca del status HTTP — de ahí `outcomeRowsFromBulk` en `grant-logic.ts`. La selección se parte en tandas de 20 y se envían **en serie**: el rate limit es 5/min y con `NullPool` cada base abre su propia conexión remota. Los campos de objeto del formulario viajan como **plantilla** (el `database` del `object_ref` lo pone el backend por base) y cada fila muestra `grants_applied`, `skipped_levels` y `errors[]` |
 | 27 | `POST /server-users/provision` 🔌 | ✅ | `ServerUserForm` → sección "Permisos iniciales" al crear con aprovisionamiento (informa `grant_results[]`) |
 | 61 | `POST /server-users/adopt` 🔌 | ✅ | `AdoptUserModal`, desde `EngineUsersPanel`, `ServerReconcilePanel` y la ficha física (`ServerUserDetailPage`, pestaña "Identidad" y CTA de las pestañas de permisos sin adoptar) |
 
-> Las 4 pestañas de permisos/BDs de la ficha física (#23–26, #22) exigen `server_user_id`
-> numérico: sin adoptar (`status !== 'adopted'`), se reemplazan por un único `EmptyState` con
-> CTA "Adoptar esta identidad para gestionar sus permisos" en vez de ocultarse sin explicación.
+> **Ya son 3 pestañas de permisos/BDs, no 4**: "Otorgar / revocar" y "Aplicar perfil" se
+> unificaron en `?tab=manage` → `GrantPanel`, y `?tab=profile` redirige ahí. Aplicar un perfil
+> dejó de ser una pestaña aparte para ser una de las tres operaciones del mismo panel, porque
+> las tres comparten lo que de verdad cuesta elegir: sobre qué bases se aplica.
+>
+> **Consultar funciona por identidad; otorgar no.** "Permisos efectivos" (#23) **ya no exige
+> adopción**: sin `server_user_id` consulta por `(username, host)` con v21 §1. Todo lo que
+> **escribe** (#24, #25, #26, v21 §11) y "Bases de datos" (#22) sí siguen exigiendo un
+> `server_user_id` numérico, así que sin adoptar (`status !== 'adopted'`) se reemplazan por un
+> único `EmptyState` con CTA "Adoptar esta identidad para gestionar sus permisos" en vez de
+> ocultarse sin explicación. La asimetría es del contrato, no una decisión de la UI.
 
 ### Identidad física y batch (`/servers/{id}/users/*`)
 
@@ -90,6 +99,7 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 | 70 | `POST /{id}/users/adopt-all-hosts` 🔌 | ✅ | `AdoptAllHostsModal` (acción por *username*); resultado por host |
 | 71 | `POST /{id}/users/define-password` | ✅ | `DefineKnownPasswordModal`; alcance explícito, aviso de que el gateway **no verifica** la contraseña, reenvío con `overwrite` |
 | 72 | `PATCH /{id}/users/password-all-hosts` 🔌 | ✅ | `RotatePasswordAllHostsModal`; resultado por host (un host con error conserva la contraseña anterior) |
+| v21 §1 | `GET /{id}/users/grants` 🔌 | ✅ | Pestaña "Permisos efectivos" de la ficha física → `EffectiveGrantsPanel` **cuando la identidad no está adoptada**: consulta por `(username, host)` sin exigir inventario, y devuelve `status` (`adopted`/`unmanaged`) más el `server_user_id` cuando existe. **No reemplaza a #23**, que sigue siendo la vía con `server_user_id` — el propio contrato lo dice. Asimetría por motor: PostgreSQL **exige** `database` y acota la respuesta a esa base; MySQL/MariaDB **ignoran** el parámetro y devuelven los grants de todo el servidor, así que el recorte lo hace el cliente (`filterGrantsByDatabase`, que conserva los `global` a propósito). El **404 es deliberado**: significa "esta identidad no existe en el motor", que no es lo mismo que existir sin privilegios (eso llega como 200 con `grants: []`) |
 
 > **Definir ≠ rotar.** `define-password` (#71) solo cifra y guarda una contraseña que el
 > admin ya conoce, sin tocar el motor; `password`/`password-all-hosts` (#66/#72) cambian

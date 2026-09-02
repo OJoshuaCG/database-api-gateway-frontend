@@ -107,6 +107,7 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 | Diálogo/modal | `Modal` (usa `<dialog>` nativo: focus-trap + Esc gratis) |
 | Estado/etiqueta | `Badge` (+ badges de estado por feature) |
 | Seleccionar privilegios por motor | `PrivilegeMultiSelect` (en `features/privileges`; se alimenta del catálogo `/privileges`) |
+| Elegir varias bases de un servidor | `DatabaseMultiSelect` (en `features/server-users`; lista las bases del motor con `GET /servers/{id}/databases`, adoptadas o no, y cae a captura manual si la introspección falla). Para elegir **una** sola, `ServerDatabaseCombobox` en `features/servers` |
 | Lista dinámica en un formulario | `useFieldArray` de RHF (p. ej. items de un perfil de permisos) |
 
 ## Trampas conocidas (gotchas)
@@ -124,8 +125,28 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 - **Doble confirmación más allá del borrado:** además de `confirm_name`/`confirm_username`,
   el *rollback* de migración exige `confirm_version` (= versión actual) y el `REVOKE … CASCADE`
   en PostgreSQL exige `confirm_grantee` (= username). Deshabilita la acción hasta que coincida.
-- **`apply-profile`:** la UI construye `object_mappings` por nivel a partir de una BD/esquema
-  objetivo; para perfiles con items a nivel **tabla/columna** habría que extender ese mapeo.
+- **`apply-profile` — los campos de objeto son una PLANTILLA, no un destino.** La UI construye
+  un `object_ref` por nivel (`database`/`schema`/`table`/`column`/`sequence`/`routine`) a partir
+  de lo que se captura una sola vez, y ese borrador se reusa **idéntico en cada base** del lote:
+  el `database` del `object_ref` lo sobrescribe el backend base por base, que es justo la
+  semántica del bulk (v21 §11). Por eso la BD ya no se teclea: sale de la multiselección. Y por
+  eso los niveles con el objeto **incompleto** (un item `table` sin tabla) **no se mandan** y se
+  avisan antes de enviar: mandarlos confiando en que el backend los descarte mezclaría «no lo
+  mapeé» con «lo mapeé mal» dentro del mismo `skipped_levels`. Todo eso vive en
+  `features/server-users/components/grant-logic.ts` (`buildObjectRef`, `missingObjectFields`),
+  aparte del componente y probable sin montar React.
+- **Un 200 no significa que haya funcionado: `apply-profile/.../bulk` responde 200 aunque fallen
+  TODAS las bases.** El estado real está en `results[].ok`, base por base, y ahí es donde la UI
+  decide el éxito (`outcomeRowsFromBulk`). Nunca derives el resultado del status HTTP en este
+  endpoint: un `catch` que solo mira el error de red pintaría «perfil aplicado» sobre un lote
+  entero fallido. Misma forma en el fan-out de privilegios sueltos (N llamadas, una por base): un
+  fallo **no aborta** las demás y cada unidad se reporta por separado.
+- **`database` no significa lo mismo en cada motor al consultar grants.** PostgreSQL lo **exige**
+  y devuelve solo esa base; MySQL/MariaDB lo **ignoran** y responden con los grants del usuario en
+  todo el servidor. Mandarlo y asumir que acotó es el error fácil del endpoint: el recorte por
+  base lo hace el cliente (`filterGrantsByDatabase`), que compara el primer segmento del `object`
+  y **conserva los grants `global`** —aplican también a esa base, y esconderlos daría una foto
+  incompleta—.
 - **Owner de una BD:** debe pertenecer al **mismo servidor**; al cambiar el servidor en el
   formulario se resetea `owner_id` (si no, el backend responde **409**).
 - **`/health`:** vive fuera de `/api/v1` y puede no tener CORS; el `HealthBadge` se degrada

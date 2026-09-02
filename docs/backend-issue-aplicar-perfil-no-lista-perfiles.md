@@ -7,6 +7,27 @@
 
 ---
 
+## 0. Actualización del 2026-09-02 — qué cambió en el frontend
+
+Al implementar **api-reference-v21** la pantalla de «Aplicar perfil» desapareció como tal: vive
+dentro de «Otorgar / revocar» (`GrantPanel`). En el camino cambió la llamada del punto **3** de la
+tabla de abajo, y eso **descarta dos de las hipótesis desde este lado**:
+
+- **H3 (motor `mysql` vs `mariadb`) ya no puede ser la causa en el frontend.** El listado
+  **dejó de mandar `engine`**: `usePermissionProfileOptions()` pide todos los perfiles activos y
+  el recorte se hace en cliente **por familia de motor**, no por igualdad. Es lo que exige v21 §10:
+  un perfil `mysql` sí se puede aplicar a un servidor MariaDB, y filtrar por igualdad perdía casos
+  válidos. Si el perfil sigue sin aparecer, ya no es por el `engine`.
+- **H6 (el servidor no está en la primera página de `/servers`) tampoco aplica.** El motor lo
+  resuelve `ServerUserDetailPage` con `GET /servers/{id}`, no buscando dentro de un listado
+  paginado.
+
+**Lo que sigue abierto es H1/H2**: la llamada mantiene `active=true`, así que un perfil que nazca
+con `is_active = false` —o un filtro `active` que el backend no reconozca— lo seguiría ocultando.
+Esa mitad del diagnóstico sigue siendo válida tal cual está escrita más abajo.
+
+---
+
 ## 1. Síntoma reportado
 
 1. El usuario crea un perfil de permisos en **Perfiles de permisos** (`/permission-profiles`).

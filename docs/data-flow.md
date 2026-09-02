@@ -262,34 +262,51 @@ Cómo lo consume la UI:
 
 ## Escenario I — Gestión de permisos de un usuario (grants 🔌)
 
-Desde la tabla de usuarios del motor, el botón "Permisos" **navega a una página** con tres
-pestañas. Fue un modal hasta que creció a ~500 líneas efectivas entre sus tres paneles; como
-página, además, cada pestaña es enlazable y desapareció el `key={user.id}` que hacía falta para
-no arrastrar estado entre filas (el remonte lo da ahora la ruta).
+Los permisos se gestionan desde la **ficha física de la identidad** (`ServerUserDetailPage`), no
+desde un modal: fue un modal hasta que creció a ~500 líneas efectivas entre sus paneles; como
+página, cada pestaña es enlazable y desapareció el `key={user.id}` que hacía falta para no
+arrastrar estado entre filas (el remonte lo da ahora la ruta). `ServerUserGrantsPage`
+(`/server-users/:userId/grants`) sobrevive solo como redirect de compatibilidad.
+
+Consultar y otorgar **no** tienen la misma exigencia: consultar funciona sobre cualquier identidad
+del motor, otorgar necesita que esté adoptada (hace falta `server_user_id`).
 
 ```
-ServerUsersPage: clic "Permisos" → navigate(/server-users/{id}/grants?from=…)
-  └─ ServerUserGrantsPage (?tab=effective|manage|profile)   features/server-users/pages/ServerUserGrantsPage.tsx
-       (`?from=` decide el enlace de vuelta: /server-users o /servers/{id}?tab=users;
-        solo se acepta si empieza por «/» y no por «//» ni «/\», para no abrir un redirect externo)
-       ├─ Pestaña "Permisos efectivos"
-       │    └─ useUserGrants(id, database?, enabled)          features/server-users/hooks/use-user-grants.ts
-       │         └─ listUserGrants(id, database)              → GET /server-users/{id}/grants 🔌
-       │    (PostgreSQL: el campo `database` lleva debounce para no consultar el motor en cada tecla)
-       ├─ Pestaña "Otorgar / revocar"  → GrantManager        features/server-users/components/GrantManager.tsx
-       │    • construye object_ref según el nivel (database/schema/table/column/sequence/routine)
-       │    • "Comprobar delegación" → useCheckGrantable(serverId) → POST /servers/{id}/grantable 🔌
-       │    • Otorgar → useGrantPrivileges(id)   → POST   /server-users/{id}/grants 🔌
-       │    • Revocar → useRevokePrivileges(id)  → DELETE /server-users/{id}/grants 🔌 (cuerpo + ?confirm_grantee si cascade)
-       └─ Pestaña "Aplicar perfil"     → ApplyProfilePanel    features/server-users/components/ApplyProfilePanel.tsx
-            └─ useApplyProfile(id)     → POST /server-users/{id}/apply-profile/{profileId} 🔌
+ServerUserDetailPage (/servers/{serverId}/users/{username}/{host}?, ?tab=…)
+  ├─ Pestaña "Permisos efectivos" (?tab=grants) → EffectiveGrantsPanel
+  │    ├─ adoptada    → useUserGrants(id, database?, enabled)   features/server-users/hooks/use-user-grants.ts
+  │    │                  → GET /server-users/{id}/grants 🔌
+  │    └─ sin adoptar → useIdentityGrants(serverId, username, host, database?)
+  │                       → GET /servers/{serverId}/users/grants 🔌   (v21 §1)
+  │    (PostgreSQL exige `database` y acota la respuesta; MySQL/MariaDB lo ignoran y devuelven
+  │     todo el servidor → el recorte lo hace `filterGrantsByDatabase` en el cliente.
+  │     404 = la identidad no existe en el motor, distinto de existir sin privilegios)
+  └─ Pestaña "Otorgar / revocar" (?tab=manage) → GrantPanel   features/server-users/components/GrantPanel.tsx
+       (`?tab=profile` redirige aquí: aplicar un perfil dejó de ser una pestaña aparte)
+       • Operación (RadioCardGroup): otorgar · revocar · aplicar perfil
+       • Bases destino → DatabaseMultiSelect  → GET /servers/{serverId}/databases 🔌
+       • "Comprobar delegación" → useCheckGrantable(serverId) → POST /servers/{id}/grantable 🔌
+       • Otorgar  → useGrantPrivilegesToDatabases(id, serverId)    → N × POST   /server-users/{id}/grants 🔌
+       • Revocar  → useRevokePrivilegesFromDatabases(id, serverId) → N × DELETE /server-users/{id}/grants 🔌
+       •                                                (cuerpo + ?confirm_grantee si cascade)
+       • Perfil global    → useApplyProfile(id, serverId)
+       │                     → POST /server-users/{id}/apply-profile/{profileId} 🔌
+       └ Perfil por bases → useApplyProfileToDatabases(id, serverId)
+                             → POST /server-users/{id}/apply-profile/{profileId}/bulk 🔌 (v21 §11)
 ```
 
 - Los grants son 🔌 (introspección/DCL en el motor real); cada mutación invalida
   `['server-users', id, 'grants']` para refrescar la pestaña de permisos efectivos.
+- **Privilegios sueltos sobre N bases = N llamadas.** El contrato (v21 §12) no ofrece bulk para
+  esto: el fan-out lo hace la UI, en serie, y un fallo **no aborta** las demás bases.
+- **El bulk de perfil responde 200 aunque fallen todas las bases**: el éxito se lee de
+  `results[].ok`, nunca del status. La selección se parte en tandas de 20 y se manda en serie
+  (rate limit 5/min). La lógica pura vive en `components/grant-logic.ts`.
 - `REVOKE … CASCADE` (solo PostgreSQL) exige `confirm_grantee` = username (defensa en cliente + `422` del backend).
-- El modal lleva `key={user.id}` para **reiniciar su estado entre filas** (ver gotcha en `maintenance.md`).
 - Los privilegios se eligen con `PrivilegeMultiSelect` (poblado desde el catálogo `/privileges` por motor).
+- Los perfiles aplicables se filtran por **familia de motor** (mysql ↔ mariadb), no por igualdad:
+  el backend valida privilegio a privilegio, así que un perfil `mysql` sí puede aplicarse a
+  MariaDB (`features/permission-profiles/components/engine-compat.ts`).
 - **Atajo:** crear usuario + aprovisionar + grants iniciales en una sola llamada →
   `useProvisionServerUser` → `POST /server-users/provision`.
 
