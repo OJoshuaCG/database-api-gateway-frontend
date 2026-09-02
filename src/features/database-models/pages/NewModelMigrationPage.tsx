@@ -47,6 +47,13 @@ export function NewModelMigrationPage() {
     create.mutate(toCreate(values), { onSuccess: (migration) => setCreated(migration) })
   }
 
+  // El resumen de la versión creada es largo: sin subir, el formulario nuevo aparecería fuera de
+  // la vista y parecería que el botón no hizo nada.
+  const createAnother = () => {
+    setCreated(null)
+    window.scrollTo({ top: 0 })
+  }
+
   // Tras crear, el backend sugiere un rollback pero no lo da por bueno: confirmarlo es una
   // decisión explícita del admin, y sin él el rollback responde 409.
   const canConfirmSuggested = created !== null && !created.down_sql && created.down_sql_suggested
@@ -97,7 +104,13 @@ export function NewModelMigrationPage() {
                     Confirmar rollback sugerido
                   </Button>
                 )}
-                <Button onClick={() => void navigate(backTo)}>Volver a las versiones</Button>
+                <Button variant="outline" onClick={() => void navigate(backTo)}>
+                  Volver a las versiones
+                </Button>
+                {/* Crear versiones en tanda es lo normal —un cambio de esquema rara vez cabe en un
+                    solo delta— y hasta ahora había que volver al listado y entrar de nuevo. El
+                    formulario nace limpio porque se desmontó al crear: no hay estado que resetear. */}
+                <Button onClick={createAnother}>Crear otra versión</Button>
               </div>
             </>
           ) : (
