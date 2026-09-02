@@ -6,6 +6,7 @@ import {
   managedDatabaseUpdateSchema,
 } from '@/lib/contracts'
 import {
+  toManagedDatabaseCreate,
   toManagedDatabaseUpdate,
   type ManagedDatabaseFormValues,
 } from '@/features/managed-databases/components/ManagedDatabaseForm'
@@ -34,7 +35,8 @@ describe('toManagedDatabaseUpdate', () => {
     server_id: 1,
     owner_id: 2,
     model_id: 3,
-    model_version: '',
+    initialState: 'vacia',
+    targetVersion: '',
     environment_id: 4,
     charsetCollation: undefined,
     notes: 'nota nueva',
@@ -65,14 +67,66 @@ describe('toManagedDatabaseUpdate', () => {
     expect(toManagedDatabaseUpdate(values, {})).toEqual({})
   })
 
-  it('model_version ya no viaja en el PATCH ni si el form lo trae', () => {
-    // El backend lo descarta en silencio, así que mandarlo hacía que la UI mintiera.
-    const body = toManagedDatabaseUpdate({ ...values, model_version: '0007' }, {
-      model_version: true,
-      notes: true,
-    })
-    expect('model_version' in body).toBe(false)
+  it('el PATCH sigue construyéndose por presencia de la clave', () => {
+    const body = toManagedDatabaseUpdate(values, { notes: true })
+    expect(body).toEqual({ notes: 'nota nueva' })
     expect(managedDatabaseUpdateSchema.safeParse(body).success).toBe(true)
+  })
+})
+
+// ─── El alta ya no declara la versión: la ejecuta ──────────────────────────── //
+
+describe('toManagedDatabaseCreate — estado inicial', () => {
+  const base = {
+    name: 'appdb',
+    server_id: 1,
+    owner_id: 2,
+    model_id: 3,
+    initialState: 'vacia' as const,
+    targetVersion: '',
+    environment_id: 4,
+    charsetCollation: undefined,
+    notes: '',
+  }
+
+  it('nunca manda model_version', () => {
+    // Era el agujero: se escribía en el inventario sin tocar el motor, la base quedaba vacía
+    // declarando estar migrada, y esa caché decide si una versión del blueprint es borrable.
+    // El backend ahora lo rechaza con 422; el formulario no debe llegar a mandarlo.
+    expect('model_version' in toManagedDatabaseCreate(base)).toBe(false)
+  })
+
+  it('«vacía» no pide migrar', () => {
+    const body = toManagedDatabaseCreate(base)
+    expect(body.apply_migrations).toBe(false)
+    expect(body.target_version).toBeNull()
+  })
+
+  it('«última» pide migrar sin versión objetivo', () => {
+    const body = toManagedDatabaseCreate({ ...base, initialState: 'ultima' })
+    expect(body.apply_migrations).toBe(true)
+    expect(body.target_version).toBeNull()
+  })
+
+  it('«hasta una versión» manda la versión', () => {
+    const body = toManagedDatabaseCreate({
+      ...base,
+      initialState: 'version',
+      targetVersion: '0007',
+    })
+    expect(body.apply_migrations).toBe(true)
+    expect(body.target_version).toBe('0007')
+  })
+
+  it('sin blueprint no pide migrar, aunque el radio haya quedado en otra opción', () => {
+    // El bloque se oculta al deseleccionar el blueprint, pero el valor del form sobrevive.
+    // Mandarlo daría un 422 del backend por un estado que el operador ya no ve.
+    const body = toManagedDatabaseCreate({
+      ...base,
+      model_id: null,
+      initialState: 'ultima',
+    })
+    expect(body.apply_migrations).toBe(false)
   })
 })
 

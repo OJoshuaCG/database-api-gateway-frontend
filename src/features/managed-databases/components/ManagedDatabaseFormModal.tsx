@@ -63,7 +63,6 @@ export function ManagedDatabaseFormModal({
           database
             ? {
                 model_id: database.model_id ?? null,
-                model_version: database.model_version ?? '',
                 // PRECARGA OBLIGATORIA. Sin esto el campo arrancaría en el `null` de DEFAULTS y,
                 // en cuanto react-hook-form lo marcara como tocado, el PATCH desclasificaría la
                 // base. La otra mitad de la defensa es que el body va por `dirtyFields`.

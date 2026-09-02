@@ -10,7 +10,7 @@ import {
   type ServerOut,
   type ServerUserOut,
 } from '@/lib/contracts'
-import { Button, Combobox, Input, Textarea } from '@/components/ui'
+import { Button, Combobox, Input, Textarea, RadioCardGroup } from '@/components/ui'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
@@ -26,7 +26,16 @@ export interface ManagedDatabaseFormValues {
   server_id: number
   owner_id: number
   model_id: number | null
-  model_version: string
+  /**
+   * Estado inicial de la BD respecto del blueprint. Reemplaza al viejo `model_version`, que
+   * era un `Input` de texto libre y NO ejecutaba nada: escribía el inventario sin tocar el
+   * motor, así que la base quedaba vacía diciendo estar migrada.
+   *
+   * `'vacia'` no aplica nada. `'ultima'` y `'version'` sí ejecutan DDL en el motor.
+   */
+  initialState: 'vacia' | 'ultima' | 'version'
+  /** Solo con `initialState === 'version'`. */
+  targetVersion: string
   /** `null` = sin clasificar. En `create` es obligatorio; ver `buildSchema`. */
   environment_id: number | null
   charsetCollation: CharsetCollationValue | null | undefined
@@ -38,7 +47,8 @@ const DEFAULTS: ManagedDatabaseFormValues = {
   server_id: 0,
   owner_id: 0,
   model_id: null,
-  model_version: '',
+  initialState: 'vacia',
+  targetVersion: '',
   environment_id: null,
   charsetCollation: undefined,
   notes: '',
@@ -55,7 +65,8 @@ function buildSchema(mode: 'create' | 'edit') {
     owner_id:
       mode === 'create' ? z.number().int().min(1, 'Selecciona un propietario') : z.number().int(),
     model_id: z.number().int().min(1).nullable(),
-    model_version: z.string().max(50),
+    initialState: z.enum(['vacia', 'ultima', 'version']),
+    targetVersion: z.string(),
     // REQUERIDO en el alta a propósito: el backend asigna `development` si no se manda, así que
     // un campo vacío *significa* development — la misma mentira que se corrigió con
     // `model_version`. Una elección explícita cuesta un click y elimina toda la clase de fallo
@@ -77,7 +88,13 @@ export function toManagedDatabaseCreate(values: ManagedDatabaseFormValues): Mana
     server_id: values.server_id,
     owner_id: values.owner_id,
     model_id: values.model_id,
-    model_version: values.model_version.trim() ? values.model_version.trim() : null,
+    // Sin blueprint no hay migraciones que aplicar, sea cual sea el radio elegido: se manda
+    // `false` en vez de arrastrar un estado que el backend rechazaría con 422.
+    apply_migrations: values.model_id != null && values.initialState !== 'vacia',
+    target_version:
+      values.model_id != null && values.initialState === 'version' && values.targetVersion.trim()
+        ? values.targetVersion.trim()
+        : null,
     environment_id: values.environment_id as number,
     charset: values.charsetCollation ? values.charsetCollation.charset : null,
     collation: values.charsetCollation ? values.charsetCollation.collation : null,
@@ -156,6 +173,10 @@ export function ManagedDatabaseForm({
 
   const servers = useServerOptions()
   const selectedServerId = watch('server_id')
+  // El bloque de estado inicial solo tiene sentido con blueprint, y el campo de versión solo
+  // con la opción que la usa: mostrarlos siempre sería ofrecer elecciones sin efecto.
+  const watchedModelId = watch('model_id')
+  const watchedInitialState = watch('initialState')
   const owners = useServerUserOptions(selectedServerId || null)
   const models = useDatabaseModelOptions()
   const selectedServer = servers.data?.find((s) => s.id === selectedServerId)
@@ -290,20 +311,61 @@ export function ManagedDatabaseForm({
         )}
       />
 
+      {/*
+        ESTADO INICIAL. Reemplaza al viejo `Input` «Versión del modelo», que era texto libre y
+        NO ejecutaba nada: escribía el inventario sin tocar el motor, así que la base quedaba
+        vacía declarando estar migrada — y esa caché es la que decide si una versión del
+        blueprint se puede borrar.
+
+        Las etiquetas dicen QUÉ SE EJECUTA EN EL MOTOR, no qué se registra. Ese cambio de sujeto
+        es la mitad del arreglo: el campo viejo hablaba de metadata y el operador leía acción.
+
+        Solo aparece con blueprint elegido: sin él no hay migraciones que aplicar, y mostrar el
+        bloque sería ofrecer una elección sin efecto.
+      */}
+      {mode === 'create' && watchedModelId != null && (
+        <Controller
+          control={control}
+          name="initialState"
+          render={({ field }) => (
+            <RadioCardGroup<'vacia' | 'ultima' | 'version'>
+              title="Estado inicial de la base"
+              options={[
+                {
+                  value: 'vacia',
+                  label: 'Vacía',
+                  hint: 'Se crea la base y no se ejecuta ninguna migración. Queda lista para migrarla después.',
+                },
+                {
+                  value: 'ultima',
+                  label: 'Migrada a la última 🔌',
+                  hint: 'Ejecuta en el motor todas las migraciones del blueprint, en orden.',
+                },
+                {
+                  value: 'version',
+                  label: 'Migrada hasta una versión 🔌',
+                  hint: 'Ejecuta las migraciones hasta la versión que elijas, inclusive.',
+                },
+              ]}
+              value={field.value}
+              onChange={field.onChange}
+              columns={1}
+              name="managed-db-initial-state"
+            />
+          )}
+        />
+      )}
+      {mode === 'create' && watchedModelId != null && watchedInitialState === 'version' && (
+        <Input
+          label="Versión objetivo"
+          placeholder="0007"
+          hint="Cuatro a diez dígitos. Se aplican todas las pendientes hasta ésta, inclusive."
+          error={errors.targetVersion?.message}
+          {...register('targetVersion')}
+        />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
-        {/*
-          `model_version` solo en el ALTA: el backend dejó de aceptarlo en el PATCH y lo descarta
-          en silencio, así que mostrarlo en edición hacía que la UI mintiera (se escribe, se
-          guarda, sale el toast de éxito y el valor no cambió). Para declararla a mano está
-          `POST /{id}/migrations/stamp`, que sí la valida contra el blueprint.
-        */}
-        {mode === 'create' && (
-          <Input
-            label="Versión del modelo"
-            error={errors.model_version?.message}
-            {...register('model_version')}
-          />
-        )}
         {mode === 'create' && (
           <Controller
             control={control}

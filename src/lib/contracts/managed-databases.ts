@@ -21,6 +21,22 @@ export const managedDatabaseOutSchema = z.object({
   model_id: z.number().int().nullable().optional(),
   model_version: z.string().nullable().optional(),
   /**
+   * Solo en el alta con `apply_migrations`. Ausente = no se pidió migrar. `ok: false` significa
+   * que la BD SÍ se creó y la migración falló: la fila queda en cuarentena y `error_code` dice
+   * a qué endpoint volver. Por eso el alta responde 201 igual — hay una base real creada.
+   */
+  migration: z
+    .object({
+      ok: z.boolean(),
+      from_version: z.string().nullable().optional(),
+      to_version: z.string().nullable().optional(),
+      applied: z.array(z.string()).optional(),
+      error: z.string().nullable().optional(),
+      error_code: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  /**
    * Entorno que clasifica esta BD; `null` = sin clasificar (y por lo tanto SIN la protección
    * del guard de migraciones destructivas). Llega como id crudo: el nombre y el color se
    * resuelven con un join en cliente contra el catálogo (`useEnvironmentMap`).
@@ -73,7 +89,24 @@ export const managedDatabaseCreateSchema = z.object({
   server_id: z.number().int().min(1),
   owner_id: z.number().int().min(1, 'Selecciona un propietario'),
   model_id: z.number().int().min(1).nullable().optional(),
-  model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
+  /**
+   * `model_version` ya NO va en el alta: el backend la rechaza con 422
+   * (`managed_database.model_version_not_writable`). Se escribía en el inventario sin tocar el
+   * motor, así que la base quedaba vacía declarando estar migrada — y esa caché es la que
+   * decide si una versión del blueprint es borrable, de modo que declararla la congelaba como
+   * «en uso» sin que ninguna base la tuviera aplicada.
+   *
+   * Para crear la base ya migrada están los dos campos de abajo; para registrar una que YA
+   * está físicamente en esa versión sigue estando `adopt`, donde `model_version` sí dispara un
+   * `stamp` real y por eso ahí se conserva.
+   */
+  apply_migrations: z.boolean().optional(),
+  /** Versión objetivo inclusive. Omitirla aplica hasta la última. */
+  target_version: z
+    .string()
+    .regex(/^\d{4,10}$/, 'Cuatro a diez dígitos, como 0007')
+    .nullable()
+    .optional(),
   /** Requerido en el alta a propósito: ver el comentario de `ManagedDatabaseUpdate`. */
   environment_id: z.number().int().min(1, 'Selecciona un entorno'),
   charset: charsetField,
