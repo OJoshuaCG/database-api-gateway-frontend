@@ -34,6 +34,7 @@ import {
 import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
 import { splitCaptureVersions } from '@/features/database-models/capture'
+import { hasResolvablePartial, isPartialResolvable } from '../partial-application'
 import { useManagedDatabase } from '../hooks/use-managed-databases'
 import {
   useApplyMigrations,
@@ -155,7 +156,10 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const partialEntries = [...(status.data?.partial_application ?? [])].sort(
     (a, b) => Number(b.version) - Number(a.version),
   )
-  const firstReconcilable = partialEntries.find((entry) => entry.reconcilable) ?? null
+  // RESOLUBLE = el gateway puede deshacerlo por sí mismo, con `force` o sin él (la regla y
+  // el porqué viven en `../partial-application`).
+  const firstResolvable = partialEntries.find(isPartialResolvable) ?? null
+  const hasAutomaticWayOut = hasResolvablePartial(partialEntries)
   const canRollback = confirmVersion.length > 0 && confirmVersion === currentVersion && !hasPartial
 
   const isQuarantined = database.status === 'error' && !recovered
@@ -535,7 +539,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             : {entry.applied_statements} de {entry.total_statements} sentencias
                             aplicadas
                           </span>
-                          {entry.reconcilable ? (
+                          {isPartialResolvable(entry) ? (
                             !isArchived && (
                               <Button
                                 variant="outline"
@@ -543,22 +547,27 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                                 disabled={reconcileVersion === entry.version}
                                 onClick={() => openReconcile(entry.version)}
                               >
-                                Reconciliar…
+                                {entry.reconcilable ? 'Reconciliar…' : 'Reconciliar (con force)…'}
                               </Button>
                             )
                           ) : (
-                            <Badge tone="warning">no reconciliable</Badge>
+                            <Badge tone="warning">sin reconciliación automática</Badge>
                           )}
                         </div>
-                        {!entry.reconcilable && (
-                          <div className="flex flex-col gap-1 text-xs">
-                            {entry.reason && <p className="text-foreground">{entry.reason}</p>}
-                            <p className="text-muted-foreground">
-                              Salidas: <strong>reintenta el apply</strong> (retoma del checkpoint,
-                              desde la sentencia {entry.applied_statements + 1}), o reconcilia el
-                              esquema a mano y usa <strong>stamp force</strong>.
-                            </p>
-                          </div>
+                        {/* El motivo se muestra siempre que la vía normal no esté disponible,
+                            incluido el caso reconciliable-con-force: es lo único que explica
+                            por qué el botón pide force y qué queda sin deshacer. */}
+                        {!entry.reconcilable && entry.reason && (
+                          <p className="text-xs text-foreground">{entry.reason}</p>
+                        )}
+                        {!isPartialResolvable(entry) && (
+                          <p className="text-xs text-muted-foreground">
+                            No hay vía automática. Salidas:{' '}
+                            <strong>reintenta el apply</strong> (retoma del checkpoint, desde la
+                            sentencia {entry.applied_statements + 1}), o arregla el esquema a mano
+                            y declara la versión con <strong>stamp force</strong> (abajo, en
+                            «Marcar versión»).
+                          </p>
                         )}
                       </li>
                     ))}
@@ -931,17 +940,26 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             bloqueado (el backend respondería <code>409</code>) porque el estado
                             físico no coincide con ninguna versión registrada.
                           </p>
-                          {firstReconcilable && !isArchived && (
+                          {firstResolvable && !isArchived ? (
                             <div>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                disabled={reconcileVersion === firstReconcilable.version}
-                                onClick={() => openReconcile(firstReconcilable.version)}
+                                disabled={reconcileVersion === firstResolvable.version}
+                                onClick={() => openReconcile(firstResolvable.version)}
                               >
                                 Reconciliar primero…
                               </Button>
                             </div>
+                          ) : (
+                            /* Sin vía automática, mandar a «Reconciliar» era un lazo cerrado: la
+                               acción no existe para esta parcial. Se nombra la salida real. */
+                            <p className="text-muted-foreground">
+                              Esta parcial no tiene reconciliación automática (mira el motivo en el
+                              aviso de arriba). Para desbloquear el rollback: reintenta el apply
+                              para completarla, o arregla el esquema a mano y declara la versión
+                              con <strong>stamp force</strong>.
+                            </p>
                           )}
                         </div>
                       )}
@@ -1115,15 +1133,24 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               )}
             </div>
           )}
+          {/* Se bloquea SOLO si el gateway puede reconciliar por sí mismo — ahí force es el
+              atajo peligroso y «Reconciliar» es la vía correcta. Cuando NO hay vía automática
+              (p. ej. la versión no tiene manifiesto de sentencias), force es la salida
+              PREVISTA por el backend y deshabilitarlo dejaba la BD sin ninguna: la UI mandaba
+              a una reconciliación que no existe. Ver el docstring de
+              `_guard_partial_checkpoint`: "sin este override … dejaría al admin sin ninguna
+              salida". */}
           <Switch
             checked={stampForce}
             onCheckedChange={setStampForce}
             label="Forzar (force)"
-            disabled={hasPartial}
+            disabled={hasAutomaticWayOut}
             hint={
-              hasPartial
-                ? 'Bloqueado: hay una aplicación parcial pendiente; usa primero «Reconciliar» (reconcile-partial).'
-                : 'Solo si ya reconciliaste el estado físico de la BD a mano.'
+              hasAutomaticWayOut
+                ? 'Bloqueado: esta aplicación parcial SÍ se puede reconciliar; usa «Reconciliar» (reconcile-partial) en vez de forzar.'
+                : hasPartial
+                  ? 'Esta aplicación parcial no tiene reconciliación automática: force es la salida prevista, pero solo después de haber arreglado el esquema a mano.'
+                  : 'Solo si ya reconciliaste el estado físico de la BD a mano.'
             }
           />
           {stampForce && (

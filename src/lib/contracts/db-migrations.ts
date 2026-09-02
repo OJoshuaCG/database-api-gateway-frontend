@@ -10,6 +10,14 @@ import { migrationStatusSchema } from './common'
  * Entrada de `partial_application[]` (§9, reconciliación): una migración multi-sentencia que
  * falló a mitad dejó `applied_statements` de `total_statements` ejecutadas SIN registrar la
  * versión. `reconcilable: false` viene con `reason`; los campos `null` se omiten del JSON.
+ *
+ * Son TRES estados, no dos, y confundirlos deja al operador sin salida visible:
+ * - `reconcilable` → se deshace todo. Vía normal.
+ * - `reconcilable_with_force` → hay reversos para parte de lo aplicado, pero alguna sentencia
+ *   no tiene ninguno: el endpoint la acepta con `force=true` y esos cambios quedan en la BD.
+ *   Hay que ofrecer la reconciliación IGUAL (con aceptación explícita de force).
+ * - ambos `false` → no hay salida automática: arreglo manual del esquema + `stamp?force=true`.
+ *   `reason` dice por qué (típicamente: la versión no tiene manifiesto de sentencias).
  */
 export const partialApplicationEntrySchema = z.object({
   version: z.string(),
@@ -17,6 +25,9 @@ export const partialApplicationEntrySchema = z.object({
   applied_statements: z.number().int(),
   total_statements: z.number().int(),
   reconcilable: z.boolean(),
+  // Opcional con default por compatibilidad con backends previos, igual que el resto de los
+  // campos de reconciliación: en un backend viejo se lee como "sin vía con force".
+  reconcilable_with_force: z.boolean().optional().default(false),
   reason: z.string().nullish(),
   statements_to_undo: z.number().int().optional().default(0),
 })
