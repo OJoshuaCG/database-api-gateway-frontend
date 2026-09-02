@@ -14,6 +14,7 @@ import {
   engineRevealPasswordOutSchema,
   engineUserMutationOutSchema,
   grantableResultSchema,
+  identityGrantsSchema,
   groupedEngineUsersOutSchema,
   knownPasswordSetOutSchema,
   passwordChangeBatchOutSchema,
@@ -36,6 +37,7 @@ import {
   type GrantableRequest,
   type GrantableResult,
   type GroupedEngineUsersOut,
+  type IdentityGrants,
   type KnownPasswordSetOut,
   type Page,
   type PasswordChangeBatchOut,
@@ -250,5 +252,26 @@ export function revealEngineUserPassword(
 ): Promise<EngineRevealPasswordOut> {
   return mutateData('POST', `${BASE}/${id}/users/reveal-password`, engineRevealPasswordOutSchema, {
     body,
+  })
+}
+
+/**
+ * `GET /servers/{id}/users/grants` 🔌 (v21 §1) — permisos de una identidad del motor
+ * **sin exigir adopción**, a diferencia de `GET /server-users/{id}/grants`, que necesita fila
+ * de inventario. Devuelve además el cruce contra ese inventario (`status`, `server_user_id`).
+ *
+ * `database` **no es simétrico entre motores** (v21 §3): en PostgreSQL es obligatorio —los
+ * grants de objeto viven dentro de una BD y hay que conectarse a ella— y acota la respuesta a
+ * esa base; en MySQL/MariaDB el backend lo **ignora** y devuelve los grants de todo el servidor,
+ * así que acotar por base es tarea del cliente (ver `filterGrantsByDatabase`).
+ */
+export function listIdentityGrants(
+  id: number,
+  params: { username: string; host?: string; database?: string },
+  signal?: AbortSignal,
+): Promise<IdentityGrants> {
+  return fetchData(`${BASE}/${id}/users/grants`, identityGrantsSchema, {
+    query: { username: params.username, host: params.host, database: params.database },
+    signal,
   })
 }

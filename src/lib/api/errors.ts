@@ -238,6 +238,24 @@ export interface ApiUnstampableDatabase {
   missing_target: string
 }
 
+/**
+ * Contexto de los errores del módulo de grants (api-reference-v21 §9/§10).
+ *
+ * A diferencia de los demás contextos de este archivo, **no se filtra por un `code` estable**:
+ * el contrato de v21 nombra estas claves dentro de `context`, no de `public_context`, y no
+ * declara ningún `public_context.code` para el módulo. Se leen de las dos y se aceptan si están;
+ * si el backend corre en producción y omite `context`, la UI se queda con `detail.msg`, que es
+ * el comportamiento correcto: se degrada a menos detalle, no a un dato inventado.
+ */
+export interface GrantErrorContext {
+  /** Items del perfil cuyos privilegios no existen en el motor real (§10). */
+  incompatibleItems?: string[]
+  /** Niveles del perfil que no se mapearon a ningún objeto y por eso no se aplicaron (§9). */
+  skippedLevels?: string[]
+  /** Errores por nivel del best-effort (§9). */
+  itemErrors?: string[]
+}
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -379,6 +397,12 @@ export class ApiError extends Error {
   readonly code?: string
   /** Contexto del módulo de exportación de bases (api-reference-v10 §6). */
   readonly exportContext?: DatabaseExportErrorContext
+  /**
+   * Contexto de los errores de otorgamiento de permisos (v21 §9/§10). Sin él, el 422 de motor
+   * incompatible dice «motor incompatible» y deja al operador adivinando **qué privilegio** del
+   * perfil no existe en su motor, que es justo el dato que necesita para arreglarlo.
+   */
+  readonly grantContext?: GrantErrorContext
   /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
   readonly environmentContext?: EnvironmentErrorContext
   /**
@@ -419,6 +443,7 @@ export class ApiError extends Error {
     unstampableDatabases?: ApiUnstampableDatabase[]
     code?: string
     exportContext?: DatabaseExportErrorContext
+    grantContext?: GrantErrorContext
     environmentContext?: EnvironmentErrorContext
     collationContext?: CollationErrorContext
     requestId?: string
@@ -451,6 +476,7 @@ export class ApiError extends Error {
     this.unstampableDatabases = args.unstampableDatabases
     this.code = args.code
     this.exportContext = args.exportContext
+    this.grantContext = args.grantContext
     this.environmentContext = args.environmentContext
     this.collationContext = args.collationContext
     this.requestId = args.requestId
@@ -1043,6 +1069,23 @@ function extractCollationContext(
   }
 }
 
+function extractGrantContext(
+  context: unknown,
+  publicContext: unknown,
+): GrantErrorContext | undefined {
+  // Se prefiere `context` porque es donde el contrato v21 declara estas claves; `public_context`
+  // queda como respaldo por si el backend las promueve más adelante.
+  const source = isRecord(context) ? context : isRecord(publicContext) ? publicContext : undefined
+  if (!source) return undefined
+  const grantContext: GrantErrorContext = {
+    incompatibleItems: stringList(source.incompatible_items),
+    skippedLevels: stringList(source.skipped_levels),
+    itemErrors: stringList(source.errors),
+  }
+  const hasAny = Object.values(grantContext).some((value) => value !== undefined)
+  return hasAny ? grantContext : undefined
+}
+
 function extractEnvironmentContext(
   code: string | undefined,
   publicContext: unknown,
@@ -1130,6 +1173,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         postgresCollationRejected: extractPostgresCollationRejected(d.public_context),
         code,
         exportContext: extractDatabaseExportContext(code, d.public_context),
+        grantContext: extractGrantContext(d.context, d.public_context),
         environmentContext: extractEnvironmentContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
         requestId,

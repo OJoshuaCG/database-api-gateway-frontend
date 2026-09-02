@@ -18,6 +18,13 @@ export const queryKeys = {
     detail: (id: number) => ['servers', 'detail', id] as const,
     databases: (id: number) => ['servers', id, 'databases'] as const,
     groupedUsers: (id: number) => ['servers', id, 'grouped-users'] as const,
+    /**
+     * Permisos de UNA identidad del motor (v21 §1), adoptada o no. Cuelga de `servers` porque
+     * la clave de la consulta es `(server_id, username, host)` y no el id de inventario: la
+     * misma identidad puede no tener fila todavía.
+     */
+    identityGrants: (id: number, username: string, host: string | null, database: string | null) =>
+      ['servers', id, 'identity-grants', username, host, database] as const,
     /** Usuarios/roles del motor con permisos sobre UNA base de datos (consulta inversa). */
     databaseGrantees: (id: number, database: string) =>
       ['servers', id, 'databases', database, 'grantees'] as const,

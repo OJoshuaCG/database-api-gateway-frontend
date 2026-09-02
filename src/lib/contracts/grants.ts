@@ -126,3 +126,60 @@ export const serverUserFullOutSchema = z.object({
   grant_results: z.array(grantApplicationResultSchema),
 })
 export type ServerUserFullOut = z.infer<typeof serverUserFullOutSchema>
+
+// ── Consulta de permisos por identidad (v21 §1–§5) ──────────────────────────
+
+/**
+ * Respuesta de `GET /servers/{id}/users/grants` (v21 §1): los permisos de una identidad del
+ * motor **sin exigir adopción**. `status` y `server_user_id` no salen del motor — son el cruce
+ * contra el inventario del gateway, y dicen si se pueden ofrecer las acciones que sí requieren
+ * fila (`/server-users/{id}/…`) o si antes hay que adoptar.
+ *
+ * `host` vuelve `null` en PostgreSQL, se haya mandado o no.
+ */
+export const identityGrantsSchema = z.object({
+  username: z.string(),
+  host: z.string().nullable().optional(),
+  status: z.enum(['adopted', 'unmanaged']),
+  server_user_id: z.number().int().nullable().optional(),
+  grants: z.array(grantInfoSchema),
+})
+export type IdentityGrants = z.infer<typeof identityGrantsSchema>
+
+// ── Aplicar un perfil a N bases (v21 §11) ───────────────────────────────────
+
+/**
+ * `ApplyProfileBulkRequest` (v21 §11). `object_mappings` es una **plantilla**, no una lista de
+ * destinos: el `database` de cada `object_ref` se ignora y lo sobrescribe la BD de la iteración.
+ * El resto (`schema`/`table`/`columns`/`sequence`/`routine`) se reusa tal cual, lo que asume el
+ * mismo esquema relativo en cada base.
+ */
+export const applyProfileBulkRequestSchema = z.object({
+  databases: z.array(z.string()).min(1, 'Selecciona al menos una base de datos').max(100),
+  object_mappings: z.array(objectMappingSchema),
+})
+export type ApplyProfileBulkRequest = z.infer<typeof applyProfileBulkRequestSchema>
+
+/** Resultado del perfil sobre UNA base dentro del lote (v21 §11). */
+export const applyProfileBulkItemSchema = z.object({
+  database: z.string(),
+  grants_applied: z.number().int(),
+  skipped_levels: z.array(z.string()),
+  errors: z.array(z.string()),
+  ok: z.boolean(),
+})
+export type ApplyProfileBulkItem = z.infer<typeof applyProfileBulkItemSchema>
+
+/**
+ * `ApplyProfileBulkResult` (v21 §11). **Siempre llega con 200, incluso si TODAS las bases
+ * fallaron**: el estado real vive en `results[].ok`. Una pantalla que mire solo el status HTTP
+ * reportaría éxito sobre un lote entero fallido.
+ */
+export const applyProfileBulkResultSchema = z.object({
+  profile_id: z.number().int(),
+  profile_name: z.string(),
+  engine: engineTypeSchema,
+  total_databases: z.number().int(),
+  results: z.array(applyProfileBulkItemSchema),
+})
+export type ApplyProfileBulkResult = z.infer<typeof applyProfileBulkResultSchema>

@@ -7,6 +7,7 @@ import {
   type QueryParams,
 } from '@/lib/api/client'
 import {
+  applyProfileBulkResultSchema,
   applyProfileResultSchema,
   grantInfoSchema,
   grantResultSchema,
@@ -14,6 +15,8 @@ import {
   serverUserFullOutSchema,
   serverUserOutSchema,
   type AdoptUserIn,
+  type ApplyProfileBulkRequest,
+  type ApplyProfileBulkResult,
   type ApplyProfileRequest,
   type ApplyProfileResult,
   type GrantInfo,
@@ -127,4 +130,31 @@ export function applyProfile(
 /** `POST /server-users/provision` 🔌 — crea + aprovisiona + aplica `initial_grants`. */
 export function provisionServerUser(body: ServerUserFullCreate): Promise<ServerUserFullOut> {
   return mutateData('POST', `${BASE}/provision`, serverUserFullOutSchema, { body })
+}
+
+/**
+ * `POST /server-users/{id}/apply-profile/{profile_id}/bulk` 🔌 (v21 §11) — el mismo perfil sobre
+ * N bases en una sola llamada.
+ *
+ * Dos cosas que no se pueden leer del status HTTP y por eso viven en el JSDoc:
+ *
+ * 1. **Siempre responde 200**, aunque TODAS las bases hayan fallado. El 422 de «no se aplicó
+ *    ningún permiso» del endpoint de una sola base (§9) **no rige acá**: el estado real está en
+ *    `results[].ok`. Lo que sí corta con error son las validaciones previas al lote —404 de
+ *    usuario/perfil, 409 de perfil desactivado, 422 de motor incompatible—, que se evalúan una
+ *    sola vez antes de tocar ninguna base.
+ * 2. **Nunca revoca**: solo agrega privilegios. Por eso un error acá es recuperable con un
+ *    `REVOKE`, y por eso su cota (5/min) es más laxa que la de las operaciones destructivas.
+ */
+export function applyProfileBulk(
+  id: number,
+  profileId: number,
+  body: ApplyProfileBulkRequest,
+): Promise<ApplyProfileBulkResult> {
+  return mutateData(
+    'POST',
+    `${BASE}/${id}/apply-profile/${profileId}/bulk`,
+    applyProfileBulkResultSchema,
+    { body },
+  )
 }
