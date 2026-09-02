@@ -22,8 +22,7 @@ import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModa
 import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
 import { useServerUser } from '@/features/server-users/hooks/use-server-users'
 import { EffectiveGrantsPanel } from '@/features/server-users/components/EffectiveGrantsPanel'
-import { GrantManager } from '@/features/server-users/components/GrantManager'
-import { ApplyProfilePanel } from '@/features/server-users/components/ApplyProfilePanel'
+import { GrantPanel } from '@/features/server-users/components/GrantPanel'
 import { OwnedDatabasesContent } from '@/features/server-users/components/OwnedDatabasesContent'
 import { useServer } from '../hooks/use-servers'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
@@ -36,18 +35,28 @@ import { AdoptAllHostsModal } from '../components/AdoptAllHostsModal'
 import { DefineKnownPasswordModal } from '../components/DefineKnownPasswordModal'
 import { RotatePasswordAllHostsModal } from '../components/RotatePasswordAllHostsModal'
 
-const TABS = ['identity', 'grants', 'manage', 'profile', 'databases'] as const
+const TABS = ['identity', 'grants', 'manage', 'databases'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
   return value !== null && (TABS as readonly string[]).includes(value)
 }
 
+/**
+ * `?tab=profile` era la pestaña «Aplicar perfil», absorbida por «Otorgar / revocar» (v21): las
+ * dos elegían un destino y aplicaban permisos, así que estar separadas obligaba a saber de
+ * antemano cuál de las dos resolvía el caso. Los enlaces viejos siguen llegando a su sitio.
+ */
+function resolveTab(value: string | null): Tab {
+  if (isTab(value)) return value
+  if (value === 'profile') return 'manage'
+  return 'identity'
+}
+
 const TAB_LABELS: Record<Tab, string> = {
   identity: 'Identidad',
   grants: 'Permisos efectivos',
   manage: 'Otorgar / revocar',
-  profile: 'Aplicar perfil',
   databases: 'Bases de datos',
 }
 
@@ -149,7 +158,7 @@ function ServerUserDetailContent({
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const tab: Tab = isTab(tabParam) ? tabParam : 'identity'
+  const tab: Tab = resolveTab(tabParam)
   const setTab = (next: Tab) => {
     setSearchParams((previous) => {
       const updated = new URLSearchParams(previous)
@@ -180,8 +189,9 @@ function ServerUserDetailContent({
 
   const isAdopted = identity.status === 'adopted' && identity.server_user_id != null
   const serverUserId = identity.server_user_id ?? undefined
-  // Las 4 pestañas de permisos exigen `server_user_id` numérico: sus hooks no aceptan
-  // username/host. La query solo se dispara si de verdad hay a quién pedirle el registro.
+  // Otorgar y las BDs propias siguen exigiendo `server_user_id` numérico: todo el otorgamiento
+  // cuelga del inventario (v21 §12). «Permisos efectivos» ya no, porque la CONSULTA sí funciona
+  // por identidad (§1) — de ahí que la query del registro solo se pida cuando hay fila.
   const serverUser = useServerUser(serverUserId ?? 0, isAdopted && serverUserId != null)
 
   const cleanupOrphan = () => {
@@ -199,7 +209,7 @@ function ServerUserDetailContent({
     )
   }
 
-  const showPermissionsTabs = tab !== 'identity'
+  const requiresAdoption = tab === 'manage' || tab === 'databases'
 
   return (
     <div className="flex flex-col gap-6">
@@ -379,11 +389,23 @@ function ServerUserDetailContent({
         </Card>
       )}
 
-      {showPermissionsTabs &&
+      {/* Consultar no exige adopción (v21 §1), otorgar sí (§12). Esa asimetría es el límite
+          actual del módulo y acá se traduce en qué pestañas piden fila de inventario. */}
+      {tab === 'grants' && (
+        <EffectiveGrantsPanel
+          serverId={serverId}
+          username={username}
+          host={host}
+          engine={engine}
+          serverUserId={isAdopted ? serverUserId : undefined}
+        />
+      )}
+
+      {requiresAdoption &&
         (!isAdopted || serverUserId == null ? (
           <EmptyState
             title="Esta identidad no está adoptada"
-            description="Los permisos y las bases de datos propias son operaciones de inventario: adopta primero esta identidad para gestionarlos."
+            description="Otorgar permisos y listar las bases propias son operaciones de inventario: adoptá primero esta identidad. Consultar sus permisos efectivos sí funciona sin adoptarla."
             action={
               <Button onClick={() => setAdoptOpen(true)}>
                 Adoptar esta identidad para gestionar sus permisos
@@ -398,9 +420,7 @@ function ServerUserDetailContent({
           <ErrorState error={serverUser.error} onRetry={() => void serverUser.refetch()} />
         ) : (
           <>
-            {tab === 'grants' && <EffectiveGrantsPanel user={serverUser.data} engine={engine} />}
-            {tab === 'manage' && <GrantManager user={serverUser.data} engine={engine} />}
-            {tab === 'profile' && <ApplyProfilePanel user={serverUser.data} engine={engine} />}
+            {tab === 'manage' && <GrantPanel user={serverUser.data} engine={engine} />}
             {tab === 'databases' && <OwnedDatabasesContent userId={serverUser.data.id} />}
           </>
         ))}

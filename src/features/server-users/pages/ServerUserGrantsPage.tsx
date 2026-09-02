@@ -6,7 +6,8 @@ import { useServerUser } from '../hooks/use-server-users'
 const OLD_TAB_TO_NEW: Record<string, string> = {
   effective: 'grants',
   manage: 'manage',
-  profile: 'profile',
+  // «Aplicar perfil» dejó de ser una pestaña propia: vive dentro de «Otorgar / revocar» (v21).
+  profile: 'manage',
 }
 
 /**

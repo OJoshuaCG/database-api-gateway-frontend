@@ -1,88 +1,133 @@
 import { useState } from 'react'
 import {
   Badge,
+  Callout,
   EmptyState,
   ErrorState,
   IconButton,
-  Input,
   RefreshIcon,
   Spinner,
 } from '@/components/ui'
-import type { EngineType, ServerUserOut } from '@/lib/contracts'
-import { useDebouncedValue } from '@/lib/utils/use-debounced-value'
+import type { EngineType, GrantInfo } from '@/lib/contracts'
+import { ServerDatabaseCombobox } from '@/features/servers/components/ServerDatabaseCombobox'
+import { useIdentityGrants } from '@/features/servers/hooks/use-identity-grants'
 import { useUserGrants } from '../hooks/use-user-grants'
+import { filterGrantsByDatabase } from './grant-logic'
 
 interface EffectiveGrantsPanelProps {
-  user: ServerUserOut
+  serverId: number
+  username: string
+  host: string | undefined
   engine: EngineType
+  /** Id de inventario, si la identidad está adoptada. */
+  serverUserId: number | undefined
 }
 
 /**
- * Permisos efectivos del usuario según la introspección del motor 🔌 (§7). Se extrajo de
- * `ServerUserGrantsPage` (que ahora es un redirect de compatibilidad) para poder montarse también
- * como pestaña "grants" de la ficha unificada de usuario del motor (`ServerUserDetailPage`) —
- * mismo criterio que `ManagedDatabaseMigrationsContent` en la Fase 1 de bases de datos.
+ * Permisos efectivos según la introspección del motor 🔌.
+ *
+ * Consulta por **dos** caminos según haya fila de inventario o no, y eso es deliberado
+ * (api-reference-v21 §2): con `server_user_id` va por `/server-users/{id}/grants`, que sigue
+ * siendo el camino natural; sin él va por `/servers/{id}/users/grants`, el endpoint por identidad
+ * que v21 añadió y **no exige adopción**. Gracias a eso esta pestaña ya funciona sobre una
+ * identidad `unmanaged`: auditar qué puede hacer un usuario no debería obligar a adoptarlo antes.
+ *
+ * El filtro por base tampoco es simétrico (§3): PostgreSQL lo exige y el backend acota la
+ * respuesta; MySQL/MariaDB lo ignora y devuelve el servidor entero, así que ahí el recorte lo
+ * hace el cliente. Por eso en MySQL el parámetro ni se manda: variaría la clave de caché para
+ * pedir exactamente la misma respuesta.
  */
-export function EffectiveGrantsPanel({ user, engine }: EffectiveGrantsPanelProps) {
-  const [databaseDraft, setDatabaseDraft] = useState('')
-  const database = useDebouncedValue(databaseDraft, 400)
+export function EffectiveGrantsPanel({
+  serverId,
+  username,
+  host,
+  engine,
+  serverUserId,
+}: EffectiveGrantsPanelProps) {
+  const [database, setDatabase] = useState('')
   const isPg = engine === 'postgresql'
+  const isAdopted = serverUserId != null
 
-  // PostgreSQL exige `?database=` para la introspección de grants: sin BD la query no se
-  // dispara (queda gateada en el hook) y en su lugar se muestra el hint de abajo.
-  const needsDatabase = isPg && !database.trim()
-  const grants = useUserGrants(user.id, database.trim() || undefined, true, isPg)
+  const selected = database.trim()
+  const backendDatabase = isPg ? selected || undefined : undefined
+  const needsDatabase = isPg && !selected
+
+  const adopted = useUserGrants(serverUserId ?? 0, backendDatabase, isAdopted, isPg)
+  const identity = useIdentityGrants(serverId, username, host, backendDatabase, !isAdopted, isPg)
+
+  const query = isAdopted ? adopted : identity
+  const rawGrants: GrantInfo[] = isAdopted ? (adopted.data ?? []) : (identity.data?.grants ?? [])
+  const grants = !isPg && selected ? filterGrantsByDatabase(rawGrants, selected) : rawGrants
+  const clientFiltered = !isPg && Boolean(selected) && grants.length !== rawGrants.length
 
   return (
     <div className="flex flex-col gap-3">
-      {isPg && (
-        <Input
-          label="Base de datos"
-          hint="PostgreSQL: obligatoria para ver grants de tablas/columnas/secuencias/rutinas."
-          value={databaseDraft}
-          onChange={(event) => setDatabaseDraft(event.target.value)}
-          placeholder="app_prod"
+      <div className="w-full sm:max-w-sm">
+        <ServerDatabaseCombobox
+          serverId={serverId}
+          value={database}
+          onChange={setDatabase}
+          required={isPg}
+          hint={
+            isPg
+              ? 'PostgreSQL la exige: los grants de objeto viven dentro de una base.'
+              : 'Opcional. El motor devuelve todo el servidor; el filtro se aplica acá.'
+          }
         />
-      )}
+      </div>
+
       {needsDatabase ? (
         <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-muted-foreground">
-          Indicá una base de datos para consultar los permisos (PostgreSQL la exige para los grants
-          de objeto).
+          Indicá una base de datos para consultar los permisos: PostgreSQL la exige para los grants
+          de objeto.
         </p>
-      ) : grants.isLoading ? (
+      ) : query.isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="h-4 w-4" /> Cargando permisos…
         </div>
-      ) : grants.isError ? (
-        <ErrorState error={grants.error} onRetry={() => void grants.refetch()} />
-      ) : (grants.data?.length ?? 0) === 0 ? (
+      ) : query.isError ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : grants.length === 0 ? (
         <EmptyState
           title="Sin permisos efectivos"
-          description="Este usuario no tiene privilegios otorgados (o no en la BD indicada)."
+          description={
+            selected
+              ? `«${username}» no tiene privilegios sobre «${selected}».`
+              : 'Este usuario no tiene privilegios otorgados en el motor.'
+          }
         />
       ) : (
-        <ul className="flex flex-col divide-y divide-border">
-          {grants.data?.map((grant, index) => (
-            <li
-              key={`${grant.level}-${grant.object ?? ''}-${index}`}
-              className="flex flex-col gap-1 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <Badge tone="info">{grant.level}</Badge>
-                <span className="text-sm font-medium text-foreground">
-                  {grant.object ?? '(global)'}
-                </span>
-                {grant.with_grant_option && <Badge tone="warning">WITH GRANT</Badge>}
-              </div>
-              <span className="text-xs text-muted-foreground">{grant.privileges.join(', ')}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          {clientFiltered && (
+            <Callout tone="info" title={`Filtrado por «${selected}» en el navegador`}>
+              En MySQL/MariaDB el backend ignora el parámetro de base y responde con los grants del
+              usuario en todo el servidor. Se muestran los de esta base más los de nivel global, que
+              aplican a todas.
+            </Callout>
+          )}
+          <ul className="flex flex-col divide-y divide-border">
+            {grants.map((grant, index) => (
+              <li
+                key={`${grant.level}-${grant.object ?? ''}-${index}`}
+                className="flex flex-col gap-1 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge tone="info">{grant.level}</Badge>
+                  <span className="text-sm font-medium text-foreground">
+                    {grant.object ?? '(global)'}
+                  </span>
+                  {grant.with_grant_option && <Badge tone="warning">WITH GRANT</Badge>}
+                </div>
+                <span className="text-xs text-muted-foreground">{grant.privileges.join(', ')}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
+
       <div className="flex justify-end">
-        {/* Un botón `disabled` no dispara el tooltip nativo, así que sin este `span` el
-            icono quedaría gris y mudo cuando falta la BD en PostgreSQL. Mismo recurso que
-            usa `ModelMigrationDetailPanel` para explicar por qué no se puede pulsar. */}
+        {/* Un botón `disabled` no dispara el tooltip nativo, así que sin este `span` el icono
+            quedaría gris y mudo cuando falta la BD en PostgreSQL. */}
         <span
           title={
             needsDatabase
@@ -96,8 +141,8 @@ export function EffectiveGrantsPanel({ user, engine }: EffectiveGrantsPanelProps
             icon={<RefreshIcon />}
             variant="outline"
             size="icon-sm"
-            onClick={() => void grants.refetch()}
-            isLoading={grants.isFetching}
+            onClick={() => void query.refetch()}
+            isLoading={query.isFetching}
             disabled={needsDatabase}
           />
         </span>
