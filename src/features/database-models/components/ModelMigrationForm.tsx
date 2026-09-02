@@ -288,7 +288,7 @@ export function ModelMigrationForm({
         readOnly={upSqlReadOnly}
         // Es el campo protagonista del formulario —el DDL que se va a ejecutar— y el único que
         // suele pasar de unas pocas líneas, así que arranca con bastante más altura que el resto.
-        rows={16}
+        rows={20}
         emptyLabel="Sin SQL base."
         hint={
           mode === 'create'
@@ -314,7 +314,7 @@ export function ModelMigrationForm({
         label="down_sql (rollback confirmado)"
         value={currentDownSql}
         registration={register('down_sql')}
-        rows={8}
+        rows={16}
         emptyLabel="Sin rollback confirmado."
         hint={
           upSqlReadOnly
@@ -348,7 +348,7 @@ export function ModelMigrationForm({
                 <SqlField
                   value={currentMysqlOverride}
                   registration={register('up_sql_mysql')}
-                  rows={4}
+                  rows={12}
                   readOnly={mysqlChoice !== 'resend'}
                   emptyLabel="Sin override para MySQL/MariaDB."
                   error={errors.up_sql_mysql?.message}
@@ -369,7 +369,7 @@ export function ModelMigrationForm({
                 <SqlField
                   value={currentPostgresqlOverride}
                   registration={register('up_sql_postgresql')}
-                  rows={4}
+                  rows={12}
                   readOnly={postgresqlChoice !== 'resend'}
                   emptyLabel="Sin override para PostgreSQL."
                   error={errors.up_sql_postgresql?.message}
@@ -388,7 +388,7 @@ export function ModelMigrationForm({
               label="up_sql_mysql (override MySQL/MariaDB)"
               value={currentMysqlOverride}
               registration={register('up_sql_mysql')}
-              rows={4}
+              rows={12}
               emptyLabel="Sin override para MySQL/MariaDB."
               error={errors.up_sql_mysql?.message}
             />
@@ -396,7 +396,7 @@ export function ModelMigrationForm({
               label="up_sql_postgresql (override PostgreSQL)"
               value={currentPostgresqlOverride}
               registration={register('up_sql_postgresql')}
-              rows={4}
+              rows={12}
               emptyLabel="Sin override para PostgreSQL."
               hint="Útil para ENUM inline, ON UPDATE CURRENT_TIMESTAMP, UNSIGNED, rutinas BEGIN…END."
               error={errors.up_sql_postgresql?.message}

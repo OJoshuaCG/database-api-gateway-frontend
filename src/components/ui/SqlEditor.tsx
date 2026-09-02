@@ -21,7 +21,13 @@ export interface SqlEditorProps extends Omit<
 > {
   /** Valor actual: es lo que se resalta en la capa de abajo. */
   value: string
+  /** Alto de partida —y mínimo— en líneas. */
   rows?: number
+  /**
+   * Si se indica, el editor **crece con el contenido** hasta este número de líneas (y a partir
+   * de ahí desplaza). Sin él, el alto es fijo y siempre vale `rows`.
+   */
+  maxRows?: number
   hideLineNumbers?: boolean
 }
 
@@ -54,6 +60,7 @@ export interface SqlEditorProps extends Omit<
 export function SqlEditor({
   value,
   rows = 6,
+  maxRows,
   hideLineNumbers,
   className,
   ...props
@@ -93,11 +100,30 @@ export function SqlEditor({
    * El cálculo sale de las mismas clases que ya usan las capas: `leading-5` = 1.25rem por
    * línea, `py-3` = 0.75rem arriba y abajo.
    */
-  const height = `calc(${rows} * 1.25rem + 1.5rem)`
+  /*
+   * Alto visible en líneas. Con `maxRows` el editor acompaña al contenido en vez de obligar a
+   * escribir DDL por una mirilla de seis líneas: crece desde `rows` hasta el tope y ahí se queda
+   * desplazando. Se cuenta una línea de más para que, al pulsar Intro en la última, el cursor
+   * caiga en un renglón ya visible y no en uno que aparece de golpe empujando el scroll.
+   *
+   * Se mide por líneas LÓGICAS (`countLines`), lo mismo que numera la columna de la izquierda. En
+   * modo ajuste una línea envuelta ocupa más de un renglón y esta cuenta se queda corta; el scroll
+   * sigue ahí como válvula, y a cambio el alto no depende de medir el DOM en un efecto.
+   */
+  const visibleRows =
+    maxRows === undefined ? rows : Math.min(Math.max(rows, lineCount + 1), Math.max(rows, maxRows))
+  const height = `calc(${visibleRows} * 1.25rem + 1.5rem)`
 
   const lines = splitTokenLines(tokenizeSql(value))
 
   return (
+    /*
+     * El ancho lo manda el contenedor padre, nunca el SQL. Quien lo garantiza es el propio
+     * `overflow-hidden` de esta caja: un ítem flex con `overflow` distinto de `visible` resuelve su
+     * `min-width: auto` a 0, así que una línea larguísima no puede empujar la caja y sacarle scroll
+     * horizontal a la página —el fallo que ya costó un arreglo en `AppShell`—. Si algún día se
+     * quita el `overflow-hidden`, hay que poner `min-w-0` en su lugar.
+     */
     <div
       style={{ height, ...gutterWidthStyle(lineCount) }}
       className="flex overflow-hidden rounded-lg border border-border bg-syntax-bg focus-within:ring-2 focus-within:ring-ring"

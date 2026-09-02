@@ -185,6 +185,22 @@ real encima, transparente. `SqlField` es el puente con react-hook-form (y cae a 
 cuando el campo es de solo lectura). Las dos capas comparten tipografía, caja y ancho útil
 al carácter; si tocas una, toca la otra o el cursor deja de coincidir con el texto.
 
+`rows` es el alto de **partida y mínimo**. Con `maxRows`, el editor además **crece con el
+contenido** hasta ese tope y a partir de ahí desplaza — es el equivalente editable del
+tirador de alto del `CodeBlock`. `SqlField` lo trae puesto (`rows` 12, `maxRows` 40), así
+que un campo de SQL de formulario acompaña a lo que se escribe sin tocar nada. El alto se
+mide en líneas **lógicas**, las mismas que numera la columna: en modo ajuste una línea
+envuelta ocupa más de un renglón y la cuenta se queda corta, y para eso queda el scroll.
+
+> `maxRows` es un tope **de pantalla, no de contenido**: un DDL de mil líneas no estira el
+> campo hasta ocupar la página. La cuenta es `rows × 1.25rem + 1.5rem`, así que 40 líneas
+> ≈ 51rem (≈820 px). Para leer el SQL entero de un vistazo está el visor a pantalla completa.
+>
+> Solo afecta al **alto**. El ancho de la caja lo hereda del contenedor y nunca lo empuja:
+> su `overflow-hidden` resuelve a 0 el `min-width: auto` del ítem flex, así que una línea
+> larguísima desplaza *dentro* del editor y no le saca scroll horizontal a la página. Si
+> alguna vez se quita ese `overflow-hidden`, hay que poner `min-w-0` en su lugar.
+
 ### Los dos modos de lectura
 Ajuste de línea (**por omisión**) o scroll horizontal. Se conmuta con el botón de la barra
 de cualquier `CodeBlock`, pero **la preferencia es global** (`SqlWrapProvider`, ver

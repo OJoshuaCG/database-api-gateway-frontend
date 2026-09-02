@@ -15,7 +15,10 @@ interface SqlFieldProps {
   required?: boolean
   /** Sin edición posible: se muestra con el visor de solo lectura. */
   readOnly?: boolean
+  /** Alto de partida —y mínimo— en líneas. */
   rows?: number
+  /** Tope al que puede crecer el campo con el contenido. Ver `SqlEditor`. */
+  maxRows?: number
   emptyLabel?: string
 }
 
@@ -29,6 +32,11 @@ interface SqlFieldProps {
  *
  * Cuando el campo es de solo lectura se usa directamente el visor `CodeBlock`, que ya trae
  * copiar y pantalla completa: si no se puede editar, no hay motivo para montar un textarea.
+ *
+ * El alto **acompaña al contenido**: `rows` es el punto de partida y el campo crece hasta
+ * `maxRows`, que es un tope pensado para la pantalla, no para el contenido. Es el equivalente
+ * editable del tirador de alto del `CodeBlock`, que es lo que se ve cuando el mismo SQL se
+ * muestra en modo lectura.
  */
 export function SqlField({
   label,
@@ -38,7 +46,19 @@ export function SqlField({
   error,
   required,
   readOnly,
-  rows = 6,
+  rows = 12,
+  /*
+   * Techo del crecimiento: el campo acompaña a lo que se escribe, pero **hasta aquí**. Un DDL de
+   * mil líneas no puede convertir el campo en la página entera; pasado el tope, desplaza. 40
+   * líneas son ~51rem (≈820 px): un editor donde se lee y se corrige SQL de verdad sin pelear con
+   * una mirilla. Para revisar el archivo completo de un vistazo está el visor a pantalla completa
+   * que ya trae la barra.
+   *
+   * El tope solo mira el ALTO. El ancho no depende de él: la caja del editor lo hereda del
+   * formulario y nunca lo empuja (ver `SqlEditor`), así que subirlo no puede sacar scroll
+   * horizontal a la vista.
+   */
+  maxRows = 40,
   emptyLabel,
 }: SqlFieldProps) {
   const [expanded, setExpanded] = useState(false)
@@ -74,7 +94,7 @@ export function SqlField({
         />
       </div>
 
-      <SqlEditor id={id} value={value} rows={rows} {...registration} />
+      <SqlEditor id={id} value={value} rows={rows} maxRows={maxRows} {...registration} />
 
       {error ? (
         <p className="text-xs text-error">{error}</p>
