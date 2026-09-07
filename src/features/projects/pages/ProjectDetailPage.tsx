@@ -8,7 +8,9 @@ import {
   EmptyState,
   ErrorState,
   FullPageSpinner,
+  IconButton,
   PageHeader,
+  PencilIcon,
   Spinner,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
@@ -24,6 +26,11 @@ import {
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { DeleteProjectDialog } from '../components/DeleteProjectDialog'
 import { LinkBlueprintsModal } from '../components/LinkBlueprintsModal'
+// Import profundo a la feature de blueprints, no a su barrel: `@/features/database-models`
+// reexporta `BlueprintMigrationsPage`, que a su vez importa `@/features/projects` — pasar por
+// los barriles cerraría un ciclo de módulos. Es el mismo criterio que ya usa
+// `BlueprintCollationBatchPage` con `use-database-models`.
+import { DatabaseModelFormModal } from '@/features/database-models/components/DatabaseModelFormModal'
 
 /**
  * Detalle de un proyecto y gestión de sus blueprints (Vista 3 del plan).
@@ -43,6 +50,16 @@ export function ProjectDetailPage() {
   const [linkOpen, setLinkOpen] = useState(false)
   /** Último blueprint desvinculado: sostiene la barra de deshacer. */
   const [undoTarget, setUndoTarget] = useState<DatabaseModelOut | null>(null)
+  /**
+   * Blueprint que se está editando, o `null`. Es el propio modelo y no un id porque el modal
+   * necesita la fila completa para rellenar el formulario, y la lista ya la tiene: pedir el
+   * detalle otra vez solo añadiría un estado de carga dentro del diálogo.
+   *
+   * Renombrar se hace desde aquí y no solo desde la pestaña «Blueprints» porque este es el
+   * sitio donde se lee el nombre en contexto —junto a los demás del proyecto— y por tanto donde
+   * se detecta que está mal escrito o desactualizado.
+   */
+  const [blueprintToEdit, setBlueprintToEdit] = useState<DatabaseModelOut | null>(null)
 
   const project = useProject(projectId, Number.isFinite(projectId))
   const blueprints = useProjectBlueprints(projectId, Number.isFinite(projectId))
@@ -198,18 +215,30 @@ export function ProjectDetailPage() {
                         <td className="py-2 pr-3 text-muted-foreground">
                           {item.charset ? `${item.charset} / ${item.collation ?? '—'}` : '—'}
                         </td>
-                        <td className="py-2 text-right">
-                          {/* Sin confirmación: un confirm() aquí es fricción sin contenido.
-                              A cambio, la barra de deshacer de arriba. */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              unlink.mutate(item.id, { onSuccess: () => setUndoTarget(item) })
-                            }
-                          >
-                            Quitar del proyecto
-                          </Button>
+                        <td className="py-2">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Icono y no texto: es una acción de fila repetida y universalmente
+                                reconocible. «Quitar del proyecto» conserva el texto porque es
+                                una acción de dominio que no se adivina de un icono. */}
+                            <IconButton
+                              label="Editar blueprint"
+                              icon={<PencilIcon />}
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setBlueprintToEdit(item)}
+                            />
+                            {/* Sin confirmación: un confirm() aquí es fricción sin contenido.
+                                A cambio, la barra de deshacer de arriba. */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                unlink.mutate(item.id, { onSuccess: () => setUndoTarget(item) })
+                              }
+                            >
+                              Quitar del proyecto
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -226,6 +255,17 @@ export function ProjectDetailPage() {
 
       {editOpen && (
         <ProjectFormModal open onClose={() => setEditOpen(false)} project={data} />
+      )}
+
+      {/* Montaje condicional, como el resto de los diálogos de esta página: así el formulario se
+          monta con los valores del blueprint elegido en vez de arrastrar los del anterior
+          (`react-hook-form` solo aplica `defaultValues` al montar). */}
+      {blueprintToEdit && (
+        <DatabaseModelFormModal
+          open
+          onClose={() => setBlueprintToEdit(null)}
+          model={blueprintToEdit}
+        />
       )}
 
       {linkOpen && (
