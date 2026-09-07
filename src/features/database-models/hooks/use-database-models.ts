@@ -78,6 +78,20 @@ export function useCreateDatabaseModel() {
   })
 }
 
+/**
+ * Edición de un blueprint (nombre, slug, versión, charset/collation, activo).
+ *
+ * Invalida DOS troncos de key, no uno. El blueprint se pinta también en
+ * `GET /projects/{id}/blueprints`, que vive bajo `['projects', id, 'blueprints']` y no comparte
+ * prefijo con `['database-models']`. Un `invalidateQueries` solo sobre `databaseModels.all`
+ * dejaba el nombre viejo en la tabla del detalle de proyecto justo después de renombrarlo desde
+ * ahí, y no hay red de seguridad que lo tape: el QueryClient de la app usa `staleTime: 30_000` y
+ * `refetchOnWindowFocus: false`. Mismo motivo que documenta `invalidateDatabaseViews`.
+ *
+ * El predicado apunta a `[2] === 'blueprints'` y por eso NO alcanza a la vista inversa
+ * `projects.ofBlueprint` (`['projects', 'of-blueprint', modelId]`), que no muestra el nombre del
+ * blueprint sino el de los proyectos.
+ */
 export function useUpdateDatabaseModel(id: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -85,6 +99,10 @@ export function useUpdateDatabaseModel(id: number) {
     mutationFn: (body: DatabaseModelUpdate) => updateDatabaseModel(id, body),
     onSuccess: (model) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'projects' && query.queryKey[2] === 'blueprints',
+      })
       toast.success('Blueprint actualizado', model.name)
     },
     onError: (error) =>
