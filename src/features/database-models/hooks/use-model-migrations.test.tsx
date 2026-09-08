@@ -6,7 +6,9 @@ import type { QueryClient } from '@tanstack/react-query'
 import { server } from '@/test/server'
 import { queryKeys } from '@/lib/api/query-keys'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
+import { FETCH_ALL_MIGRATIONS_MAX_PAGES } from '../api/model-migrations.api'
 import {
+  useAllModelMigrations,
   useCreateModelMigration,
   useDeleteModelMigration,
   useModelMigration,
@@ -57,6 +59,97 @@ describe('useModelMigrations', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.items[0]?.version).toBe('0001')
+  })
+
+  it('propaga el `order` al backend', async () => {
+    // El navegador de versiones pide `desc` para que la punta venga en la primera página
+    // (api-reference-v22 §2); si el parámetro no viajara, volvería a abrir en las más antiguas.
+    const seen: string[] = []
+    server.use(
+      http.get('http://localhost/api/v1/database-models/3/migrations', ({ request }) => {
+        seen.push(new URL(request.url).searchParams.get('order') ?? '')
+        return HttpResponse.json({
+          data: [summaryFixture],
+          pagination: { page: 1, size: 50, total: 1, pages: 1, has_next: false, has_prev: false },
+        })
+      }),
+    )
+
+    const { result } = renderHook(
+      () => useModelMigrations(3, { page: 1, size: 50, order: 'desc' }),
+      { wrapper },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(seen).toEqual(['desc'])
+  })
+})
+
+describe('useAllModelMigrations', () => {
+  /** Devuelve una página con `has_next` mientras queden, para simular un catálogo largo. */
+  function pagedHandler(pages: number) {
+    return http.get('http://localhost/api/v1/database-models/3/migrations', ({ request }) => {
+      const page = Number(new URL(request.url).searchParams.get('page') ?? '1')
+      return HttpResponse.json({
+        data: [{ ...summaryFixture, id: page, version: String(page).padStart(4, '0') }],
+        pagination: {
+          page,
+          size: 50,
+          total: pages,
+          pages,
+          has_next: page < pages,
+          has_prev: page > 1,
+        },
+      })
+    })
+  }
+
+  it('recorre TODAS las páginas y las concatena', async () => {
+    // Es el punto del hook: quedarse con la primera página producía cálculos incompletos sin
+    // ninguna señal de que lo eran (qué versiones captura un apply, qué versión se puede stampear).
+    server.use(pagedHandler(3))
+
+    const { result } = renderHook(() => useAllModelMigrations(3), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.items.map((m) => m.version)).toEqual(['0001', '0002', '0003'])
+    expect(result.current.data?.truncated).toBe(false)
+  })
+
+  it('con una sola página no pide una segunda', async () => {
+    let calls = 0
+    server.use(
+      http.get('http://localhost/api/v1/database-models/3/migrations', () => {
+        calls += 1
+        return HttpResponse.json({
+          data: [summaryFixture],
+          pagination: { page: 1, size: 50, total: 1, pages: 1, has_next: false, has_prev: false },
+        })
+      }),
+    )
+
+    const { result } = renderHook(() => useAllModelMigrations(3), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(calls).toBe(1)
+  })
+
+  it('avisa con `truncated` al llegar al tope de páginas, en vez de callar la lista corta', async () => {
+    server.use(pagedHandler(FETCH_ALL_MIGRATIONS_MAX_PAGES + 5))
+
+    const { result } = renderHook(() => useAllModelMigrations(3), { wrapper })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.items).toHaveLength(FETCH_ALL_MIGRATIONS_MAX_PAGES)
+    expect(result.current.data?.truncated).toBe(true)
+  })
+
+  it('cuelga del prefijo de invalidación de migraciones', () => {
+    // Las mutaciones invalidan por `migrations(modelId)`. Si esta key quedara fuera del prefijo,
+    // el catálogo completo se serviría rancio tras crear o borrar una versión.
+    expect(queryKeys.databaseModels.migrationsAll(3).slice(0, 3)).toEqual(
+      queryKeys.databaseModels.migrations(3),
+    )
   })
 })
 

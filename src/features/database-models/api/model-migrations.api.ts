@@ -20,17 +20,63 @@ import {
   type ModelMigrationSummary,
   type OnFailureMode,
   type Page,
+  PAGINATION,
 } from '@/lib/contracts'
 
 const base = (modelId: number) => `/database-models/${modelId}/migrations`
 
-/** `GET .../migrations` — lista paginada de resúmenes (§8). */
+/**
+ * `GET .../migrations` — lista paginada de resúmenes (§8).
+ *
+ * Acepta `order: 'asc' | 'desc'` desde api-reference-v22 §2. Pedir `desc` es la forma de que la
+ * PUNTA caiga en la primera página sin conocer `pagination.pages` de antemano: con el orden
+ * ascendente por default, un blueprint de más de `PAGINATION.maxSize` versiones deja las más
+ * nuevas fuera de la página 1, que son justamente con las que se trabaja.
+ */
 export function listModelMigrations(
   modelId: number,
   params: QueryParams,
   signal?: AbortSignal,
 ): Promise<Page<ModelMigrationSummary>> {
   return fetchPage(base(modelId), modelMigrationSummarySchema, { query: params, signal })
+}
+
+/** Tope de seguridad para `fetchAllModelMigrations`: nunca pagina más allá de esto. */
+export const FETCH_ALL_MIGRATIONS_MAX_PAGES = 40
+
+/**
+ * Pagina `GET .../migrations` hasta agotar `has_next`.
+ *
+ * Lo usan las superficies que necesitan el catálogo COMPLETO y para las que quedarse con una
+ * página no es "ver menos" sino **calcular mal**: el aviso de captura del apply masivo, que
+ * deriva de la lista qué versiones se van a capturar, y los selectores de versión de stamp y
+ * adopción, a los que les faltaba la punta y por eso no dejaban elegir la versión actual.
+ *
+ * No sirve para el navegador de versiones: ese pagina de verdad (`Pagination`), porque es una
+ * superficie de navegación y no un cálculo.
+ *
+ * Se corta en `FETCH_ALL_MIGRATIONS_MAX_PAGES` como salvaguarda ante un historial anormalmente
+ * largo, y lo REPORTA en `truncated` en vez de devolver una lista corta en silencio — que es el
+ * fallo que este helper viene a eliminar.
+ */
+export async function fetchAllModelMigrations(
+  modelId: number,
+  signal?: AbortSignal,
+): Promise<{ items: ModelMigrationSummary[]; truncated: boolean }> {
+  const items: ModelMigrationSummary[] = []
+  let page = 1
+  let truncated = false
+  for (;;) {
+    const result = await listModelMigrations(modelId, { page, size: PAGINATION.maxSize }, signal)
+    items.push(...result.items)
+    if (!result.pagination.has_next) break
+    if (page >= FETCH_ALL_MIGRATIONS_MAX_PAGES) {
+      truncated = true
+      break
+    }
+    page += 1
+  }
+  return { items, truncated }
 }
 
 /** `GET .../migrations/{version}` — detalle completo (§8). */

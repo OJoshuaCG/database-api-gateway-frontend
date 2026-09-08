@@ -52,6 +52,12 @@ export const queryKeys = {
     migrations: (modelId: number) => ['database-models', modelId, 'migrations'] as const,
     migrationList: (modelId: number, params: QueryParams) =>
       ['database-models', modelId, 'migrations', 'list', params] as const,
+    /**
+     * Catálogo COMPLETO (todas las páginas). Cuelga del mismo prefijo `migrations(modelId)`
+     * a propósito: las invalidaciones existentes lo usan como raíz, así que esta entrada se
+     * refresca con ellas sin tocar ni una.
+     */
+    migrationsAll: (modelId: number) => ['database-models', modelId, 'migrations', 'all'] as const,
     migrationDetail: (modelId: number, version: string) =>
       ['database-models', modelId, 'migrations', 'detail', version] as const,
   },

@@ -15,6 +15,7 @@ import {
   applyAllMigrations,
   createModelMigration,
   deleteModelMigration,
+  fetchAllModelMigrations,
   getModelMigration,
   getModelMigrationDeletePlan,
   listModelMigrations,
@@ -28,6 +29,25 @@ export function useModelMigrations(modelId: number, params: QueryParams, enabled
   return useQuery({
     queryKey: queryKeys.databaseModels.migrationList(modelId, params),
     queryFn: ({ signal }) => listModelMigrations(modelId, params, signal),
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Catálogo COMPLETO de versiones: pagina hasta agotarlo (`fetchAllModelMigrations`).
+ *
+ * Para quien necesita el conjunto entero porque **calcula** sobre él —qué versiones capturará un
+ * apply masivo— o porque tiene que poder ofrecer cualquier versión, incluida la punta, en un
+ * selector. Con una sola página esas superficies se equivocaban en silencio.
+ *
+ * El navegador de versiones usa `useModelMigrations` y pagina de verdad: ahí el catálogo se
+ * recorre, no se calcula, y traerlo entero no aportaría nada a cambio de N requests.
+ */
+export function useAllModelMigrations(modelId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.databaseModels.migrationsAll(modelId),
+    queryFn: ({ signal }) => fetchAllModelMigrations(modelId, signal),
     enabled,
     placeholderData: keepPreviousData,
   })
