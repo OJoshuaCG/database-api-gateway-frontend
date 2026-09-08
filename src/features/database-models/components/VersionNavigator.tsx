@@ -1,26 +1,41 @@
 import {
   Badge,
-  Callout,
   Card,
   CardContent,
   ChevronLeftIcon,
   ChevronRightIcon,
   Combobox,
   IconButton,
+  Pagination,
 } from '@/components/ui'
 import type { ModelMigrationSummary } from '@/lib/contracts'
 import { versionNeighbors } from '../version-nav'
 import { describeMigrationBadges } from '../migration-badges'
 import { MigrationBadges } from './MigrationBadges'
 
+/** Meta de paginación con la página ya en números de PANTALLA (ver `flipPage`). */
+export interface VersionPageMeta {
+  page: number
+  pages: number
+  total: number
+  size: number
+}
+
 interface VersionNavigatorProps {
-  /** Catálogo YA ordenado ascendente por versión. */
+  /** Catálogo de la PÁGINA actual, ya ordenado ascendente por versión. */
   sorted: ModelMigrationSummary[]
   /** Índice de la versión visible dentro de `sorted`. */
   index: number
   onSelect: (version: string) => void
-  /** Total según el backend; puede superar a `sorted.length` si la página se quedó corta. */
-  total: number
+  pagination: VersionPageMeta
+  onPageChange: (page: number) => void
+  onSizeChange: (size: number) => void
+  /**
+   * Salto a la página contigua desde una flecha, seleccionando su versión del extremo para que
+   * la secuencia siga sin huecos ni saltos.
+   */
+  onCrossPage: (direction: 'older' | 'newer') => void
+  isFetching?: boolean
 }
 
 /**
@@ -36,16 +51,41 @@ interface VersionNavigatorProps {
  * escrito a mano que omitía `no portable`, `SQL congelado`, `SQL editado tras aplicarse` y —el más
  * grave— `sin rollback`. Para ESCANEAR el catálogo está la `VersionAlertsBar`: las insignias de aquí
  * solo existen mientras el menú está abierto, y el menú se cierra al elegir.
+ *
+ * **El desplegable muestra una PÁGINA, no el catálogo entero.** Antes pedía una sola página del
+ * tamaño máximo y, si el blueprint tenía más versiones, avisaba del recorte y ya: no había forma
+ * de llegar a las que faltaban. Ahora hay paginador, y las flechas cruzan de página en el borde
+ * en vez de morir ahí, así que la secuencia se recorre entera sin abrir el menú.
  */
-export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavigatorProps) {
+export function VersionNavigator({
+  sorted,
+  index,
+  onSelect,
+  pagination,
+  onPageChange,
+  onSizeChange,
+  onCrossPage,
+  isFetching,
+}: VersionNavigatorProps) {
   const selected = sorted[index] ?? null
-  const { previous, next, position, isLatest } = versionNeighbors(sorted, index)
+  const { previous, next, position } = versionNeighbors(sorted, index)
 
-  // El backend no devuelve más de `PAGINATION.maxSize` versiones por página. Si el catálogo vino
-  // recortado, `sorted` son las primeras N en el orden que quiso el backend y la punta REAL puede
-  // no estar entre ellas: entonces «más reciente» sería una afirmación sin respaldo, justo al lado
-  // de la ficha que ofrece borrar. Se avisa y no se afirma.
-  const truncated = total > sorted.length
+  const { page, pages, total, size } = pagination
+  const multiPage = pages > 1
+  // Extremos REALES del catálogo, no de la página: en el borde interior hay página contigua a la
+  // que saltar. `page` ya viene en números de pantalla, donde 1 son las versiones más antiguas.
+  const hasOlderPage = page > 1
+  const hasNewerPage = page < pages
+  const canGoOlder = previous !== null || hasOlderPage
+  const canGoNewer = next !== null || hasNewerPage
+
+  const goOlder = () => (previous !== null ? onSelect(previous) : onCrossPage('older'))
+  const goNewer = () => (next !== null ? onSelect(next) : onCrossPage('newer'))
+
+  // Única fuente de la punta: el backend la resuelve sobre TODO el catálogo (api-reference-v22
+  // §3). Deducirla de la posición en la lista mentía en cuanto había más de una página, y lo
+  // hacía justo al lado de la ficha que ofrece borrar.
+  const isLatest = selected?.is_latest ?? false
 
   return (
     <Card className="sticky top-[var(--topbar-h)] z-30">
@@ -82,25 +122,30 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
                 `aria-disabled` y un handler que no hace nada, en vez de `disabled`: al llegar al
                 extremo, un botón enfocado que se deshabilita **pierde el foco** —cae a `<body>` y el
                 siguiente Tab reinicia el documento—. Con estas flechas como navegación principal,
-                eso se nota en cada recorrido. */}
+                eso se nota en cada recorrido.
+
+                Solo se apagan en los extremos REALES del catálogo. En el borde de la página saltan
+                a la contigua: si murieran ahí, con un blueprint de más de una página la secuencia
+                quedaría cortada en un punto arbitrario —el tope de página— sin nada que lo
+                explicara. */}
             <div className="flex shrink-0 gap-1">
               <IconButton
                 label="Versión anterior"
                 icon={<ChevronLeftIcon />}
                 variant="outline"
                 size="icon"
-                aria-disabled={previous === null}
-                className={previous === null ? 'opacity-50' : undefined}
-                onClick={() => previous && onSelect(previous)}
+                aria-disabled={!canGoOlder}
+                className={!canGoOlder ? 'opacity-50' : undefined}
+                onClick={() => canGoOlder && goOlder()}
               />
               <IconButton
                 label="Versión siguiente"
                 icon={<ChevronRightIcon />}
                 variant="outline"
                 size="icon"
-                aria-disabled={next === null}
-                className={next === null ? 'opacity-50' : undefined}
-                onClick={() => next && onSelect(next)}
+                aria-disabled={!canGoNewer}
+                className={!canGoNewer ? 'opacity-50' : undefined}
+                onClick={() => canGoNewer && goNewer()}
               />
             </div>
           </div>
@@ -118,24 +163,35 @@ export function VersionNavigator({ sorted, index, onSelect, total }: VersionNavi
                 anunciarse dos veces. */}
             <span aria-live="polite" className="sr-only">
               {selected
-                ? `Versión ${selected.version}, ${selected.name}. ${describeMigrationBadges(selected).join(', ')}. Posición ${position} de ${sorted.length}.`
+                ? `Versión ${selected.version}, ${selected.name}. ${describeMigrationBadges(selected).join(', ')}. Posición ${position} de ${sorted.length}${multiPage ? ` en esta página, página ${page} de ${pages}` : ''}.`
                 : 'Sin versión seleccionada.'}
             </span>
             <span aria-hidden="true">
               {position} de {sorted.length}
+              {multiPage && ' en esta página'}
             </span>
-            {isLatest && !truncated && <Badge tone="success">más reciente</Badge>}
+            {isLatest && <Badge tone="success">más reciente</Badge>}
           </div>
 
-          {truncated && (
-            <Callout tone="warning" title={`Se cargaron ${sorted.length} de ${total} versiones`}>
-              <p>
-                El catálogo vino recortado por el tope de página, así que no se puede afirmar cuál
-                es la última versión y la insignia «más reciente» no es fiable en esta vista. El
-                borrado sí lo es: ya no depende de cuál sea la punta, sino de la comprobación que se
-                hace en vivo contra cada base al pulsarlo.
-              </p>
-            </Callout>
+          {/* El paginador solo aparece cuando hay más de una página: con un blueprint corto —el
+              caso normal— sería un control permanente que nunca hace nada.
+
+              Sus flechas van en el MISMO sentido que las del navegador (◀ hacia versiones más
+              antiguas) porque `page` llega ya invertida respecto de la página de la API: ver
+              `flipPage`, que explica por qué el catálogo se pide descendente y se muestra
+              ascendente. */}
+          {multiPage && (
+            <Pagination
+              page={page}
+              pages={pages}
+              total={total}
+              size={size}
+              hasNext={hasNewerPage}
+              hasPrev={hasOlderPage}
+              onPageChange={onPageChange}
+              onSizeChange={onSizeChange}
+              isFetching={isFetching}
+            />
           )}
         </div>
       </CardContent>

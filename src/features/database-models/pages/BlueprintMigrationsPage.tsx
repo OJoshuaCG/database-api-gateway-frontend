@@ -22,7 +22,11 @@ import {
 } from '@/lib/contracts'
 import { toApiError, type ApiError } from '@/lib/api/errors'
 import { useDatabaseModel } from '../hooks/use-database-models'
-import { useModelMigrationDeletePlan, useModelMigrations } from '../hooks/use-model-migrations'
+import {
+  useAllModelMigrations,
+  useModelMigrationDeletePlan,
+  useModelMigrations,
+} from '../hooks/use-model-migrations'
 import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPanel'
 import { ApplyMigrationsDialog } from '../components/ApplyMigrationsDialog'
 import { MigrationDeletePlanDialog } from '../components/MigrationDeletePlanDialog'
@@ -30,7 +34,7 @@ import { ModelDatabasesStatusTable } from '../components/ModelDatabasesStatusTab
 import { VersionNavigator } from '../components/VersionNavigator'
 import { VersionAlertsBar } from '../components/VersionAlertsBar'
 import { VersionFactsCard } from '../components/VersionFactsCard'
-import { latestVersionOf, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
+import { flipPage, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
 import { versionAlerts } from '../version-alerts'
 
 /**
@@ -45,6 +49,13 @@ import { versionAlerts } from '../version-alerts'
  * `VersionAlertsBar` (qué versiones están sin revisar, sin rollback, con el SQL editado o
  * congelado, con su lista y su consecuencia) y el estado de UNA versión va a `VersionFactsCard`,
  * que además absorbió el antiguo «card delgado» del panel de detalle.
+ *
+ * **Dos lecturas del catálogo, y no es un descuido.** El navegador pide UNA página (`order=desc`,
+ * la punta primero) porque recorre; la barra de avisos pide el catálogo ENTERO porque escanea, y
+ * un «3 sin revisar» que en realidad son nueve es peor que no tenerlo. Van a endpoints de solo
+ * metadatos, sin conexión a ningún motor. Unificarlas en la lectura completa devolvería al
+ * desplegable el historial entero —que es lo que se acaba de quitar—; unificarlas en la página
+ * dejaría los avisos afirmando de más.
  */
 export function BlueprintMigrationsPage() {
   const params = useParams()
@@ -65,6 +76,22 @@ export function BlueprintMigrationsPage() {
     })
 
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
+  /**
+   * Página **de la API**, no la que se muestra. Se guarda esta y no la de pantalla justamente
+   * porque no depende de `pagination.pages`: la 1 es siempre la punta (el catálogo se pide
+   * descendente), así que la pantalla abre sobre lo reciente sin un viaje previo para averiguar
+   * cuántas páginas hay. La conversión a número de pantalla es `flipPage`, y solo hace falta al
+   * renderizar, cuando `pages` ya llegó.
+   */
+  const [apiPage, setApiPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGINATION.maxSize)
+  /**
+   * Extremo a seleccionar cuando termine de cargar la página a la que se acaba de saltar con una
+   * flecha. Sin esto, cruzar de página dejaría la selección en la versión más reciente de la
+   * página nueva —el default— en vez de en la contigua a la que se venía mirando, que es un salto
+   * de hasta 50 versiones en el gesto que sirve justamente para avanzar de a una.
+   */
+  const [pendingEdge, setPendingEdge] = useState<'oldest' | 'newest' | null>(null)
   const [applyAllOpen, setApplyAllOpen] = useState(false)
   const [applyTargets, setApplyTargets] = useState<ModelDatabaseStatus[]>([])
   /**
@@ -79,10 +106,18 @@ export function BlueprintMigrationsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const model = useDatabaseModel(modelId)
-  // El desplegable necesita el catálogo completo (ligero, sin SQL): pedimos el máximo por página.
+  /**
+   * El catálogo se pide **descendente** (api-reference-v22 §2): así la PUNTA viene en la página 1
+   * de la API y la pantalla abre sobre las versiones recientes, que es con las que se trabaja.
+   * Con el orden ascendente por default, un blueprint de 53 versiones abría en la 50 y las tres
+   * últimas quedaban fuera, sin ninguna forma de llegar a ellas.
+   *
+   * Los ítems se reordenan ascendente para mostrarlos y el número de página se invierte al
+   * pintarlo (`flipPage`), así que en pantalla nada delata que por debajo se pide al revés.
+   */
   const migrations = useModelMigrations(
     modelId,
-    { page: 1, size: PAGINATION.maxSize },
+    { page: apiPage, size: pageSize, order: 'desc' },
     Number.isFinite(modelId),
   )
 
@@ -123,12 +158,82 @@ export function BlueprintMigrationsPage() {
     () => sortVersionsAscending(migrations.data?.items ?? []),
     [migrations.data],
   )
-  const total = migrations.data?.pagination.total ?? sorted.length
+  /**
+   * Catálogo COMPLETO, aparte de la página que se navega.
+   *
+   * La barra de avisos existe para ESCANEAR («¿qué versiones no tienen rollback?»), y un escaneo
+   * que solo cubre la página visible no es un escaneo: diría «2 sin revisar» cuando hay nueve, sin
+   * nada que lo delate. Por lo mismo sale de acá la punta que redacta la pista `not_tip`.
+   *
+   * Es una petición más (dos, con un historial de más de una página) contra un endpoint de solo
+   * metadatos que no abre conexión a ningún motor. El navegador NO la usa: ese pagina, y traerse
+   * el historial entero para pintar un desplegable sería pagar N peticiones por nada.
+   */
+  const catalog = useAllModelMigrations(modelId, Number.isFinite(modelId))
+  const catalogSorted = useMemo(
+    () => sortVersionsAscending(catalog.data?.items ?? []),
+    [catalog.data],
+  )
+
+  const meta = migrations.data?.pagination
+  const total = meta?.total ?? sorted.length
+  const pages = meta?.pages ?? 1
+  // Número de página tal como se muestra: la 1 son las más antiguas. Ver `flipPage`.
+  const displayPage = flipPage(apiPage, pages)
+
+  /**
+   * Selecciona una versión, **saltando a su página si hace falta**.
+   *
+   * La barra de avisos lista versiones de todo el catálogo, así que puede señalar una que no está
+   * en la página cargada. Sin este salto, `resolveVersionIndex` no la encontraría y caería en la
+   * más reciente de la página: el clic mostraría OTRA versión sin decir nada, que es peor que no
+   * poder pulsarlo.
+   *
+   * La página se calcula sobre el catálogo completo que ya está en memoria: la posición en el
+   * orden DESCENDENTE (el que pide la API) dividida por el tamaño de página. Desde el navegador,
+   * la versión ya está en la página actual y esto no hace nada.
+   */
+  const selectVersion = (version: string) => {
+    setPendingEdge(null)
+    setSelectedVersion(version)
+    const ascIndex = catalogSorted.findIndex((m) => m.version === version)
+    if (ascIndex === -1) return
+    const descIndex = catalogSorted.length - 1 - ascIndex
+    setApiPage(Math.floor(descIndex / pageSize) + 1)
+  }
+
+  const goToPage = (nextDisplayPage: number) => {
+    setPendingEdge(null)
+    setSelectedVersion(null)
+    setApiPage(flipPage(nextDisplayPage, pages))
+  }
+
+  /**
+   * Salto de página desde una flecha del navegador. En la API el orden es descendente, así que
+   * ir hacia versiones más VIEJAS es avanzar de página y hacia las más nuevas es retroceder.
+   *
+   * El extremo que queda seleccionado es el contiguo al que se venía mirando —el más nuevo de la
+   * página vieja, el más viejo de la nueva—, para que el gesto siga avanzando de a una versión y
+   * no salte el ancho de una página entera.
+   */
+  const crossPage = (direction: 'older' | 'newer') => {
+    setSelectedVersion(null)
+    setPendingEdge(direction === 'older' ? 'newest' : 'oldest')
+    setApiPage((current) => (direction === 'older' ? current + 1 : current - 1))
+  }
 
   // Selección efectiva derivada (sin estado redundante, sin efecto de sincronización): la versión
   // elegida si sigue existiendo, o por defecto la MÁS RECIENTE — que es el estado actual del
   // blueprint y lo que el admin espera ver al entrar.
-  const index = resolveVersionIndex(sorted, selectedVersion)
+  //
+  // `isPlaceholderData` (el `keepPreviousData` del hook) hace que durante el salto de página se
+  // siga viendo la página anterior. Aplicar el extremo ahí seleccionaría el borde de la página
+  // VIEJA, o sea un salto visible a una versión que nadie pidió, y otro al llegar la nueva.
+  const edgeIndex = pendingEdge === 'oldest' ? 0 : sorted.length - 1
+  const index =
+    pendingEdge !== null && !migrations.isPlaceholderData && sorted.length > 0
+      ? edgeIndex
+      : resolveVersionIndex(sorted, selectedVersion)
   const selected = sorted[index] ?? null
 
   // Versión punta. **Ya no es «la única que se puede eliminar»**: desde api-reference-v18 el
@@ -138,14 +243,15 @@ export function BlueprintMigrationsPage() {
   // Sigue haciendo falta para UNA cosa: redactar la pista del `block_reason` legado `not_tip`,
   // que solo devuelve un gateway anterior a v18.
   //
-  // `null` si el catálogo vino RECORTADO por el tope de página: entonces la punta real puede no
-  // estar entre las cargadas, y una pista que nombre la versión equivocada al lado del botón de
-  // borrar es peor que no dar pista. El navegador avisa del recorte.
-  const latestVersion = total > sorted.length ? null : latestVersionOf(sorted)
+  // Sale del `is_latest` del backend, resuelto sobre TODO el catálogo (api-reference-v22 §3), y
+  // ya no de la posición en la lista: con el catálogo paginado, el último ítem de la página no
+  // es el último del blueprint, y nombrar la versión equivocada al lado del botón de borrar es
+  // peor que no dar pista.
+  const latestVersion = catalogSorted.find((m) => m.is_latest)?.version ?? null
 
-  // Avisos del catálogo: lógica pura sobre `sorted`, que ya está en memoria. Mismo criterio de
-  // dependencia que el memo de arriba — la dep es el array ordenado, no un `?? []` intermedio.
-  const alerts = useMemo(() => versionAlerts(sorted), [sorted])
+  // Avisos del catálogo: lógica pura sobre el array ordenado, no sobre un `?? []` intermedio, que
+  // crearía uno nuevo en cada render y dejaría el memo sin efecto.
+  const alerts = useMemo(() => versionAlerts(catalogSorted), [catalogSorted])
 
   if (Number.isNaN(modelId)) {
     return <ErrorState error={new Error('Identificador de blueprint inválido.')} />
@@ -219,11 +325,11 @@ export function BlueprintMigrationsPage() {
               blueprint —versiones sin revisar que el apply va a rechazar, versiones sin rollback que
               romperían una reversión— y eso se decide antes de elegir una versión concreta. Es lo
               que repone el escaneo que daba la tabla eliminada. Si no hay avisos, no se pinta. */}
-          {sorted.length > 0 && (
+          {catalogSorted.length > 0 && (
             <VersionAlertsBar
               alerts={alerts}
               selectedVersion={selected?.version ?? null}
-              onSelect={setSelectedVersion}
+              onSelect={selectVersion}
             />
           )}
 
@@ -235,8 +341,20 @@ export function BlueprintMigrationsPage() {
             <VersionNavigator
               sorted={sorted}
               index={index}
-              onSelect={setSelectedVersion}
-              total={total}
+              onSelect={selectVersion}
+              pagination={{ page: displayPage, pages, total, size: pageSize }}
+              onPageChange={goToPage}
+              onSizeChange={(next) => {
+                // Vuelve a la punta: con otro tamaño de página, el número anterior apunta a un
+                // tramo distinto del historial y conservarlo dejaría al admin en un sitio que no
+                // eligió. La punta es siempre la página 1 de la API.
+                setPendingEdge(null)
+                setSelectedVersion(null)
+                setPageSize(next)
+                setApiPage(1)
+              }}
+              onCrossPage={crossPage}
+              isFetching={migrations.isFetching}
             />
           ) : (
             <Card>
@@ -345,8 +463,11 @@ export function BlueprintMigrationsPage() {
             // La selección vuelve a la derivada por defecto (la más reciente). No se puede
             // conservar: tras un borrado con renumerado, el número que estaba elegido puede
             // designar ahora OTRA migración, y quedarse en él mostraría un delta distinto bajo el
-            // mismo rótulo.
+            // mismo rótulo. Por lo mismo se vuelve a la punta: el renumerado corre las versiones
+            // entre páginas, así que la página en la que se estaba tampoco designa ya lo mismo.
             setSelectedVersion(null)
+            setPendingEdge(null)
+            setApiPage(1)
           }}
         />
       )}
