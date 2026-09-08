@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Button, Combobox, Input, Modal, Textarea } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import { PAGINATION } from '@/lib/contracts'
 import type { DatabaseModelOut, ServerUserOut } from '@/lib/contracts'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
-import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
+import { useAllModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { useAdoptDatabase } from '../hooks/use-adopt-database'
 
 interface AdoptDatabaseModalProps {
@@ -59,11 +58,11 @@ export function AdoptDatabaseModal({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   // El selector de versión solo tiene sentido con un blueprint elegido; se puebla al vuelo.
-  const migrations = useModelMigrations(
-    model?.id ?? 0,
-    { page: 1, size: PAGINATION.maxSize },
-    open && model != null,
-  )
+  //
+  // Catálogo COMPLETO: adoptar una base es declarar en qué versión está, y con una sola página
+  // ordenada ascendente un blueprint largo no ofrecía las más recientes —que son en las que
+  // suele estar una base que ya existía—.
+  const migrations = useAllModelMigrations(model?.id ?? 0, open && model != null)
   const versionSummaries = migrations.data?.items ?? []
   const hasNoVersions = model != null && !migrations.isLoading && versionSummaries.length === 0
   const versionOptions: VersionOption[] = [

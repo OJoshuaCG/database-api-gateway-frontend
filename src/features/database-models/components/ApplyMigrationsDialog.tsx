@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Callout,
   Combobox,
   Input,
   Modal,
@@ -11,20 +12,15 @@ import {
   Switch,
 } from '@/components/ui'
 import {
-  PAGINATION,
   type ApplyAllResult,
   type ModelDatabaseStatus,
   type OnFailureMode,
   type EnvironmentOut,
 } from '@/lib/contracts'
 import { useModelDatabases } from '../hooks/use-database-models'
-import { useApplyAllMigrations, useModelMigrations } from '../hooks/use-model-migrations'
+import { useAllModelMigrations, useApplyAllMigrations } from '../hooks/use-model-migrations'
 import { OnFailureSelect } from './OnFailureSelect'
-import {
-  CAPTURE_UNREVIEWED_CODE,
-  describeCaptureRejection,
-  splitCaptureVersions,
-} from '../capture'
+import { CAPTURE_UNREVIEWED_CODE, describeCaptureRejection, splitCaptureVersions } from '../capture'
 import {
   blockingEnvironments,
   classifyItem,
@@ -87,7 +83,11 @@ export function ApplyMigrationsDialog({
   const [wasDryRun, setWasDryRun] = useState(false)
 
   const applyAll = useApplyAllMigrations(modelId)
-  const migrations = useModelMigrations(modelId, { page: 1, size: PAGINATION.maxSize }, open)
+  // Catálogo COMPLETO, no una página: este aviso no lista versiones, las CALCULA. Con una sola
+  // página, un blueprint con más versiones que el tope producía un «van a capturar estas» y un
+  // «estas están bloqueadas por review» incompletos, sin ninguna señal de que lo estaban —y el
+  // apply masivo sí las mira todas, así que el aviso contradecía lo que iba a pasar.
+  const migrations = useAllModelMigrations(modelId, open)
   // Misma respuesta que alimenta la pestaña de estado: no es una llamada extra.
   const databases = useModelDatabases(modelId, open)
   const environments = useSelectableEnvironments()
@@ -96,6 +96,9 @@ export function ApplyMigrationsDialog({
   // Predicado COMPARTIDO con la ficha de la BD (`features/database-models/capture`). Vivía
   // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`.
   const { willCapture, blockedByReview } = splitCaptureVersions(migrations.data?.items ?? [])
+  // El helper corta en su tope de páginas ante un historial anormalmente largo. Si eso pasa, se
+  // dice: el cálculo de arriba vuelve a ser parcial y callarlo sería repetir el fallo original.
+  const catalogTruncated = migrations.data?.truncated ?? false
 
   const handleClose = () => {
     setResult(null)
@@ -282,11 +285,23 @@ export function ApplyMigrationsDialog({
               <strong className="text-foreground">
                 Captura sin aprobar: {blockedByReview.join(', ')}
               </strong>{' '}
-              — el backend va a rechazar (409) cada BD que tenga esas versiones pendientes.
-              Revisá qué consultan y aprobalas antes de aplicar: el aviso «sin revisar» de la
-              pantalla del blueprint las lista y lleva a cada una.
+              — el backend va a rechazar (409) cada BD que tenga esas versiones pendientes. Revisá
+              qué consultan y aprobalas antes de aplicar: el aviso «sin revisar» de la pantalla del
+              blueprint las lista y lleva a cada una.
             </p>
           </div>
+        )}
+
+        {/* Los dos avisos de arriba se calculan sobre el catálogo. Si no se pudo cargar entero,
+            son parciales, y decirlo es el punto: un aviso incompleto que se presenta como
+            completo es peor que no tenerlo. */}
+        {catalogTruncated && (
+          <Callout tone="warning" title="Catálogo de versiones incompleto">
+            <p>
+              El blueprint tiene más versiones de las que se pudieron cargar, así que los avisos de
+              captura de arriba pueden estar dejando alguna fuera. El apply sí las considera todas.
+            </p>
+          </Callout>
         )}
 
         {/*

@@ -24,14 +24,13 @@ import { toApiError } from '@/lib/api/errors'
 import {
   isDryRunResult,
   MIGRATION_VERSION_PATTERN,
-  PAGINATION,
   type MigrationApplyResult,
   type MigrationRollbackResult,
   type ModelMigrationSummary,
   type OnFailureMode,
   type PartialApplicationEntry,
 } from '@/lib/contracts'
-import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
+import { useAllModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
 import { splitCaptureVersions } from '@/features/database-models/capture'
 import { hasResolvablePartial, isPartialResolvable } from '../partial-application'
@@ -140,7 +139,11 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const rollback = useRollbackMigration(databaseId)
   const stamp = useStampMigration(databaseId)
   // Catálogo de versiones del blueprint para poblar el selector del stamp (Cambio 4).
-  const versions = useModelMigrations(modelId, { page: 1, size: PAGINATION.maxSize }, hasModel)
+  //
+  // COMPLETO, no una página: el stamp tiene que poder apuntar a cualquier versión, y con una
+  // sola página ordenada ascendente un blueprint largo dejaba fuera justamente la punta —o sea
+  // que no se podía stampear a la versión actual, que es el caso más habitual—.
+  const versions = useAllModelMigrations(modelId, hasModel)
 
   if (db.isLoading) return <FullPageSpinner label="Cargando base de datos" />
   if (db.isError || !db.data) {
@@ -1097,6 +1100,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               label="Versión a marcar"
               placeholder="Selecciona una versión del blueprint…"
               isLoading={versions.isLoading}
+              // El catálogo se corta en el tope de páginas ante un historial desmedido. Se dice
+              // en el propio control: un desplegable al que le faltan opciones y no lo avisa
+              // hace pensar que la versión buscada no existe.
+              hint={
+                versions.data?.truncated
+                  ? 'El blueprint tiene más versiones de las que se pudieron listar; puede faltar alguna.'
+                  : undefined
+              }
             />
           ) : (
             <Input
