@@ -1,5 +1,6 @@
-import { Badge, Button, Checkbox, Spinner } from '@/components/ui'
-import { MAX_DATA_TABLES, type OnOversize } from '@/lib/contracts'
+import { Badge, Button, Callout, Checkbox, Spinner } from '@/components/ui'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, MAX_DATA_TABLES, type OnOversize } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { HIGH_ROW_ESTIMATE } from '../logic'
 import type { SnapshotWizard } from '../use-snapshot-wizard'
@@ -15,6 +16,17 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
   const loadingStats = wizard.includeDataStats && !statsLoaded && wizard.snapshot.isFetching
   const candidates = wizard.dataCandidateList
   const atLimit = wizard.dataCount >= MAX_DATA_TABLES
+  /*
+   * Mandar `data_tables` SUBE el requisito a `blueprints.captures` (v23 §4), que solo tiene
+   * `owner`: los datos-semilla son filas reales de la base del cliente guardadas en el
+   * gateway, o sea el mismo eje de divulgación que la captura de SELECT. Todo este paso es
+   * opcional, así que sin la capacidad se explica y se sigue de largo — no se bloquea el
+   * asistente, que funciona perfectamente sin datos-semilla.
+   */
+  const seedGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsCaptures,
+    'incluir datos-semilla en un snapshot',
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -26,10 +38,19 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
         </p>
       </div>
 
-      {!statsLoaded ? (
+      {!seedGuard.allowed ? (
+        <Callout tone="info" title="Tu rol no incluye datos-semilla">
+          <p>{seedGuard.hint}</p>
+          <p className="mt-1">
+            El snapshot se puede crear igual: los datos-semilla son opcionales y solo aportan
+            catálogos pequeños. Continuá al paso siguiente.
+          </p>
+        </Callout>
+      ) : !statsLoaded ? (
         <div className="flex flex-col items-start gap-3 rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">
-            Para elegir catálogos hay que leer estadísticas por tabla (una consulta extra por tabla).
+            Para elegir catálogos hay que leer estadísticas por tabla (una consulta extra por
+            tabla).
           </p>
           <Button
             variant="outline"
@@ -83,18 +104,27 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
                           disabled={disabled}
                           onChange={() => wizard.toggleDataTable(candidate.table)}
                           aria-label={`Seleccionar ${candidate.table}`}
-                          title={!candidate.hasPrimaryKey ? 'Sin PK: no puede sembrar datos' : undefined}
+                          title={
+                            !candidate.hasPrimaryKey ? 'Sin PK: no puede sembrar datos' : undefined
+                          }
                         />
                       </td>
                       <td className="p-2">
                         <code className="font-mono text-xs text-foreground">{candidate.table}</code>
                       </td>
                       <td className="p-2 text-right tabular-nums">
-                        <span className={cn(candidate.estimatedRows >= HIGH_ROW_ESTIMATE && 'text-warning')}>
+                        <span
+                          className={cn(
+                            candidate.estimatedRows >= HIGH_ROW_ESTIMATE && 'text-warning',
+                          )}
+                        >
                           {candidate.estimatedRows.toLocaleString('es')}
                         </span>
                         {candidate.estimatedRows >= HIGH_ROW_ESTIMATE && (
-                          <span className="ml-1 text-xs text-warning" title="Puede superar el guardrail y omitirse">
+                          <span
+                            className="ml-1 text-xs text-warning"
+                            title="Puede superar el guardrail y omitirse"
+                          >
                             ⚠
                           </span>
                         )}
@@ -131,7 +161,9 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
           </div>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm font-medium text-foreground">Si una tabla excede el guardrail</legend>
+            <legend className="text-sm font-medium text-foreground">
+              Si una tabla excede el guardrail
+            </legend>
             {OVERSIZE_OPTIONS.map((option) => (
               <label key={option.value} className="flex items-center gap-2 text-sm text-foreground">
                 <input

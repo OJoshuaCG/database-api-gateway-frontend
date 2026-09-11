@@ -2,9 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
+import { CAPABILITIES, MIGRATION_VERSION_PATTERN } from '@/lib/contracts'
 import type { ModelMigrationCreate, ModelMigrationPatch } from '@/lib/contracts'
 import { Badge, Button, Checkbox, Input } from '@/components/ui'
+import { useCapabilityGuard } from '@/features/auth'
 import { cn } from '@/lib/utils'
 import { MigrationValidationPanel } from './MigrationValidationPanel'
 import { SqlField } from './SqlField'
@@ -140,6 +141,18 @@ export function ModelMigrationForm({
   const currentMysqlOverride = watch('up_sql_mysql')
   const currentPostgresqlOverride = watch('up_sql_postgresql')
   const currentCaptureSelects = watch('capture_selects')
+  /*
+   * ENCENDER la captura sube el requisito a `blueprints.captures` (v23 §4), que solo tiene
+   * `owner`: guarda en el gateway filas de la base gestionada, la única excepción a no
+   * almacenar datos del cliente. APAGARLA no pide nada extra — por eso el control se
+   * deshabilita solo cuando está apagado: quien heredó una versión con la captura encendida
+   * tiene que poder apagarla aunque no pueda volver a encenderla.
+   */
+  const captureGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsCaptures,
+    'activar la captura de resultados',
+  )
+  const captureLocked = !captureGuard.allowed && !currentCaptureSelects
   const upSqlChanged = mode === 'edit' && currentUpSql !== originalUpSql
   const originalDownSql = defaultValues?.down_sql ?? ''
   const downSqlChanged = mode === 'edit' && currentDownSql !== originalDownSql
@@ -231,7 +244,11 @@ export function ModelMigrationForm({
         <div className="flex items-center gap-2">
           <Checkbox
             label="Capturar resultados de SELECT"
-            hint="Guarda cifradas en el gateway las filas de cada SELECT del up_sql/down_sql (§0). Opt-in por versión: el gateway normalmente NO guarda datos de la base gestionada."
+            disabled={captureLocked}
+            hint={
+              captureGuard.hint ??
+              'Guarda cifradas en el gateway las filas de cada SELECT del up_sql/down_sql (§0). Opt-in por versión: el gateway normalmente NO guarda datos de la base gestionada.'
+            }
             {...register('capture_selects')}
           />
           {mode === 'edit' && currentCaptureSelects && (

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useCapabilities } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
   Button,
@@ -352,6 +354,7 @@ export function ApplyMigrationsDialog({
 const OUTCOME_ORDER = { failed: 0, blocked: 1, ok: 2 } as const
 
 function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun: boolean }) {
+  const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
   const items = [...result.results].sort(
     (a, b) => OUTCOME_ORDER[classifyItem(a)] - OUTCOME_ORDER[classifyItem(b)],
   )
@@ -442,7 +445,13 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
               )}
               {/* Puente que faltaba: desde el blueprint no había forma de llegar a lo
                   capturado; solo se llegaba entrando a la ficha de cada BD. */}
-              {item.select_results_available && capturedAt && (
+              {/*
+                El ENLACE se condiciona a `blueprints.captures`: ver las filas es divulgación
+                (son datos reales de la base gestionada). El conteo de arriba se deja: ya viene
+                en el resumen de la corrida que el usuario tiene delante, así que ocultarlo no
+                protegería nada y solo confundiría.
+              */}
+              {item.select_results_available && capturedAt && canSeeCaptures && (
                 <Link
                   to={`/managed-databases/${item.managed_database_id}/migrations/${capturedAt}/select-results`}
                   className="text-xs text-primary hover:underline"
