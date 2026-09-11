@@ -11,10 +11,12 @@ import {
   executeDatabaseExport,
   getExportContent,
   previewDatabaseExport,
+  requestExportDownloadTicket,
   type ExportExecuteIn,
   type ExportPreviewIn,
   type ExportSpecPayload,
 } from '../api/database-exports.api'
+import { downloadErrorCopy } from '../messages'
 
 /**
  * Mutaciones "propiedad del asistente" (mismo patrón que `database-clones` y
@@ -88,6 +90,15 @@ export function useCancelDatabaseExport(jobId: number) {
  * descarga (y el manifiesto sigue respondiendo después, que es lo que permite saber qué se llevó
  * uno cuando el archivo ya no está).
  *
+ * **Desde v23 §7.2 la descarga son DOS pasos**, y los dos viven dentro de esta misma mutación a
+ * propósito: el ticket vence en 60 segundos, así que pedirlo en cualquier otro momento —al montar
+ * la vista, al terminar el job— garantiza que esté vencido cuando el operador finalmente haga
+ * click. Encadenarlos acá es lo que ata el ticket al gesto que lo consume.
+ *
+ * El `POST` del ticket corre los mismos guards que la descarga, así que un 403/409/410 de
+ * autorización o de estado del artefacto llega en ese paso, **antes** de consumir nada. Lo que
+ * puede fallar después es el ticket en sí, y esos errores no traen código: ver `downloadErrorCopy`.
+ *
  * Devuelve el `delivery` como `data` para que la pantalla pueda advertir de un artefacto PARCIAL
  * (`complete === false`) y mostrar el sha256 con el que verificar el archivo.
  */
@@ -96,8 +107,11 @@ export function useDownloadExportArtifact(jobId: number) {
   const toast = useToast()
   return useMutation<ExportArtifactDelivery, unknown, void>({
     mutationFn: async () => {
-      const { blob, filename, delivery } = await downloadExportArtifact(jobId)
-      downloadBlob(blob, filename)
+      const ticket = await requestExportDownloadTicket(jobId)
+      const { blob, filename, delivery } = await downloadExportArtifact(jobId, ticket.ticket)
+      // El nombre del blob gana sobre el del ticket: `Content-Disposition` es el que el backend
+      // calculó al servir el archivo, y el del ticket es una previsión de 60 segundos antes.
+      downloadBlob(blob, filename || ticket.filename)
       return delivery
     },
     onSuccess: () => {
@@ -108,7 +122,8 @@ export function useDownloadExportArtifact(jobId: number) {
         'El artefacto quedó consumido: no se puede volver a descargar.',
       )
     },
-    onError: (error) => toast.error('No se pudo descargar el artefacto', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo descargar el artefacto', downloadErrorCopy(toApiError(error))),
   })
 }
 
