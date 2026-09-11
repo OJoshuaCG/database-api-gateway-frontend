@@ -95,9 +95,19 @@ const PermissionProfilesPage = lazyPage(
   'PermissionProfilesPage',
 )
 const AdminPage = lazyPage(() => import('@/features/admin'), 'AdminPage')
+const GatewayUsersPage = lazyPage(() => import('@/features/gateway-users'), 'GatewayUsersPage')
+const ApiTokensPage = lazyPage(() => import('@/features/api-tokens'), 'ApiTokensPage')
+const AcceptInvitationPage = lazyPage(
+  () => import('@/features/gateway-users'),
+  'AcceptInvitationPage',
+)
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  // PÚBLICA, hermana de `/login` y fuera de `ProtectedRoute` a propósito: quien acepta una
+  // invitación todavía no puede iniciar sesión, así que detrás de la guarda no podría llegar
+  // nunca. El token viaja en `?token=` (el `user_id` va firmado dentro) o se pega a mano.
+  { path: '/invitacion', element: <AcceptInvitationPage /> },
   {
     element: <ProtectedRoute />,
     children: [
@@ -180,6 +190,9 @@ export const router = createBrowserRouter([
             path: 'charset-collation-options',
             element: <Navigate to="/admin?tab=charset-collation" replace />,
           },
+          // Identidades del GATEWAY, no del motor: `/server-users` es la otra población.
+          { path: 'gateway-users', element: <GatewayUsersPage /> },
+          { path: 'api-tokens', element: <ApiTokensPage /> },
           { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],

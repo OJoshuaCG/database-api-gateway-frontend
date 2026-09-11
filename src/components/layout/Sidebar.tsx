@@ -135,6 +135,34 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    // «del gateway» no es adorno: la entrada de arriba dice «Usuarios del motor» y son dos
+    // poblaciones distintas. Sin el sufijo, las dos se leen igual y se entra a la equivocada.
+    to: '/gateway-users',
+    label: 'Usuarios del gateway',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <circle cx="9" cy="8" r="3.2" strokeWidth="1.6" />
+        <path d="M3.5 19a5.5 5.5 0 0111 0" strokeWidth="1.6" strokeLinecap="round" />
+        <path
+          d="M16 11.5l1.8 1.8 3.2-3.4"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    to: '/api-tokens',
+    label: 'Tokens de agente',
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <circle cx="7.5" cy="12" r="3.5" strokeWidth="1.6" />
+        <path d="M11 12h9M17 12v3M20 12v2.5" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin',
     label: 'Administración',
     icon: (
