@@ -23,9 +23,58 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 3 | `POST /auth/login` | ✅ | `LoginPage` (`/login`) |
 | 4 | `POST /auth/logout` | ✅ | `Topbar` → "Cerrar sesión" |
-| 5 | `GET /auth/me` | ✅ | `ProtectedRoute` (guarda de sesión) + `Topbar` |
+| 5 | `GET /auth/me` | ✅ | `ProtectedRoute` (guarda de sesión) + `Topbar`. Desde v23 trae **diez** campos: rol efectivo, `capabilities`, `global_capabilities`, `scope_roles`, `step_up_capabilities`, `previous_login_at`, `last_failed_at` y `catalog_version`. Lo consumen `useCapabilities` (gating de UI) y `SessionsPanel` |
+| v23 §2 | `GET /authz/catalog` | 🧩 | `useCapabilityCatalog` existe y cachea contra `catalog_version` (`staleTime`/`gcTime` infinitos: son 29 filas que no se mueven), pero **ningún componente lo consume todavía**. Queda listo para la pantalla que muestre qué puede cada rol; el gating de hoy se resuelve con `capabilities` de `/auth/me`, que no necesita el catálogo |
+| v23 §8 | `GET /authz/scope-readiness` | ✅ | `GatewayUserAccessModal`, **antes** de otorgar un permiso por alcance: una base sin entorno resuelve al entorno MÁS protegido, no al default, así que acotar a alguien a un entorno también le acota esas bases |
+| v23 §7.4 | `GET /auth/sessions` | ✅ | `SessionsPanel` → Administración, pestaña «Mis sesiones» |
+| v23 §7.4 | `POST /auth/sessions/revoke-others` | ✅ | `SessionsPanel` → «Cerrar las otras N sesión(es)», con `ConfirmDialog` |
 | 2 | `GET /health/ready` | ✅ | `HealthBadge` en el `Topbar` (poll 30 s, `VITE_HEALTH_URL`) |
-| 1 | `GET /health` | ⛔ | Liveness pensado para *probes* de orquestador; la UI no aporta nada mostrándolo. El schema existe en `contracts/health.ts` por si se necesita. |
+| 1 | `GET /health` | ⛔ | Liveness pensado para *probes* de orquestador; la UI no aporta nada mostrándolo. El schema existe en `contracts/health.ts` por si se necesita. **Es el reemplazo de los `/api/v1/test/*`, que fueron desmontados y dan 404**: cualquier sonda de CI o de monitoreo que apuntara a `test/ping` debe mover acá. La SPA no los usaba. |
+
+⚠️ **Dos respuestas 401 que NO traen `public_context.code`** y hay que distinguir por el endpoint,
+no por el cuerpo: el login con credenciales inválidas (`Credenciales inválidas.`) y la sesión de un
+usuario **desactivado** (`Sesión inválida o usuario inactivo.`). El segundo no es ninguno de los
+`auth.session_*`: la cuenta fue desactivada, que no es lo mismo que «la sesión expiró». Las dos se
+muestran tal cual las manda el backend (`ApiError.message`), así que no hay copy hardcodeado que
+las contradiga.
+
+## Usuarios del gateway (`/gateway-users`)
+
+Las identidades que se autentican **contra el gateway**. ⚠️ No confundir con los **usuarios del
+motor** (`/server-users`, `/servers/{id}/users`): son dos poblaciones distintas y el gateway usa
+las mismas palabras para las dos. Por eso las entradas de menú se llaman «Usuarios del gateway» y
+«Usuarios del motor», nunca «Usuarios» a secas.
+
+**El alta no lleva contraseña, y no es un olvido**: si quien crea la cuenta conociera la credencial
+inicial, toda fila de auditoría atribuida a esa persona sería repudiable. La persona la elige con
+un token de invitación que **viaja una sola vez** y que el gateway **no envía por ningún canal**
+(no hay SMTP, ni webhook, ni cola).
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| v23.1 §2 | `GET /gateway-users` | ✅ | `GatewayUsersPage` (`/gateway-users`). Único del módulo **paginado**; los demás usan el `success()` plano |
+| v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el token en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño |
+| v23.1 §2.4 | `POST /gateway-users/invite/accept` | ✅ | `AcceptInvitationPage` (`/invitacion?token=…`) — **ruta pública**, fuera de `ProtectedRoute`: quien la usa todavía no puede iniciar sesión |
+| v23.1 §2 | `GET /gateway-users/{id}` | 🧩 | Existe en `api/`; el listado ya trae `GatewayUserOut` completo, así que ninguna pantalla necesita el detalle todavía |
+| v23.1 §2.5 | `PATCH /gateway-users/{id}` | ✅ | `GatewayUserFormModal` (edición). `username` va deshabilitado **con el motivo a la vista**: es la identidad que audita `audit_log`, guardada sin FK |
+| v23.1 §2.6 | `PUT /gateway-users/{id}/access` | ✅ | `GatewayUserAccessModal` → «Accesos». ⚠️ **Reemplazo TOTAL**: el contrato exige los dos campos justamente para que un formulario no pueda mandar un delta y revocar la otra mitad con un 200 |
+| v23.1 §2.7 | `POST /gateway-users/{id}/invite` | ✅ | Botón «Reinvitar» de la fila, que **desaparece** cuando `credential_set` es `true` (ahí responde 409) |
+
+**Defectos de contrato conocidos, tratados en la UI** (§2.8): `notes` se acepta y **nunca se
+devuelve**, así que el formulario lo trata como *solo escritura* —empieza vacío y solo se envía si
+se escribe algo, para no borrar en silencio lo que hubiera—; y `email` omitido lo rellena el
+servidor con `{username}@gateway.local`, que el listado marca como «Sin correo declarado» en vez de
+presentarlo como dato de contacto.
+
+## Tokens de agente (`/api-tokens`)
+
+Credenciales portadoras para procesos automáticos. Todo detrás de `gateway.admin`.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| v23.1 §3 | `GET /api-tokens` | ✅ | `ApiTokensPage` (`/api-tokens`), paginado |
+| v23.1 §3 | `POST /api-tokens` | ✅ | `ApiTokenFormModal` → entrega el bearer en `OneTimeSecretPanel`. Límite 10/min. La columna «Permisos» muestra los scopes **efectivos** que devolvió el servidor, nunca los pedidos: intersecta con el techo de agente |
+| v23.1 §3 | `DELETE /api-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer |
 
 ## Servidores
 
@@ -178,8 +227,15 @@ Relación **N:M** contra `database_models`. No tocan ningún motor: ninguna fila
 
 ## Entornos de despliegue
 
-Clasifican cada BD gestionada y llevan la política que el backend hace cumplir (hoy:
-`blocks_destructive_migrations`). Contrato del backend: `docs/features/environments.md`.
+Clasifican cada BD gestionada y llevan la política que el backend hace cumplir
+(`blocks_destructive_migrations` y `allows_agent_access`). Contrato del backend:
+`docs/features/environments.md`.
+
+`allows_agent_access` dice si un token de agente puede leer las bases de ese entorno. Se muestra
+en `EnvironmentsPanel` **siempre**, encendido o apagado: es una superficie de lectura sobre bases
+de terceros, y una fila que no dice nada se lee igual que una cerrada. Y se describe como
+condición **parcial**: es una de las cinco del gate de agentes, así que cada base necesita además
+su propio opt-in — que hoy **no es legible por ninguna vía** (ver «Pendiente…» al final).
 
 **Los entornos son un conjunto FIJO de cuatro** (`local`, `development`, `staging`, `production`)
 y la administración es **por API a propósito**: no hay pantalla de CRUD, y no es un olvido. La
@@ -194,7 +250,7 @@ del gateway, no la clasificación de una base de datos.
 | — | `GET /environments` | ✅ | `useEnvironmentOptions` / `useEnvironmentMap` (catálogo compartido por 5 consumidores, `staleTime` infinito): badge de entorno en `ManagedDatabasesPage`, selector en `ManagedDatabaseForm`, filtro «Entorno» del inventario y filtro del `ApplyMigrationsDialog`. Se pide **completo** (sin `only_active`): el selector filtra los activos en cliente, pero el badge tiene que poder resolver un entorno desactivado |
 | — | `POST /environments` | ⛔ | Los cuatro entornos son un conjunto fijo; crear uno nuevo es una decisión de política, no de operación diaria. Por API. |
 | — | `GET /environments/{id}` | ⛔ | El listado ya trae todos los campos (son 4 filas), así que un detalle no aportaría nada. |
-| — | `PATCH /environments/{id}` | ⛔ | Cambiar la política —y sobre todo **debilitarla**— exige repetir el slug (`confirm_slug`) y queda auditado con `record_intent`. Se hace por API a propósito: darlo por UI abarataría un gesto que el backend encareció deliberadamente. |
+| — | `PATCH /environments/{id}` | ⛔ | Cambiar la política —y sobre todo **debilitarla**— exige repetir el slug (`confirm_slug`) y queda auditado con `record_intent`. Se hace por API a propósito: darlo por UI abarataría un gesto que el backend encareció deliberadamente. **`allows_agent_access` es la segunda palanca que cuenta como debilitamiento** y también exige `?confirm_slug=`; su 422 trae `expected_slug` (para prellenar el diálogo) y `weakened[]` (qué debilita esta llamada, que puede ser más de una cosa). Cuando se construya la UI, el diálogo debe enumerarlas todas. |
 | — | `DELETE /environments/{id}` | ⛔ | Exige cero BDs asignadas (409 con el conteo) y no tiene `force`. Por API. |
 
 ## Catálogo de charset/collation
@@ -365,8 +421,9 @@ desde la pestaña "Resumen" de `ServerDatabaseDetailPage`. Contrato en
 | `GET /database-exports/{id}/items` | ✅ | `MonitorStep`, **solo cuando el job ya es terminal**: el backend escribe los ítems de una sola vez al terminar, así que pedirlos antes mostraría «0 incidencias» durante toda la corrida |
 | `POST /database-exports/{id}/cancel` | ✅ | `MonitorStep` — cooperativa; descarta el artefacto parcial. Sin rate limit para que un freno nunca quede bloqueado por una cuota |
 | `GET /database-exports/{id}/manifest` | ✅ | `MonitorStep` — checksum, tamaño, objetos y TTL del artefacto. **Sobrevive a `consumed` y a `purged`**: «¿qué me llevé?» se sigue pudiendo responder cuando el archivo ya no está |
-| `GET /database-exports/{id}/download` | ✅ | `MonitorStep` — `fetchBlob`; **NO pasa por el envelope `ApiResponse`** y los metadatos (`X-Export-Sha256`, `X-Export-Complete`) viajan en cabeceras. Un solo uso. **3/min** |
-| `GET /database-exports/{id}/content` | ✅ | `MonitorStep` — `fetchText` para el portapapeles; deshabilitado desde el preview cuando `inline_delivery_viable` es `false`. Un solo uso. **3/min** |
+| `POST /database-exports/{id}/download-ticket` | ✅ | Primer paso de la descarga (v23 §7.2). Lo encadena `useDownloadExportArtifact` **dentro de la misma mutación**: el ticket vive 60 s, así que pedirlo en cualquier otro momento garantiza que esté vencido al hacer click. Corre los mismos guards que la descarga, o sea que los 403/409/410 llegan acá, antes de consumir nada. **10/min** |
+| `GET /database-exports/{id}/download?ticket=` | ✅ | `MonitorStep` — `fetchBlob`; **NO pasa por el envelope `ApiResponse`** y los metadatos (`X-Export-Sha256`, `X-Export-Complete`) viajan en cabeceras. Un solo uso. **3/min**. ⚠️ Sus dos fallos propios NO traen código: `410` = ticket vencido (60 s, **no** el artefacto) y `422` = ticket malformado o de otra sesión (está atado a `(job_id, user_id)`). Los separa `downloadErrorCopy` |
+| `GET /database-exports/{id}/content` | ✅ | `MonitorStep` — `fetchText` para el portapapeles; deshabilitado desde el preview cuando `inline_delivery_viable` es `false`. Un solo uso. **3/min**. ⚠️ **Exige `X-CSRF-Token` aunque sea un GET** (`csrf: true`): consume el artefacto, y una navegación GET lleva la cookie sola — sin el header, un `<img>` ajeno lo destruía |
 
 Cinco cosas que no se leen en la tabla y condicionan el código:
 
@@ -431,3 +488,99 @@ documento y todavía no se han ejercitado contra una instancia real:
   acepta las dos formas a propósito.
 
 Ver el checklist de [`deployment.md`](deployment.md#checklist-de-endurecimiento-para-producción).
+
+### Bloqueado por backend: lo que se ve construible desde el contrato y NO lo es
+
+Estas dos cosas parecen implementables leyendo el addendum de identidades y no lo son. Conviene
+saberlo **antes** de planificar la pantalla, no a mitad de camino.
+
+- 🔴 **El estado de acceso de agentes por base no es legible por ninguna vía.**
+  `PUT /managed-databases/{id}/agent-access` **escribe** `agent_access_allowed` y
+  `agent_access_blocked` —el opt-in por base del que depende todo el gate— pero esas dos columnas
+  **no aparecen en ninguna respuesta**: ni en `ManagedDatabaseOut`, ni en el `GET` de listado o
+  detalle, **ni en la respuesta del propio `PUT`**. Se puede escribir el estado, no leerlo.
+  Por eso **no hay pantalla de administración de agentes**: un toggle que no puede leer su propio
+  valor es peor que no tener toggle, porque afirma algo que no verificó. Lo único observable hoy es
+  indirecto y desde el otro lado (`list_databases` del MCP, con un token del proyecto, muestra las
+  bases que pasaron las cinco condiciones — sin decir cuál falló para las demás). Se destraba
+  agregando los dos campos a `ManagedDatabaseOut` y a la serialización del controller.
+
+- 🔴 **Un snapshot o un export puede venir incompleto sin que la respuesta lo diga.** Cuando el
+  gateway no tiene privilegio sobre un catálogo del motor (`42501` de PostgreSQL, `1142`/`1227` de
+  MySQL) la consulta devuelve vacío, y **un vacío por falta de privilegio es indistinguible de «no
+  hay objetos»**: el blueprint o el export salen sin vistas, sin rutinas o sin triggers, con **200**
+  y sin ninguna marca. La señal existe del lado del servidor —cada consulta se clasifica `ok` /
+  `denied` / `unsupported`— pero **solo sale a `logger.warning` y no está en ningún schema**. Lo
+  mismo con `requires_manual_credentials`, que marca un DDL cuya credencial embebida el gateway
+  redactó a `***` y que por lo tanto **no es re-aplicable tal cual**.
+  Consecuencia para la UI, que ya está aplicada: **el copy es descriptivo y nunca afirmativo** («se
+  exportaron N objetos», no «export íntegro»), y ninguna pantalla promete integridad estructural.
+  El `X-Export-Complete` de la descarga cubre otra cosa: que el **job** no terminó bien, no un job
+  que terminó bien sobre un catálogo que el gateway no pudo leer.
+
+### Cambios de autorización ya aplicados en la UI
+
+- `GET /database-exports/{id}/manifest` pasó al mismo guard de **propiedad** que `/download` y
+  `/content`: expone checksum, lista de objetos y conteo de filas. Dos usuarios con `exports.read`
+  sobre el mismo servidor ya **no** comparten manifiestos. El `ArtifactPanel` pinta el 403
+  `export.not_owner` de forma explícita en vez de desaparecer en silencio, que era lo que hacía
+  antes al no tener datos.
+- `GET /managed-databases/{id}/migrations/{v}/select-results` subió a **`blueprints.captures`**
+  (solo `owner`): es un endpoint de lectura que un `operator` deja de poder llamar, y es deliberado
+  — devuelve datos de negocio de la base gestionada, así que pertenece al eje de **divulgación**.
+  `SelectResultsPage` explica el 403 en vez de mostrar un error genérico. **Y desde v23 el enlace
+  de origen SÍ se condiciona a la capacidad**: los cuatro sitios que enlazaban a los resultados
+  capturados (`VersionFactsCard`, `ApplyResult` y los dos de `ManagedDatabaseMigrationsContent`)
+  consultan `useCapabilities().can('blueprints.captures')`. Se oculta **solo el enlace**, no el
+  conteo de filas capturadas: ese dato ya viene en el resumen de la corrida que el usuario tiene
+  delante, así que taparlo no protegería nada. La rama del 403 queda como red de contención para un
+  enlace pegado a mano.
+
+### Fuera de la superficie de esta SPA
+
+- **`POST /mcp` y sus tools** (`list_databases`, los códigos `mcp.*`). La SPA **no implementa un
+  cliente MCP**: esos errores llegan como error de *tool* (`result` con `isError: true`) al agente
+  que habla con el gateway, no a esta interfaz. Lo que sí toca a la SPA es lo que administra ese
+  canal, y está integrado: emitir y revocar los tokens (`/api-tokens`) y ver el flag
+  `allows_agent_access` del entorno. Lo que falta para cerrar el círculo —ver el opt-in por base—
+  está bloqueado por backend (arriba).
+
+### v23 — el contrato de autorización, y lo que cambia en la superficie
+
+Cada endpoint declara una capacidad de un vocabulario cerrado de **29** y el servidor la exige.
+Antes solo hacía falta sesión válida: quien entraba podía todo. El detalle del modelo y la decisión
+de fallar **abierto** ante datos ausentes están en [ADR-0007](adr/0007-capacidades-como-pista-de-ui.md).
+
+**Los cinco controles donde un PARÁMETRO sube el requisito (§4)**, todos deshabilitados en la UI con
+`useCapabilityGuard` para que la restricción se vea antes de llenar el formulario y no después:
+
+| Control | Dónde | Pide además |
+|---|---|---|
+| `data_tables` (datos-semilla del snapshot) | `DataSeedStep` | `blueprints.captures` |
+| `capture_selects: true` al crear o editar una versión | `ModelMigrationForm` | `blueprints.captures` |
+| `drop_remote=true` al borrar una BD gestionada | `DeleteManagedDatabaseDialog` | `databases.drop` |
+| `drop_remote=true` al borrar un usuario del motor | `DeleteServerUserDialog` | `engine_users.drop` |
+
+⚠️ **Apagar la captura NO pide nada extra: solo encenderla.** Por eso el control de
+`ModelMigrationForm` se deshabilita únicamente cuando está apagado — quien heredó una versión con la
+captura encendida tiene que poder apagarla aunque no pueda volver a encenderla. Modelarlo al revés
+dejaría a un operador sin poder desactivar algo que sí puede desactivar.
+
+Y dos endpoints exigen **dos capacidades siempre**, porque crean una versión de blueprint desde otro
+módulo: `POST /schema-comparisons/{id}/adopt` y
+`POST /database-models/{id}/collation-conversions/{batch}/blueprint-version` piden
+`blueprints.write` además de la propia.
+
+**Tres asignaciones de rol que sorprenden y son deliberadas:** `servers.admin` **no** lo tiene
+`owner` —editar un servidor puede re-apuntar un `server_id` a otro host, o sea redirigir cada
+operación futura de todo operador—; `catalogs.write` y los mutantes de `/environments` tampoco,
+porque toda fila que un guard lee es una frontera de privilegio; y `clones.execute` está en `owner`
+y no en `operator` pese a su nombre, porque un clon **copia datos** y meter la base de producción de
+un cliente en un entorno de desarrollo es divulgación.
+
+### Fuera de alcance de v23, declarado por el propio documento
+
+- **Step-up (§1/§6).** `/auth/me` publica `step_up_capabilities` y el servidor **todavía no lo
+  exige**. Está tipado y expuesto en `useCapabilities().requiresStepUp()` para poder avisar antes de
+  mandar una operación, pero **no hay ningún flujo que dependa de que el servidor rechace por falta
+  de step-up**, porque hoy no lo hace. Construirlo ahora sería construir sobre algo que no existe.

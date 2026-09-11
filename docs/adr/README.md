@@ -15,3 +15,4 @@ Formato: **Contexto** (qué problema) · **Decisión** (qué se eligió) · **Co
 | [0004](0004-theming-tailwind-v4.md) | Theming con tokens CSS y Tailwind v4 `@theme inline` | Aceptada |
 | [0005](0005-sin-class-components.md) | Composición sin class components (boundaries con librería) | Aceptada |
 | [0006](0006-sin-streaming.md) | Operaciones 🔌 como request/response, no streaming | Aceptada |
+| [0007](0007-capacidades-como-pista-de-ui.md) | Las capacidades son pista de UI; la ausencia de datos falla **abierto** | Aceptada |

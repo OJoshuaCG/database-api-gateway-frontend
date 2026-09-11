@@ -33,6 +33,75 @@ elegir este esquema en lugar de guardar JWT en el cliente.
 - **Rutas protegidas:** todo lo que cuelga de `ProtectedRoute` exige sesión válida;
   sin ella, redirección a login preservando la ruta de retorno.
 
+### La sesión ahora vence de verdad (v23 §7.3)
+
+Antes la sesión no expiraba nunca mientras hubiera actividad. Ahora hay **dos relojes**, y el 401
+dice cuál se cumplió en `public_context.code`:
+
+| Código | Qué pasó |
+|---|---|
+| `auth.session_absolute` | **12 h desde el login, haya habido actividad o no** |
+| `auth.session_idle` | 60 min sin requests |
+| `auth.session_logout` | se cerró en otra pestaña |
+| `auth.session_password_change` · `auth.session_role_change` · `auth.session_admin_revoked` | revocada |
+| `auth.session_unknown` · `auth.session_missing` | no hay sesión: login normal |
+
+**El absoluto es el que sorprende**, porque echa al usuario *mientras está trabajando*. Sin
+explicación, eso se lee como un bug de la aplicación. Por eso el motivo **viaja hasta el login**:
+el handler global lo guarda en `queryKeys.auth.sessionEndReason()` y `LoginPage` lo pinta como
+`Callout`. El copy vive en `features/auth/messages.ts`; `unknown` y `missing` se mapean a `null` a
+propósito, para no mostrarle «tu sesión terminó» a alguien que nunca entró.
+
+`SessionsPanel` (pestaña «Mis sesiones» de Administración) lista las sesiones vivas y permite
+cerrar las demás. `sid_prefix` es un **prefijo** y nunca el identificador completo: ese
+identificador *es* la credencial de sesión.
+
+## 1.b CSRF: header obligatorio en todo método no seguro **con sesión** (v23 §7.1)
+
+El backend deja el token en una cookie **legible por JS a propósito** (`__Host-gw_csrf`, o
+`gw_csrf` sin TLS) y exige que vuelva en el header `X-CSRF-Token`. Punto único:
+`src/lib/api/csrf.ts` + `runRequest` en `client.ts`.
+
+**No es double-submit.** El servidor lo **recomputa** a partir del identificador de sesión, así que
+plantar la cookie desde JavaScript no sirve: ante `auth.csrf_invalid`, el arreglo **nunca** es
+escribir la cookie.
+
+Tres cosas que no son obvias y que la implementación respeta:
+
+- **El alcance es «con sesión», no «todo método no seguro».** El chequeo vive dentro del guard de
+  capacidades y solo corre para un actor de sesión, así que los dos `POST` públicos —`/auth/login`
+  y `/gateway-users/invite/accept`— **no lo llevan** (pasan `csrf: false`). Ahí no hay sesión de la
+  que derivar el token: no es que no haga falta, es que no puede existir.
+- **`GET /database-exports/{id}/content` SÍ lo lleva**, aunque sea un GET (pasa `csrf: true`). Ese
+  endpoint consume el artefacto y una navegación GET arrastra la cookie sola: sin el header,
+  bastaba un `<img src=…>` en cualquier página ajena para destruirle la exportación a quien la
+  abriera.
+- **El token rota con la sesión**, porque se deriva de su identificador. Por eso se lee de la
+  cookie en **cada** request y nunca se cachea en memoria: un token guardado al arrancar la app
+  daría `auth.csrf_invalid` después de cerrar y volver a iniciar sesión.
+
+**Si la cookie no está, el request se manda igual y decide el servidor.** Bloquearlo en el cliente
+sería peor que inútil: en la pantalla de login la cookie todavía no existe, así que un interceptor
+que exija el token antes de salir dejaría a nadie poder iniciar sesión.
+
+## 1.c Capacidades: son una PISTA de UI, no autorización
+
+Cada endpoint declara una capacidad de un vocabulario cerrado de 29 y **el servidor la exige**.
+`GET /auth/me` publica las efectivas del usuario para que la interfaz decida qué mostrar.
+
+**Ocultar un botón no es autorización.** Toda pantalla sigue manejando el 403 aunque el control
+esté deshabilitado. El detalle completo —incluida la decisión de que la ausencia de datos falle
+**abierto**, y por qué— está en [ADR-0007](adr/0007-capacidades-como-pista-de-ui.md).
+
+El 403 de autorización es **cerrado y no nombra la capacidad que falta** (`access.forbidden`), a
+propósito: un mensaje como «falta `servers.admin`» le daría a un atacante un mapa de la superficie
+por fuerza bruta de 403. **No intentes parsear qué faltó.**
+
+⚠️ **`mutates` y `discloses` son ejes independientes.** Agrupar capacidades por «peligrosidad»
+mirando solo `mutates` pinta como inofensivas a `exports.download`, `engine_users.secrets`,
+`blueprints.captures`, `clones.execute` y `sql_console.execute`: ninguna destruye nada y **todas
+divulgan**.
+
 ## 2. Almacenamiento en el cliente
 
 - **No se guardan credenciales ni tokens** en `localStorage` ni `sessionStorage` (serían
@@ -92,7 +161,38 @@ elegir este esquema en lugar de guardar JWT en el cliente.
   **HTTPS**. Idealmente frontend y backend bajo el mismo dominio (proxy inverso) para
   evitar problemas de cookies de terceros con `same_site=lax`.
 
-## 8. Responsabilidad de la capa de servido (pendiente)
+## 8. Límites de tasa: qué hay y por qué el frontend no puede reintentar
+
+Los límites son **por sesión**, salvo el login, que va por IP porque todavía no hay sesión.
+Estos son los que están en las rutas:
+
+| Endpoint | Límite |
+|---|---|
+| `POST /auth/login` | 5/min (por IP) |
+| `POST /gateway-users/invite/accept` | 10/min |
+| `POST /servers/{id}/users/reveal-password` | **3/min** |
+| `POST /database-exports/{id}/download-ticket` | 10/min |
+| `GET /database-exports/{id}/download` | **3/min** |
+| `POST /api-tokens` | 10/min |
+| `POST /schema-comparisons/{id}/adopt` | **3/min** |
+| `GET /managed-databases/{id}/migrations/{v}/select-results` | 20/min |
+| `POST /mcp` | 120/min **por token** |
+
+**El escalón de 3/min es el de DIVULGACIÓN**: cada llamada entrega una credencial en claro o un
+artefacto con datos del cliente. Bajó desde el default de 100/min, que alcanzaba para vaciar el
+llavero entero mientras la auditoría registraba el saqueo sin poder frenarlo.
+
+⚠️ **El 429 no trae código ni cabecera `Retry-After`.** No hay con qué calcular un backoff, así
+que el cliente solo puede aplicar una espera fija que conozca de antemano, y **nunca** reintentar
+solo. Vale para todos los endpoints con límite propio, no solo los sensibles.
+
+**Impacto de diseño, concreto: una pantalla que revele credenciales desde una lista muere al
+cuarto clic.** Si el flujo fuera «ver la contraseña de cada usuario del motor de este servidor»,
+los primeros tres funcionarían y el cuarto devolvería 429 sin `Retry-After`. Por eso revelar es
+una **acción deliberada por fila**, con confirmación, y **no existe ningún botón de «revelar
+todas»** — ni debe agregarse. El error se deja visible en vez de reintentar en silencio.
+
+## 9. Responsabilidad de la capa de servido (pendiente)
 
 Estas protecciones se configuran al **servir** el SPA, no en el código del frontend, y
 están en el checklist de [`deployment.md`](deployment.md):
