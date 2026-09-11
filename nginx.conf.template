@@ -58,9 +58,11 @@ server {
     include /etc/nginx/conf.d/upstream-headers.inc;
   }
 
-  # Health del backend, para `VITE_HEALTH_URL=/health`. No colisiona con el health check del
+  # Health del backend, para `VITE_HEALTH_URL=/health`. Prefijo y NO coincidencia exacta: el
+  # frontend pide `/health/ready`, que con `location = /health` caería en el fallback de la SPA y
+  # devolvería el index.html en vez del JSON de readiness. No colisiona con el health check del
   # propio contenedor, que usa `/` (ver docs/dokploy.md §5).
-  location = /health {
+  location /health {
     set $upstream ${API_UPSTREAM};
     proxy_pass $upstream$request_uri;
     include /etc/nginx/conf.d/upstream-headers.inc;

@@ -67,8 +67,29 @@ const UNSAFE_METHODS: ReadonlySet<HttpMethod> = new Set<HttpMethod>([
   'DELETE',
 ])
 
+/**
+ * Base con la que se resuelve `BASE_URL` cuando es una ruta relativa.
+ *
+ * `VITE_API_BASE_URL` tiene que poder ser relativa (`/api/v1`): es lo que exige el despliegue de
+ * mismo origen, donde la API se sirve bajo el dominio del frontend (ver `docs/dokploy.md` §3). Y
+ * `new URL('/api/v1/…')` sin segundo argumento lanza `TypeError`, porque `URL` no resuelve rutas
+ * relativas por su cuenta.
+ *
+ * Ese throw era especialmente difícil de diagnosticar: `buildUrl` se invoca DENTRO del `try` que
+ * envuelve al `fetch`, así que lo capturaba el `catch` que produce `networkError()` y el usuario
+ * veía «No se pudo conectar con la API. Revisa tu conexión o la configuración de CORS» — un
+ * mensaje que apunta a la red y al backend cuando el fallo era local y síncrono. En las DevTools
+ * no aparecía NINGUNA petición, porque el `fetch` nunca llegaba a ejecutarse.
+ *
+ * Con una `BASE_URL` absoluta el segundo argumento se ignora, así que esto sirve para los dos
+ * casos sin ramificar.
+ */
+function currentOrigin(): string | undefined {
+  return typeof location === 'undefined' ? undefined : location.origin
+}
+
 function buildUrl(path: string, query?: QueryParams): string {
-  const url = new URL(`${BASE_URL}${path}`)
+  const url = new URL(`${BASE_URL}${path}`, currentOrigin())
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (Array.isArray(value)) {
