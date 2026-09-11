@@ -1,0 +1,85 @@
+# Plantilla procesada por el entrypoint de `nginx:alpine` con `envsubst` al arrancar el
+# contenedor (ver Dockerfile). `NGINX_ENVSUBST_FILTER` la acota a las variables `API_*`, así que
+# las variables propias de nginx (`$uri`, `$host`, `$remote_addr`…) sobreviven intactas.
+#
+# `API_UPSTREAM` es el backend tal como se lo alcanza desde ESTE contenedor por la red interna
+# de Dokploy: esquema + host + puerto, sin barra final ni path (p. ej. `http://gateway-api:8000`).
+# Es variable de RUNTIME, no build arg: mover el backend no obliga a reconstruir la imagen.
+#
+# `API_RESOLVER` es el DNS con el que se resuelve ese host. Por defecto `127.0.0.11`, el DNS
+# embebido de Docker en redes definidas por el usuario, que es lo que arma Dokploy.
+
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Cabeceras de seguridad de la capa de servido (ver docs/security.md §8).
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header X-Frame-Options "DENY" always;
+  # `connect-src 'self'` es correcto porque la API se sirve bajo este mismo origen vía el proxy
+  # de abajo. Si algún día se vuelve a un backend en otro dominio, hay que añadir su origen acá
+  # — y además dejaría de funcionar el CSRF, ver docs/dokploy.md §3.
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'" always;
+
+  # === API, MCP y health: mismo origen que la SPA
+  #
+  # ESTO NO ES UNA COMODIDAD, ES UN REQUISITO FUNCIONAL. El backend emite la cookie de CSRF
+  # SIN atributo `Domain` (host-only, a propósito: el prefijo `__Host-` lo exige y es la mitad
+  # de la defensa contra cookie tossing). Una SPA servida en otro host no puede leerla con
+  # `document.cookie`, se queda sin el header `X-CSRF-Token` y TODA escritura muere con 403
+  # `auth.csrf_missing`. Sirviendo API y SPA bajo el mismo origen, la cookie queda a la vista.
+  #
+  # EL UPSTREAM VA EN UNA VARIABLE, Y NO ES ESTILO. Con un `proxy_pass` literal, nginx resuelve
+  # el host UNA VEZ AL ARRANCAR y aborta con `host not found in upstream` si todavía no resuelve
+  # — comprobado. En Dokploy el orden de arranque entre apps no está garantizado, así que un
+  # backend que tarda un segundo de más dejaría la SPA entera sin levantar. Con la variable, la
+  # resolución pasa a ser por request contra el `resolver`: nginx arranca igual y, si el backend
+  # no está, lo que falla son las llamadas a la API y no el sitio.
+  #
+  # `$request_uri` (el URI original, con query string) se concatena explícito: usando variables,
+  # nginx no reescribe el path por su cuenta. El backend ya monta la API en `/api/v1`, así que
+  # acá no se recorta ningún prefijo.
+  resolver ${API_RESOLVER} valid=10s ipv6=off;
+
+  location /api/ {
+    set $upstream ${API_UPSTREAM};
+    proxy_pass $upstream$request_uri;
+    include /etc/nginx/conf.d/upstream-headers.inc;
+  }
+
+  # Servidor MCP. Va sin barra final a propósito: `POST /mcp` (sin barra) es la URL natural de un
+  # `.mcp.json` y tiene que matchear igual que `/mcp/`.
+  location /mcp {
+    set $upstream ${API_UPSTREAM};
+    proxy_pass $upstream$request_uri;
+    include /etc/nginx/conf.d/upstream-headers.inc;
+  }
+
+  # Health del backend, para `VITE_HEALTH_URL=/health`. No colisiona con el health check del
+  # propio contenedor, que usa `/` (ver docs/dokploy.md §5).
+  location = /health {
+    set $upstream ${API_UPSTREAM};
+    proxy_pass $upstream$request_uri;
+    include /etc/nginx/conf.d/upstream-headers.inc;
+  }
+
+  # index.html nunca se cachea: sirve como entrypoint de cada deploy.
+  location = /index.html {
+    add_header Cache-Control "no-cache";
+  }
+
+  # Activos con hash en el nombre de archivo (generados por Vite) → caché larga.
+  location /assets/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+  }
+
+  # Fallback SPA: cualquier ruta desconocida (p. ej. /servers/42) sirve index.html
+  # para que BrowserRouter la resuelva en el cliente. Imprescindible: sin esto,
+  # recargar una ruta profunda da 404.
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
