@@ -101,6 +101,34 @@ dos contenedores se ven o no por la red interna.
 | **Red interna** | `http://<servicio-backend>:8000` | `$host` (el default) | Los dos contenedores comparten red de Docker. Es lo preferible: un salto menos y no sale a la red pública. |
 | **URL pública** | `http://api.midominio.com` | `api.midominio.com` | No comparten red. Funciona igual: el navegador sigue viendo un solo origen, y el salto va por el proxy de Dokploy. |
 
+| **Ruteo en Traefik** | *(no se usa)* | *(no se usa)* | Dokploy enruta `midominio.com/api` al backend antes de que el request llegue a este contenedor. La más robusta cuando el dominio resuelve a una IP que el contenedor no puede alcanzar. |
+
+#### Cuándo la URL pública NO sirve, aunque parezca la más simple
+
+Si el dominio del backend resuelve a una IP que el **host** alcanza pero los **contenedores** no
+—una IP de Tailscale/WireGuard, una IP de la LAN detrás de NAT, un `127.0.0.1`— el proxy da `502`
+y el mensaje no dice por qué. nginx tendría que salir del namespace de red de Docker, llegar a esa
+IP y volver a entrar por Traefik; ese rebote normalmente no se puede.
+
+Se reconoce así: `curl` desde tu máquina al backend funciona, pero la SPA da `502` en todas las
+rutas de API. **La causa no es el backend, que está perfecto: es que el contenedor del frontend no
+tiene ruta hasta él.**
+
+En ese caso, la salida es el **ruteo en Traefik**, que elimina el salto: en Dokploy se le agrega al
+proyecto del **BACKEND** un dominio más, con el host del frontend y path `/api`. Traefik resuelve
+el ruteo en el borde y el request nunca entra a este contenedor.
+
+- Backend, dominio adicional: host `midominio.com`, path `/api`, **sin strip prefix** — el backend
+  ya monta la API en `/api/v1`.
+- Frontend: sigue igual, con `VITE_API_BASE_URL=/api/v1`. El navegador ve un solo origen, que es
+  lo único que la cookie de CSRF necesita.
+- `API_UPSTREAM` deja de usarse para `/api`. El `location /api/` de este nginx queda como
+  respaldo: nunca lo alcanza un request que Traefik ya enrutó.
+- `/mcp` y `/health` **no** quedan cubiertos por esa regla. Para el health, o se le agrega su
+  propia regla de path, o se deja `VITE_HEALTH_URL` vacía: el badge de salud se oculta solo
+  (`isHealthConfigured()`), que es una degradación aceptable. Para el MCP, los clientes siguen
+  usando el subdominio del backend, que no se toca.
+
 Para saber cuál te toca, probá la resolución desde el contenedor del frontend:
 
 ```bash
