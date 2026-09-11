@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react'
-import Prism from 'prismjs'
+// Publica el core de Prism en el global. TIENE que ir antes del import de la gramática: el
+// archivo del componente resuelve `Prism` por el global, no por un import. Ver `prism-core.ts`.
+import Prism from './prism-core'
 // Registra `Prism.languages.sql` por efecto secundario sobre el Prism global. El componente de
 // SQL no depende de ningún otro lenguaje, así que esto es lo único que hace falta importar.
 import 'prismjs/components/prism-sql'
