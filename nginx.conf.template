@@ -1,6 +1,7 @@
 # Plantilla procesada por el entrypoint de `nginx:alpine` con `envsubst` al arrancar el
-# contenedor (ver Dockerfile). `NGINX_ENVSUBST_FILTER` la acota a las variables `API_*`, así que
-# las variables propias de nginx (`$uri`, `$host`, `$remote_addr`…) sobreviven intactas.
+# contenedor, junto con `upstream-headers.inc.template` (ver Dockerfile).
+# `NGINX_ENVSUBST_FILTER` la acota a las variables `API_*`, así que las variables propias de
+# nginx (`$uri`, `$host`, `$remote_addr`…) sobreviven intactas.
 #
 # `API_UPSTREAM` es el backend tal como se lo alcanza desde ESTE contenedor por la red interna
 # de Dokploy: esquema + host + puerto, sin barra final ni path (p. ej. `http://gateway-api:8000`).

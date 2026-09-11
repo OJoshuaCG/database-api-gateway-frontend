@@ -1,13 +1,22 @@
 # Cabeceras comunes a todo lo que se proxea al backend. Vive en un archivo aparte porque
 # repetirlas en cada `location` es exactamente como se desincronizan.
 
-# El backend ve el host y el esquema que usó el NAVEGADOR, no los del contenedor. Importa por
-# dos motivos concretos:
+# `X-Forwarded-*` lleva el host y el esquema que usó el NAVEGADOR, no los del contenedor.
+# Importa por dos motivos concretos:
 #  - La cookie de sesión es `Secure` en producción: sin `X-Forwarded-Proto` correcto, el backend
 #    puede decidir mal si la emite.
 #  - El guard de CSRF valida el header `Origin` contra `CORS_ORIGINS`. Ese origen es el del
 #    navegador, así que `CORS_ORIGINS` tiene que listar el origen público de la SPA.
-proxy_set_header Host $host;
+#
+# `Host` es aparte, y es la línea con más filo de todo esto. Por defecto `API_HOST_HEADER` vale
+# `$host`, o sea el dominio del frontend: correcto cuando `API_UPSTREAM` es un nombre de servicio
+# de la red interna, porque ahí nadie enruta por Host.
+#
+# ⚠️ Si `API_UPSTREAM` apunta a la URL PÚBLICA del backend (el caso de dos proyectos de Dokploy
+# que no comparten red), hay que ponerle el host del backend: `api.midominio.com`. Dejarlo en
+# `$host` mandaría `Host: <dominio del frontend>` al proxy de Dokploy, que lo enrutaría DE VUELTA
+# al frontend — un bucle que se manifiesta como el index.html devuelto ante cada llamada a la API.
+proxy_set_header Host ${API_HOST_HEADER};
 proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;

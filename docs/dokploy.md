@@ -74,8 +74,45 @@ no obliga a reconstruir la imagen.
 
 | Variable | Default | Notas |
 |---|---|---|
-| `API_UPSTREAM` | `http://gateway-api:8000` | Esquema + host + puerto del backend en la red interna, **sin barra final ni path**. El host es el nombre del servicio del backend en Dokploy. |
-| `API_RESOLVER` | `127.0.0.11` | DNS embebido de Docker en redes definidas por el usuario. |
+| `API_UPSTREAM` | `http://gateway-api:8000` | Dónde alcanzar el backend **desde este contenedor**: esquema + host + puerto, **sin barra final ni path**. El default es un placeholder: hay que definirla. |
+| `API_RESOLVER` | `127.0.0.11` | DNS con el que se resuelve ese host. `127.0.0.11` es el resolver embebido de Docker. |
+| `API_HOST_HEADER` | `$host` | Valor del header `Host` hacia el backend. Ver la tabla de abajo: depende de qué sea `API_UPSTREAM`. |
+
+**Van en «Environment Settings» (runtime), NO en «Build Args».** Es la distinción que más se
+confunde acá, y falla en silencio en las dos direcciones:
+
+| | Dónde | Cuándo se lee | Para cambiarla |
+|---|---|---|---|
+| `VITE_*` | **Build Args** | Al compilar: Vite las incrusta en el bundle | Hace falta **rebuild** |
+| `API_*` | **Environment Settings** | Al arrancar el contenedor, por nginx | Basta **reiniciar** |
+
+Poner una `VITE_*` como env var de runtime no hace nada: el bundle ya se compiló con el valor
+viejo. Y poner `API_UPSTREAM` como build arg tampoco: nginx la busca en el entorno del proceso.
+
+### Frontend y backend en proyectos distintos de Dokploy
+
+Este es el caso normal, y **no hace falta eliminar el subdominio del backend**: sigue existiendo
+y sirviendo. Lo único que cambia es que el NAVEGADOR deja de usarlo — pasa a pedirle todo al
+dominio del frontend, y el salto al backend lo da nginx por dentro. Hay dos formas, según si los
+dos contenedores se ven o no por la red interna.
+
+| | `API_UPSTREAM` | `API_HOST_HEADER` | Cuándo |
+|---|---|---|---|
+| **Red interna** | `http://<servicio-backend>:8000` | `$host` (el default) | Los dos contenedores comparten red de Docker. Es lo preferible: un salto menos y no sale a la red pública. |
+| **URL pública** | `http://api.midominio.com` | `api.midominio.com` | No comparten red. Funciona igual: el navegador sigue viendo un solo origen, y el salto va por el proxy de Dokploy. |
+
+Para saber cuál te toca, probá la resolución desde el contenedor del frontend:
+
+```bash
+docker exec <contenedor-frontend> sh -c 'wget -qO- http://<servicio-backend>:8000/health'
+```
+
+Si responde, usá la fila **Red interna**. Si no resuelve, usá la fila **URL pública**.
+
+⚠️ **Con la URL pública, `API_HOST_HEADER` NO es opcional.** Dejarlo en `$host` mandaría
+`Host: <dominio del frontend>` al proxy de Dokploy, que lo enrutaría **de vuelta al frontend**.
+El síntoma es desconcertante: cada llamada a la API devuelve el `index.html` de la SPA y el
+cliente falla al validar el contrato con Zod, en vez de dar un error de red.
 
 ⚠️ **El upstream se resuelve por request, no al arrancar.** `nginx.conf.template` lo mete
 en una variable (`set $upstream …; proxy_pass $upstream$request_uri;`) a propósito: con un
@@ -120,8 +157,8 @@ adicional.
 1. Crear la app en Dokploy, build type `Dockerfile`, conectar el repo.
 2. Definir `VITE_API_BASE_URL=/api/v1` (y opcionalmente `VITE_HEALTH_URL=/health`,
    `VITE_MAX_PAGE_SIZE`) como **Build Args** — relativos, ver §3.
-3. Definir `API_UPSTREAM` como **variable de entorno de runtime**, apuntando al servicio
-   del backend en la red interna (p. ej. `http://gateway-api:8000`).
+3. Definir `API_UPSTREAM` (y `API_HOST_HEADER` si hace falta) en **Environment Settings**,
+   no en Build Args. Ver la tabla de §3 para elegir entre red interna y URL pública.
 4. Configurar el dominio de la app y activar HTTPS gestionado. El backend no necesita
    dominio público propio.
 5. Confirmar en el backend que `CORS_ORIGINS` lista el origen **exacto** del frontend
