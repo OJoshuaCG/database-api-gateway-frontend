@@ -211,15 +211,37 @@ export type ResolveComparisonSelectionOut = z.infer<typeof resolveComparisonSele
  * `auto_resolve_dependencies` (default `false`, fail-closed): si la selección no cierra sus
  * dependencias, el backend responde 422 en vez de completarla solo. Este asistente NUNCA lo
  * activa: el cierre se hace explícito y visible vía `resolve-selection` antes de confirmar.
+ *
+ * `confirm_target_name` es OBLIGATORIO cuando `execute_immediately` es `true`, y tiene que
+ * coincidir carácter por carácter con el `target_database_name` de la comparación. Si falta o no
+ * coincide, el backend responde 422 `schema_comparison.adopt_confirmation_required`.
+ *
+ * Va **opcional en el schema** —y no condicionado con un `refine`— a propósito: el backend lo
+ * IGNORA cuando `execute_immediately` es `false`, porque crear la versión sin aplicarla es
+ * escritura de metadatos del gateway, reversible y sin tocar ningún motor. Pedir confirmación en
+ * el caso inofensivo es exactamente cómo se entrena el reflejo de confirmar sin leer. Quien exige
+ * el campo es el paso de confirmación de la UI (`AdoptConfirmStep` + `WizardNav`), que es donde el
+ * usuario tiene el nombre del target delante.
  */
 export const adoptComparisonInSchema = z.object({
   selected_item_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un ítem'),
   name: z.string().min(1, 'Requerido').max(200, 'Máximo 200 caracteres'),
   description: z.string().max(1000, 'Máximo 1000 caracteres').optional(),
   execute_immediately: z.boolean().optional().default(false),
+  confirm_target_name: z.string().nullable().optional(),
   auto_resolve_dependencies: z.boolean().optional(),
 })
 export type AdoptComparisonIn = z.infer<typeof adoptComparisonInSchema>
+
+/**
+ * Códigos estables de `detail.public_context.code` del módulo. Hasta el addendum de identidades
+ * este módulo NO exponía ninguno, y por eso `wizard/messages.ts` clasifica sus 409/422 por
+ * fragmentos del `detail.msg`. `adoptConfirmationRequired` es el primero que llega con código, así
+ * que se reconoce por dato —estable, presente en producción— y no por prosa.
+ */
+export const SCHEMA_COMPARISON_ERROR_CODES = {
+  adoptConfirmationRequired: 'schema_comparison.adopt_confirmation_required',
+} as const
 
 /** `added_item_ids`: ítems que el backend sumó a la versión por cierre de dependencias. */
 export const adoptComparisonOutSchema = z.object({

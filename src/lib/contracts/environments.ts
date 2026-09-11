@@ -55,6 +55,21 @@ export const environmentOutSchema = z.object({
   is_default: z.boolean().optional().default(false),
   is_active: z.boolean().optional().default(true),
   blocks_destructive_migrations: z.boolean().optional().default(false),
+  /**
+   * ¿Este entorno deja que un agente (token de `/api-tokens`) lea sus bases? Es la PRIMERA de las
+   * cinco condiciones del gate de agentes; **no alcanza sola**, cada base necesita además su
+   * propio opt-in.
+   *
+   * Va `.optional().default(false)` —fail-closed— por dos motivos: un backend sin el campo todavía
+   * no debe leerse como «abierto a agentes», y el default del propio entorno es cerrado.
+   *
+   * NOTA sobre la advertencia del addendum: dice que la SPA descarta todo `EnvironmentOut` hasta
+   * declarar este campo. No es así en este repo — verificado contra zod 4.4.3, sin `.strict()` en
+   * ningún contrato: `z.object` hace *strip*, así que un campo NUEVO se descarta en silencio y el
+   * envelope sigue validando. Lo que sí rompería es un campo DIVERGENTE. Declararlo hace falta
+   * para poder USARLO, no para no romperse.
+   */
+  allows_agent_access: z.boolean().optional().default(false),
   /** BDs asignadas. El borrado por API lo exige en cero, y alimenta el aviso de la UI. */
   database_count: z.number().int().optional().default(0),
   created_at: z.string(),

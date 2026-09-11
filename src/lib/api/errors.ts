@@ -404,6 +404,10 @@ export class ApiError extends Error {
    */
   readonly grantContext?: GrantErrorContext
   /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
+  /** Contexto del módulo de tokens de agente; ver `extractApiTokenContext`. */
+  readonly apiTokenContext?: ApiTokenErrorContext
+  /** Contexto del módulo de usuarios del gateway; ver `extractGatewayUserContext`. */
+  readonly gatewayUserContext?: GatewayUserErrorContext
   readonly environmentContext?: EnvironmentErrorContext
   /**
    * Contexto del módulo de conversión de collation (v17 §5). Los códigos `collation.*` traen
@@ -444,6 +448,8 @@ export class ApiError extends Error {
     code?: string
     exportContext?: DatabaseExportErrorContext
     grantContext?: GrantErrorContext
+    apiTokenContext?: ApiTokenErrorContext
+    gatewayUserContext?: GatewayUserErrorContext
     environmentContext?: EnvironmentErrorContext
     collationContext?: CollationErrorContext
     requestId?: string
@@ -477,6 +483,8 @@ export class ApiError extends Error {
     this.code = args.code
     this.exportContext = args.exportContext
     this.grantContext = args.grantContext
+    this.apiTokenContext = args.apiTokenContext
+    this.gatewayUserContext = args.gatewayUserContext
     this.environmentContext = args.environmentContext
     this.collationContext = args.collationContext
     this.requestId = args.requestId
@@ -997,6 +1005,37 @@ function extractExportObjects(value: unknown): ExportErrorObject[] | undefined {
  * en el cuerpo de éxito — este extractor NUNCA lo ve. Esa clasificación se hace con el mapa de
  * `features/environments/messages.ts`. Son dos mecanismos distintos.
  */
+/**
+ * Datos accionables de un rechazo `api_token.*` (addendum de identidades §3).
+ *
+ * `allowed` es el TECHO DE AGENTE completo y llega con `api_token.scope_not_allowed`: es la fuente
+ * para armar el selector de scopes sin hardcodear nada. `maxDays` llega con `api_token.ttl_too_long`
+ * y es el tope que debería aplicar el control de vencimiento.
+ *
+ * Ojo: `scope_not_allowed` llega TAMBIÉN cuando el string no es una capacidad conocida (un typo),
+ * y en ese caso `allowed` viene ausente. Por eso es opcional y quien lo consuma debe tolerarlo.
+ */
+export interface ApiTokenErrorContext {
+  readonly allowed?: string[]
+  readonly maxDays?: number
+}
+
+/**
+ * Datos accionables de un rechazo `gateway_user.*` / `access.*` (addendum de identidades §2.9).
+ *
+ * `allowed` lo traen `invalid_role` (roles válidos) e `invalid_global_capability` (capacidades
+ * globales válidas) — y es la fuente del selector correspondiente. `minLength` lo trae
+ * `weak_password`.
+ *
+ * Ojo: `invalid_global_capability` cubre DOS errores distintos —capacidad global inválida y
+ * `scope_type` inválido en `PUT /access`— y solo el primero trae `allowed`. Quien lo consuma no
+ * puede asumir que el campo está.
+ */
+export interface GatewayUserErrorContext {
+  readonly allowed?: string[]
+  readonly minLength?: number
+}
+
 export interface EnvironmentErrorContext {
   /** Slug del entorno que rechazó (`environment.destructive_blocked`). */
   environmentSlug?: string
@@ -1084,6 +1123,31 @@ function extractGrantContext(
   }
   const hasAny = Object.values(grantContext).some((value) => value !== undefined)
   return hasAny ? grantContext : undefined
+}
+
+function extractApiTokenContext(
+  code: string | undefined,
+  publicContext: unknown,
+): ApiTokenErrorContext | undefined {
+  if (!code?.startsWith('api_token.') || !isRecord(publicContext)) return undefined
+  return {
+    allowed: stringList(publicContext.allowed),
+    maxDays: finiteNumber(publicContext.max_days),
+  }
+}
+
+function extractGatewayUserContext(
+  code: string | undefined,
+  publicContext: unknown,
+): GatewayUserErrorContext | undefined {
+  // `access.last_admin_protected` pertenece al mismo módulo pese al prefijo distinto: es el 409
+  // que devuelven el PATCH y el PUT /access de `/gateway-users`.
+  const belongs = code?.startsWith('gateway_user.') || code?.startsWith('access.')
+  if (!belongs || !isRecord(publicContext)) return undefined
+  return {
+    allowed: stringList(publicContext.allowed),
+    minLength: finiteNumber(publicContext.min_length),
+  }
 }
 
 function extractEnvironmentContext(
@@ -1174,6 +1238,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         code,
         exportContext: extractDatabaseExportContext(code, d.public_context),
         grantContext: extractGrantContext(d.context, d.public_context),
+        apiTokenContext: extractApiTokenContext(code, d.public_context),
+        gatewayUserContext: extractGatewayUserContext(code, d.public_context),
         environmentContext: extractEnvironmentContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
         requestId,
