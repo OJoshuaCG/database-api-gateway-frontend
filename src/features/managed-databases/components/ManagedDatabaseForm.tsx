@@ -183,7 +183,11 @@ export function ManagedDatabaseForm({
   const engineFamily = selectedServerId ? engineToFamily(selectedServer?.engine ?? 'mysql') : null
 
   return (
-    <form onSubmit={handleSubmit((values) => onSubmit(values, dirtyFields))} className="flex flex-col gap-4" noValidate>
+    <form
+      onSubmit={handleSubmit((values) => onSubmit(values, dirtyFields))}
+      className="flex flex-col gap-4"
+      noValidate
+    >
       {mode === 'create' ? (
         <>
           <Input
