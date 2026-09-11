@@ -158,8 +158,15 @@ divulgan**.
 - El backend envía `allow_credentials=True`; por ello `CORS_ORIGINS` **debe** listar el
   origen exacto del frontend (no `*`). Ver [`getting-started.md`](getting-started.md).
 - En **producción la cookie es `Secure`** (`https_only`): el frontend debe servirse por
-  **HTTPS**. Idealmente frontend y backend bajo el mismo dominio (proxy inverso) para
-  evitar problemas de cookies de terceros con `same_site=lax`.
+  **HTTPS**.
+- **Frontend y backend TIENEN que compartir origen**, con la API detrás de un proxy inverso.
+  No es una preferencia: la cookie de CSRF que la SPA necesita leer es *host-only* —el
+  prefijo `__Host-` prohíbe el atributo `Domain`—, así que desde otro host `document.cookie`
+  no la ve y **toda escritura falla con `403 auth.csrf_missing`**. Ver
+  [`dokploy.md`](dokploy.md) §3.
+- En desarrollo esto no se nota porque las cookies **no se aíslan por puerto**: `localhost:5173`
+  y `localhost:8000` comparten el mismo frasco. Por eso un despliegue con hosts distintos puede
+  romper algo que localmente funcionaba perfecto.
 
 ## 8. Límites de tasa: qué hay y por qué el frontend no puede reintentar
 
@@ -212,4 +219,4 @@ están en el checklist de [`deployment.md`](deployment.md):
 | Fuga de credenciales | El cliente nunca recibe ni loguea credenciales; solo `has_*` booleanos. |
 | Borrados/operaciones destructivas en el motor | Doble confirmación (`confirm_name`/`confirm_username`/`confirm_version`/`confirm_grantee`). |
 | Secretos expuestos | `VITE_*` solo contiene URLs públicas; prohibido poner secretos ahí. |
-| CSRF | Cookie `same_site=lax` (backend); endpoints mutadores no son navegaciones GET. |
+| CSRF | Token `HMAC(SESSION_SECRET, sid)` en el header `X-CSRF-Token`, exigido por el backend en todo método no seguro de una sesión de admin (§7.1 de la API v23). Se lee de la cookie `__Host-gw_csrf` / `gw_csrf`, que es host-only: exige mismo origen (§7). Además, cookie de sesión `same_site=lax` y validación de `Origin`. |

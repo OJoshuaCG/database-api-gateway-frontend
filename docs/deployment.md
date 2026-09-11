@@ -53,7 +53,7 @@ server {
 
 ### Docker
 
-`Dockerfile` y `nginx.conf` ya están versionados en la raíz del repo (multi-stage:
+`Dockerfile` y `nginx.conf.template` ya están versionados en la raíz del repo (multi-stage:
 build con `node:24-alpine` + runtime `nginx:alpine`, con fallback SPA y cabeceras de
 seguridad incluidos). Para la configuración específica de la plataforma de despliegue
 (Dokploy: build args, dominio, HTTPS), ver [`dokploy.md`](dokploy.md).
@@ -104,10 +104,14 @@ producción"):
 - [x] Build, typecheck, lint y tests en verde.
 - [x] Variables de entorno (sin URLs hardcodeadas).
 - [x] Manejo de errores transversal + estados loading/empty/error.
-- [x] **Fallback SPA** configurado en el servidor — ver `nginx.conf` (raíz del repo).
-- [x] **Cabeceras de seguridad / CSP** en la capa de servido — ver `nginx.conf`.
-- [ ] **Decisión de dominio** (mismo dominio vs. subdominios para frontend/backend) —
-      ver [`dokploy.md`](dokploy.md#3-dominio--decisión-pendiente-dos-escenarios).
+- [x] **Fallback SPA** configurado en el servidor — ver `nginx.conf.template` (raíz del repo).
+- [x] **Cabeceras de seguridad / CSP** en la capa de servido — ver `nginx.conf.template`.
+- [x] **API bajo el mismo origen que la SPA** (proxy `/api/`, `/mcp`, `/health` en el mismo
+      contenedor). No es una comodidad: la cookie de CSRF es host-only y una SPA en otro host
+      no puede leerla, así que toda escritura devolvería `403 auth.csrf_missing`. Ver
+      [`dokploy.md`](dokploy.md) §3.
+- [x] **Decisión de dominio**: mismo origen, con la API proxeada por el contenedor del
+      frontend. Decidido el 2026-09-11 — ver [`dokploy.md`](dokploy.md) §3.
 - [ ] **Validado contra el backend real** (hoy solo con mocks MSW). Confirmar shapes
       ambiguos: paginación de `/{id}/databases` y forma exacta de `detail` de error.
 - [ ] **HTTPS** en el frontend (requisito de la cookie `Secure`) — activar el
