@@ -1,12 +1,15 @@
 import { useForm } from 'react-hook-form'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { loginInSchema, type LoginIn } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Callout, Card, Input } from '@/components/ui'
+import { queryKeys } from '@/lib/api/query-keys'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { useSession } from '../hooks/use-session'
 import { useLogin } from '../hooks/use-login'
+import type { SessionEndReason } from '../messages'
 
 interface LocationState {
   from?: string
@@ -16,6 +19,19 @@ export function LoginPage() {
   const { isAuthenticated } = useSession()
   const login = useLogin()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  /*
+   * Por qué terminó la sesión anterior (v23 §7.3). Lo dejó el handler global de 401 en la caché.
+   * Importa mostrarlo: "alcanzó su duración máxima" explica por qué lo echó MIENTRAS trabajaba,
+   * que sin explicación se lee como un bug de la app. `useQuery` sin `queryFn` solo observa el
+   * dato que otro escribió — no dispara ninguna petición.
+   */
+  const sessionEnd = useQuery<SessionEndReason | null>({
+    queryKey: queryKeys.auth.sessionEndReason(),
+    enabled: false,
+    initialData: null,
+  })
   const location = useLocation()
   const from = (location.state as LocationState | null)?.from ?? '/servers'
 
@@ -35,6 +51,9 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       await login.mutateAsync(values)
+      // El motivo del cierre anterior ya cumplió su función: si no se limpia, reaparece la
+      // próxima vez que alguien vuelva al login por un camino que no sea un 401.
+      queryClient.setQueryData(queryKeys.auth.sessionEndReason(), null)
       void navigate(from, { replace: true })
     } catch (error) {
       const apiError = toApiError(error)
@@ -65,6 +84,18 @@ export function LoginPage() {
             <h1 className="text-lg font-semibold text-foreground">Database API Gateway</h1>
             <p className="text-sm text-muted-foreground">Inicia sesión como administrador</p>
           </div>
+
+          {/*
+            Va ANTES del error del formulario y con tono informativo, no de error: no es que el
+            usuario se haya equivocado en algo, es la explicación de por qué está viendo esta
+            pantalla. Se oculta en cuanto hay un error de credenciales, para no apilar dos carteles
+            que compiten por la misma atención.
+          */}
+          {sessionEnd.data && !errors.root && (
+            <Callout tone="info" title={sessionEnd.data.title}>
+              {sessionEnd.data.detail}
+            </Callout>
+          )}
 
           {errors.root && (
             <p
