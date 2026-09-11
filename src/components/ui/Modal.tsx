@@ -9,6 +9,17 @@ export interface ModalProps {
   children: ReactNode
   footer?: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'full'
+  /**
+   * `false` retira las salidas accidentales: no se pinta la «✕» y el clic en el backdrop no
+   * cierra. Esc ya lo decidía el padre (ver `onCancel`).
+   *
+   * Es para el diálogo que ENTREGA algo irrecuperable —un token de invitación, un bearer de
+   * agente— donde cerrar por reflejo destruye el valor para siempre. En ese caso la única salida
+   * es el botón explícito del contenido, y esconder la «✕» es lo correcto: un aspa que no hace
+   * nada es peor que no tener aspa, porque el usuario la aprieta, no pasa nada, y concluye que la
+   * app se colgó. Por defecto `true`: la fricción se pide, no se hereda.
+   */
+  dismissible?: boolean
 }
 
 const SIZES = {
@@ -31,6 +42,7 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  dismissible = true,
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
 
@@ -59,7 +71,7 @@ export function Modal({
       }}
       onClick={(event) => {
         // Cerrar al hacer clic en el backdrop (fuera del contenido).
-        if (event.target === ref.current) onClose()
+        if (dismissible && event.target === ref.current) onClose()
       }}
       className={cn(
         'm-auto w-[calc(100%-2rem)] rounded-card border border-border bg-surface p-0 text-foreground shadow-elevated backdrop:bg-overlay',
@@ -73,16 +85,18 @@ export function Modal({
           </h2>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor">
-            <path d="M6 6l8 8M14 6l-8 8" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
+        {dismissible && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor">
+              <path d="M6 6l8 8M14 6l-8 8" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
       {/* `min-w-0`: el visor a pantalla completa mete aquí el SQL más ancho de la app y no debe
           poder empujar el panel más allá de su `max-w`. */}

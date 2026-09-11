@@ -15,9 +15,10 @@ import {
 import { PrivilegesPage } from '@/features/privileges'
 import { CharsetCollationOptionsPage } from '@/features/charset-collation-options'
 import { EnvironmentsPanel } from '@/features/environments'
+import { SessionsPanel } from '@/features/auth'
 import { useRotateCrypto } from '../hooks/use-crypto-rotation'
 
-const TABS = ['crypto', 'privileges', 'charset-collation', 'environments'] as const
+const TABS = ['crypto', 'sessions', 'privileges', 'charset-collation', 'environments'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -51,6 +52,9 @@ export function AdminPage() {
       <div className="flex gap-1 border-b border-border" role="tablist">
         <TabButton active={tab === 'crypto'} onClick={() => setTab('crypto')}>
           Cifrado
+        </TabButton>
+        <TabButton active={tab === 'sessions'} onClick={() => setTab('sessions')}>
+          Mis sesiones
         </TabButton>
         <TabButton active={tab === 'privileges'} onClick={() => setTab('privileges')}>
           Privilegios
@@ -92,6 +96,7 @@ export function AdminPage() {
         </Card>
       )}
 
+      {tab === 'sessions' && <SessionsPanel />}
       {tab === 'privileges' && <PrivilegesPage />}
       {tab === 'charset-collation' && <CharsetCollationOptionsPage />}
       {tab === 'environments' && <EnvironmentsPanel />}

@@ -8,6 +8,7 @@ import {
 } from '@/lib/api/client'
 import {
   exportCapabilitiesSchema,
+  exportDownloadTicketSchema,
   exportItemSchema,
   exportManifestSchema,
   exportObjectCatalogSchema,
@@ -17,6 +18,7 @@ import {
   type ExportArtifactDelivery,
   type ExportCapabilities,
   type ExportDataSelection,
+  type ExportDownloadTicket,
   type ExportItem,
   type ExportManifest,
   type ExportObjectCatalog,
@@ -230,16 +232,29 @@ function readArtifactDelivery(headers: Headers): ExportArtifactDelivery {
  */
 export async function downloadExportArtifact(
   id: number,
+  ticket: string,
   signal?: AbortSignal,
 ): Promise<{ blob: Blob; filename: string; delivery: ExportArtifactDelivery }> {
   // El fallback es genérico a propósito: el artefacto puede ser sql, csv, json, ndjson, gzip o zip, y
   // el default de `fetchBlob` (`export.sql`) le pondría a un `.zip` una extensión que miente. Solo se
   // usa si `Content-Disposition` no llegó (p. ej. cross-origin sin `Access-Control-Expose-Headers`).
   const { blob, filename, headers } = await fetchBlob(`${base(id)}/download`, {
+    query: { ticket },
     signal,
     fallbackFilename: `export-${id}`,
   })
   return { blob, filename, delivery: readArtifactDelivery(headers) }
+}
+
+/**
+ * `POST .../download-ticket` (10/min) — primer paso de la descarga (v23 §7.2).
+ *
+ * ⚠️ El ticket **vence en 60 s**: se pide en el momento del click, nunca al montar la pantalla.
+ * Corre los mismos guards que la descarga, así que los 403/409/410 de autorización y de estado del
+ * artefacto llegan ACÁ, donde todavía no se consumió nada.
+ */
+export function requestExportDownloadTicket(id: number): Promise<ExportDownloadTicket> {
+  return mutateData('POST', `${base(id)}/download-ticket`, exportDownloadTicketSchema, {})
 }
 
 /**
@@ -251,6 +266,9 @@ export async function getExportContent(
   id: number,
   signal?: AbortSignal,
 ): Promise<{ text: string; delivery: ExportArtifactDelivery }> {
-  const { text, headers } = await fetchText(`${base(id)}/content`, { signal })
+  // `csrf: true` aunque sea un GET (v23 §7.1): este endpoint CONSUME el artefacto, y una
+  // navegación GET lleva la cookie de sesión sola. Sin el header, bastaba un `<img src=…>` en
+  // cualquier página ajena para destruirle la exportación a quien la abriera.
+  const { text, headers } = await fetchText(`${base(id)}/content`, { signal, csrf: true })
   return { text, delivery: readArtifactDelivery(headers) }
 }

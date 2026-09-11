@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   ConfirmDialog,
@@ -11,6 +12,7 @@ import {
   FullPageSpinner,
   PageHeader,
 } from '@/components/ui'
+import { ApiError } from '@/lib/api/errors'
 import { formatDateTime } from '@/lib/utils'
 import type { MigrationSelectResultItem } from '@/lib/contracts'
 import { useManagedDatabase } from '../hooks/use-managed-databases'
@@ -41,6 +43,38 @@ export function SelectResultsPage() {
     return <ErrorState error={db.error} onRetry={() => void db.refetch()} />
   }
   if (results.isError || !results.data) {
+    /*
+     * Este endpoint subió de capacidad: ahora exige `blueprints.captures`, que solo tiene `owner`.
+     * Es un endpoint de LECTURA que un `operator` deja de poder llamar, y es deliberado — devuelve
+     * datos de negocio de la base gestionada, la única excepción del gateway a no almacenar datos,
+     * así que pertenece al eje de divulgación y no al de lectura.
+     *
+     * El 403 se explica en vez de dejar el error genérico: sin la explicación, alguien que ayer
+     * podía entrar acá y hoy no, concluye que la pantalla se rompió. Y NO se puede ocultar el
+     * enlace de origen según la capacidad, que sería lo ideal: `/auth/me` todavía no devuelve
+     * `capabilities` en este frontend, así que no hay dato con el que condicionarlo. Cuando llegue,
+     * el enlace se condiciona a `blueprints.captures` y esta rama pasa a ser la red de contención.
+     */
+    if (results.error instanceof ApiError && results.error.status === 403) {
+      return (
+        <div className="flex flex-col gap-4">
+          <Link
+            to={`/managed-databases/${databaseId}/migrations`}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← Migraciones
+          </Link>
+          <Callout tone="info" title="No tenés permiso para ver los resultados capturados">
+            <p>
+              Estas filas son datos de negocio de la base gestionada, así que leerlas exige la
+              capacidad <code className="font-mono">blueprints.captures</code>, reservada al rol{' '}
+              <code className="font-mono">owner</code>.
+            </p>
+            <p className="mt-1">{results.error.message}</p>
+          </Callout>
+        </div>
+      )
+    }
     return <ErrorState error={results.error} onRetry={() => void results.refetch()} />
   }
 
@@ -155,9 +189,10 @@ function SelectResultItemCard({ item }: { item: MigrationSelectResultItem }) {
 
         {item.durability === 'rolled_back' && (
           <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
-            Estos datos vienen de un <strong>SELECT dentro de una transacción que el motor
-            deshizo</strong> (la migración falló y revirtió). Son reales para diagnosticar el
-            fallo, pero puede que las filas ya NO existan en la BD destino (§4.3).
+            Estos datos vienen de un{' '}
+            <strong>SELECT dentro de una transacción que el motor deshizo</strong> (la migración
+            falló y revirtió). Son reales para diagnosticar el fallo, pero puede que las filas ya NO
+            existan en la BD destino (§4.3).
           </p>
         )}
 

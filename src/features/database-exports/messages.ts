@@ -241,6 +241,30 @@ export function exportErrorHint(error: ApiError): string | null {
   return (error.code ? CODE_HINTS[error.code] : undefined) ?? null
 }
 
+/**
+ * Copy del fallo de una descarga en dos pasos (v23 §7.2).
+ *
+ * Los dos errores del TICKET **no traen `public_context.code`**: solo se distinguen por status, y
+ * ahí está la trampa de este endpoint. El módulo ya usa 410 para otra cosa —`export.artifact_expired`
+ * y `export.artifact_consumed`, que sí traen código— así que un `410` pelado en la descarga NO es
+ * «el artefacto venció» sino «el ticket venció»: son plazos distintos (30 min contra 60 s) y
+ * confundirlos manda al operador a regenerar un export que sigue perfectamente vivo.
+ *
+ * Por eso se mira el código PRIMERO y el status solo cuando no hay código.
+ */
+export function downloadErrorCopy(error: ApiError): string {
+  if (error.code) return exportErrorHint(error) ?? error.message
+
+  if (error.status === 410) {
+    return 'El permiso de descarga venció (dura 60 segundos). El artefacto sigue disponible: volvé a tocar «Descargar».'
+  }
+  if (error.status === 422) {
+    // El ticket está atado a `(job_id, user_id)`: el de otra persona no sirve aunque esté vigente.
+    return 'El permiso de descarga no es válido para esta sesión. Volvé a tocar «Descargar» para pedir uno nuevo.'
+  }
+  return error.message
+}
+
 // ── Diagnóstico ─────────────────────────────────────────────────────────────────
 /**
  * Registra un fallo del módulo en consola con su `X-Request-ID`, que es **la única forma de que el

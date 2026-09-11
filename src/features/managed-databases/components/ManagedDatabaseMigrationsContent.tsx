@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useCapabilities } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
   Button,
@@ -24,14 +26,13 @@ import { toApiError } from '@/lib/api/errors'
 import {
   isDryRunResult,
   MIGRATION_VERSION_PATTERN,
-  PAGINATION,
   type MigrationApplyResult,
   type MigrationRollbackResult,
   type ModelMigrationSummary,
   type OnFailureMode,
   type PartialApplicationEntry,
 } from '@/lib/contracts'
-import { useModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
+import { useAllModelMigrations } from '@/features/database-models/hooks/use-model-migrations'
 import { OnFailureSelect } from '@/features/database-models/components/OnFailureSelect'
 import { splitCaptureVersions } from '@/features/database-models/capture'
 import { hasResolvablePartial, isPartialResolvable } from '../partial-application'
@@ -75,6 +76,7 @@ function isTab(value: string | null): value is Tab {
 export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: number }) {
   // Pestaña y objetivo de reconciliación viven en la URL, no en estado local: así se enlaza
   // directamente al historial o a una reconciliación concreta, y «cerrar» es quitar el parámetro.
+  const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab: Tab = isTab(tabParam) ? tabParam : 'actions'
@@ -140,7 +142,11 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const rollback = useRollbackMigration(databaseId)
   const stamp = useStampMigration(databaseId)
   // Catálogo de versiones del blueprint para poblar el selector del stamp (Cambio 4).
-  const versions = useModelMigrations(modelId, { page: 1, size: PAGINATION.maxSize }, hasModel)
+  //
+  // COMPLETO, no una página: el stamp tiene que poder apuntar a cualquier versión, y con una
+  // sola página ordenada ascendente un blueprint largo dejaba fuera justamente la punta —o sea
+  // que no se podía stampear a la versión actual, que es el caso más habitual—.
+  const versions = useAllModelMigrations(modelId, hasModel)
 
   if (db.isLoading) return <FullPageSpinner label="Cargando base de datos" />
   if (db.isError || !db.data) {
@@ -278,9 +284,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
    * ese gate se retiró, así que la única causa posible es que la versión no esté aprobada — y
    * eso tiene una salida concreta (aprobarla en el blueprint), no un checkbox.
    */
-  const readCaptureGate409 = (
-    err: unknown,
-  ): { versions: string[]; message: string } | null => {
+  const readCaptureGate409 = (err: unknown): { versions: string[]; message: string } | null => {
     const apiError = toApiError(err)
     if (apiError.status !== 409) return null
     if (apiError.unreviewedCapture) {
@@ -417,16 +421,12 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                     <p className="text-xs text-muted-foreground">
                       Está registrada en el inventario pero nunca se creó en el servidor (o la
                       borraron por fuera del gateway). Hasta que se aprovisione no hay dónde
-                      aplicar, revertir ni marcar versiones, y el contador de pendientes lista
-                      todas las del blueprint porque ninguna pudo aplicarse.
+                      aplicar, revertir ni marcar versiones, y el contador de pendientes lista todas
+                      las del blueprint porque ninguna pudo aplicarse.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setProvisionOpen(true)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setProvisionOpen(true)}>
                       Aprovisionar ahora 🔌
                     </Button>
                   </div>
@@ -562,11 +562,11 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                         )}
                         {!isPartialResolvable(entry) && (
                           <p className="text-xs text-muted-foreground">
-                            No hay vía automática. Salidas:{' '}
-                            <strong>reintenta el apply</strong> (retoma del checkpoint, desde la
-                            sentencia {entry.applied_statements + 1}), o arregla el esquema a mano
-                            y declara la versión con <strong>stamp force</strong> (abajo, en
-                            «Marcar versión»).
+                            No hay vía automática. Salidas: <strong>reintenta el apply</strong>{' '}
+                            (retoma del checkpoint, desde la sentencia{' '}
+                            {entry.applied_statements + 1}), o arregla el esquema a mano y declara
+                            la versión con <strong>stamp force</strong> (abajo, en «Marcar
+                            versión»).
                           </p>
                         )}
                       </li>
@@ -609,8 +609,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                         Las versiones pendientes <strong>{captureWillRun.join(', ')}</strong>{' '}
                         guardan en el gateway el resultado de sus SELECT: filas de esta base de
                         datos, cifradas. Se conserva solo la corrida más reciente por versión y
-                        caduca sola; al terminar podés verlas o purgarlas desde esta misma
-                        pantalla.
+                        caduca sola; al terminar podés verlas o purgarlas desde esta misma pantalla.
                       </p>
                     </div>
                   )}
@@ -622,8 +621,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                         <strong className="text-foreground">
                           Captura sin aprobar: {captureBlocked.join(', ')}
                         </strong>{' '}
-                        — el apply y el rollback se van a rechazar hasta que revises qué consultan
-                        y las apruebes.
+                        — el apply y el rollback se van a rechazar hasta que revises qué consultan y
+                        las apruebes.
                       </p>
                     </div>
                   )}
@@ -723,14 +722,13 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                         🔒 No se intentó: no se ejecutó ningún DDL.
                       </p>
                       <p className="mt-1 text-muted-foreground">
-                        El entorno{' '}
-                        <strong>{environmentGate.slug ?? 'de esta base'}</strong> bloquea las
-                        migraciones destructivas
+                        El entorno <strong>{environmentGate.slug ?? 'de esta base'}</strong> bloquea
+                        las migraciones destructivas
                         {environmentGate.versions.length > 0 && (
                           <> y las versiones {environmentGate.versions.join(', ')} las contienen</>
                         )}
-                        . Las salidas son reclasificar la base o separar las sentencias
-                        destructivas de esa versión.
+                        . Las salidas son reclasificar la base o separar las sentencias destructivas
+                        de esa versión.
                       </p>
                     </div>
                   )}
@@ -855,12 +853,15 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                                 ? `Se capturaron ${lastRun.captured_select_count} fila(s) de SELECT.`
                                 : 'Hay una captura de SELECT disponible (sin filas).'}
                             </span>
-                            <Link
-                              to={`/managed-databases/${databaseId}/migrations/${lastRun.to_version}/select-results`}
-                              className="shrink-0 font-medium text-primary hover:underline"
-                            >
-                              Ver resultados capturados →
-                            </Link>
+                            {/* Solo con `blueprints.captures`: ver las filas es divulgación. */}
+                            {canSeeCaptures && (
+                              <Link
+                                to={`/managed-databases/${databaseId}/migrations/${lastRun.to_version}/select-results`}
+                                className="shrink-0 font-medium text-primary hover:underline"
+                              >
+                                Ver resultados capturados →
+                              </Link>
+                            )}
                           </div>
                         )}
 
@@ -957,8 +958,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             <p className="text-muted-foreground">
                               Esta parcial no tiene reconciliación automática (mira el motivo en el
                               aviso de arriba). Para desbloquear el rollback: reintenta el apply
-                              para completarla, o arregla el esquema a mano y declara la versión
-                              con <strong>stamp force</strong>.
+                              para completarla, o arregla el esquema a mano y declara la versión con{' '}
+                              <strong>stamp force</strong>.
                             </p>
                           )}
                         </div>
@@ -1006,12 +1007,15 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                               ? `Se capturaron ${lastRollback.captured_select_count} fila(s) de SELECT (down_sql).`
                               : 'Hay una captura de SELECT disponible (sin filas).'}
                           </span>
-                          <Link
-                            to={`/managed-databases/${databaseId}/migrations/${lastRollback.to_version}/select-results`}
-                            className="shrink-0 font-medium text-primary hover:underline"
-                          >
-                            Ver resultados capturados →
-                          </Link>
+                          {/* Solo con `blueprints.captures`: ver las filas es divulgación. */}
+                          {canSeeCaptures && (
+                            <Link
+                              to={`/managed-databases/${databaseId}/migrations/${lastRollback.to_version}/select-results`}
+                              className="shrink-0 font-medium text-primary hover:underline"
+                            >
+                              Ver resultados capturados →
+                            </Link>
+                          )}
                         </div>
                       )}
                       <div className="flex justify-end">
@@ -1097,6 +1101,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               label="Versión a marcar"
               placeholder="Selecciona una versión del blueprint…"
               isLoading={versions.isLoading}
+              // El catálogo se corta en el tope de páginas ante un historial desmedido. Se dice
+              // en el propio control: un desplegable al que le faltan opciones y no lo avisa
+              // hace pensar que la versión buscada no existe.
+              hint={
+                versions.data?.truncated
+                  ? 'El blueprint tiene más versiones de las que se pudieron listar; puede faltar alguna.'
+                  : undefined
+              }
             />
           ) : (
             <Input
@@ -1170,10 +1182,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       </Modal>
 
       {provisionOpen && (
-        <ProvisionDatabaseDialog
-          database={database}
-          onClose={() => setProvisionOpen(false)}
-        />
+        <ProvisionDatabaseDialog database={database} onClose={() => setProvisionOpen(false)} />
       )}
     </div>
   )

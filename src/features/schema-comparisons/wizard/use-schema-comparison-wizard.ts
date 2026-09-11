@@ -188,6 +188,14 @@ export interface SchemaComparisonWizard {
   setAdoptDescription: (value: string) => void
   adoptExecuteImmediately: boolean
   setAdoptExecuteImmediately: (value: boolean) => void
+  /**
+   * Nombre del target reescrito para adoptar-y-aplicar. Es un estado DISTINTO de
+   * `confirmTargetName` (Opción B) aunque las dos confirmen lo mismo: desde el panel de error se
+   * salta de una rama a la otra (`onSwitchToAdopt` / `onSwitchToExecute`), y compartir el estado
+   * haría llegar la confirmación ya escrita. Una confirmación pre-llenada no confirma nada.
+   */
+  adoptConfirmTargetName: string
+  setAdoptConfirmTargetName: (value: string) => void
   adopt: ReturnType<typeof useAdoptComparison>
   submitAdopt: () => void
 
@@ -274,6 +282,7 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   const [adoptName, setAdoptName] = useState('')
   const [adoptDescription, setAdoptDescription] = useState('')
   const [adoptExecuteImmediately, setAdoptExecuteImmediately] = useState(false)
+  const [adoptConfirmTargetName, setAdoptConfirmTargetName] = useState('')
 
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('all_except_destructive')
   const [confirmTargetName, setConfirmTargetName] = useState('')
@@ -498,6 +507,7 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     setAdoptName('')
     setAdoptDescription('')
     setAdoptExecuteImmediately(false)
+    setAdoptConfirmTargetName('')
     setExecuteMode('all_except_destructive')
     setConfirmTargetName('')
     setForce(false)
@@ -647,6 +657,7 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
       name: adoptName,
       description: adoptDescription,
       executeImmediately: adoptExecuteImmediately,
+      confirmTargetName: adoptConfirmTargetName,
     })
     adopt.mutate(body, {
       onSuccess: (data) => {
@@ -655,7 +666,17 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
       },
       onError: handleActionError,
     })
-  }, [resolveSelection.data, adoptName, adoptDescription, adoptExecuteImmediately, handleActionError, adopt])
+  }, [resolveSelection.data, adoptName, adoptDescription, adoptExecuteImmediately, adoptConfirmTargetName, handleActionError, adopt])
+
+  /**
+   * Apagar «generar y aplicar» descarta lo ya escrito en la confirmación. Si no se limpiara,
+   * volver a encenderlo dejaría el nombre del target ya puesto y el gate se pasaría con un clic —
+   * justo la fricción que el campo existe para imponer.
+   */
+  const changeAdoptExecuteImmediately = useCallback((value: boolean) => {
+    setAdoptExecuteImmediately(value)
+    if (!value) setAdoptConfirmTargetName('')
+  }, [])
 
   // ── Opción B ──────────────────────────────────────────────────────────────────
   const previewActive = step === 'executeSelect' || step === 'executeConfirm'
@@ -825,7 +846,9 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     adoptDescription,
     setAdoptDescription,
     adoptExecuteImmediately,
-    setAdoptExecuteImmediately,
+    setAdoptExecuteImmediately: changeAdoptExecuteImmediately,
+    adoptConfirmTargetName,
+    setAdoptConfirmTargetName,
     adopt,
     submitAdopt,
 

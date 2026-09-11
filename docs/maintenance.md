@@ -166,6 +166,16 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 - **Validación de contrato (Zod) en runtime:** si el backend cambia un shape, verás en
   consola `[api] Respuesta no conforme al contrato` y un error "respuesta inesperada".
   Es la señal de que hay que actualizar `lib/contracts/`.
+- **Un campo NUEVO en una respuesta NO rompe nada; uno DIVERGENTE sí.** Los addenda del backend
+  suelen advertir que «un campo nuevo o divergente descarta la respuesta entera» y **para este
+  repo eso es falso a medias**. Verificado contra zod 4.4.3, sin un solo `.strict()` ni
+  `strictObject` en `lib/contracts/`: el comportamiento por defecto de `z.object` es *strip*, así
+  que una clave que el schema no declara se descarta en silencio y el envelope sigue validando.
+  Lo que sí falla es un campo declarado cuyo **tipo o forma** cambió.
+  La consecuencia práctica: declarar un campo nuevo en el Zod hace falta para **usarlo**, no para
+  «no romperse». Eso baja la urgencia de un despliegue coordinado, no la elimina — el frontend
+  simplemente no ve el dato hasta que lo declare. Antes de tratar una advertencia así como
+  bloqueante, comprobalo; el precio de creerla es un despliegue de emergencia que no hacía falta.
 
 ## Antes de abrir un PR
 

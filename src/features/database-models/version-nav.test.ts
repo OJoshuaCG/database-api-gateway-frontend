@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  flipPage,
   latestVersionOf,
   resolveVersionIndex,
   sortVersionsAscending,
@@ -124,5 +125,35 @@ describe('versionNeighbors', () => {
       total: 0,
       isLatest: false,
     })
+  })
+})
+
+describe('flipPage', () => {
+  it('la página 1 de la API es la ÚLTIMA en pantalla', () => {
+    // El catálogo se pide descendente para que la punta llegue en la primera respuesta, pero se
+    // muestra ascendente: la página 1 de pantalla son las versiones más antiguas.
+    expect(flipPage(1, 3)).toBe(3)
+    expect(flipPage(3, 3)).toBe(1)
+    expect(flipPage(2, 3)).toBe(2)
+  })
+
+  it('es autoinversa: aplicarla dos veces devuelve el original', () => {
+    for (const page of [1, 2, 3, 4, 5]) {
+      expect(flipPage(flipPage(page, 5), 5)).toBe(page)
+    }
+  })
+
+  it('con una sola página no hay nada que invertir', () => {
+    expect(flipPage(1, 1)).toBe(1)
+  })
+
+  it('sin páginas devuelve 1, que no existe la página 0', () => {
+    // `pages` es 0 mientras la meta no llegó o el catálogo está vacío. Pedir `page=0` sería un 422.
+    expect(flipPage(1, 0)).toBe(1)
+  })
+
+  it('acota fuera de rango en vez de pedir una página inexistente', () => {
+    expect(flipPage(9, 3)).toBe(1)
+    expect(flipPage(-4, 3)).toBe(3)
   })
 })

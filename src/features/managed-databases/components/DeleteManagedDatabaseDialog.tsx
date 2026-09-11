@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ConfirmDialog, Switch } from '@/components/ui'
-import type { ManagedDatabaseOut } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, type ManagedDatabaseOut } from '@/lib/contracts'
 import { useDeleteManagedDatabase } from '../hooks/use-managed-databases'
 
 interface DeleteManagedDatabaseDialogProps {
@@ -18,6 +19,10 @@ export function DeleteManagedDatabaseDialog({
   onClose,
 }: DeleteManagedDatabaseDialogProps) {
   const [dropRemote, setDropRemote] = useState(false)
+  // `drop_remote=true` SUBE el requisito (v23 §4): quitarla del inventario pide
+  // `databases.write`, pero el DROP DATABASE sobre el motor pide `databases.drop`. Se
+  // deshabilita el control en vez de dejar que el 403 llegue después de re-tipear el nombre.
+  const dropGuard = useCapabilityGuard(CAPABILITIES.databasesDrop, 'eliminar bases del motor')
   const deleteDatabase = useDeleteManagedDatabase()
 
   return (
@@ -43,8 +48,9 @@ export function DeleteManagedDatabaseDialog({
       <Switch
         checked={dropRemote}
         onCheckedChange={setDropRemote}
+        disabled={!dropGuard.allowed}
         label="Eliminar también del motor (DROP DATABASE) 🔌"
-        hint="Requiere reescribir el nombre de la base de datos para confirmar."
+        hint={dropGuard.hint ?? 'Requiere reescribir el nombre de la base de datos para confirmar.'}
       />
     </ConfirmDialog>
   )

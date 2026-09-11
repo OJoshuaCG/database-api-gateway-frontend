@@ -68,11 +68,18 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
         wizard.resolveSelection.data != null &&
         !wizard.resolveSelection.isFetching &&
         !wizard.resolveSelection.isStale
+      // La confirmación por nombre solo se exige al aplicar: sin el toggle, adoptar es escritura
+      // de metadatos del gateway y el backend ignora `confirm_target_name`.
+      const adoptConfirmed =
+        !wizard.adoptExecuteImmediately ||
+        (wizard.adoptConfirmTargetName.length > 0 &&
+          wizard.adoptConfirmTargetName === wizard.targetName)
       const disabled =
         busy ||
         wizard.actionCooldown ||
         wizard.adoptName.trim().length === 0 ||
         wizard.pendingReviewIds.length > 0 ||
+        !adoptConfirmed ||
         !closureReady
       left = <BackButton wizard={wizard} disabled={busy} />
       right = (

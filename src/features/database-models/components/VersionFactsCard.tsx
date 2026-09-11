@@ -11,7 +11,12 @@ import {
 } from '@/components/ui'
 import { formatBytes, formatDateTime } from '@/lib/utils'
 import { resolveEnvironmentState, useEnvironmentMap } from '@/features/environments'
-import type { MigrationBlockReason, ModelMigrationSummary } from '@/lib/contracts'
+import { useCapabilities } from '@/features/auth'
+import {
+  CAPABILITIES,
+  type MigrationBlockReason,
+  type ModelMigrationSummary,
+} from '@/lib/contracts'
 import { useModelDatabases } from '../hooks/use-database-models'
 import { useModelMigration, useUpdateModelMigration } from '../hooks/use-model-migrations'
 import { pendingAdoptionOfVersion } from '../version-adoption'
@@ -116,6 +121,7 @@ export function VersionFactsCard({
   const reviewed = detail.data?.reviewed ?? summary.reviewed
   const needsReview = reviewed === false
   const capturesSelects = summary.capture_selects === true
+  const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
   const isCurrent = blueprintCurrentVersion === summary.version
 
   // La versión existe en el listado pero el detalle no la encuentra: se borró por debajo. No es un
@@ -299,7 +305,14 @@ export function VersionFactsCard({
 
         {/* 6 — Acciones de la versión, al pie y fuera de la franja que cubre el desplegable. */}
         <div className="flex flex-col gap-2 border-t border-border pt-3">
-          {capturesSelects && (databases.data?.length ?? 0) > 0 && (
+          {/*
+            El enlace se condiciona a `blueprints.captures` (v23 §9.1 de v24): es una capacidad de
+            DIVULGACIÓN —devuelve filas reales de la base gestionada, la única excepción del
+            gateway a no almacenar datos del cliente— así que quien no la tiene ni siquiera debería
+            ver que esos datos existen. `SelectResultsPage` explica el 403 igual, como red de
+            contención para un enlace pegado a mano.
+          */}
+          {capturesSelects && canSeeCaptures && (databases.data?.length ?? 0) > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">
                 Resultados capturados (solo la corrida más reciente por BD, y caduca sola):

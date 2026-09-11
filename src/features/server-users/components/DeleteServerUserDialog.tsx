@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ConfirmDialog, Switch } from '@/components/ui'
-import type { ServerUserOut } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, type ServerUserOut } from '@/lib/contracts'
 import { useDeleteServerUser } from '../hooks/use-server-user-mutations'
 
 interface DeleteServerUserDialogProps {
@@ -16,6 +17,10 @@ interface DeleteServerUserDialogProps {
 export function DeleteServerUserDialog({ user, onClose }: DeleteServerUserDialogProps) {
   const [dropRemote, setDropRemote] = useState(false)
   const deleteUser = useDeleteServerUser()
+  // `drop_remote=true` SUBE el requisito (v23 §4): borrar del inventario pide `engine_users.write`,
+  // pero ejecutar el DROP en el motor pide `engine_users.drop`. Sin esto, el operador llena el
+  // diálogo, confirma reescribiendo el nombre y recién ahí se come un 403.
+  const dropGuard = useCapabilityGuard(CAPABILITIES.engineUsersDrop, 'eliminar usuarios del motor')
 
   return (
     <ConfirmDialog
@@ -40,8 +45,9 @@ export function DeleteServerUserDialog({ user, onClose }: DeleteServerUserDialog
       <Switch
         checked={dropRemote}
         onCheckedChange={setDropRemote}
+        disabled={!dropGuard.allowed}
         label="Eliminar también del motor (DROP USER) 🔌"
-        hint="Requiere reescribir el nombre del usuario para confirmar."
+        hint={dropGuard.hint ?? 'Requiere reescribir el nombre del usuario para confirmar.'}
       />
     </ConfirmDialog>
   )

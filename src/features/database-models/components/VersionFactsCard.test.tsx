@@ -19,6 +19,7 @@ function summary(overrides: Partial<ModelMigrationSummary> = {}): ModelMigration
     has_postgresql_override: false,
     has_rollback: true,
     capture_selects: false,
+    is_latest: false,
     sql_frozen: false,
     deletable: true,
     delete_requires_stamps: false,

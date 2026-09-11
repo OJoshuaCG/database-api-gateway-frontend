@@ -63,6 +63,28 @@ export function latestVersionOf(sorted: readonly VersionLike[]): string | null {
   return sorted.at(-1)?.version ?? null
 }
 
+/**
+ * Convierte entre el número de página de la API y el que se le muestra al usuario, **invirtiendo
+ * el sentido**. Es autoinversa: aplicarla dos veces devuelve el valor original.
+ *
+ * El catálogo se pide con `order=desc` para que la PUNTA caiga en la página 1 de la API, y así
+ * la pantalla abre sobre las versiones recientes sin necesitar un viaje previo para averiguar
+ * cuántas páginas hay. Pero dentro de la página se sigue mostrando ASCENDENTE, porque las
+ * migraciones son una secuencia de pasos (ver `sortVersionsAscending`).
+ *
+ * Sin esta inversión las dos direcciones se contradirían en la misma pantalla: el ▶ del paginador
+ * iría hacia versiones más VIEJAS mientras el ▶ del navegador va hacia las más NUEVAS. Con ella,
+ * la página mostrada 1 son las más antiguas y la última son las más recientes, así que todo
+ * —flechas, paginador y orden dentro de la página— avanza en el mismo sentido.
+ *
+ * Con `pages` en 0 (catálogo vacío, o meta aún sin cargar) devuelve 1: no existe página 0 y
+ * pedirla daría un 422.
+ */
+export function flipPage(page: number, pages: number): number {
+  if (pages < 1) return 1
+  return Math.min(Math.max(pages - page + 1, 1), pages)
+}
+
 export interface VersionNeighbors {
   /** Versión inmediatamente anterior, o `null` si ya está en la primera. */
   previous: string | null

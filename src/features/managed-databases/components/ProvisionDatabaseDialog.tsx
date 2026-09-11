@@ -32,10 +32,7 @@ export function ProvisionDatabaseDialog({
       open
       onClose={onClose}
       onConfirm={() => {
-        provision.mutate(
-          { id: database.id, allowRecreate: isRecreate },
-          { onSuccess: onClose },
-        )
+        provision.mutate({ id: database.id, allowRecreate: isRecreate }, { onSuccess: onClose })
       }}
       title={isRecreate ? 'Recrear base de datos en el motor' : 'Aprovisionar base de datos'}
       description={

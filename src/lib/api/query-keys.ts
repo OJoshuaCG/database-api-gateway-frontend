@@ -7,6 +7,25 @@ import type { QueryParams } from './client'
 export const queryKeys = {
   auth: {
     me: () => ['auth', 'me'] as const,
+    /** Sesiones vivas del propio usuario (v23 §7.4). */
+    sessions: () => ['auth', 'sessions'] as const,
+    /**
+     * Por qué terminó la última sesión (v23 §7.3). No es un recurso del servidor: es estado de UI
+     * que viaja del handler global de 401 hasta el login, y vive acá para que el login lo consuma
+     * de forma reactiva sin un contexto propio para un solo dato.
+     */
+    sessionEndReason: () => ['auth', 'session-end-reason'] as const,
+  },
+  /**
+   * Contrato de autorización (v23). El catálogo se cachea **contra `catalog_version` de
+   * `/auth/me`**, que es exactamente para lo que el backend lo publica: son 29 filas que no se
+   * mueven, y mientras el sha no cambie no hay por qué volver a pedirlas. Cuando cambia, la key
+   * cambia sola y la entrada vieja queda huérfana sin necesidad de invalidar a mano.
+   */
+  authz: {
+    all: ['authz'] as const,
+    catalog: (version: string | null) => ['authz', 'catalog', version] as const,
+    scopeReadiness: () => ['authz', 'scope-readiness'] as const,
   },
   health: {
     liveness: () => ['health', 'liveness'] as const,
@@ -52,6 +71,12 @@ export const queryKeys = {
     migrations: (modelId: number) => ['database-models', modelId, 'migrations'] as const,
     migrationList: (modelId: number, params: QueryParams) =>
       ['database-models', modelId, 'migrations', 'list', params] as const,
+    /**
+     * Catálogo COMPLETO (todas las páginas). Cuelga del mismo prefijo `migrations(modelId)`
+     * a propósito: las invalidaciones existentes lo usan como raíz, así que esta entrada se
+     * refresca con ellas sin tocar ni una.
+     */
+    migrationsAll: (modelId: number) => ['database-models', modelId, 'migrations', 'all'] as const,
     migrationDetail: (modelId: number, version: string) =>
       ['database-models', modelId, 'migrations', 'detail', version] as const,
   },
@@ -173,5 +198,23 @@ export const queryKeys = {
     preview: (id: number, body: unknown) => ['database-exports', id, 'preview', body] as const,
     items: (id: number, params: QueryParams) => ['database-exports', id, 'items', params] as const,
     manifest: (id: number) => ['database-exports', id, 'manifest'] as const,
+  },
+  /**
+   * Usuarios del GATEWAY (addendum de identidades §2) — no los del motor, que viven bajo
+   * `serverUsers`. Aceptar la invitación NO tiene key: es una mutación pública, sin sesión y sin
+   * nada que cachear.
+   */
+  gatewayUsers: {
+    all: ['gateway-users'] as const,
+    list: (params: QueryParams) => ['gateway-users', 'list', params] as const,
+    detail: (id: number) => ['gateway-users', 'detail', id] as const,
+  },
+  /**
+   * Tokens de agente (§3). El secreto del alta NO se cachea en ningún lado: viaja una sola vez y
+   * vive en el estado local de la vista de entrega hasta que el operador la cierra.
+   */
+  apiTokens: {
+    all: ['api-tokens'] as const,
+    list: (params: QueryParams) => ['api-tokens', 'list', params] as const,
   },
 } as const

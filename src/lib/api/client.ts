@@ -7,6 +7,7 @@ import {
   type Page,
 } from '@/lib/contracts/common'
 import { networkError, normalizeApiError, ApiError } from './errors'
+import { CSRF_HEADER, readCsrfToken } from './csrf'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -16,7 +17,13 @@ if (!BASE_URL) {
 }
 
 // ── Manejo global de 401 ────────────────────────────────────────────────────
-type UnauthorizedHandler = () => void
+/**
+ * Recibe el `ApiError` ya normalizado, y no solo el aviso de que hubo un 401, porque desde v23 §7.3
+ * el código dice **por qué** se terminó la sesión: expiró por inactividad, alcanzó su duración
+ * máxima, la cerraron en otra pestaña, le cambiaron el rol… Sin el error, el usuario aterriza en el
+ * login sin saber qué pasó, que es justo el caso que el contrato nuevo se preocupó por distinguir.
+ */
+type UnauthorizedHandler = (error: ApiError) => void
 let unauthorizedHandler: UnauthorizedHandler | null = null
 
 /** Registra el handler que limpia la sesión y redirige a login ante un 401. */
@@ -35,7 +42,30 @@ interface RequestOptions {
   signal?: AbortSignal
   /** No dispara el handler global de 401 (p. ej. login: el 401 es "credenciales inválidas"). */
   suppressAuthHandler?: boolean
+  /**
+   * Fuerza o suprime el header `X-CSRF-Token` (v23 §7.1). Omitido = **automático**: se manda en
+   * todo método no seguro y en ninguno seguro.
+   *
+   * Los dos casos que rompen la regla por método, y por qué:
+   *
+   * - **`false` en los dos `POST` públicos** (`/auth/login` y `/gateway-users/invite/accept`). El
+   *   chequeo del backend vive dentro del guard de capacidades y solo corre para un actor de
+   *   sesión: ahí todavía no hay ninguna, y el token se deriva justamente del identificador de
+   *   sesión. No es que "no haga falta": es que no puede existir.
+   * - **`true` en `GET /database-exports/{id}/content`**, aunque sea un GET. Ese endpoint
+   *   CONSUME el artefacto, y una navegación GET lleva la cookie sola: sin el header, un `<img>`
+   *   en cualquier página ajena destruiría la exportación de quien la mirara.
+   */
+  csrf?: boolean
 }
+
+/** Métodos que el backend considera no seguros y para los que exige el token CSRF. */
+const UNSAFE_METHODS: ReadonlySet<HttpMethod> = new Set<HttpMethod>([
+  'POST',
+  'PATCH',
+  'PUT',
+  'DELETE',
+])
 
 function buildUrl(path: string, query?: QueryParams): string {
   const url = new URL(`${BASE_URL}${path}`)
@@ -64,9 +94,25 @@ async function runRequest(
   options: RequestOptions,
   extraHeaders?: Record<string, string>,
 ): Promise<Response> {
-  const { query, body, signal, suppressAuthHandler } = options
+  const { query, body, signal, suppressAuthHandler, csrf } = options
   const headers: Record<string, string> = { ...extraHeaders }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
+
+  /*
+   * CSRF (v23 §7.1). El token se lee de la cookie en CADA request, sin cachear, porque rota con
+   * la sesión: ver `readCsrfToken`.
+   *
+   * **Si la cookie no está, el request se manda igual y decide el servidor.** Bloquearlo acá
+   * sería peor que inútil: en la pantalla de login la cookie todavía no existe —no hay sesión de
+   * la que derivarla—, así que un interceptor que exija el token antes de salir dejaría a nadie
+   * poder iniciar sesión. El cliente no es la autoridad de autorización; que el 403 lo emita quien
+   * decide de verdad.
+   */
+  const needsCsrf = csrf ?? UNSAFE_METHODS.has(method)
+  if (needsCsrf) {
+    const token = readCsrfToken()
+    if (token) headers[CSRF_HEADER] = token
+  }
 
   let response: Response
   try {
@@ -93,12 +139,15 @@ async function runRequest(
         parsed = {}
       }
     }
-    if (response.status === 401 && !suppressAuthHandler) {
-      unauthorizedHandler?.()
-    }
     // El backend adjunta `X-Request-ID` a toda respuesta; se muestra en los estados de error.
     const requestId = response.headers.get('X-Request-ID') ?? undefined
-    throw normalizeApiError(response.status, parsed, requestId)
+    const apiError = normalizeApiError(response.status, parsed, requestId)
+    // Se normaliza ANTES de avisar al handler: necesita el `public_context.code` para saber por
+    // qué murió la sesión (v23 §7.3), no solo que murió.
+    if (response.status === 401 && !suppressAuthHandler) {
+      unauthorizedHandler?.(apiError)
+    }
+    throw apiError
   }
 
   return response

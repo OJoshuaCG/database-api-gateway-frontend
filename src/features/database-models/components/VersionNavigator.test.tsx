@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/utils'
 import type { ModelMigrationSummary } from '@/lib/contracts'
 import { resolveVersionIndex, sortVersionsAscending } from '../version-nav'
-import { VersionNavigator } from './VersionNavigator'
+import { VersionNavigator, type VersionPageMeta } from './VersionNavigator'
 
-function migration(version: string, id: number): ModelMigrationSummary {
+function migration(version: string, id: number, isLatest = false): ModelMigrationSummary {
   return {
     id,
     model_id: 1,
@@ -19,6 +19,7 @@ function migration(version: string, id: number): ModelMigrationSummary {
     is_baseline: false,
     reviewed: true,
     capture_selects: false,
+    is_latest: isLatest,
     sql_frozen: false,
     deletable: true,
     delete_requires_stamps: false,
@@ -32,16 +33,33 @@ function migration(version: string, id: number): ModelMigrationSummary {
 }
 
 /** El backend no garantiza el orden: se entrega desordenado a propósito. */
-const RAW = [migration('0002', 2), migration('0010', 10), migration('0001', 1)]
+const RAW = [migration('0002', 2), migration('0010', 10, true), migration('0001', 1)]
 
-function renderNavigator(selectedVersion: string | null) {
+/** Una sola página: `pages: 1` oculta el paginador y las flechas marcan los extremos reales. */
+const SINGLE_PAGE: VersionPageMeta = { page: 1, pages: 1, total: 3, size: 50 }
+
+function renderNavigator(
+  selectedVersion: string | null,
+  pagination: VersionPageMeta = SINGLE_PAGE,
+  raw: ModelMigrationSummary[] = RAW,
+) {
   const onSelect = vi.fn()
-  const sorted = sortVersionsAscending(RAW)
+  const onCrossPage = vi.fn()
+  const onPageChange = vi.fn()
+  const sorted = sortVersionsAscending(raw)
   const index = resolveVersionIndex(sorted, selectedVersion)
   renderWithProviders(
-    <VersionNavigator sorted={sorted} index={index} onSelect={onSelect} total={sorted.length} />,
+    <VersionNavigator
+      sorted={sorted}
+      index={index}
+      onSelect={onSelect}
+      pagination={pagination}
+      onPageChange={onPageChange}
+      onSizeChange={vi.fn()}
+      onCrossPage={onCrossPage}
+    />,
   )
-  return { onSelect }
+  return { onSelect, onCrossPage, onPageChange }
 }
 
 describe('VersionNavigator', () => {
@@ -69,9 +87,10 @@ describe('VersionNavigator', () => {
 
   it('en el extremo la flecha no navega, aunque siga siendo enfocable', async () => {
     const user = userEvent.setup()
-    const { onSelect } = renderNavigator(null)
+    const { onSelect, onCrossPage } = renderNavigator(null)
     await user.click(screen.getByRole('button', { name: 'Versión siguiente' }))
     expect(onSelect).not.toHaveBeenCalled()
+    expect(onCrossPage).not.toHaveBeenCalled()
   })
 
   it('en la más antigua no se puede retroceder', () => {
@@ -99,17 +118,6 @@ describe('VersionNavigator', () => {
     expect(onSelect).toHaveBeenCalledWith('0010')
   })
 
-  it('con el catálogo recortado avisa y RETIRA la afirmación de «más reciente»', () => {
-    // Si el backend tiene 120 versiones y solo llegaron 3, la punta real puede no estar entre
-    // ellas: afirmar «más reciente» al lado de la ficha que ofrece borrar sería inventar.
-    const sorted = sortVersionsAscending(RAW)
-    renderWithProviders(
-      <VersionNavigator sorted={sorted} index={2} onSelect={vi.fn()} total={120} />,
-    )
-    expect(screen.getByText('Se cargaron 3 de 120 versiones')).toBeInTheDocument()
-    expect(screen.queryByText('más reciente')).not.toBeInTheDocument()
-  })
-
   it('anuncia la versión ENTERA con su estado, no solo la posición', () => {
     // La región live decía «3 de 12» y nada más: quien navega con lector de pantalla pulsaba la
     // flecha y no se enteraba ni de qué versión ni de si estaba sin rollback.
@@ -124,5 +132,58 @@ describe('VersionNavigator', () => {
     renderNavigator(null)
     await user.click(screen.getByRole('button', { name: 'Abrir lista' }))
     expect(screen.getAllByText('sin rollback').length).toBeGreaterThan(0)
+  })
+
+  // ─── Catálogo paginado ────────────────────────────────────────────────────
+  //
+  // Antes de esto el catálogo se pedía en una sola página y, si el blueprint tenía más versiones
+  // que el tope, se avisaba del recorte y ya: no había forma de llegar a las que faltaban. Estos
+  // tests fijan que ahora sí la hay.
+
+  it('con una sola página no pinta el paginador', () => {
+    renderNavigator(null)
+    expect(screen.queryByRole('button', { name: 'Siguiente' })).not.toBeInTheDocument()
+  })
+
+  it('con varias páginas pinta el paginador y el total del catálogo entero', () => {
+    renderNavigator(null, { page: 2, pages: 2, total: 53, size: 50 })
+    expect(screen.getByText(/Página 2 de 2 · 53 resultados/)).toBeInTheDocument()
+    // El contador de posición aclara que es dentro de la página, no del catálogo.
+    expect(screen.getByText('3 de 3 en esta página')).toBeInTheDocument()
+  })
+
+  it('en el borde de la página la flecha CRUZA en vez de morir', async () => {
+    const user = userEvent.setup()
+    // Página 2 de 2 (las más recientes en números de pantalla): hacia atrás hay página contigua.
+    const { onCrossPage, onSelect } = renderNavigator('0001', {
+      page: 2,
+      pages: 2,
+      total: 53,
+      size: 50,
+    })
+    const back = screen.getByRole('button', { name: 'Versión anterior' })
+    expect(back).toHaveAttribute('aria-disabled', 'false')
+    await user.click(back)
+    expect(onCrossPage).toHaveBeenCalledWith('older')
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('en el extremo REAL del catálogo la flecha sigue apagada', () => {
+    // Página 1 de 2: por debajo de la más antigua de esta página ya no hay nada.
+    renderNavigator('0001', { page: 1, pages: 2, total: 53, size: 50 })
+    expect(screen.getByRole('button', { name: 'Versión anterior' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('la insignia «más reciente» sale del backend, no de la posición en la lista', () => {
+    // En una página que no contiene la punta, el último ítem NO es la versión más reciente del
+    // blueprint. Deducirlo de la posición era el bug: afirmaba «más reciente» sobre una versión
+    // intermedia, justo al lado de la ficha que ofrece borrar.
+    const sinPunta = [migration('0001', 1), migration('0002', 2)]
+    renderNavigator(null, { page: 1, pages: 2, total: 53, size: 50 }, sinPunta)
+    expect(screen.getByDisplayValue('0002 · paso 0002')).toBeInTheDocument()
+    expect(screen.queryByText('más reciente')).not.toBeInTheDocument()
   })
 })

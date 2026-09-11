@@ -40,3 +40,6 @@ dist-ssr
 
 # Environment variables
 .env
+
+# Índice local de CodeGraph: es por checkout y contiene rutas absolutas de esta máquina.
+.codegraph/

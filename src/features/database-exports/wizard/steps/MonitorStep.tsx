@@ -13,6 +13,7 @@ import {
 import { cn, formatBytes, formatDuration, formatInteger, isClipboardAvailable } from '@/lib/utils'
 import { formatCountdown } from '@/lib/utils/countdown'
 import { useToast } from '@/lib/toast/use-toast'
+import { toApiError } from '@/lib/api/errors'
 import type { ExportItem, ExportItemStatus, ExportJobPhase, ExportJobStatus } from '@/lib/contracts'
 import { Callout, type CalloutTone } from '@/components/ui'
 import { WarningList } from '../../components/Callout'
@@ -186,6 +187,30 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
       <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
         <Spinner className="h-4 w-4" /> Cargando el manifiesto del artefacto…
       </div>
+    )
+  }
+  /*
+   * El manifiesto pasó a estar detrás del mismo guard de PROPIEDAD que las dos entregas: expone
+   * checksum, lista de objetos y conteo de filas del export de otra persona.
+   *
+   * Hay que pintarlo explícito y no dejar que caiga en el `return null` de abajo: un panel que
+   * desaparece sin decir nada se lee como «todavía está cargando» o como un bug de la app, y quien
+   * lo mira se queda esperando algo que no va a llegar nunca.
+   */
+  if (wizard.manifest.isError) {
+    const error = toApiError(wizard.manifest.error)
+    if (error.code === 'export.not_owner') {
+      return (
+        <Callout tone="info" title="Esta exportación la creó otro administrador">
+          Solo quien la pidió puede ver su manifiesto y descargarla. Pedile a esa persona el
+          artefacto, o creá tu propia exportación.
+        </Callout>
+      )
+    }
+    return (
+      <Callout tone="warning" title="No se pudo cargar el manifiesto del artefacto">
+        {error.message}
+      </Callout>
     )
   }
   if (!manifest) return null

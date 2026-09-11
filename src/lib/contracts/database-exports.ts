@@ -692,6 +692,32 @@ export const exportManifestSchema = z.object({
 })
 export type ExportManifest = z.infer<typeof exportManifestSchema>
 
+/**
+ * `POST /database-exports/{id}/download-ticket` (v23 §7.2) — el primer paso de la descarga.
+ *
+ * La descarga pasó a ser de DOS pasos: se pide un ticket y recién con él se hace el `GET`. El
+ * ticket **vence en 60 segundos**, así que se pide en el momento del click y NUNCA al cargar la
+ * pantalla: uno pedido al montar la vista ya está vencido cuando el operador se decide.
+ *
+ * Está atado a `(job_id, user_id)`, no solo al job: el de otra persona no sirve aunque esté
+ * vigente. Si la SPA llegara a cachear tickets —hoy no lo hace, y por esto no debería— habría que
+ * indexarlos por usuario además de por job.
+ *
+ * El POST corre los MISMOS guards que la descarga, así que un 409/410 de autorización o de estado
+ * del artefacto llega acá y no en el `GET`. Lo que sí puede fallar después es el ticket en sí, y
+ * esos dos errores **no traen `public_context.code`**: solo se distinguen por status (422 =
+ * malformado o de otro usuario; 410 = vencido).
+ */
+export const exportDownloadTicketSchema = z.object({
+  ticket: z.string(),
+  expires_at: z.string(),
+  filename: z.string(),
+})
+export type ExportDownloadTicket = z.infer<typeof exportDownloadTicketSchema>
+
+/** Vida útil del ticket, en segundos. La fija el backend; acá solo alimenta el copy. */
+export const EXPORT_TICKET_TTL_SECONDS = 60
+
 // ── Entregas sin `ApiResponse` (`download` / `content`) ──────────────────────────
 /**
  * Metadatos de una entrega de artefacto, leídos de las **cabeceras** de `download`/`content`. No

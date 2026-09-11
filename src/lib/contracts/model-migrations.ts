@@ -151,6 +151,19 @@ export const modelMigrationSummarySchema = z.object({
   reviewed: z.boolean().optional(),
   /** Ver `modelMigrationOutSchema.capture_selects` (api-reference-v9 §7). */
   capture_selects: z.boolean().optional().default(false),
+  /**
+   * Es la PUNTA del blueprint (api-reference-v22 §3). El backend lo resuelve sobre el catálogo
+   * COMPLETO, así que vale en cualquier página y con cualquier `order`.
+   *
+   * Es la única fuente válida para la insignia «más reciente». Deducirla de la posición en la
+   * lista —el último ítem del array— era el bug que motivó este campo: con el catálogo paginado,
+   * el último ítem de la página no es el último del blueprint, y esa afirmación falsa aparecía
+   * al lado de la ficha que ofrece borrar.
+   *
+   * Opcional para no romper contra un gateway anterior a v22: ahí llega `false` y la insignia
+   * simplemente no se pinta, que es el fallo en la dirección segura.
+   */
+  is_latest: z.boolean().optional().default(false),
   ...migrationPolicyFields,
   ...migrationSqlFactFields,
   checksum: z.string(),

@@ -315,11 +315,13 @@ describe('buildAdoptBody / buildExecuteBody', () => {
       name: '  Mi versión  ',
       description: '   ',
       executeImmediately: true,
+      confirmTargetName: 'tienda_cliente_42',
     })
     expect(body).toEqual({
       selected_item_ids: [1, 2],
       name: 'Mi versión',
       execute_immediately: true,
+      confirm_target_name: 'tienda_cliente_42',
     })
   })
 
@@ -329,9 +331,23 @@ describe('buildAdoptBody / buildExecuteBody', () => {
       name: 'v2',
       description: '',
       executeImmediately: false,
+      confirmTargetName: '',
     })
     expect(body.selected_item_ids).toEqual([9, 3, 7])
     expect('auto_resolve_dependencies' in body).toBe(false)
+  })
+
+  it('OMITE confirm_target_name cuando no se aplica: ahí el backend lo ignora y no hay motor que tocar', () => {
+    const body = buildAdoptBody({
+      selectedItemIds: [1],
+      name: 'v3',
+      description: '',
+      executeImmediately: false,
+      // Aunque el estado traiga algo escrito (p. ej. el usuario encendió y apagó el toggle),
+      // no se manda: el campo solo tiene significado en la rama que ejecuta DDL.
+      confirmTargetName: 'tienda_cliente_42',
+    })
+    expect('confirm_target_name' in body).toBe(false)
   })
 
   it('en modo custom incluye selected_item_ids; en otros modos manda null', () => {
