@@ -37,8 +37,8 @@ export function EnvironmentsPanel() {
         <CardTitle>Entornos de despliegue</CardTitle>
         <CardDescription>
           Clasifican cada base gestionada y definen qué se puede aplicar sobre ella. Es un conjunto
-          fijo: se administra por API a propósito, no desde acá. Ojo, esto no tiene nada que ver
-          con el <code>APP_ENV</code> del propio gateway que muestra <code>/health</code>.
+          fijo: se administra por API a propósito, no desde acá. Ojo, esto no tiene nada que ver con
+          el <code>APP_ENV</code> del propio gateway que muestra <code>/health</code>.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -79,14 +79,36 @@ export function EnvironmentsPanel() {
                       </span>
                     </td>
                     <td className="py-2 pr-4">
-                      {env.blocks_destructive_migrations ? (
-                        <span className="text-warning">
-                          Bloquea migraciones destructivas (DROP / TRUNCATE / DELETE sin WHERE /
-                          ALTER DROP COLUMN)
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Sin restricciones</span>
-                      )}
+                      <span className="flex flex-col gap-1">
+                        {env.blocks_destructive_migrations ? (
+                          <span className="text-warning">
+                            Bloquea migraciones destructivas (DROP / TRUNCATE / DELETE sin WHERE /
+                            ALTER DROP COLUMN)
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Sin restricciones</span>
+                        )}
+                        {/*
+                          Se muestra SIEMPRE, encendido o apagado, y no solo cuando está abierto:
+                          es una superficie de lectura sobre bases de terceros, y «no dice nada»
+                          se lee igual que «está cerrado». Que el estado sea explícito es la mitad
+                          del valor de la fila.
+
+                          Y se describe como condición PARCIAL a propósito: el flag del entorno es
+                          una de las cinco del gate de agentes. Presentarlo como «los agentes
+                          acceden» prometería un acceso que igual puede no existir, porque cada
+                          base necesita además su propio opt-in.
+                        */}
+                        {env.allows_agent_access ? (
+                          <span className="text-warning">
+                            Permite acceso de agentes (falta además el opt-in de cada base)
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Cerrado a agentes: ninguna de sus bases es alcanzable por un token
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="py-2 pr-4">
                       {env.database_count > 0 ? (
