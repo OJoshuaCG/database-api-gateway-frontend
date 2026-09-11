@@ -453,6 +453,11 @@ export interface AdoptBodyInput {
   name: string
   description: string
   executeImmediately: boolean
+  /**
+   * Nombre del target reescrito por el usuario. Solo viaja cuando `executeImmediately` es `true`:
+   * ver `buildAdoptBody`.
+   */
+  confirmTargetName: string
 }
 
 export function buildAdoptBody(input: AdoptBodyInput): AdoptComparisonIn {
@@ -463,6 +468,10 @@ export function buildAdoptBody(input: AdoptBodyInput): AdoptComparisonIn {
   }
   const description = input.description.trim()
   if (description) body.description = description
+  // Solo cuando se aplica. El backend lo ignora si `execute_immediately` es `false`, y mandarlo
+  // igual haría creer —a quien lea esta función o el payload en la red— que la confirmación
+  // gobierna también el caso que no toca ningún motor. No lo hace: ahí no hay nada que confirmar.
+  if (input.executeImmediately) body.confirm_target_name = input.confirmTargetName
   return body
 }
 
