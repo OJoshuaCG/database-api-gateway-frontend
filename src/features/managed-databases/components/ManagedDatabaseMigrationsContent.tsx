@@ -5,6 +5,7 @@ import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   Combobox,
@@ -15,13 +16,11 @@ import {
   Input,
   Modal,
   PageHeader,
-  Pagination,
   Spinner,
   Switch,
   TabButton,
   XIcon,
 } from '@/components/ui'
-import { formatDateTime } from '@/lib/utils'
 import { toApiError } from '@/lib/api/errors'
 import {
   isDryRunResult,
@@ -39,18 +38,38 @@ import { hasResolvablePartial, isPartialResolvable } from '../partial-applicatio
 import { useManagedDatabase } from '../hooks/use-managed-databases'
 import {
   useApplyMigrations,
-  useMigrationHistory,
   useMigrationStatus,
   useRollbackMigration,
   useStampMigration,
 } from '../hooks/use-db-migrations'
 import { ProvisionStatusBadge } from './ProvisionStatusBadge'
 import { ProvisionDatabaseDialog } from './ProvisionDatabaseDialog'
+import { historyStatusSpec } from '../history-badges'
+import { MigrationHistoryPanel } from './MigrationHistoryPanel'
 import { ReconcilePartialSection } from './ReconcilePartialSection'
 
 /** Motivo único para los `title` de los controles que el backend rechazaría con 409. */
 const NOT_PROVISIONED_HINT =
   'La base de datos no existe en el motor: aprovisionala antes de operar migraciones.'
+
+/**
+ * Motivo único del bloqueo por contabilidad huérfana.
+ *
+ * Va como TEXTO VISIBLE junto a cada control deshabilitado, no solo como `title`: un `title` no
+ * llega por teclado ni existe en táctil, así que el único lector al que le explicaría el bloqueo
+ * es el que ya tiene el ratón encima. El `title` se pone además, no en vez de.
+ */
+const ORPHAN_BLOCK_REASON =
+  'Bloqueado: la contabilidad de versiones de esta base está fuera de sitio.'
+
+/**
+ * Aviso dominante entre los tres que pueden coexistir en esta pantalla.
+ *
+ * `database_exists: false`, `has_orphan_accounting: true` y `has_partial_application: true` son
+ * independientes en el contrato, así que los tres pueden venir a la vez. Mostrarlos juntos no es
+ * «más información»: es tres diagnósticos contradictorios peleando por la misma decisión.
+ */
+type DominantBanner = 'not-provisioned' | 'orphan-accounting' | 'partial' | null
 
 const TABS = ['actions', 'history'] as const
 type Tab = (typeof TABS)[number]
@@ -81,6 +100,15 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const tabParam = searchParams.get('tab')
   const tab: Tab = isTab(tabParam) ? tabParam : 'actions'
   const reconcileVersion = searchParams.get('reconcile')
+  /**
+   * Precarga del stamp desde el informe de contabilidad del blueprint (`?stamp=<version>`).
+   *
+   * Se valida contra el patrón del backend antes de aceptarla: la URL la escribe quien sea, y una
+   * versión inventada abriría el diálogo con un valor que el POST rechazaría con 422. Si no pasa
+   * el patrón, la precarga simplemente no existe.
+   */
+  const stampParam = searchParams.get('stamp')?.trim() ?? ''
+  const preloadedStamp = MIGRATION_VERSION_PATTERN.test(stampParam) ? stampParam : null
 
   const [applyVersion, setApplyVersion] = useState('')
   const [force, setForce] = useState(false)
@@ -115,9 +143,24 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const [rollbackTarget, setRollbackTarget] = useState('')
   // Versiones sin `down_sql` confirmado devueltas por el 409 (`public_context.missing_down_sql`).
   const [missingDownSql, setMissingDownSql] = useState<string[] | null>(null)
-  const [stampVersion, setStampVersion] = useState('')
+  // El estado inicial del diálogo se DERIVA de la URL en el inicializador de `useState`, no en un
+  // efecto: un `setState` síncrono dentro de `useEffect` está prohibido en este repo (y
+  // `react-hooks` v7 lo marca como error), y además pintaría un fotograma con el diálogo cerrado.
+  const [stampVersion, setStampVersion] = useState(() => preloadedStamp ?? '')
   const [stampForce, setStampForce] = useState(false)
-  const [stampOpen, setStampOpen] = useState(false)
+  /**
+   * `purge` (v25): vacía la tabla de versión ANTES de escribir el puntero nuevo.
+   *
+   * Vive junto a `stampForce` porque el backend solo lo acepta acompañado de `force` (si no,
+   * responde 422). La UI no debe llegar ahí: el interruptor está deshabilitado sin `force`, y al
+   * apagar `force` se apaga también este.
+   */
+  const [stampPurge, setStampPurge] = useState(false)
+  const [stampOpen, setStampOpen] = useState(() => preloadedStamp !== null)
+  // 422 sin `public_context.code`: el único camino conocido es purge sin force, que esta UI ya
+  // impide. Si aun así llega, el mensaje del backend se muestra tal cual dentro del diálogo —el
+  // toast del hook se va solo y el diálogo sigue abierto sin explicar por qué no pasó nada.
+  const [stampFallbackError, setStampFallbackError] = useState<string | null>(null)
   // 409 de captura sin revisar al stampear (api-reference-v9 §3.4): `force` NO habilita la
   // captura, solo permite marcar el puntero de versión igual.
   const [stampUnreviewedCapture, setStampUnreviewedCapture] = useState<string[] | null>(null)
@@ -175,12 +218,44 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   // blueprint: pintarlo sin este aviso haría creer que hay trabajo pendiente cuando lo que falta
   // es la base. Todo lo que ejecuta responde 409, así que se deshabilita en la UI.
   const notProvisioned = status.data?.database_exists === false
+  /**
+   * Contabilidad huérfana (v25): la versión real vive en una tabla `_gw_v_*` que el gateway NO
+   * está leyendo, así que `pending_versions` NO es de fiar —lista todo como pendiente— y aplicar
+   * desde acá reejecutaría migraciones que esta base ya tiene. Bloquea apply y rollback; el stamp
+   * sigue habilitado porque es la vía de salida.
+   */
+  const hasOrphanAccounting = status.data?.has_orphan_accounting ?? false
+  const orphanTables = status.data?.orphan_version_tables ?? []
+  const cachedVersion = status.data?.cached_version ?? null
+  /**
+   * Orden fijo, de más a menos dominante: sin base no hay nada que diagnosticar, y la contabilidad
+   * huérfana invalida la lectura sobre la que se juzga la aplicación parcial (los contadores de
+   * los que sale «hay una parcial» salen de la tabla equivocada).
+   */
+  const pickDominantBanner = (): DominantBanner => {
+    if (notProvisioned) return 'not-provisioned'
+    if (hasOrphanAccounting) return 'orphan-accounting'
+    if (hasPartial && partialEntries.length > 0) return 'partial'
+    return null
+  }
+  const dominantBanner = pickDominantBanner()
   // Una BD archivada es de solo lectura: se ocultan las acciones que tocan el motor (Item 11).
   const isArchived = database.status === 'archived'
   const effectiveStatus = recovered ? 'active' : database.status
   const versionItems = versions.data?.items ?? []
   const selectedStampVersion = versionItems.find((m) => m.version === stampVersion) ?? null
   const stampValid = MIGRATION_VERSION_PATTERN.test(stampVersion.trim())
+  /**
+   * El desplegable solo sirve mientras la versión elegida esté en el catálogo del blueprint.
+   *
+   * Con una precarga de contabilidad huérfana puede NO estarlo —ese es justamente el caso «Can't
+   * locate revision»—, y un `Combobox` con un valor que no figura entre sus opciones se pinta
+   * vacío: la pantalla diría «no elegiste nada» mientras el POST manda una versión. En ese caso
+   * se cae al campo de texto, que sí muestra lo que se va a enviar. Es derivado, no estado: por
+   * el desplegable solo entran versiones del catálogo, así que no puede cambiar mientras se usa.
+   */
+  const stampVersionInCatalog = versionItems.some((m) => m.version === stampVersion)
+  const useStampCombobox = versionItems.length > 0 && (stampVersion === '' || stampVersionInCatalog)
   // Captura de SELECT: aviso PROACTIVO, acotado a las versiones PENDIENTES de ESTA base. El
   // predicado es compartido con el diálogo del lote (`features/database-models/capture`): estaba
   // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`, con el
@@ -216,19 +291,45 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const openStamp = () => {
     setStampVersion('')
     setStampForce(false)
+    setStampPurge(false)
     setStampUnreviewedCapture(null)
+    setStampFallbackError(null)
     setStampOpen(true)
+  }
+
+  /**
+   * Cierra el diálogo y consume la precarga.
+   *
+   * El `?stamp=` es de un solo uso: si sobreviviera al cierre, recargar la página o volver atrás
+   * reabriría el diálogo con una versión ya elegida, que es justo lo que nadie espera de una
+   * pantalla que acaba de cerrar.
+   */
+  const closeStamp = () => {
+    setStampOpen(false)
+    if (searchParams.has('stamp')) updateParams((next) => next.delete('stamp'))
+  }
+
+  /** Apagar `force` apaga `purge`: el backend responde 422 si llega purge sin force. */
+  const changeStampForce = (value: boolean) => {
+    setStampForce(value)
+    if (!value) setStampPurge(false)
   }
 
   const confirmStamp = () => {
     stamp.mutate(
-      { version: stampVersion.trim(), force: stampForce || undefined },
+      {
+        version: stampVersion.trim(),
+        force: stampForce || undefined,
+        purge: stampPurge || undefined,
+      },
       {
         onSuccess: () => {
-          setStampOpen(false)
+          closeStamp()
           setStampVersion('')
           setStampForce(false)
+          setStampPurge(false)
           setStampUnreviewedCapture(null)
+          setStampFallbackError(null)
           // Un stamp saca a la BD de cuarentena (error→active); lo reflejamos en la UI.
           if (database.status === 'error') setRecovered(true)
         },
@@ -246,6 +347,9 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               ? apiError.unreviewedCapture
               : null,
           )
+          // 422 sin código estable: no hay nada que traducir a una salida concreta, así que se
+          // muestra el mensaje del backend tal cual en vez de inventar un diagnóstico.
+          setStampFallbackError(apiError.status === 422 && !apiError.code ? apiError.message : null)
         },
       },
     )
@@ -353,23 +457,38 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                 >
                   Marcar versión (stamp)…
                 </Button>
-                <Button
-                  isLoading={apply.isPending}
-                  disabled={pendingCount === 0 || notProvisioned}
-                  title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
-                  onClick={() => runApply({ dryRun: false })}
-                >
-                  {/* En la cabecera el botón se lee antes que el estado: mientras se carga no
-                      puede afirmar «ya está al día», que aún no se sabe. Y con la base sin
-                      crear tampoco: hay pendientes, pero no hay dónde aplicarlas. */}
-                  {status.isLoading
-                    ? 'Comprobando estado…'
-                    : notProvisioned
-                      ? 'La base no existe en el motor'
-                      : pendingCount === 0
-                        ? 'Ya está al día'
-                        : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    isLoading={apply.isPending}
+                    disabled={pendingCount === 0 || notProvisioned || hasOrphanAccounting}
+                    title={
+                      notProvisioned
+                        ? NOT_PROVISIONED_HINT
+                        : hasOrphanAccounting
+                          ? ORPHAN_BLOCK_REASON
+                          : undefined
+                    }
+                    onClick={() => runApply({ dryRun: false })}
+                  >
+                    {/* En la cabecera el botón se lee antes que el estado: mientras se carga no
+                        puede afirmar «ya está al día», que aún no se sabe. Y con la base sin
+                        crear tampoco: hay pendientes, pero no hay dónde aplicarlas. Con la
+                        contabilidad huérfana tampoco puede prometer «a la última»: no se sabe
+                        cuál es la actual. */}
+                    {status.isLoading
+                      ? 'Comprobando estado…'
+                      : notProvisioned
+                        ? 'La base no existe en el motor'
+                        : hasOrphanAccounting
+                          ? 'Actualizar (bloqueado)'
+                          : pendingCount === 0
+                            ? 'Ya está al día'
+                            : `Actualizar a la última${latest ? ` (${latest})` : ''} 🔌`}
+                  </Button>
+                  {hasOrphanAccounting && (
+                    <p className="max-w-xs text-right text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
+                  )}
+                </div>
               </>
             ) : undefined
           }
@@ -412,7 +531,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                   pantalla no sirva para nada, y hasta ahora se manifestaba como un 404 opaco
                   («El recurso solicitado no existe en el servidor destino») sin decir qué
                   hacer. Va PRIMERO porque bloquea todo lo demás. */}
-              {notProvisioned && (
+              {dominantBanner === 'not-provisioned' && (
                 <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-4">
                   <div className="flex flex-col gap-1">
                     <h2 className="text-sm font-semibold text-foreground">
@@ -445,10 +564,30 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {/*
+                      🔴 Este botón también se bloquea con la contabilidad huérfana, y es el que
+                      MÁS importa de los cinco, porque es el que aparece justo al final de la
+                      secuencia del incidente: renombrar el slug deja la contabilidad huérfana →
+                      la cadena entera figura pendiente → alguien aplica → el motor falla con
+                      «ya existen las tablas» → la base queda en `error` y se pinta este banner.
+                      O sea que el operador llega hasta acá **por culpa** de la contabilidad rota,
+                      y se encontraba con un botón habilitado que reejecuta el MISMO apply, ahora
+                      con `force: true`, sobre la MISMA lista falsa. El banner de cuarentena se
+                      evalúa fuera de `pickDominantBanner`, así que convivía con el de huérfana
+                      sin que ninguno de los dos supiera del otro.
+                    */}
                     <Button
                       variant="outline"
                       size="sm"
                       isLoading={apply.isPending}
+                      disabled={hasOrphanAccounting || notProvisioned}
+                      title={
+                        hasOrphanAccounting
+                          ? ORPHAN_BLOCK_REASON
+                          : notProvisioned
+                            ? NOT_PROVISIONED_HINT
+                            : undefined
+                      }
                       onClick={() =>
                         apply.mutate(
                           { force: true, dryRun: false, onFailure },
@@ -470,6 +609,9 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                     >
                       Reintentar apply (force) 🔌
                     </Button>
+                    {hasOrphanAccounting && (
+                      <p className="basis-full text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -482,6 +624,69 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                 </div>
               )}
 
+              {/* Contabilidad huérfana: va ARRIBA de los contadores porque es lo que decide si
+                  esos contadores se pueden leer siquiera. */}
+              {dominantBanner === 'orphan-accounting' && (
+                <Callout
+                  tone="danger"
+                  title="La contabilidad de versiones de esta base está fuera de sitio."
+                  action={
+                    <>
+                      <Link
+                        to={`/database-models/${modelId}/migrations?tab=contabilidad`}
+                        className="inline-flex min-h-8 select-none items-center justify-center gap-1.5 rounded-lg border border-input bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      >
+                        Ver el informe del blueprint
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={openStamp}
+                        disabled={stamp.isPending || isArchived}
+                      >
+                        Recuperar con stamp…
+                      </Button>
+                    </>
+                  }
+                >
+                  <p>
+                    La versión real de esta base vive en una tabla que el gateway{' '}
+                    <strong>no está leyendo</strong>, así que la lista de pendientes{' '}
+                    <strong>no es de fiar</strong>: figuran todas como pendientes sin estarlo, y
+                    aplicar desde acá reejecutaría migraciones que esta base ya tiene.
+                  </p>
+                  <p>
+                    <span className="text-foreground">Tabla(s) que el gateway no lee:</span>{' '}
+                    {orphanTables.length > 0 ? (
+                      orphanTables.map((table, index) => (
+                        <span key={table}>
+                          {index > 0 && ' · '}
+                          <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                            {table}
+                          </code>
+                        </span>
+                      ))
+                    ) : (
+                      <em>el gateway no devolvió ninguna</em>
+                    )}
+                  </p>
+                  <p>
+                    <span className="text-foreground">
+                      Última versión que el inventario registró:
+                    </span>{' '}
+                    {cachedVersion !== null ? (
+                      <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                        {cachedVersion}
+                      </code>
+                    ) : (
+                      // Un `null` escondido se lee como «no pasa nada»: acá significa que el
+                      // inventario nunca llegó a registrar una versión, que es un dato.
+                      <em>ninguna — el inventario nunca registró una</em>
+                    )}
+                  </p>
+                </Callout>
+              )}
+
               {/* Estado */}
               {status.isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -492,22 +697,57 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               ) : status.data ? (
                 <Card>
                   <CardContent className="flex flex-wrap items-center gap-2 p-4">
-                    <Badge tone="info">actual: {currentVersion ?? 'ninguna'}</Badge>
+                    {/* `actual` se SUSTITUYE por el mismo motivo que el contador, y no es un
+                        detalle: `has_orphan_accounting: true` implica, por construcción de la
+                        sonda del backend, que `current_version` viene `null`. O sea que este
+                        badge diría «actual: ninguna» —que es FALSO: la versión está viva en la
+                        tabla huérfana que el banner de arriba nombra— y, junto a «última: 0009»,
+                        le sirve al operador las dos premisas para que reconstruya solo la
+                        conclusión del incidente («falta todo») sin que la pantalla la afirme.
+                        Un `null` en azul se sigue leyendo como un dato. */}
+                    {hasOrphanAccounting ? (
+                      <Badge tone="error">actual: no se puede determinar</Badge>
+                    ) : (
+                      <Badge tone="info">actual: {currentVersion ?? 'ninguna'}</Badge>
+                    )}
                     <Badge tone="neutral">última: {latest ?? '—'}</Badge>
-                    <Badge tone={pendingCount > 0 ? 'warning' : 'success'}>
-                      {pendingCount} pendiente(s)
-                    </Badge>
-                    {status.data.pending_versions.length > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {status.data.pending_versions.join(', ')}
-                      </span>
+                    {/* Con la contabilidad huérfana el contador se SUSTITUYE, no se decora: un
+                        número tachado, en gris o con asterisco se sigue leyendo como número, y
+                        este incidente empezó con alguien creyéndole a ese contador. La lista que
+                        devolvió el gateway se conserva —es evidencia— pero plegada y rotulada
+                        como no fiable, para que haya que ir a buscarla a propósito. */}
+                    {hasOrphanAccounting ? (
+                      <>
+                        <Badge tone="error">Pendientes: no se puede determinar</Badge>
+                        {status.data.pending_versions.length > 0 && (
+                          <details className="basis-full rounded-lg border border-border p-2">
+                            <summary className="cursor-pointer text-xs text-muted-foreground">
+                              Ver la lista que devolvió el gateway (no fiable)
+                            </summary>
+                            <p className="mt-2 break-all text-xs text-muted-foreground">
+                              {status.data.pending_versions.join(', ')}
+                            </p>
+                          </details>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Badge tone={pendingCount > 0 ? 'warning' : 'success'}>
+                          {pendingCount} pendiente(s)
+                        </Badge>
+                        {status.data.pending_versions.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {status.data.pending_versions.join(', ')}
+                          </span>
+                        )}
+                      </>
                     )}
                   </CardContent>
                 </Card>
               ) : null}
 
               {/* Aplicación parcial (§9): sentencias ejecutadas sin registrar la versión */}
-              {hasPartial && partialEntries.length > 0 && (
+              {dominantBanner === 'partial' && (
                 <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-4">
                   <div className="flex flex-col gap-1">
                     <h2 className="text-sm font-semibold text-foreground">
@@ -643,16 +883,34 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
+                          {/* El dry-run se bloquea con la contabilidad huérfana aunque NO escriba
+                              nada, y esa es justamente la lección del incidente: el daño no fue la
+                              escritura, fue la AFIRMACIÓN. Este plan se calcula sobre
+                              `pending_versions`, que con el flag en `true` no es de fiar, así que
+                              devolvería la lista completa —«0001, 0002, …»— con la autoridad
+                              añadida de «esto es lo que el backend dice que va a pasar», dos
+                              tarjetas debajo del banner que acaba de decir que no se puede
+                              determinar. Un plan calculado sobre datos falsos no tiene valor
+                              diagnóstico: para diagnosticar está el informe de /version-tables. */}
                           <Button
                             variant="outline"
                             size="sm"
                             isLoading={apply.isPending}
-                            disabled={pendingCount === 0 || notProvisioned}
-                            title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
+                            disabled={pendingCount === 0 || notProvisioned || hasOrphanAccounting}
+                            title={
+                              notProvisioned
+                                ? NOT_PROVISIONED_HINT
+                                : hasOrphanAccounting
+                                  ? ORPHAN_BLOCK_REASON
+                                  : undefined
+                            }
                             onClick={() => runApply({ dryRun: true })}
                           >
                             Previsualizar (dry-run)
                           </Button>
+                          {hasOrphanAccounting && (
+                            <p className="basis-full text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
+                          )}
                           <Switch
                             checked={force}
                             onCheckedChange={setForce}
@@ -667,7 +925,11 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             hint="Solo MySQL/MariaDB. Aplica también a «ir a una versión concreta»."
                           />
                         </div>
-                        {preview && (
+                        {/* Un preview pedido ANTES de que llegara el flag seguiría pintando
+                            «Plan: 8 pendiente(s) · 0001, 0002…» debajo del bloqueo. Se retira
+                            junto con el botón: la evidencia envenenada no se conserva «por si
+                            acaso», porque acá lo que se conserva se cree. */}
+                        {preview && !hasOrphanAccounting && (
                           <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
                             Plan: {preview.pending_versions.length} pendiente(s)
                             {preview.pending_versions.length > 0
@@ -697,8 +959,18 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                           <Button
                             size="sm"
                             isLoading={apply.isPending}
-                            disabled={applyVersion.trim().length === 0 || notProvisioned}
-                            title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
+                            disabled={
+                              applyVersion.trim().length === 0 ||
+                              notProvisioned ||
+                              hasOrphanAccounting
+                            }
+                            title={
+                              notProvisioned
+                                ? NOT_PROVISIONED_HINT
+                                : hasOrphanAccounting
+                                  ? ORPHAN_BLOCK_REASON
+                                  : undefined
+                            }
                             onClick={() =>
                               runApply({ version: applyVersion.trim(), dryRun: false })
                             }
@@ -706,6 +978,9 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                             Aplicar hasta esa versión 🔌
                           </Button>
                         </div>
+                        {hasOrphanAccounting && (
+                          <p className="text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
+                        )}
                       </CardContent>
                     </Card>
                   </div>
@@ -804,8 +1079,13 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                                       </code>
                                     </td>
                                     <td className="px-2 py-1.5">
-                                      <Badge tone={item.status === 'applied' ? 'success' : 'error'}>
-                                        {item.status}
+                                      {/* Vocabulario derivado, no el valor crudo: este ternario
+                                          pintaba `applied`/`failed` en inglés en una UI que es
+                                          toda en español, y quedaba al lado de la pestaña de
+                                          historial que ya lo traduce. Dos rótulos distintos para
+                                          el mismo hecho en la misma pantalla. */}
+                                      <Badge tone={historyStatusSpec(item.status).tone}>
+                                        {historyStatusSpec(item.status).label}
                                       </Badge>
                                     </td>
                                     <td className="px-2 py-1.5 text-muted-foreground">
@@ -1018,12 +1298,21 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
                           )}
                         </div>
                       )}
-                      <div className="flex justify-end">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {hasOrphanAccounting && (
+                          <p className="text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
+                        )}
                         <Button
                           variant="danger"
                           size="sm"
-                          disabled={!canRollback || notProvisioned}
-                          title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
+                          disabled={!canRollback || notProvisioned || hasOrphanAccounting}
+                          title={
+                            notProvisioned
+                              ? NOT_PROVISIONED_HINT
+                              : hasOrphanAccounting
+                                ? ORPHAN_BLOCK_REASON
+                                : undefined
+                          }
                           isLoading={rollback.isPending}
                           onClick={() =>
                             rollback.mutate(
@@ -1062,7 +1351,9 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
             </div>
           )}
 
-          {tab === 'history' && <MigrationHistoryPanel dbId={databaseId} />}
+          {tab === 'history' && (
+            <MigrationHistoryPanel dbId={databaseId} modelId={hasModel ? modelId : undefined} />
+          )}
         </>
       )}
 
@@ -1070,14 +1361,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       <Modal
         open={stampOpen}
         onClose={() => {
-          if (!stamp.isPending) setStampOpen(false)
+          if (!stamp.isPending) closeStamp()
         }}
         title="Marcar versión (stamp)"
         description={`«${database.name}» (#${database.id})`}
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStampOpen(false)} disabled={stamp.isPending}>
+            <Button variant="ghost" onClick={closeStamp} disabled={stamp.isPending}>
               Cancelar
             </Button>
             <Button
@@ -1091,7 +1382,29 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
         }
       >
         <div className="flex flex-col gap-3">
-          {versionItems.length > 0 ? (
+          {/* Precarga desde el informe de contabilidad del blueprint. Se anuncia porque el
+              diálogo se abre solo con una versión ya elegida: sin decir de dónde salió, parece
+              un valor que el usuario puso y no recuerda. */}
+          {preloadedStamp !== null && stampVersion === preloadedStamp && (
+            <Callout tone="info" title={`Precargado con ${preloadedStamp}`}>
+              <p>Es la versión que guarda la tabla huérfana de esta base.</p>
+            </Callout>
+          )}
+          {preloadedStamp !== null &&
+            stampVersion === preloadedStamp &&
+            cachedVersion !== null &&
+            cachedVersion !== preloadedStamp && (
+              <Callout tone="warning" title="El inventario no dice lo mismo que la tabla huérfana">
+                <p>
+                  El inventario del gateway registra{' '}
+                  <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
+                    {cachedVersion}
+                  </code>
+                  . Mirá esta base antes de tocarla.
+                </p>
+              </Callout>
+            )}
+          {useStampCombobox ? (
             <Combobox<ModelMigrationSummary>
               items={versionItems}
               value={selectedStampVersion}
@@ -1114,12 +1427,36 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
             <Input
               label="Versión a marcar"
               placeholder="p. ej. 0002"
-              hint="Patrón del backend: solo dígitos, 4–10."
+              hint={
+                versionItems.length > 0
+                  ? 'Esta versión no figura en el catálogo del blueprint, así que se escribe a mano. Patrón del backend: solo dígitos, 4–10.'
+                  : 'Patrón del backend: solo dígitos, 4–10.'
+              }
               value={stampVersion}
               onChange={(event) => setStampVersion(event.target.value)}
               error={stampVersion && !stampValid ? 'Solo dígitos, 4–10 (ej. 0002).' : undefined}
             />
           )}
+          {/*
+            El contrato es explícito: «el destino sigue teniendo que existir en el blueprint»
+            (api-reference-v25 §6), o sea 404. Se avisa ANTES de enviar en vez de dejar que el
+            operador lo descubra por el error.
+
+            El aviso se calla con el catálogo truncado, y esa excepción es el punto: ahí la
+            ausencia no prueba nada —la versión puede estar en una página que no se pidió—, y
+            afirmar «no existe» sobre una lista incompleta es peor que no decir nada. Mismo
+            criterio fail-closed que el resto del módulo, pero al revés: acá lo seguro es callarse.
+          */}
+          {stampValid &&
+            !stampVersionInCatalog &&
+            versionItems.length > 0 &&
+            !versions.data?.truncated && (
+              <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
+                La versión <strong>{stampVersion.trim()}</strong> no figura en el catálogo de este
+                blueprint. El backend exige que el destino exista, así que va a rechazarla. Revisa
+                el número, o créala en el blueprint antes de marcarla.
+              </p>
+            )}
           <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
             El stamp <strong>no ejecuta SQL</strong>: solo marca la versión en el motor. Úsalo solo
             si el esquema de la BD ya coincide con esa versión.
@@ -1154,7 +1491,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               salida". */}
           <Switch
             checked={stampForce}
-            onCheckedChange={setStampForce}
+            onCheckedChange={changeStampForce}
             label="Forzar (force)"
             disabled={hasAutomaticWayOut}
             hint={
@@ -1173,6 +1510,46 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
               estado físico a mano y la BD coincide de verdad con esa versión.
             </p>
           )}
+          {/* Zona de excepción, PLEGADA por defecto: `purge` solo tiene sentido en un caso que
+              casi nunca se da, y un interruptor destructivo a la vista en el camino normal se
+              acaba activando «por si acaso». Quien llega acá viene buscándolo. */}
+          <details className="rounded-lg border border-border p-3">
+            {/* El literal va en inglés A PROPÓSITO, y es la única cadena así de toda la UI: es
+                el texto exacto que devuelve Alembic, y el operador llega hasta acá justamente
+                buscando lo que acaba de leer en el error. Traducirlo rompería el reconocimiento,
+                que es la función del rótulo. Por eso se presenta como cita del motor y no como
+                frase nuestra. */}
+            <summary className="cursor-pointer text-sm font-medium text-foreground">
+              Esta base no se deja marcar: el motor responde{' '}
+              <code className="font-mono text-xs">Can&apos;t locate revision</code>
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <Switch
+                checked={stampPurge}
+                onCheckedChange={setStampPurge}
+                label="Vaciar la tabla de versión antes de escribir"
+                // Deshabilitado sin `force`, y nunca se marca `force` por el usuario: encender un
+                // override que no pidió es peor que no dejarlo avanzar. El backend responde 422 si
+                // llega `purge` sin `force`, así que acá no se llega nunca.
+                disabled={!stampForce}
+                hint={
+                  stampForce
+                    ? 'Se ejecuta como parte del stamp: primero vacía, después escribe.'
+                    : 'Requiere también "force".'
+                }
+              />
+              <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-foreground">
+                <strong>Descarta el puntero actual SIN LEERLO.</strong> Solo tiene sentido si el
+                puntero nombra una revisión que ya no está en la cadena, que es el caso en que esta
+                base quedó sin apply, sin rollback y sin stamp.
+              </p>
+            </div>
+          </details>
+          {stampFallbackError && (
+            <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-error">
+              {stampFallbackError}
+            </p>
+          )}
           {stampCooldown && (
             <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-error">
               Has alcanzado el límite de 10/min. Espera unos segundos e inténtalo de nuevo.
@@ -1183,65 +1560,6 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
 
       {provisionOpen && (
         <ProvisionDatabaseDialog database={database} onClose={() => setProvisionOpen(false)} />
-      )}
-    </div>
-  )
-}
-
-/** Historial de aplicaciones paginado (server-side): la página vive en estado local. */
-function MigrationHistoryPanel({ dbId }: { dbId: number }) {
-  const [page, setPage] = useState(1)
-  const { data, isLoading, isError, error, refetch } = useMigrationHistory(
-    dbId,
-    { page, size: 10 },
-    true,
-  )
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner className="h-4 w-4" /> Cargando historial…
-      </div>
-    )
-  }
-  if (isError) return <ErrorState error={error} onRetry={() => void refetch()} />
-  if ((data?.items.length ?? 0) === 0) {
-    return <EmptyState title="Sin historial de aplicaciones" />
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-col divide-y divide-border rounded-card border border-border">
-        {data?.items.map((entry) => (
-          <li key={entry.id} className="flex items-center justify-between gap-2 p-3">
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-foreground">
-                <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">
-                  {entry.version}
-                </code>{' '}
-                {formatDateTime(entry.applied_at)}
-              </span>
-              {entry.error && <span className="text-xs text-error">{entry.error}</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              {entry.execution_ms != null && (
-                <span className="text-xs text-muted-foreground">{entry.execution_ms} ms</span>
-              )}
-              <Badge tone={entry.status === 'applied' ? 'success' : 'error'}>{entry.status}</Badge>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {data && data.pagination.pages > 1 && (
-        <Pagination
-          page={data.pagination.page}
-          pages={data.pagination.pages}
-          total={data.pagination.total}
-          size={data.pagination.size}
-          hasNext={data.pagination.has_next}
-          hasPrev={data.pagination.has_prev}
-          onPageChange={setPage}
-        />
       )}
     </div>
   )
