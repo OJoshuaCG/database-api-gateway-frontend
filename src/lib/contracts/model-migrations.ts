@@ -616,6 +616,10 @@ export type MigrationDeleteResult = z.infer<typeof migrationDeleteResultSchema>
  *   desaparición como permiso.
  * - `renumberConfirmationRequired` trae `stamp_plan[]`: es el «falta el `confirm_token`», y su
  *   salida es pedir el `delete-plan` otra vez, no reintentar el DELETE tal cual.
+ * - `renumberPlanStale` es el token **caducado o desfasado**: el parque se movió entre el plan y
+ *   el DELETE. Su salida es repetir el `delete-plan` —igual que el anterior, pero por otro
+ *   motivo— y, sobre todo, **no fue un error del operador**: decírselo evita que insista con el
+ *   mismo token. Llega con el status que herede el servicio de token (típicamente 422).
  * - `renumberStampFailed` trae `compensated` y `left_moved[]`. En este 409 **el blueprint no se
  *   modificó**; lo que puede haber quedado mal son punteros de BDs.
  * - `renumberTargetMissing` trae `unstampable_databases[]`, y tampoco modificó el blueprint.
@@ -634,6 +638,7 @@ export const MIGRATION_ERROR_CODES = {
   versionInUse: 'model_migration.version_in_use',
   unreadableDatabases: 'model_migration.unreadable_databases',
   renumberConfirmationRequired: 'model_migration.renumber_confirmation_required',
+  renumberPlanStale: 'model_migration.renumber_plan_stale',
   renumberStampFailed: 'model_migration.renumber_stamp_failed',
   renumberTargetMissing: 'model_migration.renumber_target_missing',
   affectedPartialApplication: 'model_migration.affected_partial_application',

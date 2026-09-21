@@ -213,7 +213,15 @@ export function MigrationDeletePlanDialog({
             })
             return
           }
-          if (apiError.status === 422 && apiError.code === undefined) {
+          // El plan desfasado llega de dos formas y las dos significan lo mismo. Desde v25 el
+          // backend lo marca con `renumber_plan_stale` —el código estaba escrito pero el
+          // catálogo lo perdía por una redefinición—, y antes solo se distinguía por ser un 422
+          // sin código, porque sale del servicio de tokens, que es compartido y no tiene uno.
+          // Se conservan las dos ramas: la segunda sigue cubriendo a los gateways previos.
+          if (
+            apiError.code === MIGRATION_ERROR_CODES.renumberPlanStale ||
+            (apiError.status === 422 && apiError.code === undefined)
+          ) {
             setError({
               title: 'El plan ya no describe la realidad',
               text: 'El token está atado al estado del parque de bases, y alguna se movió mientras tanto (un apply que corría en paralelo, por ejemplo). No es un fallo tuyo ni hay nada que arreglar: hay que volver a comprobar el plan para confirmar sobre el estado de ahora.',
