@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface ModalProps {
@@ -44,6 +44,15 @@ export function Modal({
   size = 'md',
   dismissible = true,
 }: ModalProps) {
+  /*
+   * `useId` y no un literal: la app apila dos `Modal` a la vez —el formulario de
+   * blueprint y, encima, el asistente de renombrado— y con un `id` fijo los dos nodos
+   * compartían `modal-title`. `aria-labelledby` resuelve al PRIMERO del documento, así
+   * que el diálogo de arriba se anunciaba con el nombre del de abajo: quien navega por
+   * teclado llegaba al asistente que escribe en N motores y oía «Editar blueprint».
+   */
+  const titleId = useId()
+
   const ref = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -58,7 +67,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      aria-labelledby="modal-title"
+      aria-labelledby={titleId}
       onClose={onClose}
       onCancel={(event) => {
         // El `<dialog>` nativo se cierra solo al recibir `cancel` (Esc). Eso saltaría por
@@ -80,7 +89,7 @@ export function Modal({
     >
       <div className="flex items-start justify-between gap-4 p-5 pb-0">
         <div className="flex flex-col gap-1">
-          <h2 id="modal-title" className="text-base font-semibold text-foreground">
+          <h2 id={titleId} className="text-base font-semibold text-foreground">
             {title}
           </h2>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
