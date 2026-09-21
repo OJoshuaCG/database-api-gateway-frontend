@@ -80,6 +80,25 @@ export const queryKeys = {
     migrationDetail: (modelId: number, version: string) =>
       ['database-models', modelId, 'migrations', 'detail', version] as const,
   },
+
+  /**
+   * Informe de contabilidad de versiones (v25 §3.4), en **raíz propia** y no bajo
+   * `['database-models']`.
+   *
+   * Vivió un rato colgando de ahí con un comentario que prometía que ningún apply lo
+   * invalidaría. La promesa era falsa: `['database-models']` es prefijo suyo, así que las cinco
+   * mutaciones que invalidan esa raíz —crear, editar y borrar blueprint, `from-snapshot` y
+   * `useAdoptComparison`, que es literalmente un apply— lo arrastraban. Y arrastrarlo no es
+   * gratis ni teórico: la query queda activa desde el primer «Comprobar ahora», `staleTime:
+   * Infinity` **no** impide el refetch de un `invalidateQueries` sobre una query activa, y cada
+   * refetch abre una conexión por base 🔌 contra un endpoint de 10/min, sin que nadie lo pida.
+   *
+   * Una garantía que solo vive en un comentario no es una garantía. Con raíz propia, la única
+   * forma de refrescarlo es pedirlo — que es justo lo que el informe quiere ser.
+   */
+  databaseModelVersionTables: {
+    detail: (modelId: number) => ['database-model-version-tables', modelId] as const,
+  },
   /**
    * Proyectos (api-reference-v16). `blueprints` y la vista inversa `ofBlueprint` NO llevan
    * params: sus endpoints no aceptan `page`/`size` y devuelven la lista completa.

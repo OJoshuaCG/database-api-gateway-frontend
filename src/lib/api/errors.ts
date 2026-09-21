@@ -403,12 +403,17 @@ export class ApiError extends Error {
    * perfil no existe en su motor, que es justo el dato que necesita para arreglarlo.
    */
   readonly grantContext?: GrantErrorContext
-  /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
   /** Contexto del módulo de tokens de agente; ver `extractApiTokenContext`. */
   readonly apiTokenContext?: ApiTokenErrorContext
   /** Contexto del módulo de usuarios del gateway; ver `extractGatewayUserContext`. */
   readonly gatewayUserContext?: GatewayUserErrorContext
+  /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
   readonly environmentContext?: EnvironmentErrorContext
+  /**
+   * Contexto de los blueprints (v25 §6): el 409 del slug en uso y los cinco del renombrado.
+   * Ver `extractDatabaseModelContext`.
+   */
+  readonly databaseModelContext?: DatabaseModelErrorContext
   /**
    * Contexto del módulo de conversión de collation (v17 §5). Los códigos `collation.*` traen
    * datos que la UI necesita para ser accionable en vez de solo informativa: sin
@@ -451,6 +456,7 @@ export class ApiError extends Error {
     apiTokenContext?: ApiTokenErrorContext
     gatewayUserContext?: GatewayUserErrorContext
     environmentContext?: EnvironmentErrorContext
+    databaseModelContext?: DatabaseModelErrorContext
     collationContext?: CollationErrorContext
     requestId?: string
   }) {
@@ -486,6 +492,7 @@ export class ApiError extends Error {
     this.apiTokenContext = args.apiTokenContext
     this.gatewayUserContext = args.gatewayUserContext
     this.environmentContext = args.environmentContext
+    this.databaseModelContext = args.databaseModelContext
     this.collationContext = args.collationContext
     this.requestId = args.requestId
   }
@@ -1046,6 +1053,61 @@ export interface EnvironmentErrorContext {
 }
 
 /**
+ * Una base dentro de un error de renombrado de slug (v25 §6). Es el **mismo** `RenameSlugDatabase`
+ * del plan: la misma forma viaja en `conflicting_databases`, `unreachable_databases`,
+ * `rename_plan`, `renamed`, `not_compensated` y en el `failed` suelto, así que se declara una vez.
+ */
+export interface ApiRenameSlugDatabase {
+  readonly managed_database_id: number
+  readonly database_name: string
+  readonly server_id: number
+  readonly server_name?: string | null
+  readonly action: string
+  readonly detail?: string | null
+}
+
+/**
+ * Datos accionables de un rechazo `database_model.*` (contrato v25 §6).
+ *
+ * Los siete códigos comparten prefijo pero **no** el contenido: cada uno trae lo suyo y ninguno
+ * viene siempre. Se tipan acá, y no se leen a mano en cada componente, por la misma razón que el
+ * resto de esta familia: `public_context` es `unknown` en el borde, y sin extractor cada pantalla
+ * se escribiría su propio casteo hasta que uno se equivoque en runtime en vez de al compilar.
+ *
+ * 🔴 El trío `renamed` / `failed` / `notCompensated` es el que no se puede resumir. Son tres
+ * listas con tres destinos distintos —se deshizo, falló ahí, **quedó a medias y hay que repararla
+ * a mano**— y fundirlas en «falló el renombrado» le esconde al operador las únicas bases sobre
+ * las que tiene que actuar.
+ */
+export interface DatabaseModelErrorContext {
+  /** `slug_in_use`: el slug que el blueprint tiene hoy. */
+  readonly currentSlug?: string
+  /** `slug_in_use`: el que se intentó poner. */
+  readonly requestedSlug?: string
+  /** `slug_in_use`: cuántas bases quedarían huérfanas. Es el dato que justifica el bloqueo. */
+  readonly managedDatabaseCount?: number
+  /** `slug_rename_conflict` / `slug_rename_failed`: la tabla destino. */
+  readonly newTable?: string
+  /** `slug_rename_failed`: la tabla de origen. */
+  readonly oldTable?: string
+  /** `slug_rename_conflict`: las bases que YA tienen la tabla destino. */
+  readonly conflictingDatabases?: ApiRenameSlugDatabase[]
+  /**
+   * `slug_rename_unreachable`: las bases que no se pudieron leer. **Fail-closed**: no significa
+   * «no la tienen», significa «no se pudo probar que no la tengan».
+   */
+  readonly unreachableDatabases?: ApiRenameSlugDatabase[]
+  /** `slug_rename_confirmation_required`: lo que se iba a tocar, sin `confirm_token`. */
+  readonly renamePlan?: ApiRenameSlugDatabase[]
+  /** `slug_rename_failed`: las que se renombraron y se devolvieron a su nombre original. */
+  readonly renamed?: ApiRenameSlugDatabase[]
+  /** `slug_rename_failed`: la base en la que falló. Objeto suelto, no lista. */
+  readonly failed?: ApiRenameSlugDatabase
+  /** 🔴 `slug_rename_failed`: quedaron con el nombre NUEVO. Reparación MANUAL. */
+  readonly notCompensated?: ApiRenameSlugDatabase[]
+}
+
+/**
  * Datos accionables de un rechazo `collation.*` (contrato v17 §5).
  *
  * Cada campo lo trae un código distinto; ninguno viene siempre. La razón de tiparlos acá y no
@@ -1165,6 +1227,65 @@ function extractEnvironmentContext(
   }
 }
 
+/** Una fila de `RenameSlugDatabase`, descartada entera si le falta algo obligatorio. */
+function toRenameSlugDatabase(row: unknown): ApiRenameSlugDatabase[] {
+  if (!isRecord(row)) return []
+  const id = row.managed_database_id
+  const name = row.database_name
+  const serverId = row.server_id
+  const action = row.action
+  if (
+    typeof id !== 'number' ||
+    !Number.isFinite(id) ||
+    typeof name !== 'string' ||
+    typeof serverId !== 'number' ||
+    !Number.isFinite(serverId) ||
+    typeof action !== 'string'
+  ) {
+    return []
+  }
+  return [
+    {
+      managed_database_id: id,
+      database_name: name,
+      server_id: serverId,
+      ...(typeof row.server_name === 'string' ? { server_name: row.server_name } : {}),
+      action,
+      ...(typeof row.detail === 'string' ? { detail: row.detail } : {}),
+    },
+  ]
+}
+
+function renameSlugDatabaseList(value: unknown): ApiRenameSlugDatabase[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const rows = value.flatMap(toRenameSlugDatabase)
+  return rows.length > 0 ? rows : undefined
+}
+
+function extractDatabaseModelContext(
+  code: string | undefined,
+  publicContext: unknown,
+): DatabaseModelErrorContext | undefined {
+  if (!code?.startsWith('database_model.') || !isRecord(publicContext)) return undefined
+
+  const context: DatabaseModelErrorContext = {
+    currentSlug: nonEmptyString(publicContext.current_slug),
+    requestedSlug: nonEmptyString(publicContext.requested_slug),
+    managedDatabaseCount: finiteNumber(publicContext.managed_database_count),
+    newTable: nonEmptyString(publicContext.new_table),
+    oldTable: nonEmptyString(publicContext.old_table),
+    conflictingDatabases: renameSlugDatabaseList(publicContext.conflicting_databases),
+    unreachableDatabases: renameSlugDatabaseList(publicContext.unreachable_databases),
+    renamePlan: renameSlugDatabaseList(publicContext.rename_plan),
+    renamed: renameSlugDatabaseList(publicContext.renamed),
+    // `failed` viaja como objeto suelto, no como lista: es UNA base, la que rompió la cadena.
+    failed: toRenameSlugDatabase(publicContext.failed)[0],
+    notCompensated: renameSlugDatabaseList(publicContext.not_compensated),
+  }
+
+  return Object.values(context).some((value) => value !== undefined) ? context : undefined
+}
+
 function extractDatabaseExportContext(
   code: string | undefined,
   publicContext: unknown,
@@ -1241,6 +1362,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         apiTokenContext: extractApiTokenContext(code, d.public_context),
         gatewayUserContext: extractGatewayUserContext(code, d.public_context),
         environmentContext: extractEnvironmentContext(code, d.public_context),
+        databaseModelContext: extractDatabaseModelContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
         requestId,
       })
