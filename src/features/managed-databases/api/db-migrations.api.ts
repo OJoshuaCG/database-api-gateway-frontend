@@ -79,12 +79,23 @@ export interface StampOptions {
    * mitad (afirmaría que la migración corrió completa); solo para "ya reconcilié a mano".
    */
   force?: boolean
+  /**
+   * Vacía la tabla de versión ANTES de escribir, en vez de pedirle a Alembic que resuelva el
+   * puntero actual para moverlo (v25 §3.7).
+   *
+   * 🔴 **Exige `force`** (el backend responde 422 si no) porque descarta el puntero actual **sin
+   * leerlo**: quien lo pide está afirmando que ya sabe en qué versión está esa base. Resuelve un
+   * caso y solo uno: un puntero que nombra una revisión que ya no está en la cadena, donde
+   * Alembic muere con `Can't locate revision identified by …` y la base queda sin apply, sin
+   * rollback y sin stamp — o sea, sin salida.
+   */
+  purge?: boolean
 }
 
 /** `POST .../migrations/stamp` 🔌 — marca una versión sin ejecutar SQL (§9). Rate limit 10/min. */
 export function stampMigration(dbId: number, options: StampOptions): Promise<MigrationStampResult> {
   return mutateData('POST', `${base(dbId)}/stamp`, migrationStampResultSchema, {
-    query: { version: options.version, force: options.force },
+    query: { version: options.version, force: options.force, purge: options.purge },
   })
 }
 

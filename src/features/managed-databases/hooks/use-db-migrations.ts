@@ -3,7 +3,11 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
-import { isDryRunResult, type ReconcilePartialResult } from '@/lib/contracts'
+import {
+  isDryRunResult,
+  type MigrationStatusOut,
+  type ReconcilePartialResult,
+} from '@/lib/contracts'
 import {
   applyMigrations,
   getMigrationStatus,
@@ -130,11 +134,22 @@ export function useStampMigration(dbId: number) {
   const toast = useToast()
   return useMutation({
     mutationFn: (options: StampOptions) => stampMigration(dbId, options),
-    onSuccess: (_, { version, force }) => {
+    onSuccess: (status, { version, force, purge }) => {
       invalidateAfterRun(queryClient)
+      // Se siembra la respuesta en la caché del estado: desde v25 el stamp devuelve el
+      // `MigrationStatusOut` recalculado, así que el banner de contabilidad huérfana se apaga en
+      // el mismo instante en que se resuelve, sin la ventana en la que la pantalla sigue
+      // afirmando un bloqueo que ya no existe.
+      queryClient.setQueryData(
+        queryKeys.managedDatabases.migrationStatus(dbId),
+        (previous: MigrationStatusOut | undefined) =>
+          previous === undefined ? previous : { ...previous, ...status },
+      )
       toast.success(
         'Versión marcada',
-        `La BD quedó marcada en ${version} (sin ejecutar SQL${force ? ', forzado' : ''})`,
+        `La BD quedó marcada en ${version} (sin ejecutar SQL${force ? ', forzado' : ''}${
+          purge ? ', con la tabla de versión vaciada antes de escribir' : ''
+        })`,
       )
     },
     onError: (error) => toast.error('No se pudo marcar la versión', toApiError(error).message),

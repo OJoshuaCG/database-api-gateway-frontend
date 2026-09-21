@@ -4,13 +4,17 @@ import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { DatabaseModelCreate, DatabaseModelUpdate } from '@/lib/contracts'
 import type { QueryParams } from '@/lib/api/client'
+import { invalidateDatabaseViews } from '@/features/managed-databases/invalidate'
 import {
   createDatabaseModel,
   deleteDatabaseModel,
   getDatabaseModel,
   listDatabaseModels,
+  getVersionTablesReport,
   listModelDatabases,
+  planRenameSlug,
   refreshModelDatabases,
+  renameSlug,
   updateDatabaseModel,
 } from '../api/database-models.api'
 
@@ -120,5 +124,99 @@ export function useDeleteDatabaseModel() {
       toast.success('Blueprint eliminado')
     },
     onError: (error) => toast.error('No se pudo eliminar el blueprint', toApiError(error).message),
+  })
+}
+
+/**
+ * Informe de contabilidad de versiones del blueprint (v25 §3.4). 🔌
+ *
+ * **Bajo demanda, nunca al montar**: abre una conexión por base y el endpoint es 10/min, así que
+ * `enabled` lo gobierna un clic explícito del operador y no el ciclo de vida del componente.
+ * Misma regla que ya sigue el `delete-plan` del borrado de versiones.
+ *
+ * `retry: false` por el mismo motivo: reintentar solo se come el presupuesto del minuto justo
+ * cuando el operador lo necesita. Y `staleTime: Infinity` porque un informe es una **foto** de
+ * cuándo se pidió: refrescarlo solo abriría N conexiones a espaldas de quien lo está leyendo.
+ * Para releerlo está el botón «Comprobar ahora».
+ */
+export function useVersionTablesReport(modelId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.databaseModelVersionTables.detail(modelId),
+    queryFn: ({ signal }) => getVersionTablesReport(modelId, signal),
+    enabled: enabled && Number.isFinite(modelId) && modelId > 0,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Preview del renombrado del slug (v25 §3.2). 🔌 10/min.
+ *
+ * Es una mutación aunque no escriba nada, por la misma razón que el `delete-plan`: se dispara de
+ * un clic y nunca al montar, y como query se re-pediría sola al reenfocar la ventana, abriendo N
+ * conexiones sin que nadie lo haya pedido.
+ *
+ * **No emite toast de éxito**: el resultado es el semáforo del propio diálogo, y un toast encima
+ * solo taparía el veredicto que hay que leer. Los errores sí los clasifica quien llama, por
+ * `public_context.code`.
+ */
+export function useRenameSlugPlan(modelId: number) {
+  return useMutation({
+    mutationFn: (newSlug: string) => planRenameSlug(modelId, newSlug),
+  })
+}
+
+/**
+ * Ejecución del renombrado del slug (v25 §3.3). 🔌 3/min.
+ *
+ * Tras el éxito cambia el `slug`, que es **lo que `expected_table` predice y lo que `status` usa
+ * para leer la versión de cada base**. Por eso la invalidación es ancha a propósito:
+ *
+ * - `invalidateDatabaseViews` cubre el cruce de troncos de las vistas de BD gestionada, que no
+ *   comparten prefijo (ver su docstring).
+ * - El blueprint y sus proyectos, porque el slug se pinta ahí.
+ * - El informe de `/version-tables`, que quedó describiendo el parque anterior.
+ * - Y el `status` de migraciones de **cada base renombrada**: no alcanza con invalidar el tronco
+ *   de blueprints, porque ese estado cuelga de `['managed-databases', id, …]`.
+ *
+ * El error NO se notifica acá: los cinco códigos de v25 §6 tienen cada uno su propia UI —y
+ * `slug_rename_failed` es una pantalla de incidente, no un toast—, así que la clasificación vive
+ * en el asistente, que es quien tiene dónde pintarla.
+ */
+export function useRenameSlug(modelId: number) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: (vars: { newSlug: string; confirmToken?: string | null }) =>
+      renameSlug(modelId, vars.newSlug, vars.confirmToken),
+    onSuccess: (result) => {
+      invalidateDatabaseViews(queryClient)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'projects' && query.queryKey[2] === 'blueprints',
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.databaseModelVersionTables.detail(modelId),
+      })
+      /*
+       * Redundante a propósito, y conviene que se sepa: `invalidateDatabaseViews` ya invalida
+       * `['managed-databases']` entero, que es prefijo de `migrationStatus`. Se deja explícito
+       * porque es la relación que importa —el `expected_table` de cada base renombrada cambió— y
+       * porque el día que alguien acote aquel helper, esto tiene que seguir en pie.
+       */
+      for (const database of result.renamed_databases) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.managedDatabases.migrationStatus(database.managed_database_id),
+        })
+      }
+      toast.success(
+        'Slug renombrado',
+        result.no_op
+          ? `El blueprint pasa a «${result.model.slug}». No hubo que tocar ningún motor.`
+          : `El blueprint pasa a «${result.model.slug}» y se renombró la tabla de versión en ${result.renamed_databases.length} base(s).`,
+      )
+    },
   })
 }
