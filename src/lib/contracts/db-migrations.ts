@@ -56,6 +56,37 @@ export const migrationStatusOutSchema = z.object({
   // Reconciliación (§9): opcionales con default por compatibilidad con backends previos.
   has_partial_application: z.boolean().optional().default(false),
   partial_application: z.array(partialApplicationEntrySchema).optional().default([]),
+  /**
+   * Última versión que el **inventario del gateway** registró para esta BD (v25 §4).
+   *
+   * No es lo mismo que `current_version`, que se lee del motor en vivo: cuando difieren, o la
+   * caché quedó rancia o la base se movió por fuera del gateway. Es justamente el dato que
+   * permite recuperar una contabilidad huérfana, porque sobrevive a que la tabla de versión
+   * deje de ser legible.
+   *
+   * Nullable **y** opcional: un backend previo a v25 no manda el campo.
+   */
+  cached_version: z.string().nullable().optional().default(null),
+  /**
+   * Tablas `_gw_v_*` que existen en la BD y que el gateway **no está leyendo** (v25 §4).
+   *
+   * Aparecen cuando el `slug` del blueprint cambió sin propagar el rename a los motores: la
+   * tabla de versión sigue ahí con el nombre viejo, y el gateway busca la que predice el slug
+   * vigente, que no existe.
+   */
+  orphan_version_tables: z.array(z.string()).optional().default([]),
+  /**
+   * 🔴 `true` ⇒ **`pending_versions` NO ES DE FIAR** (v25 §4).
+   *
+   * La versión real vive en una tabla que el gateway no lee, así que la cadena entera figura
+   * pendiente sin estarlo y aplicar reejecutaría migraciones que la base ya tiene. La UI tiene
+   * que bloquear el apply con esto en `true`, no decorar el contador.
+   *
+   * `false` **no** significa «no se pudo comprobar»: significa «no hay nada». La sonda del
+   * backend se dispara solo ante la firma exacta (el motor no reporta versión **pero** el
+   * inventario sí tenía una), así que una base nueva devuelve `[]` sin pagar una consulta.
+   */
+  has_orphan_accounting: z.boolean().optional().default(false),
 })
 export type MigrationStatusOut = z.infer<typeof migrationStatusOutSchema>
 
@@ -259,23 +290,107 @@ export type ReconcilePartialResult = z.infer<typeof reconcilePartialResultSchema
 /**
  * Respuesta de `stamp` (§9). Marca una versión sin ejecutar SQL; el shape no está
  * documentado con detalle, por eso los campos son opcionales (robustez ante el contrato).
+ *
+ * Desde v25 el backend lo declara `ApiResponse[MigrationStatusOut]`, o sea que responde el
+ * estado COMPLETO recalculado. Se suman los campos que la UI necesita —en particular
+ * `has_orphan_accounting`, para apagar el banner de bloqueo sin esperar al refetch— **sin**
+ * exigirlos: un gateway previo devuelve solo los tres de arriba y este schema lo sigue aceptando.
  */
 export const migrationStampResultSchema = z.object({
   managed_database_id: z.number().int().optional(),
   version: z.string().optional(),
   current_version: z.string().nullable().optional(),
+  pending_count: z.number().int().optional(),
+  pending_versions: z.array(z.string()).optional(),
+  /*
+   * 🔴 Estos tres van `.optional()` **sin `.default()`**, al revés que sus gemelos de
+   * `migrationStatusOutSchema`, y la diferencia no es estilística.
+   *
+   * Un `.default()` está SIEMPRE presente en la salida de Zod, incluso cuando el backend omitió
+   * la clave. Y esta respuesta se mezcla sobre la caché del estado con un spread
+   * (`{ ...previous, ...status }` en `useStampMigration`), así que un `has_orphan_accounting`
+   * fabricado en `false` se escribiría encima del `true` que el `/status` sí afirmó: el banner
+   * se apagaría y Apply y Revertir volverían a habilitarse sobre una base cuya contabilidad
+   * sigue huérfana, sin que el backend lo haya dicho en ningún momento.
+   *
+   * Con `.optional()` a secas la clave se omite, el spread no pisa nada, y solo se apaga el
+   * banner cuando el backend realmente respondió que ya no hay huérfana. En el schema de
+   * `/status` el `.default()` sí es correcto: ahí no se mezcla con nada, se reemplaza entero.
+   */
+  cached_version: z.string().nullable().optional(),
+  orphan_version_tables: z.array(z.string()).optional(),
+  /** `false` tras un stamp que resolvió la huérfana: úsalo para apagar el banner al instante. */
+  has_orphan_accounting: z.boolean().optional(),
 })
 export type MigrationStampResult = z.infer<typeof migrationStampResultSchema>
 
-/** Item del historial de aplicaciones (§9). */
+/**
+ * Item del historial de aplicaciones (§9), enriquecido en v25 §5.
+ *
+ * ⚠️ **Dos campos que antes eran obligatorios ahora llegan `null`.** No son campos nuevos —que
+ * `z.object` descartaría en silencio sin romper nada—, son campos **divergentes**: declarados
+ * con el tipo viejo, `safeParse` falla y se descarta la **página entera** del historial, no la
+ * fila. Y ocurre de forma diferida, recién cuando alguien borre una versión del blueprint, que
+ * es lo que lo vuelve peor que un fallo inmediato: nadie lo asocia al despliegue.
+ *
+ * Los dos se normalizan a `| null` (en vez de `| null | undefined`) para que el consumidor
+ * tenga dos casos y no tres: el backend previo a v25 siempre manda el valor.
+ */
 export const migrationHistoryItemSchema = z.object({
   id: z.number().int(),
   managed_database_id: z.number().int(),
-  model_migration_id: z.number().int(),
-  version: z.string(),
+  /**
+   * 🔴 Nullable desde v25: la FK pasó de `ON DELETE CASCADE` a `ON DELETE SET NULL`, así que
+   * borrar una versión del blueprint ya **no** borra su historial de aplicación en las N bases.
+   *
+   * `null` = la versión se borró del catálogo. Con la FK en null, `version` y
+   * `applied_checksum` son **lo único que queda del evento**: la fila no se oculta ni se
+   * atenúa, y el enlace al detalle de la versión simplemente se omite porque no hay a dónde ir.
+   */
+  model_migration_id: z.number().int().nullable().optional().default(null),
+  /**
+   * 🔴 Nullable desde v25, **confirmado por el contrato** (v25 §0 lo lista junto a
+   * `model_migration_id` entre los dos cambios de tipo que rompen el `safeParse`). No es una
+   * inferencia nuestra: hay que diseñar de verdad para el `null`.
+   *
+   * El backend la resuelve con `applied_version` —la copia congelada al momento del intento— y
+   * cae al join solo para las filas previas a esa entrega. Con la FK ya en null **y** una fila
+   * previa, no queda de dónde sacarla.
+   *
+   * ⚠️ Y en esas filas previas el join devuelve la versión **ACTUAL** de la migración, que un
+   * renumerado pudo haber movido: el número que se muestra puede no ser el que ese evento tuvo
+   * cuando ocurrió. Por eso desde v25 se congela.
+   */
+  version: z.string().nullable().optional().default(null),
   applied_at: z.string(),
   status: migrationStatusSchema,
   error: z.string().nullable().optional(),
   execution_ms: z.number().optional(),
+  /**
+   * `up` = apply, `down` = rollback (v25 §5). Antes eran **indistinguibles**: las dos escribían
+   * `status: "applied"`.
+   *
+   * 🔴 `null` en TODO el historial previo a v25, y ahí un `applied` **no prueba** que la versión
+   * siga vigente. No inferir `up` por defecto: ese null significa literalmente «no sabemos si
+   * esto sigue vigente», y inventarlo devuelve la UI al estado anterior al incidente.
+   */
+  direction: z.enum(['up', 'down']).nullable().optional().default(null),
+  /**
+   * Checksum del SQL que **realmente corrió** en esta base (v25 §5). Si difiere del `checksum`
+   * vigente de la migración, esa versión se editó después de aplicarse acá: la fila es
+   * divergente y la base conserva el esquema anterior.
+   */
+  applied_checksum: z.string().nullable().optional().default(null),
+  /** Quién disparó el evento (v25 §5). Nullable en el historial previo, que no lo registraba. */
+  actor_type: z.string().nullable().optional().default(null),
+  actor_id: z.number().int().nullable().optional().default(null),
+  actor_username: z.string().nullable().optional().default(null),
+  /**
+   * Correlaciona la fila con `audit_log` y los logs HTTP (v25 §5).
+   *
+   * Ojo, no confundir con `ApiError.requestId`: aquel sale del header `X-Request-ID` de una
+   * respuesta de error; este es un **campo de la fila** y describe el evento histórico.
+   */
+  request_id: z.string().nullable().optional().default(null),
 })
 export type MigrationHistoryItem = z.infer<typeof migrationHistoryItemSchema>
