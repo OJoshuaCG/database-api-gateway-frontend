@@ -31,6 +31,7 @@ import { ModelMigrationDetailPanel } from '../components/ModelMigrationDetailPan
 import { ApplyMigrationsDialog } from '../components/ApplyMigrationsDialog'
 import { MigrationDeletePlanDialog } from '../components/MigrationDeletePlanDialog'
 import { ModelDatabasesStatusTable } from '../components/ModelDatabasesStatusTable'
+import { VersionTablesReportPanel } from '../components/VersionTablesReportPanel'
 import { VersionNavigator } from '../components/VersionNavigator'
 import { VersionAlertsBar } from '../components/VersionAlertsBar'
 import { VersionFactsCard } from '../components/VersionFactsCard'
@@ -57,6 +58,13 @@ import { versionAlerts } from '../version-alerts'
  * desplegable el historial entero —que es lo que se acaba de quitar—; unificarlas en la página
  * dejaría los avisos afirmando de más.
  */
+/**
+ * Pestañas de la pantalla. El default (`versiones`) NO se escribe en la URL: se borra el
+ * parámetro, para que la dirección compartida más corta sea la de la vista por defecto. Los otros
+ * dos sí, porque `?tab=estado` ya se genera como deep-link desde `MigrationDeletePlanDialog`.
+ */
+type BlueprintTab = 'versiones' | 'estado' | 'contabilidad'
+
 export function BlueprintMigrationsPage() {
   const params = useParams()
   const modelId = Number(params.modelId)
@@ -67,15 +75,30 @@ export function BlueprintMigrationsPage() {
   // de este blueprint», y volver atrás no pierde dónde estabas. Mismo patrón que
   // `ManagedDatabaseMigrationsContent`, que ya guarda `?tab=` y `?reconcile=`.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'estado' ? 'estado' : 'versiones'
-  const setTab = (next: 'versiones' | 'estado') =>
+  const tabParam = searchParams.get('tab')
+  const tab: BlueprintTab =
+    tabParam === 'estado' ? 'estado' : tabParam === 'contabilidad' ? 'contabilidad' : 'versiones'
+  const setTab = (next: BlueprintTab) =>
     setSearchParams((params) => {
       if (next === 'versiones') params.delete('tab')
       else params.set('tab', next)
       return params
     })
 
-  const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
+  /*
+   * La versión abierta vive en estado local, no en la URL: se cambia con flechas y con el
+   * desplegable, y escribir cada paso en el histórico del navegador convertiría el «atrás» en un
+   * deshacer de uno en uno.
+   *
+   * Lo que SÍ se lee de la URL es la versión de ARRANQUE, y por eso se resuelve en el
+   * inicializador del `useState` —nunca en un `useEffect`, que sincronizar estado con props es
+   * error de lint en este repo—. Sin esto no había forma de enlazar a una versión concreta desde
+   * fuera, y el historial de una BD gestionada (v25 §5) la necesita: cada fila nombra la versión
+   * que se aplicó y no tenía a dónde llevar.
+   */
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(() =>
+    searchParams.get('version'),
+  )
   /**
    * Página **de la API**, no la que se muestra. Se guarda esta y no la de pantalla justamente
    * porque no depende de `pagination.pages`: la 1 es siempre la punta (el catálogo se pide
@@ -236,6 +259,23 @@ export function BlueprintMigrationsPage() {
       : resolveVersionIndex(sorted, selectedVersion)
   const selected = sorted[index] ?? null
 
+  /*
+   * ¿Se pidió una versión por `?version=` y no está en la página cargada?
+   *
+   * `resolveVersionIndex` cae a la punta cuando no la encuentra, y callar ahí es un fallo
+   * silencioso: el catálogo se pide paginado, así que en un blueprint largo llegar desde el
+   * historial de una BD a la `0003` abre la `0042` con la URL todavía diciendo `?version=0003`.
+   * El operador cree estar mirando el evento que clicó y está mirando otro — exactamente la clase
+   * de afirmación falsa que esta entrega existe para quitar.
+   *
+   * Se calcula sin efectos y solo con datos ya cargados: nada que sincronizar.
+   */
+  const requestedVersionMissing =
+    selectedVersion !== null &&
+    !migrations.isPlaceholderData &&
+    sorted.length > 0 &&
+    !sorted.some((item) => item.version === selectedVersion)
+
   // Versión punta. **Ya no es «la única que se puede eliminar»**: desde api-reference-v18 el
   // backend deja borrar cualquier versión, punta o intermedia —renumera las posteriores y mueve
   // el puntero de las BDs que estén más adelante—, así que ser la punta dejó de ser un requisito.
@@ -308,7 +348,22 @@ export function BlueprintMigrationsPage() {
         <TabButton active={tab === 'estado'} onClick={() => setTab('estado')}>
           Estado en las BDs
         </TabButton>
+        <TabButton active={tab === 'contabilidad'} onClick={() => setTab('contabilidad')}>
+          Contabilidad de versiones
+        </TabButton>
       </div>
+
+      {tab === 'versiones' && requestedVersionMissing && (
+        <Callout
+          tone="warning"
+          title={`La versión ${selectedVersion} no está en esta página del catálogo`}
+        >
+          <p>
+            Se abrió la más reciente en su lugar. El catálogo se pide por páginas, así que esa
+            versión puede estar en otra: buscala con el navegador de versiones.
+          </p>
+        </Callout>
+      )}
 
       {tab === 'estado' ? (
         <ModelDatabasesStatusTable
@@ -319,6 +374,11 @@ export function BlueprintMigrationsPage() {
             setApplyAllOpen(true)
           }}
         />
+      ) : tab === 'contabilidad' ? (
+        /* Pestaña propia y no una sección de «Estado en las BDs»: esa tabla sale de datos locales
+           del gateway y no abre conexiones, mientras que esta lee CADA motor y es 10/min. Juntarlas
+           obligaría a una de las dos a heredar el coste de la otra. */
+        <VersionTablesReportPanel modelId={modelId} />
       ) : (
         <>
           {/* Avisos del catálogo ANTES del selector: dicen si hay algo que resolver en el
@@ -495,6 +555,8 @@ function deletePlanErrorText(apiError: ApiError): string {
       return 'No se pudo leer la versión de alguna base de datos, y el gateway prefiere negarse a suponer dónde está. Es un problema de acceso a esa base —motor caído, base sin aprovisionar o credenciales rotas—, no del blueprint. Arregla la conexión y vuelve a intentarlo.'
     case MIGRATION_ERROR_CODES.affectedPartialApplication:
       return 'Hay una base con una aplicación a medio camino que este borrado afectaría. Reconcilia esa aplicación parcial o termina el apply antes de eliminar la versión.'
+    case MIGRATION_ERROR_CODES.renumberPlanStale:
+      return 'El plan quedó viejo: alguna base se movió entre la comprobación y ahora. No es un fallo tuyo y no hay nada que arreglar — vuelve a pedir el plan y confirma sobre el estado de ahora.'
     case MIGRATION_ERROR_CODES.renumberTargetMissing:
       return 'Al renumerar, alguna base quedaría apuntando a una versión que no figura en su historial. Revisa el historial de esas bases —lo habitual es que les falte aplicar migraciones— antes de volver a intentarlo.'
     default:
