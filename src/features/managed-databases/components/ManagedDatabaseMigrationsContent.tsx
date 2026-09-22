@@ -219,7 +219,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   // es la base. Todo lo que ejecuta responde 409, así que se deshabilita en la UI.
   const notProvisioned = status.data?.database_exists === false
   /**
-   * Contabilidad huérfana (v25): la versión real vive en una tabla `_gw_v_*` que el gateway NO
+   * Contabilidad huérfana (v25): la versión real vive en una tabla `_datum_version_*` o `_gw_v_*` que el gateway NO
    * está leyendo, así que `pending_versions` NO es de fiar —lista todo como pendiente— y aplicar
    * desde acá reejecutaría migraciones que esta base ya tiene. Bloquea apply y rollback; el stamp
    * sigue habilitado porque es la vía de salida.

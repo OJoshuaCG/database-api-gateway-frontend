@@ -426,9 +426,11 @@ export type ExportCatalogObject = z.infer<typeof exportCatalogObjectSchema>
 /**
  * `data` de `GET .../objects`. **No usa el envelope paginado estándar**: la paginación viaja DENTRO
  * del objeto (`total`/`page`/`size`) porque la respuesta lleva metadatos de catálogo que una lista
- * plana no transporta. `excluded_internal` son las tablas de contabilidad del gateway (`_gw_v_`,
- * `_gw_stg_`) que se descartan siempre — se muestran en un pie de lista para que nadie las busque
- * en el artefacto y crea que se perdieron.
+ * plana no transporta. `excluded_internal` son las tablas de contabilidad del gateway que se
+ * descartan siempre —el puntero de versión y las de staging, con cualquiera de sus prefijos—, y
+ * se muestran en un pie de lista para que nadie las busque en el artefacto y crea que se
+ * perdieron. La lista la decide el backend: el espejo del historial `_datum_migrations` es
+ * interno pero **sí viaja** en el export (v25 §8), así que no aparece acá.
  */
 export const exportObjectCatalogSchema = z.object({
   engine: engineTypeSchema,

@@ -68,7 +68,7 @@ export const migrationStatusOutSchema = z.object({
    */
   cached_version: z.string().nullable().optional().default(null),
   /**
-   * Tablas `_gw_v_*` que existen en la BD y que el gateway **no está leyendo** (v25 §4).
+   * Tablas `_datum_version_*` o `_gw_v_*` que existen en la BD y que el gateway **no está leyendo** (v25 §4).
    *
    * Aparecen cuando el `slug` del blueprint cambió sin propagar el rename a los motores: la
    * tabla de versión sigue ahí con el nombre viejo, y el gateway busca la que predice el slug

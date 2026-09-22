@@ -121,7 +121,7 @@ function Section({
  *
  * Son dos cosas distintas y se confundían porque estaban una al lado de la otra en la misma rejilla.
  * El **nombre** es una etiqueta para el humano: cambiarlo no toca ningún motor. El **slug** nombra
- * la tabla de versión `_gw_v_<slug>` **DENTRO de cada base gestionada**, así que cambiarlo con este
+ * la tabla de versión `_datum_version_<slug>` (o `_gw_v_<slug>` en el formato histórico) **DENTRO de cada base gestionada**, así que cambiarlo con este
  * `PATCH` no renombra nada en ningún motor — el gateway pasa a leer una tabla que no existe y todas
  * esas bases pierden su contabilidad.
  *
@@ -212,8 +212,9 @@ export function DatabaseModelForm({
             control está deshabilitado, y un tooltip se descubre por accidente —en táctil, ni eso. */}
         {slugLocked && (
           <p className="text-xs text-muted-foreground">
-            El slug nombra la tabla de versión{' '}
-            <code className="rounded bg-surface-muted px-1 py-0.5">_gw_v_&lt;slug&gt;</code>{' '}
+            {/* Sin prefijo escrito a mano: dentro de un mismo blueprint conviven bases con el
+                formato histórico y con el vigente, y el backend resuelve el nombre por base. */}
+            El slug forma parte del nombre de la tabla de versión que vive{' '}
             <strong className="text-foreground">DENTRO</strong> de cada una de las{' '}
             {managedDatabaseCount ?? 'las'} base(s) gestionadas. Cambiarlo acá las dejaría
             huérfanas: el gateway buscaría una tabla que ningún motor tiene.

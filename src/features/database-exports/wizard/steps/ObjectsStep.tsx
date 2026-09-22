@@ -368,8 +368,10 @@ export function ObjectsStep({ wizard }: { wizard: DatabaseExportWizard }) {
         isFetching={objects.isFetching}
       />
 
-      {/* Las tablas de contabilidad del gateway (`_gw_v_`, `_gw_stg_`) se descartan SIEMPRE. Se
-          listan para que nadie las busque en el artefacto y crea que se perdieron. */}
+      {/* Las tablas de contabilidad del gateway que el backend descarta SIEMPRE. Se listan tal
+          como llegan —sin asumir prefijo: conviven `_gw_` y `_datum_`— para que nadie las busque
+          en el artefacto y crea que se perdieron. El espejo del historial no figura porque sí
+          viaja (v25 §8). */}
       {catalog.excluded_internal.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Excluidas siempre (tablas internas del gateway): {catalog.excluded_internal.join(', ')}
