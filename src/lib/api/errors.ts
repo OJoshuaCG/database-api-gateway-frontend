@@ -1063,6 +1063,9 @@ export interface ApiRenameSlugDatabase {
   readonly server_id: number
   readonly server_name?: string | null
   readonly action: string
+  /** La tabla de origen EN ESA BASE: el prefijo varía por base (`_gw_v_` o `_datum_version_`). */
+  readonly source_table?: string | null
+  readonly has_mirror?: boolean | null
   readonly detail?: string | null
 }
 
@@ -1251,6 +1254,8 @@ function toRenameSlugDatabase(row: unknown): ApiRenameSlugDatabase[] {
       server_id: serverId,
       ...(typeof row.server_name === 'string' ? { server_name: row.server_name } : {}),
       action,
+      ...(typeof row.source_table === 'string' ? { source_table: row.source_table } : {}),
+      ...(typeof row.has_mirror === 'boolean' ? { has_mirror: row.has_mirror } : {}),
       ...(typeof row.detail === 'string' ? { detail: row.detail } : {}),
     },
   ]

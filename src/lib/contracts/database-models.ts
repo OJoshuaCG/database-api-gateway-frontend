@@ -203,7 +203,7 @@ export type ModelDatabaseStatus = z.infer<typeof modelDatabaseStatusSchema>
 // ── Contabilidad de versiones y renombrado del slug (api-reference-v25) ────────
 /*
  * Los dos bloques que siguen son las dos caras del mismo incidente: el `slug` nombra la tabla
- * `_gw_v_<slug>` DENTRO de cada base gestionada, así que cambiarlo por un campo de formulario
+ * `_datum_version_<slug>` (o `_gw_v_<slug>` en el formato histórico) DENTRO de cada base gestionada, así que cambiarlo por un campo de formulario
  * no renombraba nada en los motores y dejaba al gateway leyendo una tabla inexistente.
  * `/version-tables` diagnostica el daño; `rename-slug` es la operación que lo hace bien.
  */
@@ -216,7 +216,7 @@ export type ModelDatabaseStatus = z.infer<typeof modelDatabaseStatusSchema>
  * hay CTA precargado que ofrecer.
  */
 export const orphanVersionTableSchema = z.object({
-  /** Nombre real en el motor, p. ej. `_gw_v_test_db`. */
+  /** Nombre real en el motor, p. ej. `_gw_v_test_db` o `_datum_version_test_db`. */
   table: z.string(),
   version: z.string().nullable().optional().default(null),
 })
@@ -277,13 +277,30 @@ export const versionTablesReportSchema = z.object({
 export type VersionTablesReport = z.infer<typeof versionTablesReportSchema>
 
 /**
- * Qué le pasa a una base en el plan de renombrado (v25 §3.2). Enum cerrado de cuatro.
+ * Qué le pasa a una base en el plan de renombrado (v25 §2.1). Enum cerrado de **cinco**.
+ *
+ * 🔴 `already` se sumó después de la primera entrega de v25 (§Δ), y es el único cambio de esa
+ * actualización que ROMPE el parseo: un valor fuera de un `z.enum` no se strippea como un campo
+ * nuevo, **descarta el plan entero**. En la migración al formato Datum (§2.3) es además el caso
+ * normal de toda base ya migrada, así que sin él ese botón fallaba de entrada.
+ *
+ * Y `already` partió en dos lo que antes era un solo caso, cambiándole el significado a
+ * `conflict`:
+ * - `already` — la base tiene **solo** la tabla destino. Nada que hacer; NO bloquea.
+ * - `conflict` — **conviven las dos** tablas, origen y destino: no se puede decidir cuál es el
+ *   puntero bueno. Bloquea.
  *
  * 🔴 `conflict` y `unreachable` **abortan la operación entera**, no solo esa base: el gateway
  * apunta a UN nombre, así que dejar medio parque renombrado deja a la otra mitad con su
  * contabilidad huérfana — el estado del que cuesta salir.
  */
-export const renameSlugActionSchema = z.enum(['rename', 'skip', 'conflict', 'unreachable'])
+export const renameSlugActionSchema = z.enum([
+  'rename',
+  'skip',
+  'already',
+  'conflict',
+  'unreachable',
+])
 export type RenameSlugAction = z.infer<typeof renameSlugActionSchema>
 
 /**
@@ -298,6 +315,20 @@ export const renameSlugDatabaseSchema = z.object({
   server_id: z.number().int(),
   server_name: z.string().nullable().optional().default(null),
   action: renameSlugActionSchema,
+  /**
+   * La tabla que se va a renombrar **en esta base** (v25 §Δ). Solo con `action: 'rename'`.
+   *
+   * Viene por fila y no una vez por plan porque el origen VARÍA dentro de un mismo blueprint:
+   * unas bases conservan el prefijo histórico `_gw_v_` y otras ya tienen `_datum_version_`, y el
+   * backend resuelve el nombre contra cada una. La UI muestra este valor tal cual y **nunca
+   * asume un prefijo**.
+   */
+  source_table: z.string().nullable().optional().default(null),
+  /**
+   * ¿La base ya tiene el espejo del historial `_datum_migrations`? (v25 §8). `null` = no se pudo
+   * leer, que no es lo mismo que «no lo tiene»: esa base no se toca.
+   */
+  has_mirror: z.boolean().nullable().optional().default(null),
   detail: z.string().nullable().optional().default(null),
 })
 export type RenameSlugDatabase = z.infer<typeof renameSlugDatabaseSchema>
@@ -321,6 +352,19 @@ export const renameSlugPlanSchema = z.object({
   no_op: z.boolean().optional().default(false),
   databases: z.array(renameSlugDatabaseSchema).optional().default([]),
   rename_count: z.number().int().optional().default(0),
+  /** Nombre fijo del espejo del historial (`_datum_migrations`, v25 §8), tal como lo da el backend. */
+  mirror_table: z.string().nullable().optional().default(null),
+  /**
+   * Bases que todavía no tienen el espejo y lo van a recibir al ejecutar. Cuenta aparte de
+   * `rename_count` porque son dos trabajos distintos: una base puede no necesitar rename (ya está
+   * en `_datum_version_`) y sí necesitar el espejo — y ahí igual vale la pena ejecutar.
+   */
+  mirror_pending_count: z.number().int().optional().default(0),
+  /**
+   * `true` en la migración al formato Datum (§2.3): el slug no cambia, solo el prefijo de la
+   * tabla de versión. Es la bandera que distingue los dos usos de este mismo schema.
+   */
+  prefix_only: z.boolean().optional().default(false),
   /** Subconjunto de `databases` con `action` `conflict` o `unreachable`. */
   blockers: z.array(renameSlugDatabaseSchema).optional().default([]),
   requires_confirmation: z.boolean().optional().default(false),
@@ -336,13 +380,36 @@ export const renameSlugPlanSchema = z.object({
 })
 export type RenameSlugPlan = z.infer<typeof renameSlugPlanSchema>
 
-/** `RenameSlugOut` — resultado de `POST .../rename-slug` (v25 §3.3). */
+/**
+ * `MirrorProvisionOut` — lo que pasó con el espejo `_datum_migrations` al ejecutar (v25 §2.2).
+ *
+ * 🔴 `failed` **no aborta** la operación, y justamente por eso hay que mostrarlo: sin él, el
+ * operador cree que el parque quedó uniforme cuando hay bases sin espejo.
+ * `skipped_disabled: true` = el espejo está apagado en el backend (`MIGRATION_MIRROR_ENABLED`).
+ */
+export const mirrorProvisionSchema = z.object({
+  created: z.array(renameSlugDatabaseSchema).optional().default([]),
+  failed: z.array(renameSlugDatabaseSchema).optional().default([]),
+  skipped_disabled: z.boolean().optional().default(false),
+})
+export type MirrorProvision = z.infer<typeof mirrorProvisionSchema>
+
+/**
+ * `RenameSlugOut` — resultado de `POST .../rename-slug` (v25 §2.2) y de
+ * `POST .../migrate-version-table` (§2.3), que devuelven exactamente el mismo schema.
+ */
 export const renameSlugResultSchema = z.object({
   /** El blueprint con el slug NUEVO. */
   model: databaseModelOutSchema,
   /** Las bases en las que el rename SÍ se ejecutó. */
   renamed_databases: z.array(renameSlugDatabaseSchema).optional().default([]),
   no_op: z.boolean().optional().default(false),
+  /**
+   * Nullable a propósito: el backend puede devolver `null` (el `rename-slug` desplegado hoy lo
+   * hace) o el objeto. `null` no significa «no se creó nada», significa que esa respuesta no
+   * reporta el espejo — y la UI tiene que distinguirlo de un `created: []`.
+   */
+  mirror: mirrorProvisionSchema.nullable().optional().default(null),
 })
 export type RenameSlugResult = z.infer<typeof renameSlugResultSchema>
 

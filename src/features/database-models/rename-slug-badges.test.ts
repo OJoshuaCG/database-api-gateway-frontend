@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { renameSlugBadge, renameSlugBlocks, sortBlockersFirst } from './rename-slug-badges'
 
 describe('renameSlugBadge', () => {
-  it('cubre los cuatro valores del enum con etiqueta propia', () => {
+  it('cubre los cinco valores del enum con etiqueta propia', () => {
     expect(renameSlugBadge('rename').label).toBe('Se renombra')
     expect(renameSlugBadge('skip').label).toBe('Sin tabla que renombrar')
-    expect(renameSlugBadge('conflict').label).toBe('Ya existe el destino')
+    expect(renameSlugBadge('already').label).toBe('Ya está al día')
+    expect(renameSlugBadge('conflict').label).toBe('Conviven las dos tablas')
     expect(renameSlugBadge('unreachable').label).toBe('No se pudo leer')
   })
 
@@ -17,6 +18,16 @@ describe('renameSlugBadge', () => {
     expect(renameSlugBlocks('unreachable')).toBe(true)
     expect(renameSlugBlocks('rename')).toBe(false)
     expect(renameSlugBlocks('skip')).toBe(false)
+    expect(renameSlugBlocks('already')).toBe(false)
+  })
+
+  it('`already` es neutro y NO cae al default desconocido', () => {
+    // Las filas de los `public_context` no pasan por Zod: antes de declararlo, `already` caía al
+    // default seguro y se pintaba como «Acción desconocida» BLOQUEANTE — justo el caso normal de
+    // toda base ya migrada al formato Datum.
+    const already = renameSlugBadge('already')
+    expect(already.tone).toBe('neutral')
+    expect(already.label).not.toBe('Acción desconocida')
   })
 
   it('`unreachable` NO se pinta como error: es fail-closed, no un conflicto probado', () => {

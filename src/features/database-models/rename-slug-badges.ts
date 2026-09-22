@@ -2,7 +2,8 @@ import type { BadgeTone } from '@/components/ui'
 import type { RenameSlugAction } from '@/lib/contracts'
 
 /**
- * Vocabulario ÚNICO del enum de cuatro del renombrado de slug (v25 §3.2).
+ * Vocabulario ÚNICO del enum de cinco del renombrado de slug y de la migración al formato
+ * Datum (v25 §2.1 y §2.3): los dos endpoints devuelven el mismo schema.
  *
  * **Existe por lo mismo que `migration-badges.ts`**: allí tres juegos de insignias escritas a mano
  * divergieron y el desplegable acabó siendo el único que NO pintaba los cuatro estados de más
@@ -41,22 +42,36 @@ const SPECS: Record<RenameSlugAction, RenameSlugBadgeSpec> = {
       'Todavía no tiene tabla de versión: no hay nada que renombrar en esta base y no se la toca.',
     blocking: false,
   },
+  // `neutral` y NO bloquea: la base ya tiene la tabla destino y no la de origen, así que no hay
+  // nada que hacer. En la migración al formato Datum es el caso NORMAL de toda base ya migrada, y
+  // una segunda corrida sale entera así. Pintarlo como problema haría que un blueprint ya
+  // modernizado pareciera tener algo pendiente.
+  already: {
+    tone: 'neutral',
+    label: 'Ya está al día',
+    title: 'Ya tiene la tabla con el nombre de destino y no la de origen: no hay nada que hacer.',
+    blocking: false,
+  },
+  // Antes de `already` este valor significaba «ya existe el destino», y ese caso ahora es el de
+  // arriba, que NO bloquea. `conflict` quedó para cuando CONVIVEN las dos tablas: el gateway no
+  // puede saber cuál de las dos es el puntero bueno, y elegir una por él es la auto-corrección
+  // que el backend rechaza por principio.
   conflict: {
     tone: 'error',
-    label: 'Ya existe el destino',
+    label: 'Conviven las dos tablas',
     title:
-      'Esta base YA tiene una tabla con el nombre nuevo. El renombrado la pisaría, así que se aborta la operación entera.',
+      'Esta base tiene a la vez la tabla de origen y la de destino, y no se puede decidir cuál es el puntero bueno. Se aborta la operación entera.',
     blocking: true,
   },
   // `warning` y no `error` a propósito: es **fail-closed**, no un conflicto probado. El gateway no
-  // dice «esta base tiene la tabla destino», dice «no pude comprobar que no la tenga» — y afirmar
-  // lo primero mandaría al operador a buscar una tabla que quizá no existe. Bloquea igual, y por
+  // dice «en esta base conviven las dos tablas», dice «no pude leerla» — y afirmar lo primero
+  // mandaría al operador a buscar una tabla que quizá no existe. Bloquea igual, y por
   // eso tampoco es `neutral`: un blocker pintado como dato inocuo no se lee.
   unreachable: {
     tone: 'warning',
     label: 'No se pudo leer',
     title:
-      'No se pudo consultar esta base, así que no se puede probar que NO tenga ya la tabla destino. Bloquea por prudencia, no por conflicto confirmado.',
+      'No se pudo consultar esta base, así que no se sabe qué tablas tiene. Bloquea por prudencia, no por conflicto confirmado.',
     blocking: true,
   },
 }
