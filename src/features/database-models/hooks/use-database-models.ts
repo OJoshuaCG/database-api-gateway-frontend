@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
-import type { DatabaseModelCreate, DatabaseModelUpdate } from '@/lib/contracts'
+import type { DatabaseModelCreate, DatabaseModelUpdate, RenameSlugResult } from '@/lib/contracts'
 import type { QueryParams } from '@/lib/api/client'
 import { invalidateDatabaseViews } from '@/features/managed-databases/invalidate'
 import {
@@ -11,6 +11,8 @@ import {
   getDatabaseModel,
   listDatabaseModels,
   getVersionTablesReport,
+  migrateVersionTable,
+  planMigrateVersionTable,
   listModelDatabases,
   planRenameSlug,
   refreshModelDatabases,
@@ -168,6 +170,38 @@ export function useRenameSlugPlan(modelId: number) {
 }
 
 /**
+ * Lo que queda rancio tras cualquier operación que renombre tablas de versión: el renombrado de
+ * slug y la migración al formato Datum. Compartido porque la regla es la misma —cambió el nombre
+ * de la tabla que `status` lee en cada base— y una divergencia entre las dos no falla: solo
+ * muestra datos viejos.
+ */
+function invalidateAfterVersionTableRename(
+  queryClient: ReturnType<typeof useQueryClient>,
+  modelId: number,
+  result: RenameSlugResult,
+): void {
+  invalidateDatabaseViews(queryClient)
+  void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
+  void queryClient.invalidateQueries({
+    predicate: (query) => query.queryKey[0] === 'projects' && query.queryKey[2] === 'blueprints',
+  })
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.databaseModelVersionTables.detail(modelId),
+  })
+  /*
+   * Redundante a propósito, y conviene que se sepa: `invalidateDatabaseViews` ya invalida
+   * `['managed-databases']` entero, que es prefijo de `migrationStatus`. Se deja explícito
+   * porque es la relación que importa —el `expected_table` de cada base renombrada cambió— y
+   * porque el día que alguien acote aquel helper, esto tiene que seguir en pie.
+   */
+  for (const database of result.renamed_databases) {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.managedDatabases.migrationStatus(database.managed_database_id),
+    })
+  }
+}
+
+/**
  * Ejecución del renombrado del slug (v25 §3.3). 🔌 3/min.
  *
  * Tras el éxito cambia el `slug`, que es **lo que `expected_table` predice y lo que `status` usa
@@ -191,26 +225,7 @@ export function useRenameSlug(modelId: number) {
     mutationFn: (vars: { newSlug: string; confirmToken?: string | null }) =>
       renameSlug(modelId, vars.newSlug, vars.confirmToken),
     onSuccess: (result) => {
-      invalidateDatabaseViews(queryClient)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
-      void queryClient.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === 'projects' && query.queryKey[2] === 'blueprints',
-      })
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.databaseModelVersionTables.detail(modelId),
-      })
-      /*
-       * Redundante a propósito, y conviene que se sepa: `invalidateDatabaseViews` ya invalida
-       * `['managed-databases']` entero, que es prefijo de `migrationStatus`. Se deja explícito
-       * porque es la relación que importa —el `expected_table` de cada base renombrada cambió— y
-       * porque el día que alguien acote aquel helper, esto tiene que seguir en pie.
-       */
-      for (const database of result.renamed_databases) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.managedDatabases.migrationStatus(database.managed_database_id),
-        })
-      }
+      invalidateAfterVersionTableRename(queryClient, modelId, result)
       toast.success(
         'Slug renombrado',
         result.no_op
@@ -218,5 +233,30 @@ export function useRenameSlug(modelId: number) {
           : `El blueprint pasa a «${result.model.slug}» y se renombró la tabla de versión en ${result.renamed_databases.length} base(s).`,
       )
     },
+  })
+}
+
+/**
+ * Preview de la migración al formato Datum (v25 §2.3). 🔌 10/min. Mutación por lo mismo que
+ * `useRenameSlugPlan`: se pide de un clic, nunca al montar ni al reenfocar la ventana.
+ */
+export function useMigrateVersionTablePlan(modelId: number) {
+  return useMutation({
+    mutationFn: () => planMigrateVersionTable(modelId),
+  })
+}
+
+/**
+ * Ejecución de la migración al formato Datum (v25 §2.3). 🔌 3/min.
+ *
+ * Misma invalidación que el renombrado de slug. El error no se notifica acá: comparte los cinco
+ * códigos del renombrado, y la clasificación vive en el asistente, que es quien tiene dónde
+ * pintarla.
+ */
+export function useMigrateVersionTable(modelId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (confirmToken: string | null) => migrateVersionTable(modelId, confirmToken),
+    onSuccess: (result) => invalidateAfterVersionTableRename(queryClient, modelId, result),
   })
 }

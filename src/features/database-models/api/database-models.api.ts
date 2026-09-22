@@ -113,7 +113,7 @@ export function planRenameSlug(id: number, newSlug: string): Promise<RenameSlugP
 /**
  * `POST /database-models/{id}/rename-slug` 🔌 — ejecución (v25 §3.3). Rate limit **3/min**.
  *
- * Renombra `_gw_v_{slug_viejo}` → `_gw_v_{slug_nuevo}` en cada BD gestionada y, **al final**,
+ * Renombra la tabla de versión de cada BD gestionada al nombre del slug nuevo y, **al final**,
  * actualiza el slug del blueprint. El orden importa: si algo falla a mitad se compensa
  * renombrando de vuelta y el slug NO se modifica. Al revés, un fallo remoto dejaría a todo el
  * parque con la contabilidad huérfana a la vez.
@@ -129,5 +129,35 @@ export function renameSlug(
 ): Promise<RenameSlugResult> {
   return mutateData('POST', `${BASE}/${id}/rename-slug`, renameSlugResultSchema, {
     body: confirmToken ? { new_slug: newSlug, confirm_token: confirmToken } : { new_slug: newSlug },
+  })
+}
+
+/**
+ * `POST /database-models/{id}/migrate-version-table/plan` 🔌 — preview de la migración al
+ * formato Datum (v25 §2.3). **Sin cuerpo.** Rate limit 10/min.
+ *
+ * Es el mismo preflight que el renombrado de slug con el slug igual a sí mismo, y por eso
+ * devuelve el mismo `RenameSlugPlanOut`, con `prefix_only: true`. No escribe nada.
+ */
+export function planMigrateVersionTable(id: number): Promise<RenameSlugPlan> {
+  return mutateData('POST', `${BASE}/${id}/migrate-version-table/plan`, renameSlugPlanSchema)
+}
+
+/**
+ * `POST /database-models/{id}/migrate-version-table` 🔌 — ejecución (v25 §2.3). Rate limit
+ * **3/min**. Renombra la tabla de versión al prefijo vigente donde haga falta y crea el espejo
+ * `_datum_migrations` donde falte, **sin cambiar el slug**.
+ *
+ * A diferencia de `renameSlug`, acá el token se manda **siempre como clave**, `null` incluido:
+ * es el cuerpo que el contrato declara (`{"confirm_token": string|null}`). Y hay un caso
+ * legítimo sin token: con `rename_count: 0` el plan no emite uno, pero si hay bases sin espejo
+ * igual vale ejecutar.
+ */
+export function migrateVersionTable(
+  id: number,
+  confirmToken: string | null,
+): Promise<RenameSlugResult> {
+  return mutateData('POST', `${BASE}/${id}/migrate-version-table`, renameSlugResultSchema, {
+    body: { confirm_token: confirmToken },
   })
 }
