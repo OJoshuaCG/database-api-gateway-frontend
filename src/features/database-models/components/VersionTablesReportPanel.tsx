@@ -12,10 +12,12 @@ import {
   EmptyState,
   ErrorState,
 } from '@/components/ui'
-import type { VersionTableDatabase, VersionTableStatus } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, type VersionTableDatabase, type VersionTableStatus } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import { formatDateTime } from '@/lib/utils'
 import { useVersionTablesReport } from '../hooks/use-database-models'
+import { RenameSlugDialog } from './RenameSlugDialog'
 import {
   isBlockingVersionTable,
   isVersionTableStatus,
@@ -49,7 +51,7 @@ interface VersionTablesReportPanelProps {
 /**
  * Informe de contabilidad de versiones del blueprint (`GET /database-models/{id}/version-tables`).
  *
- * **Qué diagnostica.** El `slug` del blueprint nombra la tabla `_gw_v_<slug>` DENTRO de cada base
+ * **Qué diagnostica.** El `slug` del blueprint nombra la tabla `_datum_version_<slug>` (o `_gw_v_<slug>` en el formato histórico) DENTRO de cada base
  * gestionada. Cambiar el slug por un campo de formulario no renombraba nada en los motores, así
  * que el gateway quedaba leyendo una tabla inexistente y la contabilidad real seguía viva con el
  * nombre viejo. Esta pantalla es la que dice, base por base, si eso pasó y con qué versión.
@@ -61,7 +63,7 @@ interface VersionTablesReportPanelProps {
  * **Tres cosas que esta vista deliberadamente NO hace**, y conviene que sigan sin hacerse:
  *
  * 1. **No ofrece borrar la tabla huérfana.** No hay endpoint para eso y la consola SQL bloquea por
- *    diseño cualquier sentencia que nombre `_gw_v_*`. Un botón que no puede existir es peor que su
+ *    diseño cualquier sentencia que nombre `_datum_version_*` o `_gw_v_*`. Un botón que no puede existir es peor que su
  *    ausencia: promete una salida y deja al operador buscando por qué falla.
  * 2. **No «arregla automáticamente».** El enlace de recuperación PRECARGA la versión leída en el
  *    formulario de stamp de esa base, que el admin confirma; no la ejecuta. El backend rechazó la
@@ -84,8 +86,15 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
    * error como base, que da la espera completa.
    */
   const [ahora, setAhora] = useState<number | null>(null)
+  const [actualizando, setActualizando] = useState(false)
 
   const informe = useVersionTablesReport(modelId, pedido)
+  // Escribe en bases ajenas: mismo requisito que el renombrado de slug. Se deshabilita el botón en
+  // vez de dejar que el 403 llegue tras leer el plan entero.
+  const guardFormato = useCapabilityGuard(
+    CAPABILITIES.blueprintsWrite,
+    'actualizar el formato de las tablas de versión',
+  )
   const error = informe.isError ? toApiError(informe.error) : null
 
   // Cuenta atrás del 429. `errorUpdatedAt` lo da TanStack Query, así que el instante del error no
@@ -388,8 +397,47 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
             <p className="text-xs text-muted-foreground">Comprobado el {comprobadoEl}</p>
           )}
         </div>
-        {botonComprobar}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap justify-end gap-2">
+            {/*
+              Opcional y secundario A PROPÓSITO: las bases con el formato histórico siguen
+              funcionando para siempre y cada apply, rollback o stamp moderniza la que toca. Por
+              eso no hay badge de «pendiente» ni banner que empuje a pulsarlo: sirve para no
+              esperar, no para saldar una deuda.
+            */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!guardFormato.allowed}
+              title={guardFormato.hint}
+              onClick={() => setActualizando(true)}
+            >
+              Actualizar al formato Datum… 🔌
+            </Button>
+            {botonComprobar}
+          </div>
+          {/* Un `<button disabled>` no dispara el tooltip nativo: el motivo va como texto
+              visible, igual que en `DatabaseModelForm`. */}
+          {!guardFormato.allowed && guardFormato.hint && (
+            <p className="text-xs text-muted-foreground">{guardFormato.hint}</p>
+          )}
+        </div>
       </div>
+
+      {actualizando && (
+        /*
+         * Tras un éxito el hook invalida la key de este informe. Si ya se había pedido, la query
+         * está activa y TanStack Query la vuelve a pedir sola pese al `staleTime: Infinity` —el
+         * invalidate marca la foto como rancia y refetchea toda query montada—, así que al
+         * cerrar el diálogo la tabla ya está releyéndose. Si nunca se pidió, no hay foto vieja
+         * que confunda: sigue el estado vacío de «Comprobar ahora».
+         */
+        <RenameSlugDialog
+          mode="migrate-format"
+          modelId={modelId}
+          onClose={() => setActualizando(false)}
+        />
+      )}
 
       {!pedido ? (
         <Card>

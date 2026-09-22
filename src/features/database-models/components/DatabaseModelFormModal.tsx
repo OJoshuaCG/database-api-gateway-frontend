@@ -103,7 +103,8 @@ export function DatabaseModelFormModal({ open, onClose, model }: DatabaseModelFo
             // Se cierra TODO, no solo el asistente. El formulario nació con el slug viejo en sus
             // `defaultValues` y `useForm` no los resincroniza: dejarlo abierto mostraría el slug
             // anterior como si siguiera siendo el del blueprint, y el siguiente «Guardar cambios»
-            // intentaría volver a ponerlo. El toast del hook ya confirma el renombrado.
+            // intentaría volver a ponerlo. Llega al CERRAR el paso de resultado del asistente, no
+            // con el 200: antes el operador tiene que ver qué pasó con el espejo en cada base.
             setRenaming(false)
             onClose()
           }}
