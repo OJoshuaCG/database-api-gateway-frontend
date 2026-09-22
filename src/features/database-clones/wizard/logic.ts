@@ -153,7 +153,8 @@ export function buildCreateCloneBody(plan: PlanFormState): CloneCreateIn | null 
     source_database_name: plan.source.managedId != null ? null : plan.source.name,
     target_server_id: plan.targetServerId,
     target_database_name: targetName,
-    target_database_id: plan.targetMode === 'existing' ? (plan.targetExisting?.managedId ?? null) : null,
+    target_database_id:
+      plan.targetMode === 'existing' ? (plan.targetExisting?.managedId ?? null) : null,
     target_mode: plan.targetMode,
     include_data: plan.includeData,
     clean_mode: plan.targetMode === 'existing' ? plan.cleanMode : 'none',
@@ -309,9 +310,23 @@ export function ruleSelectsEverything(spec: CloneStructureSpec): boolean {
 }
 
 // Prefijos de la contabilidad interna del gateway (`identifiers.GATEWAY_TABLE_PREFIXES`). El
-// backend las excluye de toda selección; se replican acá para que el conteo en pantalla no
-// prometa objetos que el plan real no va a incluir.
-const GATEWAY_TABLE_PREFIXES = ['_gw_v_', '_gw_stg_']
+// backend las excluye de toda selección —diff, snapshot y clon—; se replican acá para que el
+// conteo en pantalla no prometa objetos que el plan real no va a incluir.
+//
+// Son los CINCO del backend, y los viejos no son transitorios: el prefijo `_gw_` se reconoce
+// para siempre, porque un backup restaurado, un clon de una base no migrada o una base que
+// estaba caída el día de la migración vuelven con el nombre viejo (v25 §8). Quitarlos haría que
+// el asistente contara la contabilidad del gateway como tablas del usuario.
+//
+// `_datum_migrations` es interna aunque SÍ viaje en el export: el clon la excluye igual, y eso
+// es el backend quien lo decide. Esta lista es la del clon, no la del export.
+const GATEWAY_TABLE_PREFIXES = [
+  '_gw_v_',
+  '_datum_version_',
+  '_gw_stg_',
+  '_datum_stg_',
+  '_datum_migrations',
+]
 
 export function isGatewayInternalTable(name: string): boolean {
   const lowered = name.toLowerCase()

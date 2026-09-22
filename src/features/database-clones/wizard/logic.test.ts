@@ -283,6 +283,11 @@ describe('isGatewayInternalTable', () => {
   it('reconoce los dos prefijos de contabilidad interna, sin distinguir mayúsculas', () => {
     expect(isGatewayInternalTable('_gw_v_mi_bd')).toBe(true)
     expect(isGatewayInternalTable('_GW_STG_users')).toBe(true)
+    // El formato Datum (v25 §8), sin dejar de reconocer el prefijo histórico de arriba.
+    expect(isGatewayInternalTable('_datum_version_mi_bd')).toBe(true)
+    expect(isGatewayInternalTable('_datum_stg_users')).toBe(true)
+    expect(isGatewayInternalTable('_datum_migrations')).toBe(true)
+    expect(isGatewayInternalTable('datum_ventas')).toBe(false)
     expect(isGatewayInternalTable('gw_ventas')).toBe(false)
     expect(isGatewayInternalTable('')).toBe(false)
   })
