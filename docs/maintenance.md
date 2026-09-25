@@ -109,6 +109,41 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 | Seleccionar privilegios por motor | `PrivilegeMultiSelect` (en `features/privileges`; se alimenta del catálogo `/privileges`) |
 | Elegir varias bases de un servidor | `DatabaseMultiSelect` (en `features/server-users`; lista las bases del motor con `GET /servers/{id}/databases`, adoptadas o no, y cae a captura manual si la introspección falla). Para elegir **una** sola, `ServerDatabaseCombobox` en `features/servers` |
 | Lista dinámica en un formulario | `useFieldArray` de RHF (p. ej. items de un perfil de permisos) |
+| Acciones de una base de datos en una fila o en su ficha | `DatabaseRowActions` / `DatabaseHeaderActions` + `DatabaseActionDialogs` (en `features/managed-databases`). Qué acciones corresponden lo decide `database-actions.ts` según el estado de la base y el `source` de la lista. Ver «Una entidad, varias vistas» abajo |
+| Acciones de un usuario del motor en una fila o en su ficha | `EngineUserActionButtons` + `useEngineUserDialogs` (en `features/servers/components`), con la lógica en `engine-user-actions.ts` |
+| Ruta a la ficha de una base o de un usuario del motor | `serverDatabasePath` / `serverUserPath` de `src/lib/routes.ts`. Nunca armes la plantilla a mano |
+
+## Una entidad, varias vistas
+
+Una base de datos, un usuario del motor, un blueprint o un servidor aparecen en **más de un
+listado** además de su página propia. Esas vistas llegaron a ofrecer acciones distintas para la
+misma entidad en el mismo estado, y cada arreglo en una vista dejaba atrás a la otra: en
+«Servidores → Bases de datos» una base gestionada no se podía editar, cuando en «Bases de datos»
+sí. Para que no vuelva a pasar, cinco reglas:
+
+1. **La ficha tiene todas las acciones.** La página propia de la entidad ofrece todo lo que se
+   puede hacer con ella. Una fila de cualquier listado es un **atajo** de esas mismas acciones:
+   una acción que está en una fila y no en la ficha es un bug. Límite conocido: la lista del
+   inventario de bases no conoce la presencia física, así que una base `active` que desapareció
+   del motor ofrece en su fila Comparar/Clonar/Exportar y en su ficha no (el detalle, en
+   `database-actions.ts`).
+2. **Qué acciones hay lo decide el estado, no la lista.** Gestionada, sin aprovisionar, no
+   gestionada o huérfana; y las capacidades del rol. La misma entidad en el mismo estado tiene la
+   misma fila en cualquier listado.
+3. **Cada acción se implementa una vez.** Un solo diálogo, un solo hook, montado desde todas las
+   vistas. Agregar una acción es tocar un lugar: la lógica de acciones de la entidad
+   (`database-actions.ts`, `engine-user-actions.ts`) y su componente. No se escriben botones
+   sueltos por página.
+4. **Las variantes de contexto se declaran.** Si una lista necesita algo propio —la tabla de un
+   blueprint ofrece «Aplicar aquí 🔌», la lista del motor y la del inventario difieren en qué
+   destructiva ofrecen—, entra como parámetro tipado (`source`, contexto), no como un botón extra
+   agregado a mano en esa página.
+5. **Una acción destructiva se nombra por su consecuencia.** «Quitar del inventario» (el motor no
+   se toca, icono `ListRemoveIcon`) y «Eliminar del motor 🔌» (`DROP`, papelera) nunca comparten
+   etiqueta ni icono. Llegaron a compartir los dos, con el mismo rojo, haciendo cosas opuestas.
+
+La paridad se consigue **sumando**: si una vista tiene un atajo que la otra no, se agrega donde
+falta; no se quita de donde ya estaba.
 
 ## Trampas conocidas (gotchas)
 

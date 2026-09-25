@@ -35,7 +35,7 @@ como texto plano y confundía a los usuarios.
 | `outline` | Acción secundaria con el mismo peso visual que `primary` pero sin color de marca. | Adoptar, Probar conexión |
 | `ghost` | Acción de fila **no destructiva** en tablas/paneles (bajo énfasis, pero con borde sutil visible en reposo). | Editar, Ver grants, Reasignar, Revelar, Rotar contraseña, Cancelar |
 | `danger-soft` | Acción de fila **destructiva** en tablas/paneles (mismo bajo énfasis que `ghost`, pero en rojo sutil para diferenciarla del resto). | Botón "Eliminar" dentro de una fila de `DataTable` |
-| `danger` | Acción destructiva de **alto énfasis**: botón de confirmación final dentro de `ConfirmDialog`, o un trigger de página/toolbar (fuera de una fila de tabla) que abre ese diálogo. | Confirmar borrado en `ConfirmDialog`, botón "Eliminar" en el header de una página de detalle |
+| `danger` | Acción destructiva de **alto énfasis**: solo el botón de confirmación final dentro de `ConfirmDialog`. El botón de la cabecera de una ficha que ABRE ese diálogo va en `danger-soft`, como en una fila. | Confirmar borrado en `ConfirmDialog` |
 
 Regla práctica: en una fila de `DataTable`, el patrón estándar es **`ghost` para las
 acciones normales + `danger-soft` para "Eliminar"** (nunca `ghost` para eliminar, ni
@@ -50,6 +50,22 @@ diálogo intermedio).
   Eliminar
 </Button>
 ```
+
+### `RowActionButton`
+Acción de una fila de tabla. Props: `label`, `subject` (la fila: nombre de la base,
+`usuario@host`), `onClick`, `variant?`, `icon?`, `iconText?` (`table` | `card`), `isLoading?`,
+`disabled?`. Resuelve tres cosas que cada fila hacía a su manera:
+
+- **Nombre accesible con contexto** (`rowActionName`): empieza por el texto visible (WCAG 2.5.3)
+  y añade la fila — `Quitar del inventario «tienda_42»` —; el 🔌 se lee «(toca el motor)».
+- **Texto en la tarjeta**: con `iconText="card"` el icono lleva también su texto por debajo de
+  `md`, donde no hay tooltip. Úsalo para los iconos que no están en la lista de universales
+  (editar, eliminar, actualizar, copiar, navegar, ver/ocultar): quitar del inventario, comparar,
+  clonar.
+- Sin `icon`, es un botón `sm` con texto.
+
+El contenedor de la fila debe llevar `flex-wrap`: en la tarjeta de `< md` una fila con seis
+acciones no cabe en un móvil y la destructiva quedaría fuera de pantalla.
 
 ### `Input` / `Textarea`
 Campo con `label`, `error`, `hint` y `aria-invalid`/`aria-describedby` cableados.
@@ -155,7 +171,8 @@ contenedores, nunca controles).
 ### `Modal`
 Diálogo modal accesible basado en el elemento nativo **`<dialog>`** (focus-trap, cierre
 con Esc y backdrop gratis). Props: `open`, `onClose`, `title`, `description?`, `footer?`,
-`size?`.
+`size?`. Al cerrarse devuelve el foco al elemento que lo tenía al abrirse, si sigue en el
+documento: el `<dialog>` se desmonta sin `close()` y el navegador no lo hace solo.
 
 ### `ConfirmDialog`
 Confirmación construida sobre `Modal`. Para borrados destructivos, `confirmWord` exige
@@ -176,7 +193,9 @@ Confirmación construida sobre `Modal`. Para borrados destructivos, `confirmWord
 ### `CodeBlock`
 Visor de SQL de solo lectura: resaltado por tokens (`src/lib/syntax/sql-highlight.ts`),
 numeración, copiar y expandir a pantalla completa. Props: `code`, `title?`, `extra?`,
-`maxHeightClass?` (`max-h-80`), `hideLineNumbers?`, `emptyLabel?`, `hideFullscreen?`.
+`maxHeightClass?` (`max-h-80`), `hideLineNumbers?`, `emptyLabel?`, `hideFullscreen?`,
+`highlightLine?` (resalta esa línea, la marca con `aria-current` y la lleva al centro de la vista;
+sin la prop el visor no cambia).
 **Es la única forma correcta de mostrar SQL**: no montes un `<pre>` propio.
 
 ### `SqlEditor` / `SqlField`
@@ -227,7 +246,9 @@ montajes: es un ajuste de lectura del momento, no una preferencia como el ajuste
 
 `AppShell` (sidebar + topbar + boundary por sección), `Sidebar` (navegación),
 `Topbar` (sesión, logout, tema, health), `ThemeToggle`, `SectionErrorFallback`,
-`PageHeader` (título + descripción + acciones de cada página).
+`PageHeader` (título + descripción + acciones de cada página). Las acciones se parten en varias
+líneas y el título corta palabras largas: una ficha con ocho acciones no puede aplastar el título
+ni desbordar la página.
 
 ### Nada de scroll horizontal en la página
 
