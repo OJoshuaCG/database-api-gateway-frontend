@@ -22,6 +22,7 @@ import {
   XIcon,
 } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
+import { serverDatabasePath } from '@/lib/routes'
 import {
   isDryRunResult,
   MIGRATION_VERSION_PATTERN,
@@ -44,6 +45,7 @@ import {
 } from '../hooks/use-db-migrations'
 import { ProvisionStatusBadge } from './ProvisionStatusBadge'
 import { ProvisionDatabaseDialog } from './ProvisionDatabaseDialog'
+import { ManagedDatabaseFormModal } from './ManagedDatabaseFormModal'
 import { historyStatusSpec } from '../history-badges'
 import { MigrationHistoryPanel } from './MigrationHistoryPanel'
 import { ReconcilePartialSection } from './ReconcilePartialSection'
@@ -92,12 +94,30 @@ function isTab(value: string | null): value is Tab {
  * como bloque a todo el ancho cada fase tiene sitio y el estado navegable (pestaña, versión en
  * reconciliación) vive en la URL, así que se puede enlazar y recargar sin perderlo.
  */
-export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: number }) {
+export function ManagedDatabaseMigrationsContent({
+  databaseId,
+  embedded = false,
+}: {
+  databaseId: number
+  /**
+   * Montado como pestaña de la ficha (`ServerDatabaseDetailPage`). Ahí el enlace «Ver ficha
+   * completa» llevaría a la misma página en la que ya se está, así que se oculta.
+   */
+  embedded?: boolean
+}) {
   // Pestaña y objetivo de reconciliación viven en la URL, no en estado local: así se enlaza
   // directamente al historial o a una reconciliación concreta, y «cerrar» es quitar el parámetro.
   const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
   const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
+  /*
+   * Embebido en la ficha de la base, `?tab=` ya es de la FICHA (grantees/summary/migrations/
+   * collation). Si esta vista escribiera ahí su `history`, la ficha no lo reconoce, cae a su
+   * pestaña por defecto y el operador que pulsó «Historial» termina en «Usuarios con permisos».
+   * Por eso embebida usa su propio parámetro; en la ruta de compatibilidad sigue siendo `tab`,
+   * así los enlaces viejos a `…/migrations?tab=history` no se rompen.
+   */
+  const tabKey = embedded ? 'migrations_tab' : 'tab'
+  const tabParam = searchParams.get(tabKey)
   const tab: Tab = isTab(tabParam) ? tabParam : 'actions'
   const reconcileVersion = searchParams.get('reconcile')
   /**
@@ -175,6 +195,8 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
   const [recovered, setRecovered] = useState(false)
   // Diálogo de aprovisionamiento para el caso «la base no existe en el motor».
   const [provisionOpen, setProvisionOpen] = useState(false)
+  // Asignar blueprint desde el vacío «Sin blueprint»: es el formulario de edición de la base.
+  const [assignModelOpen, setAssignModelOpen] = useState(false)
 
   const db = useManagedDatabase(databaseId, true)
   const modelId = db.data?.model_id ?? 0
@@ -281,7 +303,7 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       return next
     })
   }
-  const setTab = (value: Tab) => updateParams((next) => next.set('tab', value))
+  const setTab = (value: Tab) => updateParams((next) => next.set(tabKey, value))
   const openReconcile = (version: string) => updateParams((next) => next.set('reconcile', version))
   const closeReconcile = () => {
     setSeenEntry(null)
@@ -436,12 +458,14 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
           >
             ← Bases de datos
           </Link>
-          <Link
-            to={`/servers/${database.server_id}/databases/${encodeURIComponent(database.name)}?tab=migrations`}
-            className="text-sm text-primary hover:underline"
-          >
-            Ver ficha completa de la base de datos →
-          </Link>
+          {!embedded && (
+            <Link
+              to={serverDatabasePath(database.server_id, database.name, 'migrations')}
+              className="text-sm text-primary hover:underline"
+            >
+              Ver ficha completa de la base de datos →
+            </Link>
+          )}
         </div>
         <PageHeader
           title={database.name}
@@ -510,9 +534,11 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
       </div>
 
       {!hasModel ? (
+        // Con salida: sin el botón, el aviso mandaba a asignar un blueprint sin decir dónde.
         <EmptyState
           title="Sin blueprint asignado"
-          description="Asigna un blueprint (model_id) a esta base de datos para gestionar sus migraciones."
+          description="Asigna un blueprint a esta base de datos para gestionar sus migraciones."
+          action={<Button onClick={() => setAssignModelOpen(true)}>Asignar blueprint</Button>}
         />
       ) : (
         <>
@@ -1560,6 +1586,13 @@ export function ManagedDatabaseMigrationsContent({ databaseId }: { databaseId: n
 
       {provisionOpen && (
         <ProvisionDatabaseDialog database={database} onClose={() => setProvisionOpen(false)} />
+      )}
+      {assignModelOpen && (
+        <ManagedDatabaseFormModal
+          open
+          onClose={() => setAssignModelOpen(false)}
+          database={database}
+        />
       )}
     </div>
   )

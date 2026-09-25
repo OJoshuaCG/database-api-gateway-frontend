@@ -2,38 +2,37 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
-  Badge,
+  AdoptionBadge,
   Button,
   DataTable,
   EmptyState,
+  EnvironmentBadge,
   ErrorState,
   IconButton,
   RefreshIcon,
   Spinner,
-  TrashIcon,
 } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { ServerOut } from '@/lib/contracts'
+import type { ServerOut, ServerUserOut } from '@/lib/contracts'
+import { serverDatabasePath, serverUserPath } from '@/lib/routes'
 import { ProvisionStatusBadge } from '@/features/managed-databases/components/ProvisionStatusBadge'
+import {
+  DatabaseActionDialogs,
+  DatabaseRowActions,
+  type PendingDatabaseAction,
+} from '@/features/managed-databases/components/DatabaseRowActions'
+import { resolveDatabaseState } from '@/features/managed-databases/database-actions'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
+import { resolveEnvironmentState, useEnvironmentMap } from '@/features/environments'
 import { useServerDatabases } from '../hooks/use-server-databases'
 import { filterDatabaseRows, type InventoryScope, type ServerDatabaseRow } from '../logic'
 import { CreateServerDatabaseModal } from './CreateServerDatabaseModal'
-import { DropDatabaseDialog } from './DropDatabaseDialog'
 
 const SCOPES: { id: InventoryScope; label: string }[] = [
   { id: 'all', label: 'Todas' },
   { id: 'managed', label: 'Gestionadas' },
   { id: 'unmanaged', label: 'No gestionadas' },
 ]
-
-/**
- * Ruta de la ficha de una base de datos. El nombre se codifica porque las bases legadas pueden
- * llevar «.», «-» o «$», que de otro modo romperían el segmento de la URL.
- */
-function detailPath(serverId: number, database: string): string {
-  return `/servers/${serverId}/databases/${encodeURIComponent(database)}`
-}
 
 /**
  * Vista 1 — bases de datos que existen FÍSICAMENTE en el servidor, cruzadas con el inventario
@@ -46,6 +45,10 @@ function detailPath(serverId: number, database: string): string {
  *
  * Sin selección múltiple a propósito (§6.6): cada borrado exige su propio `confirm_token`
  * ligado a su base, y un borrado en lote es justo el patrón que la doble confirmación evita.
+ *
+ * Las acciones de cada fila son las de `DatabaseRowActions` con `source="physical"`: una base
+ * gestionada tiene aquí las mismas que en el inventario (Editar, Reasignar, Migraciones…), salvo
+ * la destructiva, que en este listado es «Eliminar del motor 🔌».
  */
 export function ServerDatabasesPanel({
   server,
@@ -61,18 +64,23 @@ export function ServerDatabasesPanel({
   const [search, setSearch] = useState('')
   const [scope, setScope] = useState<InventoryScope>('all')
   const [createOpen, setCreateOpen] = useState(false)
-  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingDatabaseAction | null>(null)
 
   // Resuelve `owner_id` → username. Es una consulta ya cacheada por otros módulos y degrada
   // sola: si el propietario no está en la página cargada, se muestra su id.
   const owners = useServerUserOptions(serverId)
-  const ownerNames = useMemo(() => {
-    const map = new Map<number, string>()
-    for (const user of owners.data ?? []) {
-      map.set(user.id, user.host ? `${user.username}@${user.host}` : user.username)
-    }
+  const ownersById = useMemo(() => {
+    const map = new Map<number, ServerUserOut>()
+    for (const user of owners.data ?? []) map.set(user.id, user)
     return map
   }, [owners.data])
+
+  const environmentMap = useEnvironmentMap()
+
+  // Sin el inventario resuelto no se sabe si una base sin registro está gestionada: la fila se
+  // queda en las acciones del motor en vez de ofrecer «Adoptar» sobre algo quizá ya adoptado.
+  // Truncado cuenta como no resuelto: una base fuera de la primera página saldría «no gestionada».
+  const inventoryKnown = inventory.isSuccess && !inventoryTruncated
 
   const visibleRows = useMemo(
     () => filterDatabaseRows(rows, { search, scope }),
@@ -86,12 +94,22 @@ export function ServerDatabasesPanel({
         header: 'Nombre',
         accessorFn: (row) => row.name,
         cell: ({ row }) => (
-          <Link
-            to={detailPath(serverId, row.original.name)}
-            className="font-mono text-sm text-primary hover:underline"
-          >
-            {row.original.name}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={serverDatabasePath(serverId, row.original.name)}
+              className="font-mono text-sm text-primary hover:underline"
+            >
+              {row.original.name}
+            </Link>
+            {/* Junto al nombre, como en el inventario: esta fila tiene el «Eliminar del motor 🔌»,
+                y el entorno es la etiqueta que dice «producción». Solo las gestionadas lo tienen. */}
+            {row.original.managed && (
+              <EnvironmentBadge
+                state={resolveEnvironmentState(row.original.managed.environment_id, environmentMap)}
+                className="shrink-0"
+              />
+            )}
+          </div>
         ),
       },
       {
@@ -103,12 +121,10 @@ export function ServerDatabasesPanel({
           // "No gestionada" sería afirmar algo que todavía no se sabe.
           inventory.isPending ? (
             <span className="text-xs text-muted-foreground">…</span>
-          ) : row.original.isManaged ? (
-            <Link to="/managed-databases" className="hover:underline">
-              <Badge tone="success">Gestionada</Badge>
-            </Link>
           ) : (
-            <Badge tone="warning">No gestionada</Badge>
+            // Sin enlace: llevaba a `/managed-databases` sin filtro, un listado donde había que
+            // volver a buscar la base. Su ficha ya está en el nombre.
+            <AdoptionBadge status={row.original.isManaged ? 'adopted' : 'unmanaged'} />
           ),
       },
       {
@@ -118,8 +134,16 @@ export function ServerDatabasesPanel({
         cell: ({ row }) => {
           const ownerId = row.original.managed?.owner_id
           if (ownerId === undefined) return <span className="text-muted-foreground">—</span>
+          const owner = ownersById.get(ownerId)
+          // Si el propietario no está en la página cargada de usuarios, queda su id sin enlace.
+          if (!owner) return <span className="font-mono text-xs">#{ownerId}</span>
           return (
-            <span className="font-mono text-xs">{ownerNames.get(ownerId) ?? `#${ownerId}`}</span>
+            <Link
+              to={serverUserPath(serverId, owner.username, owner.host)}
+              className="font-mono text-xs text-primary hover:underline"
+            >
+              {owner.host ? `${owner.username}@${owner.host}` : owner.username}
+            </Link>
           )
         },
       },
@@ -136,43 +160,28 @@ export function ServerDatabasesPanel({
       },
       {
         id: 'actions',
-        header: 'Acciones',
+        header: '',
         enableSorting: false,
+        enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-2">
-            <Link to={detailPath(serverId, row.original.name)}>
-              <Button variant="ghost" size="sm">
-                Ver usuarios
-              </Button>
-            </Link>
-            {/* La exportación funciona sobre cualquier base del servidor, adoptada o no: se
-                identifica por `serverId` + nombre, igual que la conversión de collation. */}
-            <Link
-              to={`/database-exports?serverId=${serverId}&database=${encodeURIComponent(row.original.name)}`}
-            >
-              <Button variant="ghost" size="sm">
-                Exportar
-              </Button>
-            </Link>
-            {!row.original.isManaged && (
-              <Link to="/managed-databases">
-                <Button variant="ghost" size="sm">
-                  Adoptar
-                </Button>
-              </Link>
-            )}
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDropTarget(row.original.name)}
-            />
-          </div>
+          <DatabaseRowActions
+            source="physical"
+            target={{
+              serverId,
+              name: row.original.name,
+              managed: row.original.managed,
+              state: resolveDatabaseState({
+                managed: row.original.managed,
+                inventoryKnown,
+                presence: 'present',
+              }),
+            }}
+            onAction={setPendingAction}
+          />
         ),
       },
     ],
-    [inventory.isPending, ownerNames, serverId],
+    [inventory.isPending, inventoryKnown, ownersById, serverId, environmentMap],
   )
 
   if (physical.isLoading) {
@@ -237,7 +246,8 @@ export function ServerDatabasesPanel({
       {inventoryTruncated && (
         <p className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           El inventario de este servidor tiene más registros de los que se cargaron: alguna base
-          podría aparecer como «No gestionada» sin serlo.
+          podría aparecer como «No adoptada» sin serlo. Por eso las bases sin registro no ofrecen
+          «Adoptar» ni acciones de inventario (Editar, Reasignar, Migraciones, Comparar, Clonar).
         </p>
       )}
 
@@ -298,27 +308,15 @@ export function ServerDatabasesPanel({
         existingNames={physical.data ?? []}
       />
 
-      {/* Montaje condicional: cada apertura nace con estado fresco, sin resetear por efectos. */}
-      {dropTarget && (
-        <DropDatabaseDialog
-          serverId={serverId}
-          serverName={server.name}
-          serverEndpoint={`${server.host}:${server.port}`}
-          engine={server.engine}
-          database={dropTarget}
-          onClose={() => setDropTarget(null)}
-          onDeleted={() => {
-            setDropTarget(null)
-            refetch()
-          }}
-          // Los grantees ya no viven en un modal hermano: son una pestaña de la ficha, así que
-          // esta salida deja el borrado y navega a ella.
-          onShowGrantees={() => {
-            setDropTarget(null)
-            void navigate(detailPath(serverId, dropTarget))
-          }}
-        />
-      )}
+      <DatabaseActionDialogs
+        pending={pendingAction}
+        getServer={(id) => (id === serverId ? server : undefined)}
+        onClose={() => setPendingAction(null)}
+        onDropped={() => refetch()}
+        // Los grantees ya no viven en un modal hermano: son una pestaña de la ficha, así que
+        // esta salida deja el borrado y navega a ella.
+        onShowGrantees={(target) => void navigate(serverDatabasePath(serverId, target.name))}
+      />
     </div>
   )
 }

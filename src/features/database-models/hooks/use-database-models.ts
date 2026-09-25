@@ -180,7 +180,7 @@ function invalidateAfterVersionTableRename(
   modelId: number,
   result: RenameSlugResult,
 ): void {
-  invalidateDatabaseViews(queryClient)
+  invalidateDatabaseViews(queryClient, null)
   void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
   void queryClient.invalidateQueries({
     predicate: (query) => query.queryKey[0] === 'projects' && query.queryKey[2] === 'blueprints',

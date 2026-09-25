@@ -1,35 +1,46 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
-  Badge,
+  AdoptionBadge,
   Button,
   EmptyState,
   ErrorState,
   IconButton,
   RefreshIcon,
   Spinner,
+  type AdoptionStatus,
 } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { ReconcileState } from '@/lib/contracts'
+import type { ReconcileState, ServerUserOut } from '@/lib/contracts'
+import { serverDatabasePath, serverUserPath } from '@/lib/routes'
 import { AdoptDatabaseModal } from '@/features/managed-databases/components/AdoptDatabaseModal'
 import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
+import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useReconcile } from '../hooks/use-reconcile'
+import { useServer } from '../hooks/use-servers'
+import { DefineKnownPasswordModal } from './DefineKnownPasswordModal'
 import { SnapshotModal } from './SnapshotModal'
 
 type SubTab = 'databases' | 'users'
 
-const STATE_BADGE: Record<
-  ReconcileState,
-  { tone: 'success' | 'warning' | 'error'; label: string }
-> = {
-  managed: { tone: 'success', label: '🟢 Gestionada' },
-  unmanaged: { tone: 'warning', label: '🟡 Sin gestionar' },
-  orphan: { tone: 'error', label: '🔴 Huérfana' },
+/**
+ * El vocabulario de la reconciliación (`managed`) traducido al de la insignia compartida
+ * (`adopted`): son el mismo estado, y con un mapa propio esta pantalla volvía a tener sus propias
+ * etiquetas, que es lo que `AdoptionBadge` existe para evitar.
+ */
+const ADOPTION_STATUS: Record<ReconcileState, AdoptionStatus> = {
+  managed: 'adopted',
+  unmanaged: 'unmanaged',
+  orphan: 'orphan',
 }
 
 /**
  * Panel de reconciliación de un servidor (Plan 09 §2): cruza el motor en vivo con el inventario y
  * ofrece las acciones de adopción sobre lo `unmanaged`. Es el puente entre los dos planos.
+ *
+ * Cada nombre enlaza a su ficha, que es donde viven TODAS las acciones de la entidad (R1 de
+ * `managed-databases/database-actions.ts`). Por eso aquí no se suman acciones sobre huérfanos:
+ * la ficha de una base o de un usuario huérfano ya las ofrece.
  */
 export function ServerReconcilePanel({ serverId }: { serverId: number }) {
   const navigate = useNavigate()
@@ -39,8 +50,25 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
     null,
   )
   const [snapshotDb, setSnapshotDb] = useState<string | null>(null)
+  const [defineTarget, setDefineTarget] = useState<{
+    username: string
+    defaultHost?: string | null
+  } | null>(null)
 
   const { data, isLoading, isError, error, refetch } = useReconcile(serverId)
+  // Ya en caché: es la misma consulta con la que `ServerDetailPage` pinta su cabecera. Solo hace
+  // falta el motor, para saber si «Definir contraseña» opera por host (PostgreSQL no tiene).
+  const server = useServer(serverId)
+  const supportsHosts = server.data ? server.data.engine !== 'postgresql' : true
+  // `owner_id` → usuario, para mostrar el nombre del dueño. Comparte key con el listado de bases
+  // del servidor y con el modal de adopción, así que suele estar en caché; si no resuelve (o el
+  // dueño queda fuera de la página cargada), se muestra el id como antes.
+  const owners = useServerUserOptions(serverId)
+  const ownersById = useMemo(() => {
+    const map = new Map<number, ServerUserOut>()
+    for (const user of owners.data ?? []) map.set(user.id, user)
+    return map
+  }, [owners.data])
 
   const dbCounts = useMemo(() => countStates(data?.databases.map((d) => d.state) ?? []), [data])
   const userCounts = useMemo(() => countStates(data?.users.map((u) => u.state) ?? []), [data])
@@ -98,12 +126,21 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
               <tbody>
                 {data.databases.map((db) => (
                   <tr key={db.name} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 font-medium text-foreground">{db.name}</td>
                     <td className="px-3 py-2">
-                      <Badge tone={STATE_BADGE[db.state].tone}>{STATE_BADGE[db.state].label}</Badge>
+                      {/* También las huérfanas: su ficha distingue «sin aprovisionar» de
+                          «existía y desapareció» y ofrece la salida de cada caso. */}
+                      <Link
+                        to={serverDatabasePath(serverId, db.name)}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {db.name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      <AdoptionBadge status={ADOPTION_STATUS[db.state]} />
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {db.owner_id ? `#${db.owner_id}` : '—'}
+                      <OwnerCell ownerId={db.owner_id} owners={ownersById} serverId={serverId} />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1.5">
@@ -158,12 +195,17 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
                   key={`${user.username}@${user.host ?? ''}`}
                   className="border-b border-border last:border-0"
                 >
-                  <td className="px-3 py-2 font-medium text-foreground">{user.username}</td>
+                  <td className="px-3 py-2">
+                    <Link
+                      to={serverUserPath(serverId, user.username, user.host)}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {user.username}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2 text-muted-foreground">{user.host ?? '—'}</td>
                   <td className="px-3 py-2">
-                    <Badge tone={STATE_BADGE[user.state].tone}>
-                      {STATE_BADGE[user.state].label}
-                    </Badge>
+                    <AdoptionBadge status={ADOPTION_STATUS[user.state]} />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end">
@@ -200,6 +242,25 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
           serverId={serverId}
           username={adoptUser.username}
           host={adoptUser.host}
+          onDefinePassword={() => {
+            // La identidad nace sin contraseña: encadena con «Definir contraseña conocida», igual
+            // que `EngineUsersPanel`.
+            setDefineTarget({ username: adoptUser.username, defaultHost: adoptUser.host })
+            setAdoptUser(null)
+          }}
+        />
+      )}
+      {defineTarget && (
+        <DefineKnownPasswordModal
+          onClose={() => setDefineTarget(null)}
+          serverId={serverId}
+          username={defineTarget.username}
+          supportsHosts={supportsHosts}
+          hostOptions={data.users
+            .filter((user) => user.username === defineTarget.username && user.state !== 'orphan')
+            .map((user) => user.host)
+            .filter((host): host is string => Boolean(host))}
+          defaultHost={defineTarget.defaultHost}
         />
       )}
       <SnapshotModal
@@ -208,6 +269,26 @@ export function ServerReconcilePanel({ serverId }: { serverId: number }) {
         onClose={() => setSnapshotDb(null)}
       />
     </div>
+  )
+}
+
+/** Dueño de una base: su nombre si el usuario está resuelto, su id si no. */
+function OwnerCell({
+  ownerId,
+  owners,
+  serverId,
+}: {
+  ownerId: number | null | undefined
+  owners: Map<number, ServerUserOut>
+  serverId: number
+}) {
+  if (ownerId == null) return <>—</>
+  const user = owners.get(ownerId)
+  if (!user) return <>#{ownerId}</>
+  return (
+    <Link to={serverUserPath(serverId, user.username, user.host)} className="hover:underline">
+      {user.host ? `${user.username}@${user.host}` : user.username}
+    </Link>
   )
 }
 

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
+import { invalidateDatabaseViews } from '@/features/managed-databases/invalidate'
 import { useToast } from '@/lib/toast/use-toast'
 import type { DatabaseCreateIn, DatabaseDropIn } from '@/lib/contracts'
 import {
@@ -18,18 +19,22 @@ import { buildDropSuccessDescription } from '../logic'
  */
 
 /**
- * Invalida todo lo que un cambio en las BDs físicas deja obsoleto: el listado del motor, el
- * inventario (`register`/`inventory_removed` lo tocan) y la reconciliación del servidor.
+ * Invalida todo lo que un cambio en las BDs físicas deja obsoleto: el listado del motor, todas
+ * las vistas del inventario (`register`/`inventory_removed` lo tocan) y la reconciliación.
  *
  * `queryKeys.servers.databases(serverId)` es prefijo de las keys de tablas, snapshot y grantees
  * de ese servidor, así que también caen — que es justo lo que se quiere tras un borrado.
+ *
+ * El inventario va por `invalidateDatabaseViews` y no solo por `managedDatabases.all`: el DROP
+ * también borra la fila del inventario, y las bases por propietario y por blueprint viven en
+ * otros troncos de key. Con solo el inventario, la ficha del propietario y la tabla de estado
+ * del blueprint seguían listando la base borrada.
  */
 function useInvalidateServerDatabases(serverId: number) {
   const queryClient = useQueryClient()
   return () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.servers.databases(serverId) })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.managedDatabases.all })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.servers.reconcile(serverId) })
+    invalidateDatabaseViews(queryClient, serverId)
   }
 }
 

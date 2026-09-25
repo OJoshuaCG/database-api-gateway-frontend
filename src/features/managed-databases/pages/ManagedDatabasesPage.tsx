@@ -4,20 +4,17 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   AdoptionBadge,
   Button,
-  CloneIcon,
   Combobox,
   CompareIcon,
   DataTable,
   EmptyState,
   ErrorState,
-  IconButton,
   PageHeader,
   Pagination,
-  PencilIcon,
-  TrashIcon,
   EnvironmentBadge,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
+import { serverDatabasePath, serverUserPath } from '@/lib/routes'
 import {
   provisionStatusSchema,
   type ManagedDatabaseOut,
@@ -36,11 +33,15 @@ import {
 } from '@/features/environments'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
 import { useManagedDatabases } from '../hooks/use-managed-databases'
+import { useOwnerDirectory } from '../hooks/use-owner-directory'
+import { resolveDatabaseState } from '../database-actions'
 import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
 import { ManagedDatabaseFormModal } from '../components/ManagedDatabaseFormModal'
-import { ReassignOwnerModal } from '../components/ReassignOwnerModal'
-import { DeleteManagedDatabaseDialog } from '../components/DeleteManagedDatabaseDialog'
-import { ProvisionDatabaseDialog } from '../components/ProvisionDatabaseDialog'
+import {
+  DatabaseActionDialogs,
+  DatabaseRowActions,
+  type PendingDatabaseAction,
+} from '../components/DatabaseRowActions'
 
 interface StatusOption {
   value: ProvisionStatus
@@ -100,11 +101,9 @@ export function ManagedDatabasesPage() {
    * totales y no hay que discriminar en cada callback.
    */
   const [envFilter, setEnvFilter] = useState<EnvironmentFilterOption | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<ManagedDatabaseOut | undefined>(undefined)
-  const [reassignTarget, setReassignTarget] = useState<ManagedDatabaseOut | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<ManagedDatabaseOut | null>(null)
-  const [provisionTarget, setProvisionTarget] = useState<ManagedDatabaseOut | null>(null)
+  // Solo el alta: editar y el resto de acciones de fila viven en `DatabaseActionDialogs`.
+  const [createOpen, setCreateOpen] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingDatabaseAction | null>(null)
 
   const servers = useServerOptions()
   const models = useDatabaseModelOptions()
@@ -121,17 +120,11 @@ export function ManagedDatabasesPage() {
     [environments.data],
   )
 
-  const serverNameById = useMemo(() => {
-    const map = new Map<number, string>()
-    for (const server of servers.data ?? []) map.set(server.id, server.name)
+  const serverById = useMemo(() => {
+    const map = new Map<number, ServerOut>()
+    for (const server of servers.data ?? []) map.set(server.id, server)
     return map
   }, [servers.data])
-
-  const ownerNameById = useMemo(() => {
-    const map = new Map<number, string>()
-    for (const owner of owners.data ?? []) map.set(owner.id, owner.username)
-    return map
-  }, [owners.data])
 
   const { data, isLoading, isFetching, isError, error, refetch } = useManagedDatabases({
     page,
@@ -146,6 +139,13 @@ export function ManagedDatabasesPage() {
     only_unassigned: envFilter === UNASSIGNED_ENVIRONMENT ? true : undefined,
   })
 
+  // Propietario → usuario del motor, para enlazar a su ficha. Uno por cada servidor de la página.
+  const pageServerIds = useMemo(
+    () => (data?.items ?? []).map((database) => database.server_id),
+    [data?.items],
+  )
+  const ownerById = useOwnerDirectory(pageServerIds)
+
   const columns = useMemo<ColumnDef<ManagedDatabaseOut>[]>(
     () => [
       {
@@ -154,9 +154,11 @@ export function ManagedDatabasesPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             {/* Ficha unificada de la BD (grantees, resumen, migraciones, collation, comparar,
-                clonar): identidad física `(server_id, nombre)`, no el id de inventario. */}
+                clonar): identidad física `(server_id, nombre)`, no el id de inventario. Enlaza
+                también en `pending`/`error`: la ficha distingue «todavía no existe en el motor»
+                (y ofrece Aprovisionar) de «existía y desapareció», así que ya no miente. */}
             <Link
-              to={`/servers/${row.original.server_id}/databases/${encodeURIComponent(row.original.name)}`}
+              to={serverDatabasePath(row.original.server_id, row.original.name)}
               className="font-medium text-foreground hover:text-primary hover:underline"
             >
               {row.original.name}
@@ -181,14 +183,27 @@ export function ManagedDatabasesPage() {
       {
         id: 'server',
         header: 'Servidor',
-        accessorFn: (row) => serverNameById.get(row.server_id) ?? `#${row.server_id}`,
+        accessorFn: (row) => serverById.get(row.server_id)?.name ?? `#${row.server_id}`,
         cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span>,
       },
       {
         id: 'owner',
         header: 'Propietario',
-        accessorFn: (row) => ownerNameById.get(row.owner_id) ?? `#${row.owner_id}`,
-        cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span>,
+        accessorFn: (row) => ownerById.get(row.owner_id)?.username ?? `#${row.owner_id}`,
+        cell: ({ row, getValue }) => {
+          const owner = ownerById.get(row.original.owner_id)
+          // Sin el usuario resuelto (fuera de la página cargada de su servidor) no hay a qué
+          // ficha enlazar: queda el id.
+          if (!owner) return <span className="text-muted-foreground">{getValue<string>()}</span>
+          return (
+            <Link
+              to={serverUserPath(row.original.server_id, owner.username, owner.host)}
+              className="text-primary hover:underline"
+            >
+              {owner.username}
+            </Link>
+          )
+        },
       },
       {
         accessorKey: 'status',
@@ -213,68 +228,31 @@ export function ManagedDatabasesPage() {
         header: '',
         enableSorting: false,
         enableHiding: false,
+        // Mismas acciones que la fila de esa base en el listado del servidor (R2), con
+        // «Quitar del inventario» como destructiva: este listado ES el inventario (R4).
+        // Aprovisionar solo aparece en `pending`: es la salida de las filas que quedaron
+        // registradas sin crearse, sin borrar el registro y perder notas, entorno e historial.
+        // Un `error` aquí no se sabe si es un alta fallida o una cuarentena (la base existe), así
+        // que ofrece Migraciones y no Aprovisionar; la ficha, que ve el motor, decide cuál es.
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
-            {/* Solo si la BD NO está creada en el motor: es la salida para las filas que
-                quedaron registradas sin aprovisionar (y para las que fallaron al crearse).
-                Sin esto la única forma de recuperarlas era borrar el registro y rehacerlo,
-                perdiendo notas, entorno, blueprint e historial de migraciones. */}
-            {(row.original.status === 'pending' || row.original.status === 'error') && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setProvisionTarget(row.original)}
-              >
-                Aprovisionar 🔌
-              </Button>
-            )}
-            {/* Comparar/Clonar/Migraciones/Reasignar duplican lo que la ficha unificada de la BD
-                también ofrece: se conservan como atajo para operarios avanzados (decisión de
-                producto). Solo el icono en Comparar/Clonar, el mismo que su entrada del menú
-                lateral: el botón de fila y la sección a la que lleva se reconocen como lo mismo,
-                y la fila deja de alargarse con dos etiquetas que se repiten en cada BD. */}
-            <IconButton
-              label="Comparar esquema"
-              icon={<CompareIcon />}
-              onClick={() => navigate(`/schema-comparisons?targetDatabaseId=${row.original.id}`)}
-            />
-            <IconButton
-              label="Clonar"
-              icon={<CloneIcon />}
-              onClick={() => navigate(`/database-clones/nuevo?sourceDatabaseId=${row.original.id}`)}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(`/managed-databases/${row.original.id}/migrations`)}
-            >
-              Migraciones
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setReassignTarget(row.original)}>
-              Reasignar
-            </Button>
-            <IconButton
-              label="Editar"
-              icon={<PencilIcon />}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setEditing(row.original)
-                setFormOpen(true)
-              }}
-            />
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget(row.original)}
-            />
-          </div>
+          <DatabaseRowActions
+            source="inventory"
+            target={{
+              serverId: row.original.server_id,
+              name: row.original.name,
+              managed: row.original,
+              state: resolveDatabaseState({
+                managed: row.original,
+                inventoryKnown: true,
+                presence: 'unknown',
+              }),
+            }}
+            onAction={setPendingAction}
+          />
         ),
       },
     ],
-    [serverNameById, ownerNameById, environmentMap],
+    [serverById, ownerById, environmentMap],
   )
 
   const resetPage = () => setPage(1)
@@ -290,14 +268,7 @@ export function ManagedDatabasesPage() {
               <CompareIcon />
               Comparar esquemas
             </Button>
-            <Button
-              onClick={() => {
-                setEditing(undefined)
-                setFormOpen(true)
-              }}
-            >
-              Crear base de datos
-            </Button>
+            <Button onClick={() => setCreateOpen(true)}>Crear base de datos</Button>
           </>
         }
       />
@@ -418,28 +389,15 @@ export function ManagedDatabasesPage() {
       )}
 
       <ManagedDatabaseFormModal
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        database={editing}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
         defaultServerId={serverFilter?.id}
-        serverName={editing ? serverNameById.get(editing.server_id) : undefined}
       />
-      {reassignTarget && (
-        <ReassignOwnerModal database={reassignTarget} onClose={() => setReassignTarget(null)} />
-      )}
-      {deleteTarget && (
-        <DeleteManagedDatabaseDialog
-          database={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
-      {provisionTarget && (
-        <ProvisionDatabaseDialog
-          database={provisionTarget}
-          serverName={serverNameById.get(provisionTarget.server_id)}
-          onClose={() => setProvisionTarget(null)}
-        />
-      )}
+      <DatabaseActionDialogs
+        pending={pendingAction}
+        getServer={(id) => serverById.get(id)}
+        onClose={() => setPendingAction(null)}
+      />
     </div>
   )
 }

@@ -217,8 +217,8 @@ export function DropDatabaseDialog({
       }}
       title={
         step === 'confirm'
-          ? `⚠️ Confirmación final — se eliminará «${database}»`
-          : `⚠️ Eliminar base de datos «${database}»`
+          ? `⚠️ Confirmación final — se eliminará «${database}» del motor`
+          : `⚠️ Eliminar del motor «${database}» 🔌`
       }
       description={`Servidor ${serverName} · ${serverEndpoint} · Motor ${engineLabel(engine)}`}
       size="lg"

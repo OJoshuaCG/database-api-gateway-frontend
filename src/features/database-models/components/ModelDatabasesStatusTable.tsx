@@ -10,6 +10,7 @@ import {
   RefreshIcon,
 } from '@/components/ui'
 import type { ModelDatabaseStatus } from '@/lib/contracts'
+import { serverDatabasePath } from '@/lib/routes'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   useModelDatabases,
@@ -74,8 +75,10 @@ export function ModelDatabasesStatusTable({
       header: 'Base de datos',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
+          {/* A la pestaña de migraciones de la ficha, no a la ruta de compatibilidad por id:
+              desde la ficha se llega también a grantees, resumen y el resto de acciones. */}
           <Link
-            to={`/managed-databases/${row.original.id}/migrations`}
+            to={serverDatabasePath(row.original.server_id, row.original.name, 'migrations')}
             className="font-medium text-foreground hover:underline"
           >
             {row.original.name}

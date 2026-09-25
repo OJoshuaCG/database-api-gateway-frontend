@@ -106,7 +106,7 @@ export function useCreateModelMigration(modelId: number) {
       // una versión nueva sube el pendiente de TODAS las bases del blueprint. Antes no se notaba
       // porque ese número no se mostraba en ninguna parte; ahora lo dice la ficha de la versión, a
       // 40 px del selector.
-      invalidateDatabaseViews(queryClient)
+      invalidateDatabaseViews(queryClient, null)
       toast.success('Migración creada', `${migration.version} · ${migration.name}`)
     },
     onError: (error) => toast.error('No se pudo crear la migración', toApiError(error).message),
@@ -154,7 +154,7 @@ export function useDeleteModelMigration(modelId: number) {
       // Simétrico a la creación: borrar la punta BAJA el pendiente de todas las bases. Ver el
       // comentario de `useCreateModelMigration`. En v18 cubre además las BDs a las que el borrado
       // les movió el puntero (`stamped`): su versión aplicada cambió en el motor, no solo acá.
-      invalidateDatabaseViews(queryClient)
+      invalidateDatabaseViews(queryClient, null)
       toast.success('Migración eliminada')
     },
     // SIN toast de error, a diferencia del resto de mutaciones de este archivo. El único llamador
@@ -178,7 +178,7 @@ export function useApplyAllMigrations(modelId: number) {
         // blueprint (`database-models/{id}/databases`) es justamente la que muestra la versión
         // aplicada, y hasta ahora quedaba rancia después de un apply masivo. Bug preexistente
         // que esta feature vuelve visible al agregarle la columna de entorno.
-        invalidateDatabaseViews(queryClient)
+        invalidateDatabaseViews(queryClient, null)
 
         // Y el catálogo de versiones, que este hook no invalidaba: el apply cambia `deletable`,
         // `block_reason` y `sql_frozen` de las versiones que acaba de aplicar. Sin esto, la ficha

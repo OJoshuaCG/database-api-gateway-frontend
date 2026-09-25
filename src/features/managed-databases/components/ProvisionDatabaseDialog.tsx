@@ -34,7 +34,7 @@ export function ProvisionDatabaseDialog({
       onConfirm={() => {
         provision.mutate({ id: database.id, allowRecreate: isRecreate }, { onSuccess: onClose })
       }}
-      title={isRecreate ? 'Recrear base de datos en el motor' : 'Aprovisionar base de datos'}
+      title={isRecreate ? 'Recrear base de datos en el motor 🔌' : 'Aprovisionar base de datos 🔌'}
       description={
         isRecreate
           ? `Se ejecutará CREATE DATABASE de «${database.name}» en ${serverName ?? 'el servidor'}. ` +

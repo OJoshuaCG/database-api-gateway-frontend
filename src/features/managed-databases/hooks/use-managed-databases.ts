@@ -79,7 +79,7 @@ export function useCreateManagedDatabase() {
     mutationFn: ({ body, provision }: { body: ManagedDatabaseCreate; provision: boolean }) =>
       createManagedDatabase(body, provision),
     onSuccess: (db, { provision }) => {
-      invalidateDatabaseViews(queryClient)
+      invalidateDatabaseViews(queryClient, db.server_id)
       if (provision && db.status === 'error') {
         toast.error('La BD quedó en estado «error»', db.notes ?? 'Revisa el detalle en el motor.')
       } else {
@@ -107,7 +107,9 @@ export function useProvisionManagedDatabase() {
     mutationFn: ({ id, allowRecreate }: { id: number; allowRecreate?: boolean }) =>
       provisionManagedDatabase(id, { allowRecreate }),
     onSuccess: (result) => {
-      invalidateDatabaseViews(queryClient)
+      // Con el servidor: la ficha deduce la presencia del listado físico, y sin refrescarlo
+      // afirmaría que la base recién creada «ya no aparece en el motor».
+      invalidateDatabaseViews(queryClient, result.database.server_id)
       void queryClient.invalidateQueries({
         queryKey: queryKeys.managedDatabases.migrationStatus(result.database.id),
       })
@@ -145,7 +147,7 @@ export function useUpdateManagedDatabase(id: number) {
   return useMutation({
     mutationFn: (body: ManagedDatabaseUpdate) => updateManagedDatabase(id, body),
     onSuccess: (db) => {
-      invalidateDatabaseViews(queryClient)
+      invalidateDatabaseViews(queryClient, db.server_id)
       toast.success('Base de datos actualizada', db.name)
     },
     onError: (error) =>
@@ -153,6 +155,14 @@ export function useUpdateManagedDatabase(id: number) {
   })
 }
 
+/**
+ * «Quitar del inventario», opcionalmente con el DROP del motor (`dropRemote`). `serverId` viaja en
+ * las variables porque la respuesta del DELETE no trae la base y hace falta para refrescar el
+ * listado físico de su servidor (mismo patrón que `useDeleteServerUser`).
+ *
+ * El toast nombra la consecuencia (R5): «eliminada» a secas, tras quitarla solo del inventario,
+ * hacía creer que la base ya no estaba en el motor.
+ */
 export function useDeleteManagedDatabase() {
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -163,15 +173,19 @@ export function useDeleteManagedDatabase() {
       confirmName,
     }: {
       id: number
+      serverId: number
       dropRemote: boolean
       confirmName?: string
     }) => deleteManagedDatabase(id, { dropRemote, confirmName }),
-    onSuccess: (_, { dropRemote }) => {
-      invalidateDatabaseViews(queryClient)
-      toast.success(dropRemote ? 'Base de datos eliminada del motor' : 'Base de datos eliminada')
+    onSuccess: (_, { serverId, dropRemote }) => {
+      invalidateDatabaseViews(queryClient, serverId)
+      toast.success(
+        dropRemote
+          ? 'Base de datos eliminada del motor 🔌'
+          : 'Base quitada del inventario (sigue en el motor)',
+      )
     },
-    onError: (error) =>
-      toast.error('No se pudo eliminar la base de datos', toApiError(error).message),
+    onError: (error) => toast.error('No se pudo quitar del inventario', toApiError(error).message),
   })
 }
 
@@ -182,7 +196,7 @@ export function useReassignOwner(id: number) {
     mutationFn: ({ body, provision }: { body: ReassignOwnerIn; provision: boolean }) =>
       reassignOwner(id, body, provision),
     onSuccess: (db) => {
-      invalidateDatabaseViews(queryClient)
+      invalidateDatabaseViews(queryClient, db.server_id)
       toast.success('Propietario reasignado', db.name)
     },
     onError: (error) =>
