@@ -52,6 +52,23 @@ export function TrashIcon({ className }: IconProps) {
   )
 }
 
+/**
+ * Quitar de una lista (el inventario): renglones y un «−». NO es la papelera a propósito: quitar
+ * un registro deja la base intacta en el motor, y compartir icono con «Eliminar del motor» es
+ * justo la confusión que llevó a dos botones idénticos haciendo cosas opuestas.
+ *
+ * Geometría «list-minus»: el «−» va a la altura del renglón del medio, que es más corto para
+ * dejarle sitio. Debajo del tercero, como estaba, se leía como un icono de «texto».
+ */
+export function ListRemoveIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M13.3 5H2.5M9.2 10H2.5M13.3 15H2.5" />
+      <path d="M17.5 10h-5" />
+    </Glyph>
+  )
+}
+
 export function RefreshIcon({ className }: IconProps) {
   return (
     <Glyph className={className}>
