@@ -4,7 +4,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
-  ConfirmDialog,
   DataTable,
   EmptyState,
   ErrorState,
@@ -17,10 +16,19 @@ import {
 import { formatDateTime } from '@/lib/utils'
 import type { ServerOut } from '@/lib/contracts'
 import { useServers } from '../hooks/use-servers'
-import { useDeleteServer } from '../hooks/use-server-mutations'
+import { useTestConnection } from '../hooks/use-server-mutations'
 import { ServerStatusBadge } from '../components/ServerStatusBadge'
 import { ServerFormModal } from '../components/ServerFormModal'
+import { DeleteServerDialog } from '../components/DeleteServerDialog'
 
+/**
+ * Inventario de servidores.
+ *
+ * **Las acciones de cada fila son atajos** (regla R1): la vista propia del servidor es su
+ * detalle (`ServerDetailPage`), que tiene todas; acá se reusan los mismos componentes
+ * (`ServerFormModal`, `DeleteServerDialog`) y el mismo hook de «Probar conexión». Una acción nueva
+ * se agrega primero en el detalle; que exista solo en esta fila es el síntoma a evitar.
+ */
 export function ServersPage() {
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
@@ -29,7 +37,6 @@ export function ServersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ServerOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useServers({ page, size })
-  const deleteServer = useDeleteServer()
 
   const columns = useMemo<ColumnDef<ServerOut>[]>(
     () => [
@@ -81,6 +88,7 @@ export function ServersPage() {
         enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            <TestConnectionButton serverId={row.original.id} />
             <IconButton
               label="Editar"
               icon={<PencilIcon />}
@@ -171,18 +179,29 @@ export function ServersPage() {
 
       <ServerFormModal open={formOpen} onClose={() => setFormOpen(false)} server={editing} />
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (!deleteTarget) return
-          deleteServer.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
-        }}
-        title="Eliminar servidor del inventario"
-        description={`Se eliminará «${deleteTarget?.name}» del inventario del gateway. Los objetos del motor destino no se modifican.`}
-        confirmLabel="Eliminar"
-        isLoading={deleteServer.isPending}
-      />
+      <DeleteServerDialog server={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </div>
+  )
+}
+
+/**
+ * Atajo de fila a «Probar conexión» 🔌. Es un componente y no un botón suelto en la celda porque
+ * `useTestConnection` está parametrizado con el id, distinto en cada fila.
+ *
+ * El resultado se presenta con el toast que ya emite el hook —el mismo que ve el detalle— y con
+ * la insignia de estado de la propia fila, que se refresca porque el hook invalida el listado.
+ * El recuadro de resultado del detalle no se replica: en una tabla no tiene dónde vivir.
+ */
+function TestConnectionButton({ serverId }: { serverId: number }) {
+  const testConnection = useTestConnection(serverId)
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      isLoading={testConnection.isPending}
+      onClick={() => testConnection.mutate()}
+    >
+      Probar conexión
+    </Button>
   )
 }

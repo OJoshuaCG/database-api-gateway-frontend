@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  ConfirmDialog,
   ErrorState,
   FullPageSpinner,
   PageHeader,
@@ -13,9 +12,10 @@ import {
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { useServer } from '../hooks/use-servers'
-import { useDeleteServer, useTestConnection } from '../hooks/use-server-mutations'
+import { useTestConnection } from '../hooks/use-server-mutations'
 import { ServerStatusBadge } from '../components/ServerStatusBadge'
 import { ServerFormModal } from '../components/ServerFormModal'
+import { DeleteServerDialog } from '../components/DeleteServerDialog'
 import { IntrospectionExplorer } from '../components/IntrospectionExplorer'
 import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
 import { EngineUsersPanel } from '../components/EngineUsersPanel'
@@ -50,7 +50,6 @@ export function ServerDetailPage() {
 
   const { data: server, isLoading, isError, error, refetch } = useServer(serverId)
   const testConnection = useTestConnection(serverId)
-  const deleteServer = useDeleteServer()
 
   if (Number.isNaN(serverId)) {
     return <ErrorState error={new Error('Identificador de servidor inválido.')} />
@@ -86,7 +85,9 @@ export function ServerDetailPage() {
               <Button variant="outline" onClick={() => setEditOpen(true)}>
                 Editar
               </Button>
-              <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+              {/* `danger-soft` y no `danger`: esto solo abre el diálogo. El rojo pleno queda para
+                  la confirmación final, que es donde de verdad se decide. */}
+              <Button variant="danger-soft" onClick={() => setDeleteOpen(true)}>
                 Eliminar
               </Button>
             </>
@@ -164,18 +165,10 @@ export function ServerDetailPage() {
 
       <ServerFormModal open={editOpen} onClose={() => setEditOpen(false)} server={server} />
 
-      <ConfirmDialog
-        open={deleteOpen}
+      <DeleteServerDialog
+        server={deleteOpen ? server : null}
         onClose={() => setDeleteOpen(false)}
-        onConfirm={() =>
-          deleteServer.mutate(server.id, {
-            onSuccess: () => navigate('/servers', { replace: true }),
-          })
-        }
-        title="Eliminar servidor del inventario"
-        description={`Se eliminará «${server.name}» del inventario. Los objetos del motor destino no se modifican.`}
-        confirmLabel="Eliminar"
-        isLoading={deleteServer.isPending}
+        onDeleted={() => void navigate('/servers', { replace: true })}
       />
     </div>
   )
