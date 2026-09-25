@@ -17,12 +17,8 @@ import { formatDateTime } from '@/lib/utils'
 import { toApiError } from '@/lib/api/errors'
 import { PROJECT_ERROR_CODES, type DatabaseModelOut } from '@/lib/contracts'
 import { useToast } from '@/lib/toast/use-toast'
-import {
-  useLinkProjectBlueprints,
-  useProject,
-  useProjectBlueprints,
-  useUnlinkProjectBlueprint,
-} from '../hooks/use-projects'
+import { useProject, useProjectBlueprints, useUnlinkProjectBlueprint } from '../hooks/use-projects'
+import { UnlinkUndoBar } from '../components/UnlinkUndoBar'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { DeleteProjectDialog } from '../components/DeleteProjectDialog'
 import { LinkBlueprintsModal } from '../components/LinkBlueprintsModal'
@@ -64,7 +60,6 @@ export function ProjectDetailPage() {
   const project = useProject(projectId, Number.isFinite(projectId))
   const blueprints = useProjectBlueprints(projectId, Number.isFinite(projectId))
   const unlink = useUnlinkProjectBlueprint(projectId)
-  const relink = useLinkProjectBlueprints(projectId)
 
   // El backend ordena por id descendente (no es parte del contrato declarado), así que la lista
   // se reordena por nombre en cliente: es el orden con el que el operador la busca.
@@ -140,26 +135,17 @@ export function ProjectDetailPage() {
           </div>
 
           {undoTarget && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground">
-              <span>
-                <strong className="font-semibold text-foreground">{undoTarget.name}</strong> quitado
-                del proyecto (el blueprint no se borró).
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                isLoading={relink.isPending}
-                onClick={() =>
-                  relink.mutate([undoTarget.id], {
-                    // Repetir el deshacer es inofensivo: la vinculación es idempotente y el id
-                    // repetido vuelve en `already_linked`. No hay carrera que proteger.
-                    onSuccess: () => setUndoTarget(null),
-                  })
-                }
-              >
-                Deshacer
-              </Button>
-            </div>
+            <UnlinkUndoBar
+              // `key` por blueprint: un segundo «Quitar» estrena barra en vez de heredar el
+              // `isPending` de la anterior.
+              key={undoTarget.id}
+              projectId={projectId}
+              modelId={undoTarget.id}
+              onDone={() => setUndoTarget(null)}
+            >
+              <strong className="font-semibold text-foreground">{undoTarget.name}</strong> quitado
+              del proyecto (el blueprint no se borró).
+            </UnlinkUndoBar>
           )}
 
           {blueprints.isError ? (
