@@ -20,10 +20,16 @@ import {
   getModelMigrationDeletePlan,
   listModelMigrations,
   previewModelMigrationEdit,
+  searchModelMigrations,
   updateModelMigration,
   validateModelMigration,
   type ApplyAllOptions,
 } from '../api/model-migrations.api'
+import {
+  buildMigrationSearchParams,
+  canRunMigrationSearch,
+  type MigrationSearchFilters,
+} from '../migration-search'
 
 export function useModelMigrations(modelId: number, params: QueryParams, enabled = true) {
   return useQuery({
@@ -49,6 +55,32 @@ export function useAllModelMigrations(modelId: number, enabled = true) {
     queryKey: queryKeys.databaseModels.migrationsAll(modelId),
     queryFn: ({ signal }) => fetchAllModelMigrations(modelId, signal),
     enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Búsqueda de texto en el SQL base de las versiones.
+ *
+ * Solo se habilita con un término de al menos `MIGRATION_SEARCH_MIN_LENGTH` caracteres recortado y
+ * un rango de fechas coherente: por debajo no hay nada que pedir, y el 422 del backend queda como
+ * red de seguridad. `q` tiene que llegar YA amortiguado (`useDebouncedValue`): el hook no lo hace
+ * para que la página y la request usen exactamente el mismo término.
+ *
+ * `keepPreviousData` para no parpadear al paginar ni al afinar el término: los resultados
+ * anteriores siguen a la vista hasta que llegan los nuevos.
+ */
+export function useModelMigrationSearch(
+  modelId: number,
+  filters: MigrationSearchFilters,
+  page: number,
+  size: number,
+) {
+  const params = buildMigrationSearchParams(filters, page, size)
+  return useQuery({
+    queryKey: queryKeys.databaseModels.migrationSearch(modelId, params),
+    queryFn: ({ signal }) => searchModelMigrations(modelId, params, signal),
+    enabled: Number.isFinite(modelId) && canRunMigrationSearch(filters),
     placeholderData: keepPreviousData,
   })
 }

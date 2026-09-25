@@ -79,6 +79,12 @@ export const queryKeys = {
     migrationsAll: (modelId: number) => ['database-models', modelId, 'migrations', 'all'] as const,
     migrationDetail: (modelId: number, version: string) =>
       ['database-models', modelId, 'migrations', 'detail', version] as const,
+    /**
+     * Búsqueda en el SQL de las versiones. Cuelga de `migrations(modelId)` a propósito: crear,
+     * editar o borrar una versión cambia los resultados, y esas mutaciones ya invalidan esa raíz.
+     */
+    migrationSearch: (modelId: number, params: QueryParams) =>
+      ['database-models', modelId, 'migrations', 'search', params] as const,
   },
 
   /**

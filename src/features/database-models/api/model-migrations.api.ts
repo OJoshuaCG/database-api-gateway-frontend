@@ -4,12 +4,14 @@ import {
   migrationDeletePlanOutSchema,
   migrationDeleteResultSchema,
   migrationEditPreviewOutSchema,
+  migrationSearchHitSchema,
   migrationValidateOutSchema,
   modelMigrationOutSchema,
   modelMigrationSummarySchema,
   type ApplyAllResult,
   type MigrationDeletePlanOut,
   type MigrationDeleteResult,
+  type MigrationSearchHit,
   type MigrationValidateIn,
   type MigrationValidateOut,
   type ModelMigrationCreate,
@@ -77,6 +79,22 @@ export async function fetchAllModelMigrations(
     page += 1
   }
   return { items, truncated }
+}
+
+/**
+ * `GET .../migrations/search` — versiones cuyo SQL base contiene un texto literal.
+ *
+ * Solo lee la BD del gateway: no abre conexión a ningún motor y no tiene rate limit propio, por eso
+ * se puede disparar mientras se escribe (con debounce). Los parámetros se arman con
+ * `buildMigrationSearchParams`, que omite los opcionales en vez de mandarlos vacíos.
+ * `pagination.total` cuenta versiones que coinciden, no el catálogo del blueprint.
+ */
+export function searchModelMigrations(
+  modelId: number,
+  params: QueryParams,
+  signal?: AbortSignal,
+): Promise<Page<MigrationSearchHit>> {
+  return fetchPage(`${base(modelId)}/search`, migrationSearchHitSchema, { query: params, signal })
 }
 
 /** `GET .../migrations/{version}` — detalle completo (§8). */

@@ -594,6 +594,59 @@ export const migrationDeleteResultSchema = z.object({
 })
 export type MigrationDeleteResult = z.infer<typeof migrationDeleteResultSchema>
 
+// ── Buscar texto en el SQL de las versiones (addendum posterior a v25) ──────────
+
+/**
+ * Límites de `q` en `GET .../migrations/search`. El mínimo se cuenta **sin los espacios de los
+ * extremos**, que es como lo cuenta el backend: `"  ab  "` son dos caracteres, no seis.
+ *
+ * El mínimo vive acá como constante y no se lee del `min_length` del 422: la UI no dispara la
+ * búsqueda por debajo de él, así que ese 422 solo aparecería si los dos lados se desincronizan, y
+ * para ese caso basta con un texto que lo nombre.
+ */
+export const MIGRATION_SEARCH_MIN_LENGTH = 4
+export const MIGRATION_SEARCH_MAX_LENGTH = 200
+/** Tope de `last` («solo las últimas N versiones»). */
+export const MIGRATION_SEARCH_LAST_MAX = 1000
+
+/**
+ * Una línea con coincidencia. `text` viene **recortado** a unos 160 caracteres, con `…` en el
+ * extremo recortado, y `match_start`/`match_end` son offsets relativos a ESE `text` —ya contando el
+ * `…`—, con `match_end` exclusivo. Se resalta `text.slice(match_start, match_end)` tal cual: un
+ * `trim()` o un recálculo corre los offsets y resalta otra cosa.
+ */
+export const migrationSearchSnippetSchema = z.object({
+  line: z.number().int().min(1),
+  text: z.string(),
+  match_start: z.number().int().min(0),
+  match_end: z.number().int().min(0),
+})
+export type MigrationSearchSnippet = z.infer<typeof migrationSearchSnippetSchema>
+
+/**
+ * Una versión con coincidencias. **Nunca trae el `up_sql` completo**: para verlo hay que pedir el
+ * detalle de la versión.
+ *
+ * Todos los campos son requeridos, a diferencia de los resúmenes de arriba: el endpoint nació con
+ * este contrato, así que no hay un gateway anterior que los omita y un default solo taparía un
+ * backend roto.
+ *
+ * - `is_latest` es la punta del **catálogo entero**, no la primera de la búsqueda.
+ * - `snippets` trae **hasta 3** líneas; si `lines_matched` es mayor, las demás no viajan.
+ */
+export const migrationSearchHitSchema = z.object({
+  id: z.number().int(),
+  model_id: z.number().int(),
+  version: z.string(),
+  name: z.string(),
+  created_at: z.string(),
+  is_latest: z.boolean(),
+  match_count: z.number().int().min(1),
+  lines_matched: z.number().int().min(1),
+  snippets: z.array(migrationSearchSnippetSchema),
+})
+export type MigrationSearchHit = z.infer<typeof migrationSearchHitSchema>
+
 /**
  * Códigos estables de `detail.public_context.code` de las versiones de blueprint (v14 §2,
  * v15 §4 y v18 §4).
@@ -628,6 +681,11 @@ export type MigrationDeleteResult = z.infer<typeof migrationDeleteResultSchema>
  *
  * `stillApplied` **sigue vigente**: es el `reason` de la EDICIÓN (`>=`), no del borrado (`==`).
  * Borrarlo de aquí rompería la clasificación del 409 de `edit-preview`/PATCH.
+ *
+ * Los dos `search*` son los 422 de `GET .../migrations/search`, y la UI los previene antes de
+ * pedir: `searchQueryTooShort` (trae `min_length`) si `q` recortado queda por debajo del mínimo, y
+ * `searchInvalidDateRange` si `date_from` es posterior a `date_to`. Llegar a verlos significa que
+ * el cliente y el backend discrepan en la regla, no que el operador se equivocó.
  */
 export const MIGRATION_ERROR_CODES = {
   sqlFrozen: 'model_migration.sql_frozen',
@@ -642,4 +700,6 @@ export const MIGRATION_ERROR_CODES = {
   renumberStampFailed: 'model_migration.renumber_stamp_failed',
   renumberTargetMissing: 'model_migration.renumber_target_missing',
   affectedPartialApplication: 'model_migration.affected_partial_application',
+  searchQueryTooShort: 'model_migration.search_query_too_short',
+  searchInvalidDateRange: 'model_migration.search_invalid_date_range',
 } as const
