@@ -4,7 +4,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
-  ConfirmDialog,
   DataTable,
   EmptyState,
   ErrorState,
@@ -15,8 +14,9 @@ import {
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import type { DatabaseModelOut } from '@/lib/contracts'
-import { useDatabaseModels, useDeleteDatabaseModel } from '../hooks/use-database-models'
+import { useDatabaseModels } from '../hooks/use-database-models'
 import { DatabaseModelFormModal } from './DatabaseModelFormModal'
+import { DeleteDatabaseModelDialog } from './DeleteDatabaseModelDialog'
 import { ModelDatabasesModal } from './ModelDatabasesModal'
 
 /**
@@ -28,6 +28,11 @@ import { ModelDatabasesModal } from './ModelDatabasesModal'
  * tendrían dónde verse.
  *
  * Sale tal cual estaba en `DatabaseModelsPage`, que ahora solo hospeda las dos pestañas.
+ *
+ * **Las acciones de cada fila son atajos** (regla R1): la página del blueprint
+ * (`BlueprintMigrationsPage`) tiene todas —editar, eliminar, collation— y acá se reusan los
+ * mismos componentes (`DatabaseModelFormModal`, `DeleteDatabaseModelDialog`) y las mismas rutas.
+ * Una acción nueva se agrega primero allá; aparecer solo en esta fila es el síntoma a evitar.
  */
 export function BlueprintsPanel() {
   const navigate = useNavigate()
@@ -39,7 +44,6 @@ export function BlueprintsPanel() {
   const [databasesTarget, setDatabasesTarget] = useState<DatabaseModelOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useDatabaseModels({ page, size })
-  const deleteModel = useDeleteDatabaseModel()
 
   const columns = useMemo<ColumnDef<DatabaseModelOut>[]>(
     () => [
@@ -192,18 +196,7 @@ export function BlueprintsPanel() {
       <DatabaseModelFormModal open={formOpen} onClose={() => setFormOpen(false)} model={editing} />
       <ModelDatabasesModal model={databasesTarget} onClose={() => setDatabasesTarget(null)} />
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (!deleteTarget) return
-          deleteModel.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
-        }}
-        title="Eliminar blueprint"
-        description={`Se eliminará «${deleteTarget?.name}». Las bases de datos asociadas no se modifican.`}
-        confirmLabel="Eliminar"
-        isLoading={deleteModel.isPending}
-      />
+      <DeleteDatabaseModelDialog model={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </div>
   )
 }

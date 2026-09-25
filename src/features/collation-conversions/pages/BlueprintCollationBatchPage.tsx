@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, PageHeader, TabButton } from '@/components/ui'
 import { useDatabaseModel } from '@/features/database-models/hooks/use-database-models'
 import type {
@@ -108,19 +108,30 @@ export function BlueprintCollationBatchPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title={
-          model.data ? `Collation de ${model.data.name}` : 'Conversión de collation del blueprint'
-        }
-        description="Convierte todas las bases activas del blueprint hacia una misma collation, y deja constancia como versión."
-        actions={
-          monitoring ? (
-            <Button variant="ghost" onClick={resetToPlan}>
-              Planificar otro lote
-            </Button>
-          ) : undefined
-        }
-      />
+      {/* Vuelta a la página del blueprint, que es la vista propia de la entidad (regla R1) y la
+          que tiene la entrada a este lote. Sin esto, salir de acá obligaba a ir al catálogo y
+          buscarlo otra vez. */}
+      <div className="flex flex-col gap-1">
+        <Link
+          to={`/database-models/${modelId}/migrations`}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          ← {model.data ? model.data.name : 'Blueprint'}
+        </Link>
+        <PageHeader
+          title={
+            model.data ? `Collation de ${model.data.name}` : 'Conversión de collation del blueprint'
+          }
+          description="Convierte todas las bases activas del blueprint hacia una misma collation, y deja constancia como versión."
+          actions={
+            monitoring ? (
+              <Button variant="ghost" onClick={resetToPlan}>
+                Planificar otro lote
+              </Button>
+            ) : undefined
+          }
+        />
+      </div>
 
       <div className="flex gap-2 border-b border-border">
         <TabButton active={tab === 'batch'} onClick={() => setTab('batch')}>

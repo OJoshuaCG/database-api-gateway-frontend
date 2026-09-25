@@ -36,6 +36,8 @@ import { VersionNavigator } from '../components/VersionNavigator'
 import { VersionAlertsBar } from '../components/VersionAlertsBar'
 import { VersionFactsCard } from '../components/VersionFactsCard'
 import { MigrationSearchPanel } from '../components/MigrationSearchPanel'
+import { DatabaseModelFormModal } from '../components/DatabaseModelFormModal'
+import { DeleteDatabaseModelDialog } from '../components/DeleteDatabaseModelDialog'
 import { flipPage, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
 import { versionAlerts } from '../version-alerts'
 
@@ -135,6 +137,13 @@ export function BlueprintMigrationsPage() {
     plan: MigrationDeletePlanOut
   } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  /**
+   * Edición y borrado del BLUEPRINT (no de una versión). Regla R1: esta es la vista propia del
+   * blueprint, así que tiene todas sus acciones; la fila del catálogo y la del detalle de
+   * proyecto son atajos que montan los mismos componentes.
+   */
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const model = useDatabaseModel(modelId)
   /**
@@ -330,6 +339,20 @@ export function BlueprintMigrationsPage() {
                 Aplicar… 🔌
               </Button>
               <Button onClick={() => void navigate(newVersionPath)}>Nueva versión</Button>
+              {/* Misma ruta que el botón «Collation» de la fila del catálogo: el lote lo define
+                  el blueprint, así que su entrada natural es esta página. */}
+              <Button
+                variant="outline"
+                onClick={() => void navigate(`/database-models/${modelId}/collation-batches`)}
+              >
+                Lotes de collation
+              </Button>
+              <Button variant="outline" onClick={() => setEditOpen(true)}>
+                Editar
+              </Button>
+              <Button variant="danger-soft" onClick={() => setDeleteOpen(true)}>
+                Eliminar
+              </Button>
             </>
           }
         />
@@ -348,6 +371,22 @@ export function BlueprintMigrationsPage() {
           fuera de las pestañas porque describe al blueprint en sí, no a sus versiones ni a su
           estado en las BDs. Su carga no bloquea nada: si falla, el resto de la pantalla sigue. */}
       <BlueprintProjectsSection modelId={modelId} />
+
+      {/* Montaje condicional: `react-hook-form` solo aplica `defaultValues` al montar, así que el
+          formulario tiene que nacer con el blueprint tal como está AHORA. Tras renombrar el slug
+          el modal se cierra solo (ver `DatabaseModelFormModal`) y esta página no se entera de
+          nada raro: está direccionada por id, no por slug, y el renombrado invalida el detalle,
+          así que la cabecera se repinta con el slug nuevo. */}
+      {editOpen && (
+        <DatabaseModelFormModal open onClose={() => setEditOpen(false)} model={model.data} />
+      )}
+      {/* Tras borrar, la ruta deja de existir: se vuelve al catálogo con `replace` para que el
+          «atrás» del navegador no lleve a una página de un blueprint que ya no está. */}
+      <DeleteDatabaseModelDialog
+        model={deleteOpen ? model.data : null}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => void navigate('/database-models?tab=blueprints', { replace: true })}
+      />
 
       <div role="tablist" className="flex items-center gap-1 border-b border-border">
         <TabButton active={tab === 'versiones'} onClick={() => setTab('versiones')}>
