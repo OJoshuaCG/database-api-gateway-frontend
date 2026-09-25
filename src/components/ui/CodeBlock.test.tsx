@@ -175,4 +175,41 @@ describe('CodeBlock', () => {
     renderWithProviders(<CodeBlock code={SQL} title="Rollback" extra={<span>confirmado</span>} />)
     expect(screen.getByText('confirmado')).toBeInTheDocument()
   })
+
+  describe('highlightLine', () => {
+    it('sin la prop no marca ninguna línea', () => {
+      const { container } = renderWithProviders(<CodeBlock code={SQL} />)
+      expect(container.querySelector('.code-line--highlighted')).toBeNull()
+      expect(container.querySelector('[aria-current]')).toBeNull()
+    })
+
+    it('marca SOLO la línea pedida, con aria-current', () => {
+      const { container } = renderWithProviders(<CodeBlock code={SQL} highlightLine={3} />)
+      const marked = Array.from(container.querySelectorAll('.code-line--highlighted'))
+      expect(marked.map((line) => line.getAttribute('data-line'))).toEqual(['3'])
+      expect(marked[0]?.getAttribute('aria-current')).toBe('true')
+      expect(marked[0]?.textContent).toBe('FROM ventas')
+    })
+
+    it('desplaza la línea a la vista', () => {
+      // jsdom no implementa `scrollIntoView`: se instala un espía en el prototipo.
+      const scrollIntoView = vi.fn()
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        value: scrollIntoView,
+        configurable: true,
+        writable: true,
+      })
+      try {
+        renderWithProviders(<CodeBlock code={SQL} highlightLine={2} />)
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+      } finally {
+        delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView
+      }
+    })
+
+    it('no rompe con una línea fuera de rango', () => {
+      const { container } = renderWithProviders(<CodeBlock code={SQL} highlightLine={99} />)
+      expect(container.querySelector('.code-line--highlighted')).toBeNull()
+    })
+  })
 })

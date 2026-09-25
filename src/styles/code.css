@@ -66,6 +66,15 @@
     min-width: 100%;
   }
 
+  /* Línea señalada (`CodeBlock highlightLine`), p. ej. la de una coincidencia de búsqueda. El tinte
+     cubre también la numeración: su pseudo-elemento tiene fondo propio —para tapar el texto al
+     desplazarse en horizontal— y sin repetirlo ahí el número quedaría fuera de la marca. Se mezcla
+     con el fondo del visor y no se superpone con transparencia, justamente por ese fondo opaco. */
+  .code-line--highlighted,
+  .code-lines--numbered .code-line--highlighted::before {
+    background-color: color-mix(in oklab, var(--color-warning) 18%, var(--color-syntax-bg));
+  }
+
   /*
    * Editor (`SqlEditor`): las dos capas superpuestas —el `<pre>` resaltado y el `<textarea>` real,
    * transparente— tienen que envolver EXACTAMENTE en la misma columna, o el cursor deja de

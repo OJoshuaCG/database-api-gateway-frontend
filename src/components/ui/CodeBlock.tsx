@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/lib/toast/use-toast'
 import { useSqlWrap } from '@/lib/theme/use-sql-wrap'
@@ -34,6 +34,12 @@ export interface CodeBlockProps {
   emptyLabel?: string
   /** Oculta el botón de expandir: para cuando ya se está dentro de un visor a pantalla completa. */
   hideFullscreen?: boolean
+  /**
+   * Línea lógica (1-based) a señalar: se marca con el tinte de resaltado y `aria-current`, y se
+   * desplaza a la vista al montar y cada vez que cambia. Sin la prop, el bloque no cambia en nada.
+   * Una línea fuera de rango simplemente no marca ninguna.
+   */
+  highlightLine?: number
 }
 
 /**
@@ -70,6 +76,7 @@ export function CodeBlock({
   hideLineNumbers,
   emptyLabel = 'Sin contenido.',
   hideFullscreen,
+  highlightLine,
 }: CodeBlockProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -82,6 +89,7 @@ export function CodeBlock({
         maxHeightClass={maxHeightClass}
         hideLineNumbers={hideLineNumbers}
         emptyLabel={emptyLabel}
+        highlightLine={highlightLine}
         onExpand={hideFullscreen ? undefined : () => setExpanded(true)}
       />
 
@@ -105,6 +113,7 @@ export function CodeBlock({
             maxHeightClass="max-h-[calc(100dvh-16rem)]"
             hideLineNumbers={hideLineNumbers}
             emptyLabel={emptyLabel}
+            highlightLine={highlightLine}
           />
         </Modal>
       )}
@@ -123,6 +132,7 @@ function CodeSurface({
   maxHeightClass,
   hideLineNumbers,
   emptyLabel,
+  highlightLine,
   onExpand,
 }: {
   code: string
@@ -131,6 +141,7 @@ function CodeSurface({
   maxHeightClass: string
   hideLineNumbers?: boolean
   emptyLabel: string
+  highlightLine?: number
   /** Si falta, no se ofrece expandir (ya se está en pantalla completa). */
   onExpand?: () => void
 }) {
@@ -141,6 +152,21 @@ function CodeSurface({
   const showGutter = !hideLineNumbers && lineCount > 1
   // Por debajo de este tamaño el bloque cabe entero y el tirador solo sería ruido.
   const resizable = lineCount > RESIZE_FROM_LINES
+  const highlightRef = useRef<HTMLSpanElement>(null)
+
+  /*
+   * Lleva la línea señalada a la vista. Es un efecto sobre el DOM y no sincroniza estado, así que
+   * no choca con la regla de `react-hooks`. Depende también de `lines` porque, si el código llega
+   * después (el detalle aún cargando), el nodo recién existe en ese render.
+   *
+   * El `typeof` no es paranoia: jsdom no implementa `scrollIntoView`, y un visor que tira una
+   * excepción en los tests por un desplazamiento cosmético sería peor que no desplazar.
+   */
+  useEffect(() => {
+    const node = highlightRef.current
+    if (highlightLine === undefined || !node || typeof node.scrollIntoView !== 'function') return
+    node.scrollIntoView({ block: 'center' })
+  }, [highlightLine, lines])
 
   const handleCopy = () => {
     // `navigator.clipboard` no existe fuera de un contexto seguro (HTTP sin TLS): se avisa en
@@ -233,17 +259,26 @@ function CodeSurface({
             )}
           >
             <code>
-              {lines.map((lineTokens, lineIndex) => (
-                <span key={lineIndex} className="code-line" data-line={lineIndex + 1}>
-                  <span className="code-text">
-                    {lineTokens.map((token, index) => (
-                      <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
-                        {token.content}
-                      </span>
-                    ))}
+              {lines.map((lineTokens, lineIndex) => {
+                const highlighted = highlightLine === lineIndex + 1
+                return (
+                  <span
+                    key={lineIndex}
+                    ref={highlighted ? highlightRef : undefined}
+                    className={cn('code-line', highlighted && 'code-line--highlighted')}
+                    data-line={lineIndex + 1}
+                    aria-current={highlighted ? 'true' : undefined}
+                  >
+                    <span className="code-text">
+                      {lineTokens.map((token, index) => (
+                        <span key={index} className={SQL_TOKEN_CLASS[token.type]}>
+                          {token.content}
+                        </span>
+                      ))}
+                    </span>
                   </span>
-                </span>
-              ))}
+                )
+              })}
             </code>
           </pre>
         </div>
