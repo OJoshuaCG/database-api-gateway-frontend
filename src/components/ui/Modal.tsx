@@ -54,6 +54,29 @@ export function Modal({
   const titleId = useId()
 
   const ref = useRef<HTMLDialogElement>(null)
+  const returnFocusRef = useRef<Element | null>(null)
+
+  /*
+   * Devolver el foco al cerrar. El `<dialog>` se desmonta (`return null` de abajo) sin pasar por
+   * `close()`, así que el navegador no restaura el foco solo y quien usa teclado acaba en el
+   * `<body>`, al principio de la página, lejos de la fila en la que estaba.
+   *
+   * Tiene que ir ANTES del efecto que llama a `showModal()`, que mueve el foco dentro. La guarda
+   * `contains` es para StrictMode, que repite el efecto con el foco ya dentro del diálogo: ese
+   * no es el origen y no debe pisar al bueno. Con modales apilados (el formulario de blueprint y,
+   * encima, el asistente de renombrado) cada uno guarda el suyo: el de arriba vuelve al botón del
+   * de abajo, que sigue montado. Si el origen ya no está en el documento —la fila que se borró—,
+   * no se fuerza nada.
+   */
+  useEffect(() => {
+    if (!open) return
+    const active = document.activeElement
+    if (!ref.current?.contains(active)) returnFocusRef.current = active
+    return () => {
+      const previous = returnFocusRef.current
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [open])
 
   useEffect(() => {
     const dialog = ref.current
