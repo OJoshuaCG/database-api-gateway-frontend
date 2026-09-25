@@ -35,6 +35,7 @@ import { VersionTablesReportPanel } from '../components/VersionTablesReportPanel
 import { VersionNavigator } from '../components/VersionNavigator'
 import { VersionAlertsBar } from '../components/VersionAlertsBar'
 import { VersionFactsCard } from '../components/VersionFactsCard'
+import { MigrationSearchPanel } from '../components/MigrationSearchPanel'
 import { flipPage, resolveVersionIndex, sortVersionsAscending } from '../version-nav'
 import { versionAlerts } from '../version-alerts'
 
@@ -62,8 +63,9 @@ import { versionAlerts } from '../version-alerts'
  * Pestañas de la pantalla. El default (`versiones`) NO se escribe en la URL: se borra el
  * parámetro, para que la dirección compartida más corta sea la de la vista por defecto. Los otros
  * dos sí, porque `?tab=estado` ya se genera como deep-link desde `MigrationDeletePlanDialog`.
+ * `buscar` sigue la misma regla: se escribe, para que una búsqueda se pueda enlazar a la pestaña.
  */
-type BlueprintTab = 'versiones' | 'estado' | 'contabilidad'
+type BlueprintTab = 'versiones' | 'estado' | 'contabilidad' | 'buscar'
 
 export function BlueprintMigrationsPage() {
   const params = useParams()
@@ -77,7 +79,13 @@ export function BlueprintMigrationsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab: BlueprintTab =
-    tabParam === 'estado' ? 'estado' : tabParam === 'contabilidad' ? 'contabilidad' : 'versiones'
+    tabParam === 'estado'
+      ? 'estado'
+      : tabParam === 'contabilidad'
+        ? 'contabilidad'
+        : tabParam === 'buscar'
+          ? 'buscar'
+          : 'versiones'
   const setTab = (next: BlueprintTab) =>
     setSearchParams((params) => {
       if (next === 'versiones') params.delete('tab')
@@ -351,6 +359,9 @@ export function BlueprintMigrationsPage() {
         <TabButton active={tab === 'contabilidad'} onClick={() => setTab('contabilidad')}>
           Contabilidad de versiones
         </TabButton>
+        <TabButton active={tab === 'buscar'} onClick={() => setTab('buscar')}>
+          Buscar en el SQL
+        </TabButton>
       </div>
 
       {tab === 'versiones' && requestedVersionMissing && (
@@ -379,6 +390,11 @@ export function BlueprintMigrationsPage() {
            del gateway y no abre conexiones, mientras que esta lee CADA motor y es 10/min. Juntarlas
            obligaría a una de las dos a heredar el coste de la otra. */
         <VersionTablesReportPanel modelId={modelId} />
+      ) : tab === 'buscar' ? (
+        /* El enlace del visor navega a `?version=` en esta MISMA ruta, y la página solo lee ese
+           parámetro al montar: por eso además se selecciona a mano con `selectVersion`, que salta
+           a la página del catálogo donde está la versión en vez de caer a la punta. */
+        <MigrationSearchPanel modelId={modelId} onOpenInCatalog={selectVersion} />
       ) : (
         <>
           {/* Avisos del catálogo ANTES del selector: dicen si hay algo que resolver en el
