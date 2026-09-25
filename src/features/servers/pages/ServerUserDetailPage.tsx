@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import {
   AdoptionBadge,
   Badge,
@@ -10,30 +8,24 @@ import {
   EmptyState,
   ErrorState,
   FullPageSpinner,
-  IconButton,
   PageHeader,
   Spinner,
   TabButton,
-  TrashIcon,
 } from '@/components/ui'
-import { queryKeys } from '@/lib/api/query-keys'
 import type { EngineType, EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
-import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
-import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
 import { useServerUser } from '@/features/server-users/hooks/use-server-users'
 import { EffectiveGrantsPanel } from '@/features/server-users/components/EffectiveGrantsPanel'
 import { GrantPanel } from '@/features/server-users/components/GrantPanel'
 import { OwnedDatabasesContent } from '@/features/server-users/components/OwnedDatabasesContent'
 import { useServer } from '../hooks/use-servers'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
-import { CreateEngineUserModal } from '../components/CreateEngineUserModal'
-import { ChangeEngineUserPasswordModal } from '../components/ChangeEngineUserPasswordModal'
-import { DeleteEngineUserDialog } from '../components/DeleteEngineUserDialog'
-import { AddEngineUserHostModal } from '../components/AddEngineUserHostModal'
-import { RevealEngineUserPasswordModal } from '../components/RevealEngineUserPasswordModal'
-import { AdoptAllHostsModal } from '../components/AdoptAllHostsModal'
-import { DefineKnownPasswordModal } from '../components/DefineKnownPasswordModal'
-import { RotatePasswordAllHostsModal } from '../components/RotatePasswordAllHostsModal'
+import {
+  DESTRUCTIVE_IDENTITY_ACTIONS,
+  identityActions,
+  usernameActions,
+} from '../components/engine-user-actions'
+import { IdentityActionButtons, UsernameActionButtons } from '../components/EngineUserActionButtons'
+import { useEngineUserDialogs } from '../components/use-engine-user-dialogs'
 
 const TABS = ['identity', 'grants', 'manage', 'databases'] as const
 type Tab = (typeof TABS)[number]
@@ -68,6 +60,10 @@ const TAB_LABELS: Record<Tab, string> = {
  *
  * La identidad se resuelve desde `GET /{id}/users/grouped` (ya usado por `EngineUsersPanel`) en
  * vez de pedir un endpoint nuevo: cruza username+host contra la lista agrupada del servidor.
+ *
+ * **La ficha tiene TODAS las acciones de la identidad (R1)**, decididas por estado en
+ * `engine-user-actions` —la misma fuente que usan las filas de `EngineUsersPanel`, que solo son
+ * atajos— y ejecutadas por `useEngineUserDialogs`. Aquí no se decide qué botón aparece.
  */
 export function ServerUserDetailPage() {
   const params = useParams()
@@ -101,8 +97,8 @@ export function ServerUserDetailPage() {
     groupedUser?.identities.find((candidate) => (candidate.host ?? undefined) === host) ?? null
 
   // Caso real, no defensivo: pueden haberla eliminado desde otra pestaña o por fuera del
-  // gateway (incluida esta misma ficha, tras un "Eliminar"/"Limpiar registro" exitoso: la
-  // invalidación de la query agrupada recalcula esto solo, sin necesidad de navegar a mano).
+  // gateway (incluida esta misma ficha, tras «Eliminar del motor» o tras quitar del inventario
+  // una huérfana: la invalidación de la query agrupada recalcula esto solo, sin navegar a mano).
   if (!groupedUser || !identity) {
     return (
       <div className="flex flex-col gap-6">
@@ -155,7 +151,6 @@ function ServerUserDetailContent({
   const username = groupedUser.username
   const host = identity.host ?? undefined
 
-  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab: Tab = resolveTab(tabParam)
@@ -167,47 +162,37 @@ function ServerUserDetailContent({
     })
   }
 
-  const [createOpen, setCreateOpen] = useState(false)
-  const [passwordOpen, setPasswordOpen] = useState(false)
-  const [revealOpen, setRevealOpen] = useState(false)
-  const [adoptOpen, setAdoptOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [addHostOpen, setAddHostOpen] = useState(false)
-  const [adoptAllOpen, setAdoptAllOpen] = useState(false)
-  const [defineOpen, setDefineOpen] = useState(false)
-  const [rotateAllOpen, setRotateAllOpen] = useState(false)
-  const [cleanupPending, setCleanupPending] = useState(false)
-
-  const deleteServerUser = useDeleteServerUser()
-
-  // Hosts EN VIVO (no `orphan`) de este username — opciones de "Agregar host"/"Definir
-  // contraseña" y condición de "Adoptar todos los hosts", igual criterio que `EngineUsersPanel`.
-  const liveHosts = groupedUser.identities
-    .filter((candidate) => candidate.status !== 'orphan')
-    .map((candidate) => candidate.host)
-    .filter((candidateHost): candidateHost is string => Boolean(candidateHost))
-
   const isAdopted = identity.status === 'adopted' && identity.server_user_id != null
   const serverUserId = identity.server_user_id ?? undefined
-  // Otorgar y las BDs propias siguen exigiendo `server_user_id` numérico: todo el otorgamiento
-  // cuelga del inventario (v21 §12). «Permisos efectivos» ya no, porque la CONSULTA sí funciona
-  // por identidad (§1) — de ahí que la query del registro solo se pida cuando hay fila.
-  const serverUser = useServerUser(serverUserId ?? 0, isAdopted && serverUserId != null)
+  // El registro del inventario (`ServerUserOut`) se pide siempre que haya fila —adoptada o
+  // huérfana—: lo exigen «Editar» y «Quitar del inventario», que antes solo existían en el
+  // listado `/server-users`. Otorgar y las BDs propias además exigen que esté ADOPTADA: todo el
+  // otorgamiento cuelga del inventario (v21 §12). «Permisos efectivos» no, porque la CONSULTA
+  // funciona por identidad (§1).
+  const serverUser = useServerUser(serverUserId ?? 0, serverUserId != null)
 
-  const cleanupOrphan = () => {
-    if (identity.server_user_id == null) return
-    setCleanupPending(true)
-    deleteServerUser.mutate(
-      { id: identity.server_user_id, dropRemote: false },
-      {
-        onSuccess: () => {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.servers.groupedUsers(serverId) })
-          setCleanupPending(false)
-        },
-        onError: () => setCleanupPending(false),
-      },
-    )
-  }
+  const actions = useEngineUserDialogs({
+    serverId,
+    serverName,
+    supportsHosts,
+    users: [groupedUser],
+  })
+  // «Permisos efectivos» es una pestaña de esta misma ficha, no un botón de la cabecera.
+  const headerActions = identityActions(identity).filter((action) => action.id !== 'viewGrants')
+  const editAction = headerActions.find((action) => action.id === 'edit')
+  const runAction = (action: (typeof headerActions)[number]) =>
+    actions.runIdentityAction(action, username, identity, serverUser.data)
+  // La cabecera va en grupos: lo de esta identidad, lo de todos los hosts del username y, aparte,
+  // lo que borra. En una sola tira, las destructivas quedaban en medio (antes de las acciones de
+  // todos los hosts) y nada distinguía qué tocaba este host y qué todos.
+  const identityGroup = headerActions.filter(
+    (action) => !DESTRUCTIVE_IDENTITY_ACTIONS.has(action.id),
+  )
+  const destructiveGroup = headerActions.filter((action) =>
+    DESTRUCTIVE_IDENTITY_ACTIONS.has(action.id),
+  )
+  const batchActions = usernameActions(groupedUser, supportsHosts)
+  const subject = `${username}${host ? `@${host}` : ''}`
 
   const requiresAdoption = tab === 'manage' || tab === 'databases'
 
@@ -225,91 +210,48 @@ function ServerUserDetailContent({
               {/* Acciones de esta identidad puntual (server_id, username, host): mismo patrón que
                   `ServerDatabaseDetailPage`, siempre visibles en la cabecera sin depender de qué
                   pestaña esté activa. */}
-              {identity.status === 'adopted' && (
-                <>
-                  {identity.has_password && (
-                    <Button variant="ghost" size="sm" onClick={() => setRevealOpen(true)}>
-                      Revelar
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="sm" onClick={() => setPasswordOpen(true)}>
-                    Rotar contraseña
-                  </Button>
-                  <IconButton
-                    label="Eliminar"
-                    icon={<TrashIcon />}
-                    variant="danger-soft"
-                    size="icon-sm"
-                    onClick={() => setDeleteOpen(true)}
+              {identityGroup.length > 0 && (
+                <div role="group" aria-label="Esta identidad" className="flex flex-wrap gap-2">
+                  <IdentityActionButtons
+                    actions={identityGroup}
+                    layout="header"
+                    subject={subject}
+                    recordReady={serverUser.data != null}
+                    recordLoading={serverUser.isLoading}
+                    onRun={runAction}
                   />
-                </>
+                </div>
               )}
-              {identity.status === 'unmanaged' && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setAdoptOpen(true)}>
-                    Adoptar
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setPasswordOpen(true)}>
-                    Rotar contraseña
-                  </Button>
-                  <IconButton
-                    label="Eliminar"
-                    icon={<TrashIcon />}
-                    variant="danger-soft"
-                    size="icon-sm"
-                    onClick={() => setDeleteOpen(true)}
-                  />
-                </>
-              )}
-              {identity.status === 'orphan' && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-                    Recrear en el motor
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    isLoading={cleanupPending}
-                    onClick={cleanupOrphan}
-                  >
-                    Limpiar registro
-                  </Button>
-                </>
-              )}
-
               {/* Acciones batch (§7.4) a nivel de USERNAME, no de esta identidad puntual: operan
                   sobre todas las identidades/hosts en vivo de «{username}». */}
-              {supportsHosts && identity.status !== 'orphan' && (
-                <span
-                  title={
-                    liveHosts.length === 0
-                      ? 'Ningún host de este usuario existe hoy en el motor (todos huérfanos)'
-                      : undefined
-                  }
+              {batchActions.length > 0 && (
+                <div
+                  role="group"
+                  aria-label={`Todos los hosts de «${username}»`}
+                  className="flex flex-wrap gap-2"
                 >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={liveHosts.length === 0}
-                    onClick={() => setAddHostOpen(true)}
-                  >
-                    Agregar host
-                  </Button>
-                </span>
+                  <UsernameActionButtons
+                    actions={batchActions}
+                    onRun={(action) => actions.runUsernameAction(action.id, username, host)}
+                  />
+                </div>
               )}
-              {supportsHosts &&
-                groupedUser.identities.some((candidate) => candidate.status === 'unmanaged') && (
-                  <Button variant="outline" size="sm" onClick={() => setAdoptAllOpen(true)}>
-                    Adoptar todos los hosts
-                  </Button>
-                )}
-              <Button variant="ghost" size="sm" onClick={() => setDefineOpen(true)}>
-                Definir contraseña
-              </Button>
-              {supportsHosts && groupedUser.identity_count > 1 && (
-                <Button variant="ghost" size="sm" onClick={() => setRotateAllOpen(true)}>
-                  Rotar en todos los hosts
-                </Button>
+              {destructiveGroup.length > 0 && (
+                <div
+                  role="group"
+                  aria-label="Destructivas"
+                  className="flex flex-wrap gap-2 sm:border-l sm:border-border sm:pl-3"
+                >
+                  <IdentityActionButtons
+                    actions={destructiveGroup}
+                    layout="header"
+                    subject={subject}
+                    recordReady={serverUser.data != null}
+                    recordLoading={serverUser.isLoading}
+                    isRemoving={actions.isRemovingOrphan(identity)}
+                    onRun={runAction}
+                  />
+                </div>
               )}
             </>
           }
@@ -382,8 +324,25 @@ function ServerUserDetailContent({
                 Este motor no usa hosts: la identidad es única por usuario.
               </p>
             )}
-            {identity.notes && (
-              <p className="text-sm text-muted-foreground">Notas: {identity.notes}</p>
+            {/* Notas y «activo» son datos del inventario: se editan con la misma acción «Editar»
+                de la cabecera, que solo existe cuando hay registro. */}
+            {(identity.notes || editAction) && (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Notas: {identity.notes || 'sin notas.'}
+                </p>
+                {editAction && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    isLoading={serverUser.isLoading}
+                    disabled={serverUser.data == null}
+                    onClick={() => runAction(editAction)}
+                  >
+                    Editar
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -403,15 +362,34 @@ function ServerUserDetailContent({
 
       {requiresAdoption &&
         (!isAdopted || serverUserId == null ? (
-          <EmptyState
-            title="Esta identidad no está adoptada"
-            description="Otorgar permisos y listar las bases propias son operaciones de inventario: adoptá primero esta identidad. Consultar sus permisos efectivos sí funciona sin adoptarla."
-            action={
-              <Button onClick={() => setAdoptOpen(true)}>
-                Adoptar esta identidad para gestionar sus permisos
-              </Button>
-            }
-          />
+          identity.status === 'orphan' ? (
+            // Huérfana: está en el inventario pero no en el motor. No hay nada que adoptar —
+            // `adopt` busca la identidad en el motor—; la salida es recrearla, desde la cabecera.
+            <EmptyState
+              title="Esta identidad ya no existe en el motor"
+              description="Otorgar permisos y listar las bases propias necesitan que la identidad exista en el motor. Recréala desde la cabecera o quítala del inventario."
+            />
+          ) : (
+            <EmptyState
+              title="Esta identidad no está adoptada"
+              description="Otorgar permisos y listar las bases propias son operaciones de inventario: adoptá primero esta identidad. Consultar sus permisos efectivos sí funciona sin adoptarla."
+              action={
+                identity.status === 'unmanaged' ? (
+                  <Button
+                    onClick={() =>
+                      actions.runIdentityAction(
+                        { id: 'adopt', needsRecord: false },
+                        username,
+                        identity,
+                      )
+                    }
+                  >
+                    Adoptar esta identidad para gestionar sus permisos
+                  </Button>
+                ) : undefined
+              }
+            />
+          )
         ) : serverUser.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="h-4 w-4" /> Cargando usuario…
@@ -425,87 +403,7 @@ function ServerUserDetailContent({
           </>
         ))}
 
-      {createOpen && (
-        <CreateEngineUserModal
-          onClose={() => setCreateOpen(false)}
-          serverId={serverId}
-          supportsHosts={supportsHosts}
-          prefill={{ username, host }}
-        />
-      )}
-      {passwordOpen && (
-        <ChangeEngineUserPasswordModal
-          onClose={() => setPasswordOpen(false)}
-          serverId={serverId}
-          username={username}
-          host={host}
-          alreadyAdopted={identity.status === 'adopted'}
-        />
-      )}
-      {deleteOpen && (
-        <DeleteEngineUserDialog
-          onClose={() => setDeleteOpen(false)}
-          serverId={serverId}
-          username={username}
-          host={host}
-        />
-      )}
-      {addHostOpen && (
-        <AddEngineUserHostModal
-          onClose={() => setAddHostOpen(false)}
-          serverId={serverId}
-          username={username}
-          sourceHostOptions={liveHosts}
-          defaultSourceHost={liveHosts[0]}
-        />
-      )}
-      {revealOpen && (
-        <RevealEngineUserPasswordModal
-          onClose={() => setRevealOpen(false)}
-          serverId={serverId}
-          username={username}
-          host={host}
-        />
-      )}
-      {adoptOpen && (
-        <AdoptUserModal
-          open
-          onClose={() => setAdoptOpen(false)}
-          serverId={serverId}
-          username={username}
-          host={host}
-          onDefinePassword={() => {
-            // La identidad nace sin contraseña: encadena con «Definir contraseña conocida».
-            setDefineOpen(true)
-            setAdoptOpen(false)
-          }}
-        />
-      )}
-      {adoptAllOpen && (
-        <AdoptAllHostsModal
-          onClose={() => setAdoptAllOpen(false)}
-          serverId={serverId}
-          username={username}
-          supportsHosts={supportsHosts}
-        />
-      )}
-      {defineOpen && (
-        <DefineKnownPasswordModal
-          onClose={() => setDefineOpen(false)}
-          serverId={serverId}
-          username={username}
-          supportsHosts={supportsHosts}
-          hostOptions={liveHosts}
-          defaultHost={host}
-        />
-      )}
-      {rotateAllOpen && (
-        <RotatePasswordAllHostsModal
-          onClose={() => setRotateAllOpen(false)}
-          serverId={serverId}
-          username={username}
-        />
-      )}
+      {actions.dialogs}
     </div>
   )
 }

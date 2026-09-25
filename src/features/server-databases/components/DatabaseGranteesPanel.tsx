@@ -12,6 +12,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
+import { serverUserPath } from '@/lib/routes'
 import type { DatabaseGrantee, EngineType } from '@/lib/contracts'
 import { filterGrantees, isDangerousPrivilege, type GranteeScope } from '../logic'
 import { useDatabaseGrantees } from '../hooks/use-database-grantees'
@@ -230,9 +231,10 @@ export function DatabaseGranteesPanel({ serverId, database }: DatabaseGranteesPa
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    {/* No hay ruta de detalle por id: ambos enlaces llevan al listado de usuarios. */}
+                    {/* La ficha se identifica por `(servidor, usuario, host)`, no por el id del
+                        inventario: es la misma ruta esté o no adoptado, y ahí mismo se adopta. */}
                     <Link
-                      to="/server-users"
+                      to={serverUserPath(serverId, grantee.username, grantee.host)}
                       className="text-xs font-medium text-primary hover:underline"
                     >
                       {grantee.status === 'adopted' && grantee.server_user_id

@@ -8,13 +8,14 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
-  IconButton,
   PageHeader,
   Pagination,
   PencilIcon,
-  TrashIcon,
+  ListRemoveIcon,
+  RowActionButton,
 } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
+import { serverUserPath } from '@/lib/routes'
 import type { ServerOut, ServerUserOut } from '@/lib/contracts'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUsers } from '../hooks/use-server-users'
@@ -23,14 +24,17 @@ import { DeleteServerUserDialog } from '../components/DeleteServerUserDialog'
 import { OwnedDatabasesModal } from '../components/OwnedDatabasesModal'
 
 /**
- * Ficha física de la identidad: `/servers/:serverId/users/:username/:host?` (host ausente en
- * PostgreSQL). Es la misma ruta esté o no adoptada — la ficha decide qué mostrar.
+ * Listado del INVENTARIO de usuarios, no del motor: por eso no ofrece «Revelar contraseña» ni las
+ * acciones que ejecutan sobre el motor, que viven en la ficha (`ServerUserDetailPage`) y en la
+ * tabla del servidor. Todo lo que sí ofrece cada fila —permisos, BDs, editar, quitar del
+ * inventario— existe también en la ficha (R1), adonde lleva el nombre.
+ *
+ * Sus botones se arman aquí y no con `engine-user-actions`, a propósito y por ahora: esa lógica
+ * decide por el estado de la identidad FRENTE AL MOTOR (`adopted`/`unmanaged`/`orphan`), que este
+ * listado no conoce —`GET /server-users` devuelve el registro, no el cruce—, y la tabla del motor,
+ * a la inversa, no tiene el registro. Se podrán unificar cuando una de las dos respuestas traiga lo
+ * que le falta a la otra: el estado frente al motor aquí, o el registro allí.
  */
-const userDetailPath = (user: ServerUserOut) =>
-  `/servers/${user.server_id}/users/${encodeURIComponent(user.username)}${
-    user.host ? `/${encodeURIComponent(user.host)}` : ''
-  }`
-
 export function ServerUsersPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
@@ -60,7 +64,7 @@ export function ServerUsersPage() {
         header: 'Usuario',
         cell: ({ row }) => (
           <Link
-            to={userDetailPath(row.original)}
+            to={serverUserPath(row.original.server_id, row.original.username, row.original.host)}
             className="font-medium text-foreground hover:text-primary hover:underline"
           >
             {row.original.username}
@@ -106,37 +110,57 @@ export function ServerUsersPage() {
         header: '',
         enableSorting: false,
         enableHiding: false,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(`${userDetailPath(row.original)}?tab=grants`)}
-            >
-              Permisos efectivos
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setOwnedTarget(row.original)}>
-              Ver BDs
-            </Button>
-            <IconButton
-              label="Editar"
-              icon={<PencilIcon />}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setEditing(row.original)
-                setFormOpen(true)
-              }}
-            />
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget(row.original)}
-            />
-          </div>
-        ),
+        cell: ({ row }) => {
+          const subject = row.original.host
+            ? `${row.original.username}@${row.original.host}`
+            : row.original.username
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <RowActionButton
+                label="Permisos efectivos"
+                subject={subject}
+                onClick={() =>
+                  navigate(
+                    serverUserPath(
+                      row.original.server_id,
+                      row.original.username,
+                      row.original.host,
+                      'grants',
+                    ),
+                  )
+                }
+              />
+              <RowActionButton
+                label="Ver BDs"
+                subject={subject}
+                onClick={() => setOwnedTarget(row.original)}
+              />
+              <RowActionButton
+                label="Editar"
+                subject={subject}
+                icon={<PencilIcon />}
+                onClick={() => {
+                  setEditing(row.original)
+                  setFormOpen(true)
+                }}
+              />
+              {/* Por defecto solo borra el registro del gateway (el DROP es opt-in dentro del
+                  diálogo), así que se nombra por esa consecuencia (R5) y lleva el MISMO icono que
+                  «Quitar del inventario» en las bases: la papelera queda reservada para lo que
+                  borra del motor, y así el icono solo ya distingue las dos consecuencias. En la
+                  tarjeta lleva además su texto: no es un icono universal y ahí no hay tooltip. */}
+              <RowActionButton
+                label="Quitar del inventario"
+                subject={subject}
+                icon={<ListRemoveIcon />}
+                iconText="card"
+                variant="danger-soft"
+                className="ml-2"
+                onClick={() => setDeleteTarget(row.original)}
+              />
+            </div>
+          )
+        },
       },
     ],
     [navigate, serverNameById],

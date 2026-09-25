@@ -1,9 +1,10 @@
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorState, FullPageSpinner } from '@/components/ui'
+import { serverUserPath, type ServerUserTab } from '@/lib/routes'
 import { useServerUser } from '../hooks/use-server-users'
 
 /** Las pestañas de la vieja página tenían otros nombres que los de la ficha unificada. */
-const OLD_TAB_TO_NEW: Record<string, string> = {
+const OLD_TAB_TO_NEW: Record<string, ServerUserTab> = {
   effective: 'grants',
   manage: 'manage',
   // «Aplicar perfil» dejó de ser una pestaña propia: vive dentro de «Otorgar / revocar» (v21).
@@ -36,8 +37,7 @@ export function ServerUserGrantsPage() {
 
   const oldTab = searchParams.get('tab')
   const newTab = (oldTab && OLD_TAB_TO_NEW[oldTab]) || 'grants'
-  const hostSegment = user.data.host ? `/${encodeURIComponent(user.data.host)}` : ''
-  const target = `/servers/${user.data.server_id}/users/${encodeURIComponent(user.data.username)}${hostSegment}?tab=${newTab}`
+  const target = serverUserPath(user.data.server_id, user.data.username, user.data.host, newTab)
 
   return <Navigate to={target} replace />
 }

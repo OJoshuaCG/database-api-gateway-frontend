@@ -17,6 +17,13 @@ export function useProvisionServerUser() {
     mutationFn: (body: ServerUserFullCreate) => provisionServerUser(body),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.serverUsers.all })
+      // La tabla del servidor y la ficha del usuario leen la vista AGRUPADA por username, que
+      // cuelga de otro tronco de clave (`['servers', id, 'grouped-users']`). Sin esto, un usuario
+      // recién creado aparece en «Usuarios del motor» del sidebar y no en la pestaña del
+      // servidor, hasta que venza el `staleTime`.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.servers.groupedUsers(result.user.server_id),
+      })
       const failed = result.grant_results.filter((grant) => !grant.success)
       if (failed.length > 0) {
         toast.push({

@@ -1,6 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   AdoptionBadge,
   Badge,
@@ -10,76 +9,36 @@ import {
   IconButton,
   RefreshIcon,
   Spinner,
-  TrashIcon,
 } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { queryKeys } from '@/lib/api/query-keys'
+import { serverUserPath } from '@/lib/routes'
 import type { EngineType, EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
-import { AdoptUserModal } from '@/features/server-users/components/AdoptUserModal'
-import { useDeleteServerUser } from '@/features/server-users/hooks/use-server-user-mutations'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
-import { CreateEngineUserModal } from './CreateEngineUserModal'
-import { ChangeEngineUserPasswordModal } from './ChangeEngineUserPasswordModal'
-import { DeleteEngineUserDialog } from './DeleteEngineUserDialog'
-import { AddEngineUserHostModal } from './AddEngineUserHostModal'
-import { RevealEngineUserPasswordModal } from './RevealEngineUserPasswordModal'
-import { AdoptAllHostsModal } from './AdoptAllHostsModal'
-import { DefineKnownPasswordModal } from './DefineKnownPasswordModal'
-import { RotatePasswordAllHostsModal } from './RotatePasswordAllHostsModal'
-
-interface IdentityTarget {
-  username: string
-  host?: string | null
-}
+import { rowIdentityActions, usernameActions } from './engine-user-actions'
+import { IdentityActionButtons, UsernameActionButtons } from './EngineUserActionButtons'
+import { useEngineUserDialogs } from './use-engine-user-dialogs'
 
 /**
  * Usuarios del motor agrupados por identidad física (docs/features/engine-users-management.md).
  * Reemplaza el listado plano de introspección: una fila por username, expandible a sus
  * identidades (hosts en MySQL/MariaDB; una sola en PostgreSQL, que no tiene host).
  *
+ * Las acciones de cada fila son un ATAJO a las de la ficha (`ServerUserDetailPage`): no se
+ * deciden aquí sino en `engine-user-actions`, que la ficha comparte, y los diálogos los aloja
+ * `useEngineUserDialogs`. La fila solo resta lo que no sabe ejecutar sin el registro del
+ * inventario (editar, quitar una adoptada); todo lo que ofrece está también en la ficha (R1).
+ *
  * `engine` ya no se consume aquí —la página de permisos resuelve el motor por su cuenta desde el
  * usuario—, pero sigue en las props porque el detalle de servidor lo pasa.
  */
 export function EngineUsersPanel({ serverId }: { serverId: number; engine: EngineType }) {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { data, isLoading, isError, error, refetch, isFetching } = useGroupedEngineUsers(serverId)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-
-  const [createTarget, setCreateTarget] = useState<IdentityTarget | 'new' | null>(null)
-  const [passwordTarget, setPasswordTarget] = useState<
-    (IdentityTarget & { alreadyAdopted: boolean }) | null
-  >(null)
-  const [deleteTarget, setDeleteTarget] = useState<IdentityTarget | null>(null)
-  const [addHostTarget, setAddHostTarget] = useState<{
-    username: string
-    sourceHostOptions: string[]
-    defaultSourceHost?: string
-  } | null>(null)
-  const [revealTarget, setRevealTarget] = useState<IdentityTarget | null>(null)
-  const [adoptTarget, setAdoptTarget] = useState<IdentityTarget | null>(null)
-  // Acciones batch (§7.4) a nivel de username, no de identidad.
-  const [adoptAllTarget, setAdoptAllTarget] = useState<string | null>(null)
-  const [defineTarget, setDefineTarget] = useState<{
-    username: string
-    defaultHost?: string | null
-  } | null>(null)
-  const [rotateAllTarget, setRotateAllTarget] = useState<string | null>(null)
-  const [cleanupId, setCleanupId] = useState<number | null>(null)
-
-  const deleteServerUser = useDeleteServerUser()
-
-  // La ficha física vive en `/servers/:serverId/users/:username/:host?` (host ausente en
-  // PostgreSQL, que no tiene). Es la MISMA ruta esté o no adoptada la identidad: la ficha decide
-  // qué mostrar según su estado, ya no esta tabla.
-  const userDetailPath = (targetUsername: string, targetHost?: string | null) =>
-    `/servers/${serverId}/users/${encodeURIComponent(targetUsername)}${
-      targetHost ? `/${encodeURIComponent(targetHost)}` : ''
-    }`
-
-  const goToGrants = (targetUsername: string, targetHost?: string | null) => {
-    void navigate(`${userDetailPath(targetUsername, targetHost)}?tab=grants`)
-  }
+  const actions = useEngineUserDialogs({
+    serverId,
+    supportsHosts: data?.supports_hosts ?? false,
+    users: data?.users ?? [],
+  })
 
   const counts = useMemo(() => {
     const acc = { adopted: 0, unmanaged: 0, orphan: 0 }
@@ -110,137 +69,40 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
     })
   }
 
-  const cleanupOrphan = (serverUserId: number) => {
-    setCleanupId(serverUserId)
-    deleteServerUser.mutate(
-      { id: serverUserId, dropRemote: false },
-      {
-        onSuccess: () => {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.servers.groupedUsers(serverId) })
-          setCleanupId(null)
-        },
-        onError: () => setCleanupId(null),
-      },
-    )
-  }
-
-  const identityActions = (username: string, identity: EngineUserIdentity) => {
-    const host = identity.host ?? undefined
-    // Siempre habilitado, sea cual sea el estado: la ficha decide qué mostrar (permisos reales
-    // si está adoptada, o el CTA "Adoptar" si no) en vez de deshabilitar el botón acá.
-    const viewFicha = (
-      <Button variant="ghost" size="sm" onClick={() => goToGrants(username, host)}>
-        Permisos efectivos
-      </Button>
-    )
-    switch (identity.status) {
-      case 'adopted':
-        return (
-          <div className="flex flex-wrap justify-end gap-1.5">
-            {viewFicha}
-            {identity.has_password ? (
-              <Button variant="ghost" size="sm" onClick={() => setRevealTarget({ username, host })}>
-                Revelar
-              </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPasswordTarget({ username, host, alreadyAdopted: true })}
-            >
-              Rotar contraseña
-            </Button>
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget({ username, host })}
-            />
-          </div>
-        )
-      case 'unmanaged':
-        return (
-          <div className="flex flex-wrap justify-end gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => setAdoptTarget({ username, host })}>
-              Adoptar
-            </Button>
-            {viewFicha}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPasswordTarget({ username, host, alreadyAdopted: false })}
-            >
-              Rotar contraseña
-            </Button>
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget({ username, host })}
-            />
-          </div>
-        )
-      case 'orphan':
-        return (
-          <div className="flex flex-wrap justify-end gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => setCreateTarget({ username, host })}>
-              Recrear en el motor
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              isLoading={cleanupId === identity.server_user_id}
-              onClick={() => identity.server_user_id && cleanupOrphan(identity.server_user_id)}
-            >
-              Limpiar registro
-            </Button>
-            {viewFicha}
-          </div>
-        )
-    }
-  }
+  const identityActions = (username: string, identity: EngineUserIdentity) => (
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      <IdentityActionButtons
+        actions={rowIdentityActions(identity)}
+        layout="row"
+        subject={identity.host ? `${username}@${identity.host}` : username}
+        isRemoving={actions.isRemovingOrphan(identity)}
+        onRun={(action) => actions.runIdentityAction(action, username, identity)}
+      />
+    </div>
+  )
 
   /**
-   * Acciones batch (§7.4) a nivel de FILA DE USERNAME (operan sobre todas sus identidades):
-   * - Adoptar todos los hosts: solo con hosts (en PostgreSQL la única identidad ya tiene su
-   *   "Adoptar" por identidad en esta misma fila) y con ≥1 identidad `unmanaged`.
-   * - Definir contraseña conocida: SIEMPRE disponible (flujo DEFINIR, distinto de ROTAR).
-   * - Rotar en todos los hosts: solo con hosts y >1 identidad (con una sola ya existe la
-   *   rotación individual).
+   * Acciones batch (§7.4) a nivel de FILA DE USERNAME (operan sobre todas sus identidades).
+   * «Agregar host» sale de la misma lista pero se pinta en la cabecera de las identidades
+   * desplegadas, junto a los hosts que clona.
    */
-  const batchActions = (user: GroupedEngineUser) => {
-    const hasUnmanaged = user.identities.some((identity) => identity.status === 'unmanaged')
-    return (
-      <div className="flex flex-wrap justify-end gap-1.5">
-        {supportsHosts && hasUnmanaged && (
-          <Button variant="outline" size="sm" onClick={() => setAdoptAllTarget(user.username)}>
-            Adoptar todos los hosts
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setDefineTarget({ username: user.username })}
-        >
-          Definir contraseña
-        </Button>
-        {supportsHosts && user.identity_count > 1 && (
-          <Button variant="ghost" size="sm" onClick={() => setRotateAllTarget(user.username)}>
-            Rotar en todos los hosts
-          </Button>
-        )}
-      </div>
-    )
-  }
+  const batchActions = (user: GroupedEngineUser) => (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      <UsernameActionButtons
+        actions={usernameActions(user, supportsHosts).filter((action) => action.id !== 'addHost')}
+        onRun={(action) => actions.runUsernameAction(action.id, user.username)}
+      />
+    </div>
+  )
 
-  /** Hosts en vivo (no `orphan`) de un username — opciones del alcance «una identidad». */
-  const liveHostsOf = (username: string): string[] =>
-    (data.users.find((user) => user.username === username)?.identities ?? [])
-      .filter((identity) => identity.status !== 'orphan')
-      .map((identity) => identity.host)
-      .filter((host): host is string => Boolean(host))
+  const addHostAction = (user: GroupedEngineUser) => (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      <UsernameActionButtons
+        actions={usernameActions(user, supportsHosts).filter((action) => action.id === 'addHost')}
+        onRun={(action) => actions.runUsernameAction(action.id, user.username)}
+      />
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -258,7 +120,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
             onClick={() => void refetch()}
             isLoading={isFetching}
           />
-          <Button size="sm" onClick={() => setCreateTarget('new')}>
+          <Button size="sm" onClick={actions.openCreate}>
             Crear usuario
           </Button>
         </div>
@@ -319,7 +181,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                           // Único host (o ninguno, en PostgreSQL): la fila YA es una identidad
                           // concreta, así que el username enlaza directo a su ficha.
                           <Link
-                            to={userDetailPath(user.username, singleIdentity?.host)}
+                            to={serverUserPath(serverId, user.username, singleIdentity?.host)}
                             className="hover:text-primary hover:underline"
                           >
                             {user.username}
@@ -363,35 +225,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Identidades de «{user.username}»
                               </p>
-                              {(() => {
-                                // Solo identidades que realmente existen en el motor (no `orphan`)
-                                // sirven de origen para clonar — `SHOW CREATE USER` fallaría si no.
-                                const liveHosts = user.identities
-                                  .filter((identity) => identity.status !== 'orphan')
-                                  .map((identity) => identity.host)
-                                  .filter((host): host is string => Boolean(host))
-                                return (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={liveHosts.length === 0}
-                                    title={
-                                      liveHosts.length === 0
-                                        ? 'Ningún host de este usuario existe hoy en el motor (todos huérfanos)'
-                                        : undefined
-                                    }
-                                    onClick={() =>
-                                      setAddHostTarget({
-                                        username: user.username,
-                                        sourceHostOptions: liveHosts,
-                                        defaultSourceHost: liveHosts[0],
-                                      })
-                                    }
-                                  >
-                                    Agregar host
-                                  </Button>
-                                )
-                              })()}
+                              {addHostAction(user)}
                             </div>
                             <div className="overflow-x-auto rounded-lg border border-border">
                               <table className="w-full border-collapse text-sm">
@@ -413,7 +247,11 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
                                       <td className="px-3 py-1.5 font-mono text-xs text-foreground">
                                         {identity.host ? (
                                           <Link
-                                            to={userDetailPath(user.username, identity.host)}
+                                            to={serverUserPath(
+                                              serverId,
+                                              user.username,
+                                              identity.host,
+                                            )}
                                             className="hover:text-primary hover:underline"
                                           >
                                             {identity.host}
@@ -457,87 +295,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
         </div>
       )}
 
-      {createTarget && (
-        <CreateEngineUserModal
-          onClose={() => setCreateTarget(null)}
-          serverId={serverId}
-          supportsHosts={supportsHosts}
-          prefill={createTarget === 'new' ? undefined : createTarget}
-        />
-      )}
-      {passwordTarget && (
-        <ChangeEngineUserPasswordModal
-          onClose={() => setPasswordTarget(null)}
-          serverId={serverId}
-          username={passwordTarget.username}
-          host={passwordTarget.host}
-          alreadyAdopted={passwordTarget.alreadyAdopted}
-        />
-      )}
-      {deleteTarget && (
-        <DeleteEngineUserDialog
-          onClose={() => setDeleteTarget(null)}
-          serverId={serverId}
-          username={deleteTarget.username}
-          host={deleteTarget.host}
-        />
-      )}
-      {addHostTarget && (
-        <AddEngineUserHostModal
-          onClose={() => setAddHostTarget(null)}
-          serverId={serverId}
-          username={addHostTarget.username}
-          sourceHostOptions={addHostTarget.sourceHostOptions}
-          defaultSourceHost={addHostTarget.defaultSourceHost}
-        />
-      )}
-      {revealTarget && (
-        <RevealEngineUserPasswordModal
-          onClose={() => setRevealTarget(null)}
-          serverId={serverId}
-          username={revealTarget.username}
-          host={revealTarget.host}
-        />
-      )}
-      {adoptTarget && (
-        <AdoptUserModal
-          open
-          onClose={() => setAdoptTarget(null)}
-          serverId={serverId}
-          username={adoptTarget.username}
-          host={adoptTarget.host}
-          onDefinePassword={() => {
-            // La identidad nace sin contraseña: encadena con «Definir contraseña conocida».
-            setDefineTarget({ username: adoptTarget.username, defaultHost: adoptTarget.host })
-            setAdoptTarget(null)
-          }}
-        />
-      )}
-      {adoptAllTarget && (
-        <AdoptAllHostsModal
-          onClose={() => setAdoptAllTarget(null)}
-          serverId={serverId}
-          username={adoptAllTarget}
-          supportsHosts={supportsHosts}
-        />
-      )}
-      {defineTarget && (
-        <DefineKnownPasswordModal
-          onClose={() => setDefineTarget(null)}
-          serverId={serverId}
-          username={defineTarget.username}
-          supportsHosts={supportsHosts}
-          hostOptions={liveHostsOf(defineTarget.username)}
-          defaultHost={defineTarget.defaultHost}
-        />
-      )}
-      {rotateAllTarget && (
-        <RotatePasswordAllHostsModal
-          onClose={() => setRotateAllTarget(null)}
-          serverId={serverId}
-          username={rotateAllTarget}
-        />
-      )}
+      {actions.dialogs}
     </div>
   )
 }
