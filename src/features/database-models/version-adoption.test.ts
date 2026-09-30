@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ModelDatabaseStatus } from '@/lib/contracts'
-import { pendingAdoptionOfVersion } from './version-adoption'
+import { adoptionHeadline, pendingAdoptionOfVersion } from './version-adoption'
 
 function database(overrides: Partial<ModelDatabaseStatus> = {}): ModelDatabaseStatus {
   return {
@@ -91,5 +91,39 @@ describe('pendingAdoptionOfVersion', () => {
   it('sin BDs activas no hay nada que contar', () => {
     const adoption = pendingAdoptionOfVersion('0007', [])
     expect(adoption).toEqual({ total: 0, pending: 0, excluded: 0, byEnvironment: [] })
+  })
+})
+
+describe('adoptionHeadline', () => {
+  const dbs = [
+    database({ id: 1, pending_versions: ['0007'] }),
+    database({ id: 2, pending_versions: [] }),
+    database({ id: 3, status: 'error', pending_versions: ['0007'] }),
+  ]
+
+  it('con `applied_database_count` dice «aplicada» sobre TODAS las filas, sin filtrar por estado', () => {
+    // El backend cuenta sin mirar el estado de la base: dividirlo por las activas (2) podría dar
+    // un «aplicada en 3 de 2».
+    expect(adoptionHeadline(pendingAdoptionOfVersion('0007', dbs), 1)).toEqual({
+      kind: 'applied',
+      applied: 1,
+      of: 3,
+    })
+  })
+
+  it('un `0` publicado es un cero de verdad, no un «no lo sé»', () => {
+    expect(adoptionHeadline(pendingAdoptionOfVersion('0007', dbs), 0)).toEqual({
+      kind: 'applied',
+      applied: 0,
+      of: 3,
+    })
+  })
+
+  it('sin el campo (backend anterior) vuelve a contar pendientes sobre las activas', () => {
+    expect(adoptionHeadline(pendingAdoptionOfVersion('0007', dbs), undefined)).toEqual({
+      kind: 'pending',
+      pending: 1,
+      of: 2,
+    })
   })
 })

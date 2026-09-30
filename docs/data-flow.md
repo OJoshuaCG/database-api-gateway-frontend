@@ -324,7 +324,7 @@ DatabaseModelsPage: "Versiones" → /database-models/{modelId}/migrations   feat
   │       · VersionAlertsBar   ← versionAlerts(sorted)      (avisos del catálogo, con su lista y su consecuencia)
   │       · VersionNavigator   ← desplegable + flechas      (insignias de migration-badges.ts, densidad compacta)
   │       · VersionFactsCard   ← el resumen de la elegida   (identidad, insignias, fechas, huella, acciones)
-  ├─ useModelDatabases(modelId)                → GET  .../databases            (para «pendiente en N de M» de la ficha)
+  ├─ useModelDatabases(modelId)                → GET  .../databases            (denominador de «aplicada/pendiente en N de M»)
   │     Misma clave que la pestaña «Estado en las BDs». La ficha NO deriva «aplicada»: ver version-adoption.ts
   ├─ useModelMigration(modelId, version)       → GET  .../migrations/{version} (una sola vez: ficha y panel comparten clave)
   ├─ Nueva migración → useCreateModelMigration → POST .../migrations

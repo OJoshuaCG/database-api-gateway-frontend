@@ -44,9 +44,10 @@ export type MigrationBlockReason = z.infer<typeof migrationBlockReasonSchema>
 /**
  * Banderas de política que el backend calcula y publica (§8).
  *
- * Son la DECISIÓN, no sus insumos: el backend no manda «en cuántas BDs se aplicó» para que el
- * cliente deduzca la regla, porque entonces la misma política viviría escrita a los dos lados
- * del contrato y se desincronizarían. Con esto la UI puede bloquear el campo *antes* de que se
+ * Son la DECISIÓN, no sus insumos: la UI no deduce la regla a partir de «en cuántas BDs se
+ * aplicó», porque entonces la misma política viviría escrita a los dos lados del contrato y se
+ * desincronizarían. (Ese conteo ahora llega —`applied_database_count`—, pero solo para mostrarse:
+ * no gobierna ningún control.) Con esto la UI puede bloquear el campo *antes* de que se
  * escriba, en vez de rechazarlo al guardar.
  *
  * Los tres son opcionales con default permisivo: un backend anterior a este contrato no los
@@ -164,6 +165,22 @@ export const modelMigrationSummarySchema = z.object({
    * simplemente no se pinta, que es el fallo en la dirección segura.
    */
   is_latest: z.boolean().optional().default(false),
+  /**
+   * Cuántas BDs gestionadas tienen esta versión aplicada HOY: fila de historial `applied` **y**
+   * versión cacheada que la alcanza. Lo calcula el backend porque el cliente no puede: solo ve la
+   * versión DECLARADA de cada base (`model_version`), y `stamp`, la adopción o un apply que
+   * arrancó en una versión intermedia la mueven sin que la migración haya corrido. Ver el JSDoc
+   * de `version-adoption.ts`.
+   *
+   * Es un DATO para mostrar, no una regla: para editar o borrar siguen mandando `sql_frozen` y
+   * `deletable`. Sale de la caché del inventario, igual que ellos.
+   *
+   * **Opcional y sin default**: durante un despliegue el frontend puede llegar antes que el
+   * backend, y un campo requerido tumbaría el listado entero. Ausente NO es cero —un `0` inventado
+   * diría «no se aplicó en ninguna»—, así que queda `undefined` y la ficha vuelve a contar
+   * pendientes, que es lo que decía antes de existir el campo.
+   */
+  applied_database_count: z.number().int().nonnegative().optional(),
   ...migrationPolicyFields,
   ...migrationSqlFactFields,
   checksum: z.string(),

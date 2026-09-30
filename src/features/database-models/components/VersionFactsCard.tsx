@@ -23,7 +23,11 @@ import {
   useModelMigration,
   useUpdateModelMigration,
 } from '../hooks/use-model-migrations'
-import { pendingAdoptionOfVersion } from '../version-adoption'
+import {
+  adoptionHeadline,
+  pendingAdoptionOfVersion,
+  type AdoptionHeadline,
+} from '../version-adoption'
 import { MigrationBadges } from './MigrationBadges'
 
 interface VersionFactsCardProps {
@@ -123,6 +127,7 @@ export function VersionFactsCard({
   const update = useUpdateModelMigration(modelId)
 
   const adoption = pendingAdoptionOfVersion(summary.version, databases.data ?? [])
+  const headline = adoptionHeadline(adoption, summary.applied_database_count)
 
   // `reviewed` del detalle antes que el del resumen: al aprobar, `useUpdateModelMigration` escribe
   // el detalle con `setQueryData` e INVALIDA el listado. Leyéndolo solo del resumen, la insignia
@@ -181,11 +186,13 @@ export function VersionFactsCard({
           className="flex flex-wrap items-center gap-1.5"
         />
 
-        {/* 3 — Adopción registrada. NO dice «aplicada»: ver el JSDoc de `version-adoption.ts`. */}
+        {/* 3 — Adopción registrada. Dice «aplicada» solo con el conteo del backend; sin él,
+            cuenta pendientes. Ver el JSDoc de `version-adoption.ts`. */}
         <AdoptionRow
           modelId={modelId}
           version={summary.version}
           adoption={adoption}
+          headline={headline}
           isLoading={databases.isLoading}
           isError={databases.isError}
           onRetry={() => void databases.refetch()}
@@ -406,6 +413,7 @@ interface AdoptionRowProps {
   modelId: number
   version: string
   adoption: ReturnType<typeof pendingAdoptionOfVersion>
+  headline: AdoptionHeadline
   isLoading: boolean
   isError: boolean
   onRetry: () => void
@@ -414,15 +422,17 @@ interface AdoptionRowProps {
 }
 
 /**
- * «Pendiente en N de M BDs», más los dos booleanos por versión que sí decide el backend.
+ * «Aplicada en N de M BDs» —o «pendiente en N de M» contra un backend que todavía no publica
+ * `applied_database_count`—, más los dos booleanos por versión que sí decide el backend.
  *
- * El número grande es el de **pendientes** y no un «aplicada en N»: es el único directo del
- * backend y el único que lleva a una acción. El porqué largo está en `version-adoption.ts`.
+ * «Aplicada» se lee TAL CUAL del backend; nunca se deriva de `model_version`, que es la versión
+ * declarada. El porqué largo está en `version-adoption.ts`.
  */
 function AdoptionRow({
   modelId,
   version,
   adoption,
+  headline,
   isLoading,
   isError,
   onRetry,
@@ -447,15 +457,25 @@ function AdoptionRow({
           <span className="flex items-center gap-2 text-muted-foreground">
             <Spinner className="h-4 w-4" /> Cargando…
           </span>
-        ) : adoption.total === 0 ? (
+        ) : headline.of === 0 ? (
           <span className="text-muted-foreground">
-            Ninguna BD activa usa este blueprint todavía.
+            {headline.kind === 'applied'
+              ? 'Ninguna BD usa este blueprint todavía.'
+              : 'Ninguna BD activa usa este blueprint todavía.'}
+          </span>
+        ) : headline.kind === 'applied' ? (
+          <span className="text-foreground">
+            <code>{version}</code> está{' '}
+            <strong className="tabular-nums">
+              aplicada en {headline.applied} de {headline.of}
+            </strong>{' '}
+            BD(s).
           </span>
         ) : (
           <span className="text-foreground">
             <code>{version}</code> figura{' '}
             <strong className="tabular-nums">
-              pendiente en {adoption.pending} de {adoption.total}
+              pendiente en {headline.pending} de {headline.of}
             </strong>{' '}
             BD(s).
           </span>
@@ -496,9 +516,23 @@ function AdoptionRow({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Es la copia local del gateway, no una lectura del motor: una BD stampeada, adoptada o dada
-        de alta declarando su versión aparece al día <strong>sin haber ejecutado este SQL</strong>.
-        {adoption.excluded > 0 &&
+        {headline.kind === 'applied' ? (
+          // El conteo del backend ya exige historial de aplicación: una BD solo stampeada no entra.
+          <>
+            Es la copia local del gateway, no una lectura del motor: cuenta las BDs cuyo historial
+            registra este SQL como aplicado y cuya versión registrada todavía la alcanza.
+          </>
+        ) : (
+          <>
+            Es la copia local del gateway, no una lectura del motor: una BD stampeada, adoptada o
+            dada de alta declarando su versión aparece al día{' '}
+            <strong>sin haber ejecutado este SQL</strong>.
+          </>
+        )}
+        {/* Solo al contar pendientes: el conteo de aplicadas del backend no filtra por estado, así
+            que esas BDs SÍ están dentro de su denominador. */}
+        {headline.kind === 'pending' &&
+          adoption.excluded > 0 &&
           ` ${adoption.excluded} BD(s) quedan fuera del conteo por no estar activas.`}{' '}
         <Link to={statusUrl} className="text-primary hover:underline">
           Ver estado por BD →

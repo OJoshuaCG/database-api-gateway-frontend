@@ -1,9 +1,10 @@
 import type { ModelDatabaseStatus } from '@/lib/contracts'
 
 /**
- * En cuántas BDs del blueprint está PENDIENTE una versión.
+ * En cuántas BDs del blueprint está PENDIENTE una versión y, si el backend lo publica, en cuántas
+ * está APLICADA.
  *
- * ## Por qué no dice «aplicada en N de M»
+ * ## Por qué «aplicada en N de M» no se deriva en el cliente
  *
  * Porque no se puede sostener. La tentación es `Number(model_version) >= Number(version)`, y esa
  * regla **no distingue aplicada de declarada**:
@@ -18,18 +19,23 @@ import type { ModelDatabaseStatus } from '@/lib/contracts'
  *   sería el complemento exacto de «pendiente», no un dato independiente.
  *
  * El backend define «aplicada» como una CONJUNCIÓN —fila de `database_migration_history` con
- * `status=applied` **y** alcance de versión— y **decidió no publicar los insumos**, por escrito:
- * «se devuelve la DECISIÓN, no sus insumos (conteos de historial); si el cliente recibiera "cuántas
- * BDs la aplicaron" y dedujera la regla por su cuenta, tendríamos la misma política escrita a los
- * dos lados del contrato». Derivarla acá es exactamente lo que ese comentario evita, y con una
- * regla peor.
+ * `status=applied` **y** versión cacheada que la alcanza— y los insumos de esa conjunción (el
+ * historial por base) no llegan al listado. Derivarla acá sería escribir la misma política a los
+ * dos lados del contrato, y con una regla peor.
+ *
+ * **Eso cambió con `applied_database_count`**: el backend ahora publica el RESULTADO de la
+ * conjunción por versión en `ModelMigrationSummary`, como dato para mostrar (no gobierna ningún
+ * control: para eso siguen `sql_frozen` y `deletable`). Con él la ficha dice «aplicada en N de M»
+ * leyéndolo tal cual, sin calcular nada. Sin él —un backend anterior durante el despliegue— vuelve
+ * a contar pendientes: `adoptionHeadline` elige, y nunca inventa un cero.
  *
  * Así que esto cuenta **solo lo que el backend afirma**: `pending_versions`, que es una lectura
- * directa. Lo demás lo dicen los booleanos por versión del propio `ModelMigrationSummary`
- * (`block_reason === 'in_use'` → alguna BD está parada EXACTAMENTE en ella; `'partial'` →
- * aplicación parcial sin resolver), que sí están decididos del lado que manda. El valor era
- * `'applied'` hasta v18 y se sigue aceptando como legado, pero un backend al día no lo devuelve:
- * quien lea solo por ese nombre va a creer que la versión no está en uso en ninguna parte.
+ * directa, y `applied_database_count` cuando llega. Lo demás lo dicen los booleanos por versión
+ * del propio `ModelMigrationSummary` (`block_reason === 'in_use'` → alguna BD está parada
+ * EXACTAMENTE en ella; `'partial'` → aplicación parcial sin resolver), que sí están decididos del
+ * lado que manda. El valor era `'applied'` hasta v18 y se sigue aceptando como legado, pero un
+ * backend al día no lo devuelve: quien lea solo por ese nombre va a creer que la versión no está
+ * en uso en ninguna parte.
  *
  * ## Dos límites que la UI tiene que decir, no esconder
  *
@@ -37,10 +43,14 @@ import type { ModelDatabaseStatus } from '@/lib/contracts'
  *    copia local del gateway, sin abrir el motor y sin comprobar que la base exista. El endpoint
  *    por BD, en cambio, con `database_exists: false` lista TODO el blueprint como pendiente. Una
  *    base borrada por fuera del gateway no aparece acá como pendiente aunque no tenga nada.
- * 2. **El denominador excluye lo que no está `active`.** `GET /database-models/{id}/databases`
- *    devuelve todas las filas sin filtrar por estado, así que una base registrada sin
- *    `CREATE DATABASE` (`pending`), en cuarentena (`error`) o archivada contaminaría el conteo.
- *    Se excluyen y se **declaran** en `excluded`: ocultarlas cambiaría el denominador en silencio.
+ *    `applied_database_count` sale de la misma caché y hereda el límite.
+ * 2. **El denominador de pendientes excluye lo que no está `active`.** `GET
+ *    /database-models/{id}/databases` devuelve todas las filas sin filtrar por estado, así que una
+ *    base registrada sin `CREATE DATABASE` (`pending`), en cuarentena (`error`) o archivada
+ *    contaminaría el conteo. Se excluyen y se **declaran** en `excluded`: ocultarlas cambiaría el
+ *    denominador en silencio. `applied_database_count`, en cambio, el backend lo cuenta **sin
+ *    filtrar por estado**, así que su denominador es el de TODAS las filas (`total + excluded`):
+ *    dividirlo por las activas podría dar «aplicada en 3 de 2».
  */
 export interface PendingAdoption {
   /** BDs consideradas: solo `status === 'active'`. */
@@ -92,5 +102,30 @@ export function pendingAdoptionOfVersion(
       environmentId,
       pending: count,
     })),
+  }
+}
+
+/**
+ * La cifra principal de la fila de adopción.
+ *
+ * `applied` solo si el backend publicó `applied_database_count` —ausente es «no lo sé», nunca
+ * cero—; si no, `pending` sobre las activas, que es lo que se decía antes de existir el campo.
+ * Cada una con SU denominador: ver el límite 2 del JSDoc de arriba.
+ */
+export type AdoptionHeadline =
+  | { kind: 'applied'; applied: number; of: number }
+  | { kind: 'pending'; pending: number; of: number }
+
+export function adoptionHeadline(
+  adoption: PendingAdoption,
+  appliedDatabaseCount: number | undefined,
+): AdoptionHeadline {
+  if (appliedDatabaseCount === undefined) {
+    return { kind: 'pending', pending: adoption.pending, of: adoption.total }
+  }
+  return {
+    kind: 'applied',
+    applied: appliedDatabaseCount,
+    of: adoption.total + adoption.excluded,
   }
 }

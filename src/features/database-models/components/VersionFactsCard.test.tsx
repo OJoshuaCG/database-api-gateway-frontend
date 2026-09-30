@@ -153,7 +153,7 @@ describe('VersionFactsCard', () => {
     expect(await screen.findByText(/20 ago 2026/)).toBeInTheDocument()
   })
 
-  it('cuenta PENDIENTES, y nunca dice «aplicada en N»', async () => {
+  it('sin el conteo del backend cuenta PENDIENTES, y nunca deriva un «aplicada en N»', async () => {
     mount({
       databases: [
         database({ id: 1, pending_versions: ['0007'] }),
@@ -161,6 +161,25 @@ describe('VersionFactsCard', () => {
       ],
     })
     expect(await screen.findByText(/pendiente en 1 de 2/)).toBeInTheDocument()
+    expect(screen.queryByText(/aplicada en/)).not.toBeInTheDocument()
+  })
+
+  it('con `applied_database_count` dice «aplicada en N de M», leído tal cual del backend', async () => {
+    mount({
+      summaryOverrides: { applied_database_count: 1 },
+      databases: [
+        database({ id: 1, pending_versions: ['0007'] }),
+        database({ id: 2, pending_versions: [], model_version: '0007' }),
+      ],
+    })
+    expect(await screen.findByText(/aplicada en 1 de 2/)).toBeInTheDocument()
+    expect(screen.queryByText(/pendiente en/)).not.toBeInTheDocument()
+  })
+
+  it('sin `applied_database_count` (backend anterior) conserva el «pendiente en N de M»', async () => {
+    // Ausente no es cero: un «aplicada en 0» inventado diría que no se aplicó en ninguna.
+    mount({ databases: [database({ id: 1, pending_versions: ['0007'] })] })
+    expect(await screen.findByText(/pendiente en 1 de 1/)).toBeInTheDocument()
     expect(screen.queryByText(/aplicada en/)).not.toBeInTheDocument()
   })
 
