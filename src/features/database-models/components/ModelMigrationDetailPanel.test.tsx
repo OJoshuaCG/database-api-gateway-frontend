@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { renderWithProviders } from '@/test/utils'
+import { createTestQueryClient, renderWithProviders } from '@/test/utils'
 import { ModelMigrationDetailPanel } from './ModelMigrationDetailPanel'
 
 const BASE = 'http://localhost/api/v1/database-models/3/migrations/0001'
@@ -75,6 +75,55 @@ describe('ModelMigrationDetailPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Editar' }))
     // El aviso de fix-forward aparece sin haber intentado guardar nada.
     expect(screen.getByText(/aplicó con éxito/)).toBeInTheDocument()
+  })
+
+  describe('mientras se ve el detalle de la versión ANTERIOR (keepPreviousData)', () => {
+    /**
+     * Monta en 0001 y cambia a 0002, cuyo detalle no llega nunca: el hook sigue mostrando el de
+     * 0001. El `queryClient` va explícito porque `AllProviders` crea uno nuevo en cada render, y
+     * el `rerender` perdería la caché —y con ella el dato prestado— sin él.
+     */
+    async function mountAndSwitch(patchSpy = vi.fn()) {
+      server.use(
+        http.get(BASE, () => HttpResponse.json({ data: detail() })),
+        http.get('http://localhost/api/v1/database-models/3/migrations/0002', async () => {
+          await delay('infinite')
+          return HttpResponse.json({ data: detail({ version: '0002' }) })
+        }),
+        http.patch('http://localhost/api/v1/database-models/3/migrations/:version', () => {
+          patchSpy()
+          return HttpResponse.json({ data: detail() })
+        }),
+      )
+      const queryClient = createTestQueryClient()
+      const user = userEvent.setup()
+      const view = renderWithProviders(
+        <ModelMigrationDetailPanel modelId={3} version="0001" onCreateNewVersion={vi.fn()} />,
+        { queryClient },
+      )
+      await user.click(await screen.findByRole('button', { name: 'Editar' }))
+      expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeInTheDocument()
+
+      view.rerender(
+        <ModelMigrationDetailPanel modelId={3} version="0002" onCreateNewVersion={vi.fn()} />,
+      )
+      return { patchSpy }
+    }
+
+    it('deshabilita «Editar»: guardaría sobre la versión que se acaba de dejar', async () => {
+      await mountAndSwitch()
+      // El SQL de 0001 sigue a la vista —es lo que evita el salto—, pero no se puede editar.
+      expect(screen.getByText('Esquema inicial')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Editar' })).toBeDisabled()
+    })
+
+    it('no deja un formulario montado ni envía nada con el detalle prestado', async () => {
+      const { patchSpy } = await mountAndSwitch()
+      // El formulario abierto sobre 0001 se cierra al cambiar de versión, y no hay forma de
+      // reabrirlo hasta que llegue 0002: ningún PATCH puede salir con `data.version` = 0001.
+      expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument()
+      expect(patchSpy).not.toHaveBeenCalled()
+    })
   })
 
   // El borrado, los resultados capturados y las insignias de estado se mudaron a

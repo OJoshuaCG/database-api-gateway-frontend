@@ -24,7 +24,11 @@ import {
 import { toApiError, type ApiError } from '@/lib/api/errors'
 import { cn, formatDateTime } from '@/lib/utils'
 import { useDebouncedValue } from '@/lib/utils/use-debounced-value'
-import { useModelMigration, useModelMigrationSearch } from '../hooks/use-model-migrations'
+import {
+  isStaleMigrationDetail,
+  useModelMigration,
+  useModelMigrationSearch,
+} from '../hooks/use-model-migrations'
 import {
   DEFAULT_MIGRATION_SEARCH_FILTERS,
   MIGRATION_SEARCH_LAST_PRESETS,
@@ -455,7 +459,9 @@ function MigrationSearchVersionModal({
   const highlightLine = line ?? hit.snippets[0]?.line
 
   let body: ReactNode
-  if (detail.isLoading) {
+  // Con otro `hit` sobre el mismo visor, el hook sostiene el SQL de la versión anterior
+  // (`keepPreviousData`): resaltar esta línea sobre aquel SQL señalaría código de otra versión.
+  if (detail.isLoading || isStaleMigrationDetail(detail.data, hit.version)) {
     body = (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Spinner className="h-4 w-4" /> Cargando el SQL de la versión…

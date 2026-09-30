@@ -85,12 +85,35 @@ export function useModelMigrationSearch(
   })
 }
 
+/**
+ * Detalle de UNA versión.
+ *
+ * `keepPreviousData` para que cambiar de versión no desmonte el panel de SQL y la página no salte:
+ * mientras llega la versión nueva se sigue viendo la anterior. **Eso tiene un precio que pagan los
+ * consumidores**: durante ese intervalo `data` es de OTRA versión, y cualquier mutación que lea
+ * `data.version` escribiría sobre la versión equivocada. Por eso todo consumidor compara
+ * `data.version` con la versión pedida (`isStaleMigrationDetail`) antes de habilitar una acción o
+ * de pintar un dato que solo trae el detalle.
+ */
 export function useModelMigration(modelId: number, version: string, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.databaseModels.migrationDetail(modelId, version),
     queryFn: ({ signal }) => getModelMigration(modelId, version, signal),
     enabled,
+    placeholderData: keepPreviousData,
   })
+}
+
+/**
+ * ¿El detalle en pantalla es de otra versión que la pedida? Pasa mientras `keepPreviousData`
+ * sostiene la anterior. Se compara la versión y no solo `isPlaceholderData` porque es el dato del
+ * que dependen las mutaciones: mientras no coincida, no hay nada sobre lo que actuar.
+ */
+export function isStaleMigrationDetail(
+  data: { version: string } | undefined,
+  version: string,
+): boolean {
+  return data !== undefined && data.version !== version
 }
 
 export function useCreateModelMigration(modelId: number) {

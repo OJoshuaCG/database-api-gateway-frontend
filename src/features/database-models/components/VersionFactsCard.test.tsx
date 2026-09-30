@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { renderWithProviders } from '@/test/utils'
+import { createTestQueryClient, renderWithProviders } from '@/test/utils'
 import type { ModelMigrationSummary } from '@/lib/contracts'
 import { VersionFactsCard } from './VersionFactsCard'
 
 const DETAIL_URL = 'http://localhost/api/v1/database-models/3/migrations/0007'
 const DATABASES_URL = 'http://localhost/api/v1/database-models/3/databases'
+/** `updated_at` 2026-08-20 formateado, con o sin datos de locale `es` en el ICU de Node. */
+const EDITED_AT = /(20 ago|Aug 20),? 2026/
 
 function summary(overrides: Partial<ModelMigrationSummary> = {}): ModelMigrationSummary {
   return {
@@ -321,6 +323,49 @@ describe('VersionFactsCard', () => {
     })
     const link = await screen.findByRole('link', { name: /app_prod/ })
     expect(link).toHaveAttribute('href', '/managed-databases/1/migrations/0007/select-results')
+  })
+
+  it('con el detalle de la versión ANTERIOR a la vista, cierra las mutaciones y no pinta sus datos', async () => {
+    // `keepPreviousData` sostiene el detalle de 0007 mientras llega el de 0008. Ese detalle no
+    // describe esta ficha: su `updated_at` y su tamaño serían de otra versión, y `isSuccess`
+    // seguiría en `true` habilitando acciones sobre una versión de la que todavía no se sabe nada.
+    server.use(
+      http.get(DETAIL_URL, () =>
+        HttpResponse.json({ data: detail({ updated_at: '2026-08-20T12:30:00Z' }) }),
+      ),
+      http.get('http://localhost/api/v1/database-models/3/migrations/0008', async () => {
+        await delay('infinite')
+        return HttpResponse.json({ data: detail({ version: '0008' }) })
+      }),
+      http.get(DATABASES_URL, () => HttpResponse.json({ data: [database()] })),
+      http.get('http://localhost/api/v1/environments', () => HttpResponse.json({ data: [] })),
+    )
+    // `queryClient` explícito: sin él, el `rerender` crearía otro y perdería la caché.
+    const queryClient = createTestQueryClient()
+    const view = renderWithProviders(
+      <VersionFactsCard
+        modelId={3}
+        summary={summary({ reviewed: false })}
+        latestVersion="0008"
+        onRequestDelete={vi.fn()}
+      />,
+      { queryClient },
+    )
+    // El formato depende del ICU de Node: sin datos de `es` sale «Aug 20, 2026».
+    expect(await screen.findByText(EDITED_AT)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar la versión 0007' })).toBeEnabled()
+
+    view.rerender(
+      <VersionFactsCard
+        modelId={3}
+        summary={summary({ id: 8, version: '0008', reviewed: false })}
+        latestVersion="0008"
+        onRequestDelete={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Eliminar la versión 0008' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Revisar y aprobar' })).toBeDisabled()
+    expect(screen.queryByText(EDITED_AT)).not.toBeInTheDocument()
   })
 
   it('una versión sin captura no ofrece resultados capturados', async () => {

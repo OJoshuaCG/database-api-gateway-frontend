@@ -18,7 +18,11 @@ import {
   type ModelMigrationSummary,
 } from '@/lib/contracts'
 import { useModelDatabases } from '../hooks/use-database-models'
-import { useModelMigration, useUpdateModelMigration } from '../hooks/use-model-migrations'
+import {
+  isStaleMigrationDetail,
+  useModelMigration,
+  useUpdateModelMigration,
+} from '../hooks/use-model-migrations'
 import { pendingAdoptionOfVersion } from '../version-adoption'
 import { MigrationBadges } from './MigrationBadges'
 
@@ -109,6 +113,11 @@ export function VersionFactsCard({
   // Misma clave que el panel de detalle: los dos observadores se deduplican en un solo fetch. De
   // aquí salen los ÚNICOS dos datos que el resumen no trae: `updated_at` y el tamaño del SQL.
   const detail = useModelMigration(modelId, summary.version, true)
+  // Mientras llega el detalle de la versión nueva, el hook sostiene el de la ANTERIOR
+  // (`keepPreviousData`). Ese detalle no describe esta ficha: se trata como «todavía cargando».
+  const detailStale = isStaleMigrationDetail(detail.data, summary.version)
+  const freshDetail = detailStale ? undefined : detail.data
+  const detailPending = detail.isLoading || detailStale
   const databases = useModelDatabases(modelId, true)
   const environmentMap = useEnvironmentMap()
   const update = useUpdateModelMigration(modelId)
@@ -118,7 +127,7 @@ export function VersionFactsCard({
   // `reviewed` del detalle antes que el del resumen: al aprobar, `useUpdateModelMigration` escribe
   // el detalle con `setQueryData` e INVALIDA el listado. Leyéndolo solo del resumen, la insignia
   // seguiría diciendo «sin revisar» un round-trip después de que el botón dejara de girar.
-  const reviewed = detail.data?.reviewed ?? summary.reviewed
+  const reviewed = freshDetail?.reviewed ?? summary.reviewed
   const needsReview = reviewed === false
   const capturesSelects = summary.capture_selects === true
   const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
@@ -127,7 +136,9 @@ export function VersionFactsCard({
   // La versión existe en el listado pero el detalle no la encuentra: se borró por debajo. No es un
   // error de red que convenga reintentar en silencio.
   const vanished = detail.isError
-  const canMutate = detail.isSuccess && !vanished
+  // `isSuccess` también es `true` con el detalle prestado de la versión anterior: sin el
+  // `!detailStale`, «Revisar y aprobar» y «Eliminar» se habilitarían antes de saber nada de esta.
+  const canMutate = detail.isSuccess && !vanished && !detailStale
 
   const deleteHint = DELETE_BLOCK_HINT[summary.block_reason ?? 'none'](latestVersion)
 
@@ -166,7 +177,7 @@ export function VersionFactsCard({
         <MigrationBadges
           migration={summary}
           density="full"
-          sourceEngine={detail.data?.source_engine ?? null}
+          sourceEngine={freshDetail?.source_engine ?? null}
           className="flex flex-wrap items-center gap-1.5"
         />
 
@@ -186,21 +197,21 @@ export function VersionFactsCard({
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <Fact label="Creada">{formatDateTime(summary.created_at)}</Fact>
           <Fact label="Editada">
-            {detail.isLoading ? (
+            {detailPending ? (
               <Skeleton />
-            ) : detail.data && detail.data.updated_at !== summary.created_at ? (
-              formatDateTime(detail.data.updated_at)
-            ) : detail.data ? (
+            ) : freshDetail && freshDetail.updated_at !== summary.created_at ? (
+              formatDateTime(freshDetail.updated_at)
+            ) : freshDetail ? (
               'sin ediciones'
             ) : (
               '—'
             )}
           </Fact>
           <Fact label="SQL base">
-            {detail.isLoading ? (
+            {detailPending ? (
               <Skeleton />
-            ) : detail.data ? (
-              formatBytes(new TextEncoder().encode(detail.data.up_sql).length)
+            ) : freshDetail ? (
+              formatBytes(new TextEncoder().encode(freshDetail.up_sql).length)
             ) : (
               '—'
             )}

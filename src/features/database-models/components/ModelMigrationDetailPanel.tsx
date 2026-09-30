@@ -17,6 +17,7 @@ import {
   type ModelMigrationPatch,
 } from '@/lib/contracts'
 import {
+  isStaleMigrationDetail,
   useModelMigration,
   usePreviewModelMigrationEdit,
   useUpdateModelMigration,
@@ -172,7 +173,16 @@ export function ModelMigrationDetailPanel({
   }
   if (!data) return null
 
+  /*
+   * El detalle en pantalla puede ser el de la versión ANTERIOR: el hook conserva los datos previos
+   * mientras llega la nueva (`keepPreviousData`), para que el panel no se desmonte en cada cambio.
+   * Todo lo que escribe usa `data.version`, así que en ese intervalo guardaría sobre la versión
+   * que el operador acaba de dejar. Mientras dure, nada se puede editar ni enviar.
+   */
+  const stale = isStaleMigrationDetail(data, version)
+
   const handleSubmitEdit = (body: ModelMigrationPatch) => {
+    if (stale) return
     setSubmitError(null)
     setFrozen(null)
     setPartial(null)
@@ -231,7 +241,7 @@ export function ModelMigrationDetailPanel({
 
   /** Salida 2 del 409: pide el preview y, con él, abre el flujo de dos pasos. */
   const startOverride = () => {
-    if (!frozen) return
+    if (!frozen || stale) return
     setPreviewError(null)
     const { sqlBody } = splitPatchBody(frozen.body)
     previewEdit.mutate(
@@ -262,7 +272,7 @@ export function ModelMigrationDetailPanel({
       {/* Card de detalles: SQL en lectura y, bajo demanda, edición */}
       <Card>
         <CardContent className="flex flex-col gap-4">
-          {editing ? (
+          {editing && !stale ? (
             <>
               <ModelMigrationForm
                 // La `key` incluye el modo: al salir y volver a entrar, el formulario nace de nuevo
@@ -302,7 +312,7 @@ export function ModelMigrationDetailPanel({
 
               {/* Inline y debajo del formulario, no en un modal encima: el borrador tiene que
                   seguir montado y a la vista. */}
-              {partial && (
+              {partial && !stale && (
                 <MigrationPartialProgressPanel
                   modelId={modelId}
                   version={data.version}
@@ -311,7 +321,7 @@ export function ModelMigrationDetailPanel({
                 />
               )}
 
-              {frozen && (
+              {frozen && !stale && (
                 <MigrationFreezePanel
                   modelId={modelId}
                   version={data.version}
@@ -333,6 +343,7 @@ export function ModelMigrationDetailPanel({
                   variant="outline"
                   size="sm"
                   className="ml-auto"
+                  disabled={stale}
                   onClick={() => setEditing(true)}
                 >
                   Editar
@@ -376,7 +387,7 @@ export function ModelMigrationDetailPanel({
         </CardContent>
       </Card>
 
-      {overridePreview && split && (
+      {overridePreview && split && !stale && (
         <MigrationEditOverrideDialog
           modelId={modelId}
           version={data.version}
