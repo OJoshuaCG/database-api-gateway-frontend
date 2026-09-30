@@ -17,7 +17,7 @@
  *    `errors.ts` lo toca. Para eso está `classifyBatchItem`.
  */
 
-/** Los 14 códigos que el backend emite para este módulo. Vocabulario cerrado. */
+/** Los 15 códigos que el backend emite para este módulo. Vocabulario cerrado. */
 export const COLLATION_ERROR_CODES = [
   'collation.scope_not_allowed',
   'collation.batch_no_eligible_databases',
@@ -33,6 +33,7 @@ export const COLLATION_ERROR_CODES = [
   'collation.version_partial_selection',
   'collation.version_too_large',
   'collation.version_quarantined_before_batch',
+  'collation.version_foreign_keys_unreadable',
 ] as const
 export type CollationErrorCode = (typeof COLLATION_ERROR_CODES)[number]
 
@@ -61,6 +62,8 @@ const MESSAGES: Record<CollationErrorCode, string> = {
   'collation.version_too_large': 'El SQL de la versión supera el tope de tamaño.',
   'collation.version_quarantined_before_batch':
     'Alguna base está en cuarentena: revisala antes de versionar.',
+  'collation.version_foreign_keys_unreadable':
+    'No se pudieron leer las FKs de una base del lote; reintentá.',
 }
 
 /** Traduce un código, o `null` si no es de este módulo (o si no viene ninguno). */
