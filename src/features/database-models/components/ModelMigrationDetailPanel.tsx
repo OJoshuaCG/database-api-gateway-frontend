@@ -152,9 +152,13 @@ export function ModelMigrationDetailPanel({
     )
   }
   if (isLoading) {
+    // Con `keepPreviousData` esto solo se ve en la primera carga o al entrar por `?version=`,
+    // pero ahí el card de una línea colapsaba la página y todo lo de abajo subía, para bajar de
+    // golpe al llegar el SQL. Se reserva un alto parecido al del card en lectura (nombre + dos
+    // `CodeBlock`) con el spinner dentro, así el salto al llegar los datos es mínimo.
     return (
       <Card>
-        <CardContent>
+        <CardContent className="flex min-h-80 items-center justify-center">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="h-4 w-4" /> Cargando versión…
           </div>
