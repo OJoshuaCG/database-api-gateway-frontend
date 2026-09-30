@@ -150,6 +150,35 @@ entre apps de Dokploy no está garantizado, eso dejaría la SPA entera caída po
 que tardó un segundo de más. Con la variable, nginx arranca igual y lo único que falla
 mientras tanto son las llamadas a la API.
 
+### Tiempos de espera del proxy
+
+El camino de producción es **Traefik → nginx de este contenedor → uvicorn**, y cada salto tiene su
+propio tope. El de nginx lo fija `nginx.conf.template`, por `location`:
+
+| Rutas | `proxy_read_timeout` |
+|---|---|
+| `POST /api/v1/managed-databases/{id}/migrations/{apply,rollback,reconcile-partial}` | **3600s** |
+| `POST /api/v1/database-models/{id}/migrations/apply-all` | **3600s** |
+| `POST /api/v1/schema-comparisons/{id}/{adopt,execute}` | **3600s** |
+| Todo lo demás bajo `/api/`, `/mcp` y `/health` | 300s |
+
+Las seis primeras son operaciones **síncronas** contra el motor que pueden superar los 5 minutos en
+bases grandes. Con 300s, nginx devolvía un 504 mientras uvicorn **seguía ejecutando**: la operación
+terminaba bien y la UI decía que había fallado. Van en una `location` regex anclada con `$` (para
+que `execute` no arrastre a `execute-preview`), y `proxy_read_timeout` salió del include
+`upstream-headers.inc.template` a cada `location`, porque nginx no admite la directiva dos veces en
+el mismo contexto. `proxy_send_timeout` sigue en el include, a 300s: el cuerpo de estas requests
+es chico.
+
+Aun con el tope alto, el frontend no da por fallida una operación que no respondió: un 504, o un
+5xx cuyo cuerpo no es del backend (la página HTML de un proxy), se muestra como «probablemente
+sigue en curso» y se consulta el estado (`ApiError.isOutcomeUncertain`, ver `maintenance.md`).
+
+⚠️ **Subir este tope no alcanza si Traefik corta antes.** Con el **ruteo en Traefik** de arriba,
+este nginx ni siquiera participa en `/api`. En los dos casos, si Traefik tiene configurado un
+`respondingTimeouts`/`forwardingTimeouts` más corto que la operación, es ese el que manda: revisalo
+en la configuración de Dokploy antes de dar por resuelto un 504.
+
 ### El MCP no se ve afectado por el CSRF, pero sí por el ruteo
 
 El servidor MCP autentica con `Authorization: Bearer dbgw.<id>.<secreto>`, que produce un

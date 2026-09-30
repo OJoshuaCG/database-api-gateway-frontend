@@ -44,10 +44,40 @@ server {
   # acá no se recorta ningún prefijo.
   resolver ${API_RESOLVER} valid=10s ipv6=off;
 
+  # Operaciones SÍNCRONAS que tocan el motor y pueden tardar más de 5 minutos: apply, rollback y
+  # reconcile-partial de una BD, el apply masivo de un blueprint, y adoptar/ejecutar una
+  # comparación. Con los 300s generales, nginx cortaba con un 504 mientras uvicorn SEGUÍA
+  # ejecutando: la operación terminaba bien y el operador veía «no se pudo», con la tentación de
+  # relanzarla sobre una base a medio migrar. El frontend ya trata ese 504 como «probablemente
+  # sigue en curso» (`ApiError.isOutcomeUncertain`); esto evita llegar a él.
+  #
+  # Una location REGEX y no un prefijo más largo: el `{id}` va en medio del path. Las regex se
+  # evalúan después de elegir el prefijo más largo (`/api/`) y la primera que casa gana, así que
+  # esta tiene prioridad sin tocar la de abajo. El `$` final ancla el path: sin él, `execute`
+  # casaría también con `execute-preview`, que es de solo lectura y no necesita una hora. La
+  # location mira el path sin query string, así que `?dry_run=true` casa igual.
+  #
+  # No distingue método: nginx no puede elegir `location` por verbo, y estos paths solo existen
+  # como POST en el backend.
+  #
+  # El valor va literal porque `proxy_read_timeout` no acepta variables. El `$` del ancla y los
+  # `$upstream`/`$request_uri` sobreviven a `envsubst` por el mismo motivo que los de las demás
+  # locations: `NGINX_ENVSUBST_FILTER` solo sustituye las `API_*`.
+  #
+  # ⚠️ Esto solo sube el tope de ESTE salto. Traefik (delante) y uvicorn (detrás) tienen los
+  # suyos: ver docs/dokploy.md §3, «Tiempos de espera del proxy».
+  location ~ ^/api/v1/(managed-databases/[0-9]+/migrations/(apply|rollback|reconcile-partial)|database-models/[0-9]+/migrations/apply-all|schema-comparisons/[0-9]+/(adopt|execute))$ {
+    set $upstream ${API_UPSTREAM};
+    proxy_pass $upstream$request_uri;
+    include /etc/nginx/conf.d/upstream-headers.inc;
+    proxy_read_timeout 3600s;
+  }
+
   location /api/ {
     set $upstream ${API_UPSTREAM};
     proxy_pass $upstream$request_uri;
     include /etc/nginx/conf.d/upstream-headers.inc;
+    proxy_read_timeout 300s;
   }
 
   # Servidor MCP. Va sin barra final a propósito: `POST /mcp` (sin barra) es la URL natural de un
@@ -56,6 +86,7 @@ server {
     set $upstream ${API_UPSTREAM};
     proxy_pass $upstream$request_uri;
     include /etc/nginx/conf.d/upstream-headers.inc;
+    proxy_read_timeout 300s;
   }
 
   # Health del backend, para `VITE_HEALTH_URL=/health`. Prefijo y NO coincidencia exacta: el
@@ -66,6 +97,7 @@ server {
     set $upstream ${API_UPSTREAM};
     proxy_pass $upstream$request_uri;
     include /etc/nginx/conf.d/upstream-headers.inc;
+    proxy_read_timeout 300s;
   }
 
   # index.html nunca se cachea: sirve como entrypoint de cada deploy.

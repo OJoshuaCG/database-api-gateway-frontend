@@ -29,5 +29,7 @@ proxy_http_version 1.1;
 client_max_body_size 0;
 proxy_request_buffering off;
 proxy_buffering off;
-proxy_read_timeout 300s;
 proxy_send_timeout 300s;
+# `proxy_read_timeout` NO vive acá: lo declara cada `location` de nginx.conf.template. nginx no
+# admite la misma directiva dos veces en un contexto, así que dejarlo en este include impediría
+# que la `location` de las operaciones largas lo suba a 3600s. Ver el comentario de esa location.
