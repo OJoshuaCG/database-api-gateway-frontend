@@ -423,6 +423,12 @@ export class ApiError extends Error {
   readonly collationContext?: CollationErrorContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
+  /**
+   * El cuerpo del error NO era el envelope del backend (`{ detail }`): vacío, texto plano o la
+   * página HTML de un proxy (nginx, Traefik). Es la huella de que la respuesta la escribió algo
+   * que está DELANTE del backend, y por tanto de que el backend puede no haber terminado.
+   */
+  readonly unrecognizedBody?: boolean
 
   constructor(args: {
     status: number
@@ -459,6 +465,7 @@ export class ApiError extends Error {
     databaseModelContext?: DatabaseModelErrorContext
     collationContext?: CollationErrorContext
     requestId?: string
+    unrecognizedBody?: boolean
   }) {
     super(args.message)
     this.name = 'ApiError'
@@ -495,6 +502,7 @@ export class ApiError extends Error {
     this.databaseModelContext = args.databaseModelContext
     this.collationContext = args.collationContext
     this.requestId = args.requestId
+    this.unrecognizedBody = args.unrecognizedBody
   }
 
   /** Rate limit del backend excedido (§3, `from-snapshot` 10/min). */
@@ -510,6 +518,24 @@ export class ApiError extends Error {
   /** Operación contra el motor destino que no se pudo completar (§3 🔌). */
   get isEngineError(): boolean {
     return this.status === 502 || this.status === 504
+  }
+
+  /**
+   * No se sabe si la operación se ejecutó: **puede seguir corriendo** en el servidor.
+   *
+   * Dos huellas, y ninguna dice «falló»:
+   * - **504**, lo emita quien lo emita. El del backend es el motor destino que no contestó a
+   *   tiempo; el de un proxy es que el proxy dejó de esperar, pero uvicorn sigue con la request.
+   * - **Cualquier 5xx con un cuerpo que no es del backend** (HTML de nginx o Traefik, vacío): lo
+   *   escribió un intermediario, así que el backend no llegó a decir nada.
+   *
+   * Un 502 CON envelope del backend no entra: es el motor que rechazó la conexión, antes de
+   * ejecutar nada. Quien trate una operación irreversible debe decir «probablemente sigue en
+   * curso» y consultar el estado, nunca «no se pudo» (que invita a reintentarla).
+   */
+  get isOutcomeUncertain(): boolean {
+    if (this.status === 504) return true
+    return this.status >= 500 && this.unrecognizedBody === true
   }
 }
 
@@ -1374,7 +1400,8 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
     }
   }
 
-  return new ApiError({ status, message: fallback, requestId })
+  // Sin `detail` utilizable: el cuerpo no es un error del backend (ver `unrecognizedBody`).
+  return new ApiError({ status, message: fallback, requestId, unrecognizedBody: true })
 }
 
 /** Error de red (fetch rechazado: offline, DNS, CORS preflight bloqueado…). */

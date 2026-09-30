@@ -84,6 +84,34 @@ describe('normalizeApiError', () => {
   })
 })
 
+describe('isOutcomeUncertain (la operación puede seguir en curso)', () => {
+  it('un 504 es incierto, venga del backend o de un proxy', () => {
+    expect(normalizeApiError(504, { detail: { msg: 'timeout del motor' } }).isOutcomeUncertain).toBe(
+      true,
+    )
+    // Cuerpo HTML de nginx/Traefik: el cliente no lo puede parsear y llega como `{}`.
+    expect(normalizeApiError(504, {}).isOutcomeUncertain).toBe(true)
+  })
+
+  it('un 5xx con un cuerpo que no es del backend es incierto', () => {
+    const error = normalizeApiError(502, {})
+    expect(error.unrecognizedBody).toBe(true)
+    expect(error.isOutcomeUncertain).toBe(true)
+  })
+
+  it('un 502 o 500 CON envelope del backend no es incierto: el backend respondió', () => {
+    expect(normalizeApiError(502, { detail: { msg: 'motor caído' } }).isOutcomeUncertain).toBe(
+      false,
+    )
+    expect(normalizeApiError(500, { detail: 'boom' }).isOutcomeUncertain).toBe(false)
+  })
+
+  it('un 4xx nunca es incierto, aunque el cuerpo no sea del backend', () => {
+    expect(normalizeApiError(404, {}).isOutcomeUncertain).toBe(false)
+    expect(networkError().isOutcomeUncertain).toBe(false)
+  })
+})
+
 describe('networkError / toApiError', () => {
   it('networkError es status 0', () => {
     expect(networkError().status).toBe(0)

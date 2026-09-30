@@ -1,14 +1,17 @@
-import { describe, expect, it } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { act, renderHook, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
 import { isDryRunResult } from '@/lib/contracts'
+import { queryKeys } from '@/lib/api/query-keys'
+import { UNCERTAIN_RUN_DESCRIPTION } from '../uncertain-run'
 import {
   useApplyMigrations,
   useMigrationStatus,
   useReconcilePartial,
+  useRollbackMigration,
   useReconcilePreview,
   useStampMigration,
 } from './use-db-migrations'
@@ -356,5 +359,102 @@ describe('useReconcilePartial', () => {
     expect(result.current.data?.fully_reconciled).toBe(true)
     expect(result.current.data?.remaining_applied_statements).toBe(0)
     expect(result.current.data?.results[0]?.seq).toBe(6)
+  })
+})
+
+/**
+ * La página de error de un proxy: HTML, sin `detail`. Es lo que llega cuando nginx o Traefik se
+ * cansan de esperar a uvicorn, que sigue ejecutando la request por detrás.
+ */
+function proxyTimeout(status = 504) {
+  return new HttpResponse('<html><body><h1>504 Gateway Time-out</h1></body></html>', {
+    status,
+    headers: { 'Content-Type': 'text/html' },
+  })
+}
+
+describe('operaciones sin respuesta (504 / página de un proxy)', () => {
+  const MIGRATIONS = 'http://localhost/api/v1/managed-databases/5/migrations'
+
+  function mountWithSpy<T>(hook: () => T) {
+    const client = createTestQueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const view = renderHook(hook, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <AllProviders queryClient={client}>{children}</AllProviders>
+      ),
+    })
+    return { ...view, invalidate }
+  }
+
+  it('apply: dice que probablemente sigue en curso, NO «no se pudieron aplicar», e invalida el estado', async () => {
+    server.use(http.post(`${MIGRATIONS}/apply`, () => proxyTimeout()))
+    const { result, invalidate } = mountWithSpy(() => useApplyMigrations(5))
+
+    act(() => {
+      result.current.mutate({ dryRun: false })
+    })
+
+    expect(await screen.findByText('Sin respuesta del apply')).toBeInTheDocument()
+    expect(screen.getByText(UNCERTAIN_RUN_DESCRIPTION)).toBeInTheDocument()
+    expect(screen.queryByText('No se pudieron aplicar las migraciones')).not.toBeInTheDocument()
+    // El prefijo cubre status, historial y detalle: el refetch del status cuenta cómo terminó.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.managedDatabases.all })
+  })
+
+  it('apply en dry-run: un preview que no llegó no escribió nada, y se dice como error', async () => {
+    server.use(http.post(`${MIGRATIONS}/apply`, () => proxyTimeout()))
+    const { result, invalidate } = mountWithSpy(() => useApplyMigrations(5))
+
+    act(() => {
+      result.current.mutate({ dryRun: true })
+    })
+
+    expect(await screen.findByText('No se pudieron aplicar las migraciones')).toBeInTheDocument()
+    expect(screen.queryByText('Sin respuesta del apply')).not.toBeInTheDocument()
+    expect(invalidate).not.toHaveBeenCalled()
+  })
+
+  it('rollback: un 502 con la página HTML del proxy también es incierto', async () => {
+    server.use(http.post(`${MIGRATIONS}/rollback`, () => proxyTimeout(502)))
+    const { result } = mountWithSpy(() => useRollbackMigration(5))
+
+    act(() => {
+      result.current.mutate({ confirmVersion: '0002' })
+    })
+
+    expect(await screen.findByText('Sin respuesta del rollback')).toBeInTheDocument()
+    expect(screen.queryByText('No se pudo revertir la migración')).not.toBeInTheDocument()
+  })
+
+  it('rollback: un 502 CON envelope del backend sigue siendo un fallo', async () => {
+    // El backend respondió —el motor rechazó la conexión antes de ejecutar nada—: ahí «no se
+    // pudo» es verdad.
+    server.use(
+      http.post(`${MIGRATIONS}/rollback`, () =>
+        HttpResponse.json({ detail: { msg: 'Motor inaccesible' } }, { status: 502 }),
+      ),
+    )
+    const { result } = mountWithSpy(() => useRollbackMigration(5))
+
+    act(() => {
+      result.current.mutate({ confirmVersion: '0002' })
+    })
+
+    expect(await screen.findByText('No se pudo revertir la migración')).toBeInTheDocument()
+    expect(screen.queryByText('Sin respuesta del rollback')).not.toBeInTheDocument()
+  })
+
+  it('reconcile-partial: un 504 es incierto', async () => {
+    server.use(http.post(`${MIGRATIONS}/reconcile-partial`, () => proxyTimeout()))
+    const { result, invalidate } = mountWithSpy(() => useReconcilePartial(5))
+
+    act(() => {
+      result.current.mutate({ confirmVersion: '0002' })
+    })
+
+    expect(await screen.findByText('Sin respuesta de la reconciliación')).toBeInTheDocument()
+    expect(screen.queryByText('No se pudo reconciliar')).not.toBeInTheDocument()
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.managedDatabases.all })
   })
 })

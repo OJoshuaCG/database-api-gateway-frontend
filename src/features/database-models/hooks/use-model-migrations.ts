@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
 import { invalidateDatabaseViews } from '@/features/managed-databases/invalidate'
+import { handleUncertainRun } from '@/features/managed-databases/uncertain-run'
 import { classifyItem } from '@/features/environments'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
@@ -244,8 +245,22 @@ export function useApplyAllMigrations(modelId: number) {
         }
       }
     },
-    onError: (error) =>
-      toast.error('No se pudo ejecutar la aplicación masiva', toApiError(error).message),
+    onError: (error, options) => {
+      // Un lote real que no respondió puede seguir corriendo base por base: se invalida lo mismo
+      // que tras un éxito, para que el estado por BD cuente cuáles llegó a aplicar.
+      if (
+        !options.dryRun &&
+        handleUncertainRun(error, toast, 'Sin respuesta de la aplicación masiva', () => {
+          invalidateDatabaseViews(queryClient, null)
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.databaseModels.migrations(modelId),
+          })
+        })
+      ) {
+        return
+      }
+      toast.error('No se pudo ejecutar la aplicación masiva', toApiError(error).message)
+    },
   })
 }
 

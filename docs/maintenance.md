@@ -198,6 +198,14 @@ falta; no se quita de donde ya estaba.
   palabra nueva en un campo de ayuda tumba la respuesta completa**. Cuando el valor solo gobierna
   un texto —`block_reason`, `reason` de una lista bloqueante— acepta también los valores viejos y
   deja el legado documentado, en vez de estrechar el enum al vocabulario del día.
+- **Un 504 no es «falló»: es «no sé».** Apply, rollback, `reconcile-partial` y el apply masivo
+  son síncronos y pueden tardar más que el timeout de un proxy; cuando el proxy corta, uvicorn
+  **sigue** ejecutando. `ApiError.isOutcomeUncertain` reconoce esa huella —un 504, o cualquier 5xx
+  cuyo cuerpo no es el envelope del backend (HTML de nginx/Traefik, marcado `unrecognizedBody`)— y
+  `handleUncertainRun` (`features/managed-databases/uncertain-run.ts`) avisa «probablemente sigue
+  en curso», invalida el estado y deja que el refetch de `.../migrations/status` diga cómo
+  terminó. Una mutación nueva que toque el motor y pueda tardar debe pasar por ahí, nunca por un
+  `toast.error('No se pudo…')` que invite a relanzarla sobre una base a medio migrar.
 - **Validación de contrato (Zod) en runtime:** si el backend cambia un shape, verás en
   consola `[api] Respuesta no conforme al contrato` y un error "respuesta inesperada".
   Es la señal de que hay que actualizar `lib/contracts/`.

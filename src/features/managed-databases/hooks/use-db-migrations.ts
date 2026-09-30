@@ -21,6 +21,7 @@ import {
   type StampOptions,
 } from '../api/db-migrations.api'
 import { getSelectResults, purgeSelectResults } from '../api/select-results.api'
+import { handleUncertainRun } from '../uncertain-run'
 
 export function useMigrationStatus(dbId: number, enabled: boolean) {
   return useQuery({
@@ -91,8 +92,18 @@ export function useApplyMigrations(dbId: number) {
         )
       }
     },
-    onError: (error) =>
-      toast.error('No se pudieron aplicar las migraciones', toApiError(error).message),
+    onError: (error, options) => {
+      // Un dry-run no escribe nada: si no llegó, no llegó, y se dice tal cual.
+      if (
+        !options.dryRun &&
+        handleUncertainRun(error, toast, 'Sin respuesta del apply', () =>
+          invalidateAfterRun(queryClient),
+        )
+      ) {
+        return
+      }
+      toast.error('No se pudieron aplicar las migraciones', toApiError(error).message)
+    },
   })
 }
 
@@ -125,7 +136,16 @@ export function useRollbackMigration(dbId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo revertir la migración', toApiError(error).message),
+    onError: (error) => {
+      if (
+        handleUncertainRun(error, toast, 'Sin respuesta del rollback', () =>
+          invalidateAfterRun(queryClient),
+        )
+      ) {
+        return
+      }
+      toast.error('No se pudo revertir la migración', toApiError(error).message)
+    },
   })
 }
 
@@ -229,7 +249,16 @@ export function useReconcilePartial(dbId: number) {
         })
       }
     },
-    onError: (error) => toast.error('No se pudo reconciliar', toApiError(error).message),
+    onError: (error) => {
+      if (
+        handleUncertainRun(error, toast, 'Sin respuesta de la reconciliación', () =>
+          invalidateAfterRun(queryClient),
+        )
+      ) {
+        return
+      }
+      toast.error('No se pudo reconciliar', toApiError(error).message)
+    },
   })
 }
 

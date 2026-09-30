@@ -127,7 +127,9 @@ export function classifyDropError(error: ApiError): DropErrorAction {
   if (error.status === 429) return 'rateLimited'
   if (error.status === 403) return 'terminal'
   if (error.status === 404) return 'alreadyGone'
-  if (error.status === 502 || error.status === 504) return 'uncertain'
+  // `isOutcomeUncertain` cubre el 504 y la página de un proxy; el 502 del backend se suma acá
+  // porque en un DROP la conexión puede caerse con la sentencia ya enviada.
+  if (error.status === 502 || error.isOutcomeUncertain) return 'uncertain'
   if (error.status === 409) {
     return /sistema/i.test(msg) ? 'terminal' : 'needsForceDisconnect'
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
@@ -8,6 +8,7 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
 import { FETCH_ALL_MIGRATIONS_MAX_PAGES } from '../api/model-migrations.api'
 import {
+  useApplyAllMigrations,
   useAllModelMigrations,
   useCreateModelMigration,
   useDeleteModelMigration,
@@ -324,5 +325,36 @@ describe('useModelMigrationDeletePlan', () => {
     // manda tal cual al DELETE para no entrenarse a mandar siempre un token.
     expect(result.current.data?.confirm_token).toBeNull()
     expect(result.current.data?.warnings).toHaveLength(1)
+  })
+})
+
+describe('useApplyAllMigrations sin respuesta (504 del proxy)', () => {
+  it('no dice «no se pudo»: avisa que sigue en curso e invalida estado por BD y catálogo', async () => {
+    server.use(
+      http.post(
+        'http://localhost/api/v1/database-models/3/migrations/apply-all',
+        () =>
+          new HttpResponse('<html><body>504 Gateway Time-out</body></html>', {
+            status: 504,
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      ),
+    )
+    const client = createTestQueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useApplyAllMigrations(3), { wrapper: wrapperWith(client) })
+
+    act(() => {
+      result.current.mutate({ dryRun: false })
+    })
+
+    expect(await screen.findByText('Sin respuesta de la aplicación masiva')).toBeInTheDocument()
+    expect(
+      screen.queryByText('No se pudo ejecutar la aplicación masiva'),
+    ).not.toBeInTheDocument()
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.managedDatabases.all })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.databaseModels.migrations(3),
+    })
   })
 })
