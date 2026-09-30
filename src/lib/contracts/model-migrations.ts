@@ -100,6 +100,24 @@ const migrationSqlFactFields = {
 }
 
 /**
+ * Quién creó la versión. Van en el resumen **y** en el detalle, con la misma forma, para que la
+ * ficha lo pinte desde el listado sin esperar ninguna petición.
+ *
+ * `created_by_actor_type` usa el vocabulario de `audit_log.actor_type`: `admin` o `api_token`
+ * (un token de agente). `null` en los tres es «autor desconocido»: la versión es anterior a que
+ * el gateway lo registrara y el backend no lo pudo recuperar de la auditoría. No se inventa.
+ *
+ * **`nullish()` y sin default**: durante un despliegue el frontend puede llegar antes que el
+ * backend, y un campo requerido tumbaría el listado entero. Ausente y `null` se leen igual —
+ * desconocido—, que es justo lo que se sabe en ese momento.
+ */
+const migrationAuthorFields = {
+  created_by_admin_id: z.number().int().nullish(),
+  created_by_username: z.string().nullish(),
+  created_by_actor_type: z.string().nullish(),
+}
+
+/**
  * `ModelMigrationOut` — detalle completo de una migración (§8). Plan 09 añade los campos de
  * baseline de snapshot: `source_engine`, `is_baseline`, `has_non_portable` y `reviewed`
  * (un baseline de snapshot nace `reviewed=false` y no se puede aplicar hasta aprobarlo).
@@ -128,6 +146,7 @@ export const modelMigrationOutSchema = z.object({
   capture_selects: z.boolean().optional().default(false),
   ...migrationPolicyFields,
   ...migrationSqlFactFields,
+  ...migrationAuthorFields,
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -183,6 +202,7 @@ export const modelMigrationSummarySchema = z.object({
   applied_database_count: z.number().int().nonnegative().optional(),
   ...migrationPolicyFields,
   ...migrationSqlFactFields,
+  ...migrationAuthorFields,
   checksum: z.string(),
   created_at: z.string(),
 })

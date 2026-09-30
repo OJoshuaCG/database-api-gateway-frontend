@@ -148,6 +148,50 @@ describe('VersionFactsCard', () => {
     expect(await screen.findByText('sin ediciones')).toBeInTheDocument()
   })
 
+  it('muestra quién creó la versión, leído del resumen sin esperar al detalle', () => {
+    mount({
+      summaryOverrides: {
+        created_by_admin_id: 4,
+        created_by_username: 'ocarrasco',
+        created_by_actor_type: 'admin',
+      },
+    })
+    expect(screen.getByText('Creada por:')).toBeInTheDocument()
+    expect(screen.getByText('ocarrasco')).toBeInTheDocument()
+    // A un admin humano no se le añade la pista de tipo.
+    expect(screen.queryByText(/token de agente/)).not.toBeInTheDocument()
+  })
+
+  it('si la creó un token de agente, lo dice junto al nombre', () => {
+    mount({
+      summaryOverrides: {
+        created_by_admin_id: 9,
+        created_by_username: 'ci-bot',
+        created_by_actor_type: 'api_token',
+      },
+    })
+    expect(screen.getByText('ci-bot')).toBeInTheDocument()
+    expect(screen.getByText(/token de agente/)).toBeInTheDocument()
+  })
+
+  it('con el autor en null dice «desconocido» como texto visible, no en un `title`', () => {
+    mount({
+      summaryOverrides: {
+        created_by_admin_id: null,
+        created_by_username: null,
+        created_by_actor_type: null,
+      },
+    })
+    expect(screen.getByText('Creada por:')).toBeInTheDocument()
+    expect(screen.getByText('desconocido')).toBeInTheDocument()
+  })
+
+  it('sin los campos de autor (backend anterior) también dice «desconocido»', () => {
+    // El `summary()` base no trae los campos: es lo que manda un gateway sin actualizar.
+    mount()
+    expect(screen.getByText('desconocido')).toBeInTheDocument()
+  })
+
   it('muestra la fecha de edición cuando de verdad se editó', async () => {
     mount({ detailOverrides: { updated_at: '2026-08-20T12:30:00Z' } })
     expect(await screen.findByText(/20 ago 2026/)).toBeInTheDocument()

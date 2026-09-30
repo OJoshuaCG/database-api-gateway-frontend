@@ -203,6 +203,11 @@ export function VersionFactsCard({
         {/* 4 — Fechas y huella. Alto fijo: al cambiar de versión nada salta. */}
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <Fact label="Creada">{formatDateTime(summary.created_at)}</Fact>
+          {/* Del resumen, no del detalle: viene en el listado, así que no espera ninguna petición
+              ni puede mostrar el autor de la versión anterior mientras carga la nueva. */}
+          <Fact label="Creada por">
+            <VersionAuthor summary={summary} />
+          </Fact>
           <Fact label="Editada">
             {detailPending ? (
               <Skeleton />
@@ -390,6 +395,47 @@ export function VersionFactsCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Etiqueta de cada `actor_type` que no es un admin humano. Mismo vocabulario que
+ * `audit_log.actor_type`; un tipo que el frontend todavía no conoce se muestra tal cual antes que
+ * esconderlo.
+ */
+const ACTOR_TYPE_LABEL: Record<string, string> = {
+  api_token: 'token de agente',
+}
+
+/**
+ * Quién creó la versión.
+ *
+ * «desconocido» va como TEXTO visible y atenuado, no en un `title`: un `title` en un `<span>` no
+ * es nombre accesible y en táctil no existe (la misma regla que ya siguen las insignias). Y se
+ * pinta siempre: una fila ausente se leería como «no tiene autor», que es otro hecho.
+ */
+function VersionAuthor({ summary }: { summary: ModelMigrationSummary }) {
+  const actorType = summary.created_by_actor_type ?? null
+  const name =
+    summary.created_by_username ??
+    (summary.created_by_admin_id != null ? `#${summary.created_by_admin_id}` : null)
+
+  if (name === null) {
+    // Sin nombre, el tipo solo sigue diciendo algo («admin», «token de agente»): mejor que nada.
+    return (
+      <span className="text-muted-foreground">
+        {actorType ? (ACTOR_TYPE_LABEL[actorType] ?? actorType) : 'desconocido'}
+      </span>
+    )
+  }
+  // A un admin humano no se le pone pista: es el caso normal y la etiqueta sería ruido.
+  const actorHint =
+    actorType && actorType !== 'admin' ? (ACTOR_TYPE_LABEL[actorType] ?? actorType) : null
+  return (
+    <span className="break-all">
+      {name}
+      {actorHint && <span className="text-muted-foreground"> ({actorHint})</span>}
+    </span>
   )
 }
 
