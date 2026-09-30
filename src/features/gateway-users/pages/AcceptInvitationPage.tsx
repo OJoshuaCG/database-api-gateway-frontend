@@ -12,6 +12,7 @@ import {
   GATEWAY_PASSWORD_MIN,
 } from '@/lib/contracts'
 import { useAcceptGatewayUserInvite } from '../hooks/use-gateway-users'
+import { extractInviteToken } from '../invite-link'
 import { acceptInviteErrorMessage } from '../messages'
 
 const schema = z
@@ -64,7 +65,7 @@ export function AcceptInvitationPage() {
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
     accept.mutate(
-      { token: values.token, password: values.password },
+      { token: extractInviteToken(values.token), password: values.password },
       {
         onSuccess: (data) => setDone(data.username),
         // El error queda FIJO en el formulario, no en un toast: un aviso que se va solo deja a
@@ -125,7 +126,7 @@ export function AcceptInvitationPage() {
               hint={
                 tokenFromUrl
                   ? 'Lo tomamos del enlace que abriste.'
-                  : 'Te lo tiene que dar quien administra los accesos.'
+                  : 'Pegá el token o el enlace completo que te dio quien administra los accesos.'
               }
               error={errors.token?.message}
               {...register('token')}

@@ -20,6 +20,7 @@ import { formatDateTime } from '@/lib/utils'
 import { GatewayUserAccessModal } from '../components/GatewayUserAccessModal'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
+import { buildInviteLink } from '../invite-link'
 
 /** Invitación pendiente de entregar, con el nombre de a quién pertenece. */
 interface PendingInvite {
@@ -267,12 +268,14 @@ function InviteDeliveryModal({ invite, onDone }: { invite: PendingInvite; onDone
             Emitir una nueva revoca la anterior. Si la vieja se había filtrado, ya no sirve.
           </Callout>
         )}
+        {/* Se entrega el LINK, no el token pelado: con el token solo, quien lo recibe no sabe
+            dónde usarlo. El link ya lleva el token y abre la pantalla con el campo relleno. */}
         <OneTimeSecretPanel
-          secretLabel="token de invitación"
-          secret={invite.token}
+          secretLabel="enlace de invitación"
+          secret={buildInviteLink(invite.token)}
           expiresLabel={formatDateTime(invite.expiresAt)}
           consequence={`Si cerrás esto sin copiarlo, ${invite.username} no va a poder iniciar sesión y vas a tener que emitir otra invitación.`}
-          handoffHint={`Entregáselo a ${invite.username} por el canal que corresponda. Con él elige su propia contraseña y recién ahí puede entrar.`}
+          handoffHint={`Entregáselo a ${invite.username} por el canal que corresponda. Al abrirlo elige su propia contraseña y recién ahí puede entrar.`}
           confirmLabel="Listo, volver al listado"
           onDone={onDone}
         />

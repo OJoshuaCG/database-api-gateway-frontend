@@ -50,10 +50,15 @@ inicial, toda fila de auditoría atribuida a esa persona sería repudiable. La p
 un token de invitación que **viaja una sola vez** y que el gateway **no envía por ningún canal**
 (no hay SMTP, ni webhook, ni cola).
 
+Lo que se entrega es el **enlace completo**, `<origen del frontend>/invitacion?token=<token>`,
+armado con el origen de quien administra (`invite-link.ts`): con el token solo, quien lo recibe no
+sabe dónde usarlo. La pantalla de aceptación acepta en el campo tanto el token como el enlace
+entero pegado.
+
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | v23.1 §2 | `GET /gateway-users` | ✅ | `GatewayUsersPage` (`/gateway-users`). Único del módulo **paginado**; los demás usan el `success()` plano |
-| v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el token en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño |
+| v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el enlace de invitación en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño |
 | v23.1 §2.4 | `POST /gateway-users/invite/accept` | ✅ | `AcceptInvitationPage` (`/invitacion?token=…`) — **ruta pública**, fuera de `ProtectedRoute`: quien la usa todavía no puede iniciar sesión |
 | v23.1 §2 | `GET /gateway-users/{id}` | 🧩 | Existe en `api/`; el listado ya trae `GatewayUserOut` completo, así que ninguna pantalla necesita el detalle todavía |
 | v23.1 §2.5 | `PATCH /gateway-users/{id}` | ✅ | `GatewayUserFormModal` (edición). `username` va deshabilitado **con el motivo a la vista**: es la identidad que audita `audit_log`, guardada sin FK |
