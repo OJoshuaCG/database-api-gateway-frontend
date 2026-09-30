@@ -122,6 +122,15 @@ export function ModelMigrationDetailPanel({
     rows: { managed_database_id: number; last_statement_index: number; total_statements: number }[]
     message: string
   } | null>(null)
+  /**
+   * ¿Está desplegado «SQL traducido por motor»? Nace CERRADO y su contenido solo se monta
+   * abierto: son tres `CodeBlock` que se tokenizan al renderizar, y con un `<details open>` se
+   * pagaban en cada cambio de versión aunque nadie los mirara. Es material de referencia —el
+   * SQL base y el rollback ya están a la vista arriba—, así que cerrado es el default honesto.
+   * Se conserva entre versiones: quien lo abrió para comparar traducciones lo quiere abierto
+   * al pasar a la siguiente.
+   */
+  const [translatedOpen, setTranslatedOpen] = useState(false)
 
   // Al cambiar de versión se descarta todo el estado de la anterior y se vuelve a lectura. Se
   // ajusta el estado en render (patrón recomendado por React) en vez de con un efecto, para no
@@ -379,13 +388,21 @@ export function ModelMigrationDetailPanel({
             </div>
           )}
 
-          <details className="rounded-lg border border-border p-3" open>
+          <details
+            className="rounded-lg border border-border p-3"
+            open={translatedOpen}
+            // El navegador ya abre y cierra el `<details>` al pulsar el `<summary>`; `onToggle`
+            // solo copia ese estado para decidir si se monta el contenido.
+            onToggle={(event) => setTranslatedOpen(event.currentTarget.open)}
+          >
             <summary className="cursor-pointer text-sm font-medium text-foreground">
               SQL traducido por motor (referencia)
             </summary>
-            <div className="mt-3">
-              <MigrationSqlView migration={data} />
-            </div>
+            {translatedOpen && (
+              <div className="mt-3">
+                <MigrationSqlView migration={data} />
+              </div>
+            )}
           </details>
 
         </CardContent>

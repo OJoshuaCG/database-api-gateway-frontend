@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -75,6 +75,21 @@ describe('ModelMigrationDetailPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Editar' }))
     // El aviso de fix-forward aparece sin haber intentado guardar nada.
     expect(screen.getByText(/aplicó con éxito/)).toBeInTheDocument()
+  })
+
+  it('el SQL traducido nace cerrado y solo se monta al desplegarlo', async () => {
+    mount()
+    const summary = await screen.findByText('SQL traducido por motor (referencia)')
+    // Cerrado: los `CodeBlock` de las traducciones no existen, no solo están ocultos. Son los que
+    // se tokenizan al renderizar, y montarlos para nadie era el coste de cada cambio de versión.
+    expect(screen.queryByText('MySQL / MariaDB')).not.toBeInTheDocument()
+
+    // Se abre como lo haría el navegador al pulsar el `<summary>`: cambia `open` y emite `toggle`.
+    const details = summary.closest('details')
+    if (!details) throw new Error('El resumen tiene que vivir dentro de un <details>')
+    details.open = true
+    fireEvent(details, new Event('toggle'))
+    expect(await screen.findByText('MySQL / MariaDB')).toBeInTheDocument()
   })
 
   describe('mientras se ve el detalle de la versión ANTERIOR (keepPreviousData)', () => {
