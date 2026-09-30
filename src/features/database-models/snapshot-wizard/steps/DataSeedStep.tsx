@@ -120,12 +120,11 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
                         >
                           {candidate.estimatedRows.toLocaleString('es')}
                         </span>
+                        {/* Visible y no en un `title`: decide si conviene incluir la tabla, y
+                            un ⚠ suelto no dice nada por teclado, lector de pantalla ni táctil. */}
                         {candidate.estimatedRows >= HIGH_ROW_ESTIMATE && (
-                          <span
-                            className="ml-1 text-xs text-warning"
-                            title="Puede superar el guardrail y omitirse"
-                          >
-                            ⚠
+                          <span className="block text-xs text-warning">
+                            <span aria-hidden>⚠ </span>puede superar el guardrail y omitirse
                           </span>
                         )}
                       </td>

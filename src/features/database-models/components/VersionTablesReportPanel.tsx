@@ -11,6 +11,7 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  StatusLegend,
 } from '@/components/ui'
 import { useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES, type VersionTableDatabase, type VersionTableStatus } from '@/lib/contracts'
@@ -158,6 +159,15 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
     )
   }, [bases, filtro])
 
+  /** Los estados presentes en el parque, en orden de gravedad, con su consecuencia visible. */
+  const leyenda = useMemo(() => {
+    const presentes = new Set(bases.map((base) => base.status))
+    return VERSION_TABLE_STATUS_ORDER.filter((estado) => presentes.has(estado)).map((estado) => {
+      const badge = versionTableBadge(estado)
+      return { key: estado, label: badge.label, tone: badge.tone, description: badge.title }
+    })
+  }, [bases])
+
   const columns = useMemo<ColumnDef<VersionTableDatabase>[]>(
     () => [
       {
@@ -192,7 +202,7 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
           const detalle = row.original.detail
           return (
             <div className="flex flex-col items-start gap-1.5">
-              <Badge tone={badge.tone} title={badge.title}>
+              <Badge tone={badge.tone}>
                 {badge.icon && <span aria-hidden>{badge.icon}</span>}
                 {badge.label}
               </Badge>
@@ -201,9 +211,11 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
                 para las quince bases `orphaned` de un parque roto, y entre quince copias idénticas
                 hay que ir a buscar lo único que varía —el `detail` y la versión real—. En la vista
                 de tarjeta de `&lt;md` es peor todavía: empuja el enlace de recuperación al fondo.
-                Vive arriba y una sola vez, en el `Callout` del semáforo; acá se llega a ella por
-                el `title` del badge y por «Ver detalle». Mismo criterio que el aviso de dirección
-                del historial, que también va una vez arriba.
+                Vive una sola vez: en el `Callout` del semáforo lo que bloquea, y en la
+                `StatusLegend` bajo la tabla la de cada estado presente. Ya no en el `title` del
+                badge, que no llega por teclado ni en táctil —y `mixed` o `none`, que no tienen
+                banda, solo se explicaban ahí—. Mismo criterio que el aviso de dirección del
+                historial, que también va una vez arriba.
               */}
               {(detalle || presentes.length > 0) && (
                 // Plegado y no siempre visible porque son varias líneas por fila; el texto del
@@ -510,7 +522,6 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
                 <span
                   key={contador.clave}
                   className="inline-flex items-center gap-2 rounded-card border border-border bg-surface px-3 py-1.5"
-                  title={contador.badge?.title}
                 >
                   <span className="text-sm font-semibold text-foreground">{contador.total}</span>
                   {contador.badge ? (
@@ -569,6 +580,10 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
               )
             }
           />
+
+          {/* Sobre el parque ENTERO y no sobre las filas filtradas: filtrar por un estado no
+              debería hacer desaparecer la explicación de los demás que siguen en los contadores. */}
+          <StatusLegend items={leyenda} />
         </>
       )}
     </div>

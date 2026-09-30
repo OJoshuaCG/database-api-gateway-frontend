@@ -38,7 +38,10 @@ export interface VersionTableBadgeSpec {
    * rápido por color se confunden justo los dos estados que no hay que confundir.
    */
   icon?: string
-  /** La consecuencia, no la definición: qué implica ese estado para quien va a operar. */
+  /**
+   * La consecuencia, no la definición: qué implica ese estado para quien va a operar. Se pinta
+   * VISIBLE en la `StatusLegend` del informe, no como `title` del badge.
+   */
   title: string
 }
 

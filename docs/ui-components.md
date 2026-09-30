@@ -158,6 +158,18 @@ Estado "sin datos": `title`, `description?`, `action?`, `icon?`.
 Estado de error: recibe `error` (cualquier cosa), lo normaliza con `toApiError`, muestra
 el mensaje y un botón `onRetry`. Añade una nota cuando es error de motor (502/504).
 
+### `Badge` y `StatusLegend`
+`Badge` es la etiqueta de estado (`tone`, `children`, `title?`). **Su `title` es solo matiz para
+el hover con puntero**: va en un `<span>` no interactivo, así que no llega a lectores de pantalla,
+no se enfoca con teclado y en táctil no existe. Nada que decida algo —el motivo de un bloqueo, un
+riesgo, la consecuencia de un estado— puede vivir solo ahí. Lo mismo vale para un
+`<span title>` alrededor de un botón deshabilitado: el motivo va **visible** al lado del control.
+
+Para la consecuencia de los estados de una tabla está `StatusLegend` (`items: { key, label, tone,
+description }[]`, `title?`): una lista de definiciones bajo la tabla, **una vez** y solo con los
+estados presentes, en vez de repetir la misma prosa en cada fila. La usan `CollationDriftPanel` y
+`VersionTablesReportPanel`. Si el aviso es uno solo y bloquea, es un `Callout`.
+
 ### `Spinner` / `FullPageSpinner`
 Indicador de carga accesible (`role="status"`). `FullPageSpinner` centra a pantalla
 completa (p. ej. verificación de sesión).

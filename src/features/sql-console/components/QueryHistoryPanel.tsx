@@ -436,6 +436,24 @@ function QueryHistoryDetailModal({ entry, onClose, onLoadInEditor }: QueryHistor
           </span>
         </div>
 
+        {/* Lo que en la tabla es un `title` —que no llega por teclado, lector de pantalla ni
+            táctil—, acá va escrito: es en el detalle donde se lee una ejecución a fondo, y «prueba»
+            en particular decide si las filas afectadas cambiaron algo o no. */}
+        <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          <li>{MODE_HINT[entry.connection_mode]}</li>
+          <li>
+            {danger.label}: {danger.description}
+          </li>
+          <li>
+            {status.label}: {status.hint}
+          </li>
+          {entry.dry_run && (
+            <li>
+              Modo de prueba: se ejecutó y se revirtió. Las cifras son reales, los cambios no.
+            </li>
+          )}
+        </ul>
+
         {/* Se dice acá y no en la tabla: es al leer el SQL cuando importa saber que lo que se ve
             puede no ser byte a byte lo que se envió. */}
         <p className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground">

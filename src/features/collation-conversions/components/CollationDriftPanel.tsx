@@ -1,6 +1,13 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, DataTable, EmptyState, ErrorState, type BadgeTone } from '@/components/ui'
+import {
+  Badge,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  StatusLegend,
+  type BadgeTone,
+} from '@/components/ui'
 import type { CollationDriftRowOut, CollationDriftStatus } from '@/lib/contracts'
 import { useCollationDrift } from '../hooks/use-collation-batches'
 
@@ -108,11 +115,9 @@ export function CollationDriftPanel({ modelId }: { modelId: number }) {
         accessorKey: 'status',
         cell: ({ row }) => {
           const meta = STATUS_META[row.original.status]
-          return (
-            <Badge tone={meta.tone} title={meta.hint}>
-              {meta.label}
-            </Badge>
-          )
+          // Sin `title`: la consecuencia de cada estado decide si hace falta convertir, así que va
+          // visible en la `StatusLegend` bajo la tabla, no en un hover que no llega por teclado.
+          return <Badge tone={meta.tone}>{meta.label}</Badge>
         },
       },
       {
@@ -141,6 +146,17 @@ export function CollationDriftPanel({ modelId }: { modelId: number }) {
   }
 
   const data = drift.data
+  // Solo los estados presentes y en el orden de `STATUS_META`, no en el de aparición: la leyenda
+  // se lee igual en cada visita.
+  const presentStatuses = new Set(data?.databases.map((row) => row.status) ?? [])
+  const legend = (Object.keys(STATUS_META) as CollationDriftStatus[])
+    .filter((status) => presentStatuses.has(status))
+    .map((status) => ({
+      key: status,
+      label: STATUS_META[status].label,
+      tone: STATUS_META[status].tone,
+      description: STATUS_META[status].hint,
+    }))
 
   return (
     <div className="flex flex-col gap-4">
@@ -186,6 +202,8 @@ export function CollationDriftPanel({ modelId }: { modelId: number }) {
           />
         }
       />
+
+      <StatusLegend items={legend} />
     </div>
   )
 }

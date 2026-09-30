@@ -16,7 +16,14 @@ interface BadgeProps {
   tone?: BadgeTone
   children: ReactNode
   className?: string
-  /** Texto adicional para lectores de pantalla/hover; el badge sigue siendo visible sin él. */
+  /**
+   * Matiz para el hover con puntero, y NADA más. Va en un `<span>` no interactivo: **no llega a
+   * los lectores de pantalla** (no es nombre accesible ni se enfoca con teclado) y **en táctil no
+   * existe**. Por eso aquí solo cabe lo redundante —una definición que el `label` ya insinúa, un
+   * valor completo que se ve recortado—, nunca lo que decide algo: el motivo de un bloqueo, un
+   * riesgo o la consecuencia de un estado van visibles, en un `Callout`, en texto al lado o en una
+   * `StatusLegend` bajo la tabla.
+   */
   title?: string
 }
 

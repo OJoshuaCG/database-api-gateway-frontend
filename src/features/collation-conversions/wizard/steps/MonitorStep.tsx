@@ -350,11 +350,22 @@ export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
                             <span>{item.columns_affected} columnas</span>
                           )}
                           {item.grants_captured != null && (
-                            <span title="grants_captured > grants_reapplied sin grants_error es normal: la reaplicación omite grants vacíos o sin GRANT OPTION.">
+                            <span>
                               {item.grants_reapplied ?? 0} de {item.grants_captured} privilegios
                               reaplicados
                             </span>
                           )}
+                          {/* La diferencia sin `grants_error` es NORMAL, y decirlo solo en un
+                              `title` dejaba el «3 de 5» leyéndose como pérdida de privilegios
+                              para quien no pasa el puntero por encima. Visible, y solo cuando
+                              la diferencia existe. */}
+                          {item.grants_captured != null &&
+                            (item.grants_reapplied ?? 0) < item.grants_captured &&
+                            !item.grants_error && (
+                              <span className="text-xs">
+                                Es normal: la reaplicación omite grants vacíos o sin GRANT OPTION.
+                              </span>
+                            )}
                         </div>
                       </td>
                     </tr>

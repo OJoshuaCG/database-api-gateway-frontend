@@ -126,26 +126,19 @@ export function EffectiveGrantsPanel({
       )}
 
       <div className="flex justify-end">
-        {/* Un botón `disabled` no dispara el tooltip nativo, así que sin este `span` el icono
-            quedaría gris y mudo cuando falta la BD en PostgreSQL. */}
-        <span
-          title={
-            needsDatabase
-              ? 'Indicá una base de datos para poder actualizar los permisos.'
-              : undefined
-          }
-        >
-          <IconButton
-            type="button"
-            label="Actualizar"
-            icon={<RefreshIcon />}
-            variant="outline"
-            size="icon-sm"
-            onClick={() => void query.refetch()}
-            isLoading={query.isFetching}
-            disabled={needsDatabase}
-          />
-        </span>
+        {/* Sin `<span title>` alrededor: un `title` en un `span` no llega por teclado, lector de
+            pantalla ni táctil. El motivo de que esté deshabilitado ya va VISIBLE arriba, en el
+            aviso «Indicá una base de datos…» que ocupa el lugar de la lista. */}
+        <IconButton
+          type="button"
+          label="Actualizar"
+          icon={<RefreshIcon />}
+          variant="outline"
+          size="icon-sm"
+          onClick={() => void query.refetch()}
+          isLoading={query.isFetching}
+          disabled={needsDatabase}
+        />
       </div>
     </div>
   )

@@ -30,7 +30,11 @@ export type EnvironmentBadgeState =
 /**
  * Alcance REAL del bloqueo, para el `title`. Un badge crea creencias más amplias que la barrera:
  * el entorno NO frena el rollback, el DROP DATABASE, el clon con `drop_database`, la consola SQL,
- * la conversión de collation ni el export. Este string es lo más barato que evita la peor lectura.
+ * la conversión de collation ni el export. Este string es lo más barato que evita la peor lectura
+ * **con puntero**: el `title` de `Badge` no llega por teclado, lector de pantalla ni táctil. Lo
+ * que decide —si el entorno protege o no— también va como texto `sr-only`; el alcance detallado
+ * sigue siendo un matiz del hover, y donde se decide de verdad (el guard del apply) lo dice el
+ * propio 409 de política.
  */
 const BLOCKS_TITLE =
   'Bloquea aplicar migraciones destructivas (DROP / TRUNCATE / DELETE sin WHERE / ALTER DROP ' +
@@ -98,6 +102,12 @@ export function EnvironmentBadge({
     >
       {state.blocksDestructive ? <span aria-hidden>🔒</span> : null}
       <span className={state.blocksDestructive ? 'font-semibold' : undefined}>{state.name}</span>
+      {/* El candado es `aria-hidden` y el `title` no llega a un lector de pantalla, así que sin
+          esto «protegido» y «no protegido» sonaban igual: solo el nombre del entorno. Es el dato
+          que decide si una migración destructiva va a pasar, y no puede depender del hover. */}
+      {state.blocksDestructive ? (
+        <span className="sr-only">(bloquea migraciones destructivas)</span>
+      ) : null}
     </Badge>
   )
 }
