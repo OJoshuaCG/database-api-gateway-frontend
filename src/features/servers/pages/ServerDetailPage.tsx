@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  buttonClassName,
   Card,
   CardContent,
   ErrorState,
@@ -57,7 +58,11 @@ export function ServerDetailPage() {
     CAPABILITIES.serversAdmin,
     'editar ni dar de baja servidores',
   )
-  const canUseConsole = useCapabilities().can(CAPABILITIES.sqlConsoleExecute)
+  // La consola le sirve también a quien solo ve el historial: entra directo a esa pestaña.
+  const capabilities = useCapabilities()
+  const canUseConsole =
+    capabilities.can(CAPABILITIES.sqlConsoleExecute) ||
+    capabilities.can(CAPABILITIES.sqlConsoleHistory)
 
   if (Number.isNaN(serverId)) {
     return <ErrorState error={new Error('Identificador de servidor inválido.')} />
@@ -80,9 +85,14 @@ export function ServerDetailPage() {
             <>
               {/* Atajo al sitio donde se comprueba que los permisos que se acaban de tocar
                   hacen lo que se espera, sin tener que volver a elegir el servidor. */}
+              {/* Un `Link` con aspecto de botón, no un `Button` dentro de un `Link`: eso anidaba dos
+                  controles (HTML inválido y dos paradas de tabulación para una sola acción). */}
               {canUseConsole && (
-                <Link to={`/sql-console?server=${server.id}`}>
-                  <Button variant="outline">Consola SQL</Button>
+                <Link
+                  to={`/sql-console?server=${server.id}`}
+                  className={buttonClassName({ variant: 'outline' })}
+                >
+                  Consola SQL
                 </Link>
               )}
               <Button
@@ -132,7 +142,11 @@ export function ServerDetailPage() {
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-border" role="tablist">
+      <div
+        className="flex gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Secciones del servidor"
+      >
         <TabButton active={tab === 'info'} onClick={() => setTab('info')}>
           Información
         </TabButton>

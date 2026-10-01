@@ -23,6 +23,13 @@ describe('RolesCapabilitiesPanel', () => {
     expect(await screen.findByText('Otorga 12 de 29')).toBeInTheDocument()
     expect(screen.getByText('Otorga 17 de 29')).toBeInTheDocument()
     expect(screen.getByText('Otorga 26 de 29')).toBeInTheDocument()
+    // Una línea de intención por rol y por global, de `ROLE_PURPOSES`.
+    expect(screen.getByText('Consulta sin cambiar nada.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Opera todo en su alcance, incluido lo destructivo.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Administración de accesos')).toBeInTheDocument()
+    expect(screen.getByText('Administra servidores, catálogos y política.')).toBeInTheDocument()
     expect(screen.getByText('Capacidades globales (se suman a cualquier rol)')).toBeInTheDocument()
     expect(screen.getByText('29 de 29 capacidades')).toBeInTheDocument()
     // Plurales sin «(s)»: viewer no tiene ninguna destructiva.

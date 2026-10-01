@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   Badge,
   Button,
@@ -11,8 +11,9 @@ import {
 } from '@/components/ui'
 import {
   EffectiveAccessPanel,
-  RoleCapabilitySummary,
+  effectiveAccessRowId,
   globalCapabilityIds,
+  globalCapabilityLabel,
   sortByRisk,
   summarizeLabels,
   useCapabilities,
@@ -58,6 +59,14 @@ interface RoleOption {
 }
 const ROLE_OPTIONS: RoleOption[] = GATEWAY_ROLES.map((value) => ({ value, label: value }))
 
+/**
+ * Una fila del formulario: el permiso más un id ESTABLE. Con `key={index}`, quitar la fila de
+ * arriba le pasaba a la de abajo el estado interno de sus `Combobox` (lo tipeado, el menú abierto).
+ */
+interface GrantRow extends ScopeGrantIn {
+  rowId: string
+}
+
 /** Clave de un permiso, para comparar el formulario contra lo que la persona ya tenía. */
 function grantKey(grant: { scope_type: string; scope_id: number; role: string }): string {
   return `${grant.scope_type}:${grant.scope_id}:${grant.role}`
@@ -97,7 +106,8 @@ export function GatewayUserAccessModal({
   const replaceAccess = useReplaceGatewayUserAccess(user.id)
   const environments = useSelectableEnvironments()
   const servers = useServerOptions()
-  const readiness = useScopeReadiness()
+  const panelId = useId()
+  const nextRowId = useRef(0)
   const catalogQuery = useCapabilityCatalog()
   const catalog = catalogQuery.data
   // Techo del ACTOR (quien edita), no de la persona editada: ver `grant-ceiling.ts`.
@@ -105,9 +115,6 @@ export function GatewayUserAccessModal({
   const actorGlobals = new Set(actor.globalCapabilities)
   const originalGlobals = new Set(user.global_capabilities)
   const originalGrants = new Set(user.scope_grants.map(grantKey))
-  const unclassifiedServers = (readiness.data?.servers ?? []).filter(
-    (server) => server.unclassified > 0,
-  )
 
   /*
    * Un grant cuyo `scope_type` o `role` esta versión de la SPA no conoce NO se puede representar
@@ -129,18 +136,25 @@ export function GatewayUserAccessModal({
   const [capabilities, setCapabilities] = useState<GlobalCapability[]>(() =>
     user.global_capabilities.filter(isKnownGlobalCapability),
   )
-  const [grants, setGrants] = useState<ScopeGrantIn[]>(() =>
+  const [grants, setGrants] = useState<GrantRow[]>(() =>
     user.scope_grants
       .filter(
         (grant) =>
           isKnownGatewayRole(grant.role) &&
           (SCOPE_TYPES as readonly string[]).includes(grant.scope_type),
       )
-      .map((grant) => ({
+      .map((grant, index) => ({
+        rowId: `inicial-${index}`,
         scope_type: grant.scope_type as ScopeType,
         scope_id: grant.scope_id,
         role: grant.role as GatewayRole,
       })),
+  )
+  // Se consulta SOLO cuando hay permisos de alcance en juego: sin ellos la capa 2 no cambia ningún
+  // resultado y la llamada sería por nada.
+  const readiness = useScopeReadiness(grants.length > 0)
+  const unclassifiedServers = (readiness.data?.servers ?? []).filter(
+    (server) => server.unclassified > 0,
   )
 
   const toggleCapability = (capability: GlobalCapability, checked: boolean) => {
@@ -149,9 +163,22 @@ export function GatewayUserAccessModal({
     )
   }
 
-  const updateGrant = (index: number, patch: Partial<ScopeGrantIn>) => {
+  /*
+   * Cambiar el tipo o el destino puede dejar el rol FUERA de lo que se ofrece: el rol se conservaba
+   * por ser el que la persona ya tenía en ESE destino, y en otro destino es un rol nuevo, que el
+   * backend mide contra el techo (409 `access.grant_ceiling_exceeded`). Se baja al más alto
+   * permitido, así el selector nunca muestra un valor que no está entre sus opciones.
+   */
+  const updateGrant = (rowId: string, patch: Partial<ScopeGrantIn>) => {
     setGrants((current) =>
-      current.map((grant, position) => (position === index ? { ...grant, ...patch } : grant)),
+      current.map((grant) => {
+        if (grant.rowId !== rowId) return grant
+        const next = { ...grant, ...patch }
+        const allowed = roleOptionsFor(next)
+        if (allowed.some((option) => option.value === next.role)) return next
+        const highest = allowed[allowed.length - 1]
+        return highest ? { ...next, role: highest.value } : next
+      }),
     )
   }
 
@@ -213,7 +240,14 @@ export function GatewayUserAccessModal({
 
   const submit = () => {
     replaceAccess.mutate(
-      { global_capabilities: capabilities, scope_grants: grants },
+      {
+        global_capabilities: capabilities,
+        scope_grants: grants.map(({ scope_type, scope_id, role }) => ({
+          scope_type,
+          scope_id,
+          role,
+        })),
+      },
       { onSuccess: onClose },
     )
   }
@@ -229,10 +263,12 @@ export function GatewayUserAccessModal({
       size="lg"
     >
       <div className="flex flex-col gap-5">
-        <Callout tone="warning" title="Se guarda el estado completo, no solo lo que cambies">
-          Esta pantalla reemplaza <strong>todos</strong> los accesos de la persona por lo que quede
-          acá. Lo que borres de la lista queda revocado al guardar.
-        </Callout>
+        {/* Texto y no `Callout`: es la regla de la pantalla, no una alerta, y con cuatro bandas a
+            la vez ninguna se lee. Las bandas quedan para lo que bloquea o sorprende. */}
+        <p className="text-sm text-muted-foreground">
+          <strong className="text-foreground">Se guarda el estado completo</strong>, no solo lo que
+          cambies: lo que borres de la lista queda revocado al guardar.
+        </p>
 
         {isSelf && (
           <Callout tone="info" title="Es tu propia cuenta">
@@ -246,8 +282,10 @@ export function GatewayUserAccessModal({
               Esta cuenta tiene{' '}
               {unrepresentable.length > 0 && (
                 <>
-                  {unrepresentable.length} permiso(s) con un tipo o rol que esta versión de la
-                  interfaz no reconoce
+                  {unrepresentable.length === 1
+                    ? '1 permiso con un tipo o rol'
+                    : `${unrepresentable.length} permisos con un tipo o rol`}{' '}
+                  que esta versión de la interfaz no reconoce
                   {unknownCapabilities.length > 0 ? ' y ' : ''}
                 </>
               )}
@@ -275,7 +313,10 @@ export function GatewayUserAccessModal({
             return (
               <Checkbox
                 key={capability}
-                label={capability}
+                label={globalCapabilityLabel(capability)}
+                caption={
+                  <code className="font-mono text-[11px] text-muted-foreground">{capability}</code>
+                }
                 hint={globalHint(capability)}
                 checked={checked}
                 disabled={blocked || globalLocked(capability, checked)}
@@ -322,7 +363,11 @@ export function GatewayUserAccessModal({
           {grants.length > 0 && readiness.data && !readiness.data.ready && (
             <Callout
               tone="warning"
-              title={`Hay ${readiness.data.unclassified_databases} base(s) sin entorno asignado`}
+              title={
+                readiness.data.unclassified_databases === 1
+                  ? 'Hay 1 base sin entorno asignado'
+                  : `Hay ${readiness.data.unclassified_databases} bases sin entorno asignado`
+              }
             >
               <p>
                 Una base sin entorno se trata como el entorno <strong>más protegido</strong>
@@ -356,13 +401,13 @@ export function GatewayUserAccessModal({
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {grants.map((grant, index) => {
+              {grants.map((grant) => {
                 const targets = targetsFor(grant.scope_type)
                 const selected = targets.find((target) => target.id === grant.scope_id) ?? null
                 const roleOptions = roleOptionsFor(grant)
                 return (
                   <li
-                    key={index}
+                    key={grant.rowId}
                     className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -378,7 +423,7 @@ export function GatewayUserAccessModal({
                             // Cambiar el tipo invalida el destino: un id de entorno no significa
                             // nada como id de servidor. Se limpia para obligar a re-elegirlo.
                             if (!option) return
-                            updateGrant(index, { scope_type: option.value, scope_id: 0 })
+                            updateGrant(grant.rowId, { scope_type: option.value, scope_id: 0 })
                           }}
                           itemToString={(option) => option.label}
                           itemToKey={(option) => option.value}
@@ -390,7 +435,9 @@ export function GatewayUserAccessModal({
                         <Combobox<TargetOption>
                           items={targets}
                           value={selected}
-                          onChange={(option) => updateGrant(index, { scope_id: option?.id ?? 0 })}
+                          onChange={(option) =>
+                            updateGrant(grant.rowId, { scope_id: option?.id ?? 0 })
+                          }
                           itemToString={(option) => option.label}
                           itemToKey={(option) => option.id}
                           label={SCOPE_TYPE_LABELS[grant.scope_type]}
@@ -407,10 +454,12 @@ export function GatewayUserAccessModal({
                       <div className="w-full sm:w-40">
                         <Combobox<RoleOption>
                           items={roleOptions}
-                          value={ROLE_OPTIONS.find((option) => option.value === grant.role) ?? null}
-                          onChange={(option) =>
-                            updateGrant(index, { role: option?.value ?? 'viewer' })
-                          }
+                          // De `roleOptions` y no de todos: un valor fuera de las opciones se
+                          // pintaría como elegido sin poder volver a elegirse.
+                          value={roleOptions.find((option) => option.value === grant.role) ?? null}
+                          onChange={(option) => {
+                            if (option) updateGrant(grant.rowId, { role: option.value })
+                          }}
                           itemToString={(option) => option.label}
                           itemToKey={(option) => option.value}
                           label="Rol en ese alcance"
@@ -427,20 +476,22 @@ export function GatewayUserAccessModal({
                           disabled={blocked}
                           onClick={() =>
                             setGrants((current) =>
-                              current.filter((_, position) => position !== index),
+                              current.filter((row) => row.rowId !== grant.rowId),
                             )
                           }
                         />
                       </div>
                     </div>
-                    {/* Qué cambia este permiso respecto del rol base: es lo que decide si
-                        conviene otorgarlo, y no se puede leer del nombre del rol. */}
-                    <RoleCapabilitySummary
-                      role={grant.role}
-                      compareTo={user.gateway_role}
-                      catalog={catalog}
-                      isLoading={catalogQuery.isLoading}
-                    />
+                    {/* Qué cambia este permiso lo dice UNA vez el panel de abajo, en su fila: repetirlo
+                        acá mostraba la misma diferencia dos veces, con colores distintos. */}
+                    {grant.scope_id >= 1 && (
+                      <a
+                        href={`#${effectiveAccessRowId(panelId, grant.scope_type, grant.scope_id)}`}
+                        className="self-start text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Ver el efecto abajo
+                      </a>
+                    )}
                   </li>
                 )
               })}
@@ -453,12 +504,14 @@ export function GatewayUserAccessModal({
               variant="outline"
               size="sm"
               disabled={blocked}
-              onClick={() =>
+              onClick={() => {
+                nextRowId.current += 1
+                const rowId = `nuevo-${nextRowId.current}`
                 setGrants((current) => [
                   ...current,
-                  { scope_type: 'environment', scope_id: 0, role: 'viewer' },
+                  { rowId, scope_type: 'environment', scope_id: 0, role: 'viewer' },
                 ])
-              }
+              }}
             >
               Añadir permiso
             </Button>
@@ -480,31 +533,36 @@ export function GatewayUserAccessModal({
             grants={effectiveGrants}
             catalog={catalog}
             isLoading={catalogQuery.isLoading}
+            idPrefix={panelId}
           />
         </section>
 
-        <Callout tone="info" title="Al guardar se cierran sus sesiones">
-          La persona va a tener que iniciar sesión otra vez para que los accesos nuevos tengan
-          efecto.
-        </Callout>
-
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            disabled={replaceAccess.isPending}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={submit}
-            isLoading={replaceAccess.isPending}
-            disabled={blocked || incomplete}
-          >
-            Guardar accesos
-          </Button>
+        {/* La consecuencia del botón, al lado del botón: leída antes de apretarlo, no tres
+            bandas más arriba. */}
+        <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
+          <p id={`${panelId}-sesiones`} className="text-xs text-muted-foreground sm:mr-auto">
+            Al guardar se cierran sus sesiones: va a tener que volver a entrar para que los accesos
+            nuevos tengan efecto.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={replaceAccess.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={submit}
+              isLoading={replaceAccess.isPending}
+              disabled={blocked || incomplete}
+              aria-describedby={`${panelId}-sesiones`}
+            >
+              Guardar accesos
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>

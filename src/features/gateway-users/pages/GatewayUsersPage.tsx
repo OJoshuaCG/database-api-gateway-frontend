@@ -14,6 +14,7 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
+  StatusLegend,
   TabButton,
 } from '@/components/ui'
 import { ForbiddenState, isAccessForbidden, useCapabilities, useSession } from '@/features/auth'
@@ -75,7 +76,12 @@ export function GatewayUsersPage() {
   const [accessTarget, setAccessTarget] = useState<GatewayUserOut | null>(null)
   const [invite, setInvite] = useState<PendingInvite | null>(null)
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useGatewayUsers({ page, size })
+  const { data, isLoading, isFetching, isError, error, refetch } = useGatewayUsers(
+    { page, size },
+    // Antes de que llegue la sesión `can()` falla abierto: sin esperarla, la lista se pediría igual
+    // y sería un 403 seguro para quien no administra accesos.
+    admin !== null && canAdmin && tab === 'users',
+  )
   const reissue = useReissueGatewayUserInvite()
   const sessionUserId = admin?.id ?? null
   // El listado y sus acciones van detrás de `gateway.admin`; «Roles y capacidades» no (es
@@ -228,9 +234,13 @@ export function GatewayUsersPage() {
         role="tablist"
         aria-label="Secciones de usuarios del gateway"
       >
-        <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
-          Usuarios
-        </TabButton>
+        {/* Sin `gateway.admin` la pestaña no se ofrece (como «Cifrado» en Administración): un
+            enlace directo a `?tab=users` muestra el 403 compartido. */}
+        {canAdmin && (
+          <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
+            Usuarios
+          </TabButton>
+        )}
         <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>
           Roles y capacidades
         </TabButton>
@@ -273,6 +283,24 @@ export function GatewayUsersPage() {
               isFetching={isFetching}
             />
           )}
+          {/* El motivo de «Invitación pendiente» vivía en el `title` del badge, que no llega a
+              teclado, lector de pantalla ni táctil. Va una vez, bajo la tabla, si aparece. */}
+          <StatusLegend
+            title="Qué significa cada estado"
+            items={
+              (data?.items ?? []).some((user) => !user.credential_set)
+                ? [
+                    {
+                      key: 'pending',
+                      label: 'Invitación pendiente',
+                      tone: 'warning',
+                      description:
+                        'La cuenta existe pero todavía no puede iniciar sesión: falta que la persona elija su contraseña con el enlace de invitación.',
+                    },
+                  ]
+                : []
+            }
+          />
         </>
       )}
 
@@ -358,11 +386,7 @@ function AccountStateBadges({ user }: { user: GatewayUserOut }) {
       <Badge tone={user.is_active ? 'success' : 'neutral'}>
         {user.is_active ? 'Activa' : 'Desactivada'}
       </Badge>
-      {!user.credential_set && (
-        <Badge tone="warning" title="La cuenta existe pero todavía no puede iniciar sesión.">
-          Invitación pendiente
-        </Badge>
-      )}
+      {!user.credential_set && <Badge tone="warning">Invitación pendiente</Badge>}
     </div>
   )
 }

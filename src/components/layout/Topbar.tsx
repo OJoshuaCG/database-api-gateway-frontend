@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Button, SqlThemeSelect } from '@/components/ui'
+import { Button, SqlThemeSelect, UserIcon } from '@/components/ui'
 import { useSession } from '@/features/auth/hooks/use-session'
 import { useLogout } from '@/features/auth/hooks/use-logout'
 import { HealthBadge } from '@/features/health/components/HealthBadge'
@@ -82,30 +82,16 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
           // El nombre lleva a «Mi cuenta»: es donde la persona ve su acceso y sus sesiones, y
           // el destino del «Ver mi acceso» de cada 403. En pantallas estrechas el nombre no entra
           // y queda un icono con nombre accesible: «Mi cuenta» tiene que poder alcanzarse igual.
-          <>
-            <Link
-              to="/mi-cuenta"
-              aria-label={`Mi cuenta (${admin.username})`}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                aria-hidden
-              >
-                <circle cx="12" cy="8" r="3.5" strokeWidth="1.6" />
-                <path d="M5 20a7 7 0 0 1 14 0" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </Link>
-            <Link
-              to="/mi-cuenta"
-              className="hidden rounded-md px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline"
-            >
-              {admin.username}
-            </Link>
-          </>
+          <Link
+            to="/mi-cuenta"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-input px-2.5 text-sm text-foreground hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <UserIcon className="h-5 w-5 shrink-0" />
+            {/* El nombre visible desde `sm`; en móvil queda el icono, con el mismo nombre
+                accesible («Mi cuenta · usuario»), que contiene el texto visible (WCAG 2.5.3). */}
+            <span className="sr-only">Mi cuenta · </span>
+            <span className="sr-only sm:not-sr-only">{admin.username}</span>
+          </Link>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} isLoading={logout.isPending}>
           Cerrar sesión

@@ -301,6 +301,7 @@ export function ConfirmStep({ wizard }: { wizard: DatabaseExportWizard }) {
             <Button
               variant="danger"
               disabled={!wizard.nameMatches || wizard.actionCooldown || !executeGuard.allowed}
+              aria-describedby={executeGuard.describedBy}
               isLoading={wizard.execute.isPending}
               onClick={wizard.confirmAfterReview}
             >

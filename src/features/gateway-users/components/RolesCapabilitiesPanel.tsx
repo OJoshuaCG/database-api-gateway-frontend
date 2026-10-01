@@ -32,6 +32,8 @@ import {
   scopeAxisLabel,
   sortByRisk,
   summarizeLabels,
+  ROLE_PURPOSES,
+  globalCapabilityLabel,
 } from '@/features/auth'
 import type { CapabilityDescriptor } from '@/lib/contracts'
 
@@ -328,6 +330,9 @@ function RoleCard({
     <Card>
       <CardHeader>
         <CardTitle>{role}</CardTitle>
+        {/* La intención en una línea (de `ROLE_PURPOSES`, el único lugar con esta prosa); el
+            detalle de qué otorga sigue saliendo del catálogo, debajo. */}
+        {ROLE_PURPOSES[role] && <p className="text-sm text-foreground">{ROLE_PURPOSES[role]}.</p>}
         <CardDescription>
           Otorga {granted.length} de {catalog.length}
         </CardDescription>
@@ -356,7 +361,11 @@ function GlobalCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{globalCapability}</CardTitle>
+        <CardTitle>{globalCapabilityLabel(globalCapability)}</CardTitle>
+        <code className="font-mono text-xs text-muted-foreground">{globalCapability}</code>
+        {ROLE_PURPOSES[globalCapability] && (
+          <p className="text-sm text-foreground">{ROLE_PURPOSES[globalCapability]}.</p>
+        )}
         <CardDescription>
           Suma {granted.length} {granted.length === 1 ? 'capacidad' : 'capacidades'}, en todo el
           gateway y sin importar el rol.

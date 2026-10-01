@@ -121,5 +121,5 @@ export const CONVERSION_ACTION_HINTS: Partial<Record<ConversionErrorAction, stri
   recomputeToken: 'El plan cambió desde la última vista previa; se recomputará automáticamente el token.',
   reviewSelection: 'No hay ningún paso pendiente con la selección actual: marca al menos una tabla u objeto.',
   previewFirst: 'Genera la vista previa del plan antes de poder ejecutarlo.',
-  rateLimited: 'Se alcanzó el límite de solicitudes. Espera unos segundos e inténtalo de nuevo.',
+  rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

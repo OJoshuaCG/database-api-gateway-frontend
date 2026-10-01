@@ -2,11 +2,15 @@ import { useId, useState, type ReactNode } from 'react'
 import { Badge, Button, Callout, TrashIcon, type BadgeTone } from '@/components/ui'
 import type { CapabilityDescriptor } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
+import { useEnvironmentOptions } from '@/features/environments/hooks/use-environment-options'
 import {
   SCOPE_ENFORCEMENT_NOTE,
+  effectiveAccessRowId,
+  globalCapabilityLabel,
   groupByModule,
   isDestructive,
-  isEnforcedByScopeToday,
+  lostEnforcementNote,
+  mostProtectedEnvironmentId,
   resolveEffectiveAccess,
   sortByRisk,
   summarizeLabels,
@@ -35,6 +39,11 @@ interface EffectiveAccessPanelProps {
    * `self`: «Mi acceso», de solo lectura.
    */
   mode: 'admin' | 'self'
+  /**
+   * Prefijo para los `id` de las filas de permisos (`effectiveAccessRowId`), para que quien llama
+   * pueda enlazar a la fila de un permiso («Ver el efecto abajo»). Sin él las filas no llevan `id`.
+   */
+  idPrefix?: string
 }
 
 const PROVENANCE: Record<string, { label: string; tone: BadgeTone }> = {
@@ -57,8 +66,14 @@ export function EffectiveAccessPanel({
   catalog,
   isLoading = false,
   mode,
+  idPrefix,
 }: EffectiveAccessPanelProps) {
+  // Las filas se pliegan y despliegan por su DESTINO (`grant:<tipo>:<id>`), no por su posición:
+  // quitar un permiso de arriba no puede dejar desplegado el de abajo, que pasó a ocupar su índice.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  // Solo para nombrar el entorno al que caen las bases sin clasificar, y solo si importa.
+  const hasEnvironmentGrant = grants.some((grant) => grant.scopeType === 'environment')
+  const environments = useEnvironmentOptions(hasEnvironmentGrant)
 
   if (!catalog) {
     return (
@@ -88,6 +103,22 @@ export function EffectiveAccessPanel({
   const scopeTypeName = (scopeType: string) =>
     scopeType === 'environment' ? 'entorno' : scopeType === 'server' ? 'servidor' : scopeType
 
+  const fallbackId = mostProtectedEnvironmentId(environments.data ?? [])
+  const fallbackName = environments.data?.find((env) => env.id === fallbackId)?.name ?? null
+  const baseDetail = hasEnvironmentGrant
+    ? `En todo lo que no tenga un permiso propio. Ojo: una base sin entorno no cae acá, cuenta como el entorno más protegido${
+        fallbackName ? ` («${fallbackName}»)` : ''
+      } y sigue el permiso que haya sobre él.`
+    : 'En todo lo que no tenga un permiso propio.'
+  // Una clave por destino; si el mismo destino aparece dos veces, la segunda lleva sufijo.
+  const seenKeys = new Map<string, number>()
+  const grantKey = (scopeType: string, scopeId: number) => {
+    const key = `grant:${scopeType}:${scopeId}`
+    const count = seenKeys.get(key) ?? 0
+    seenKeys.set(key, count + 1)
+    return count === 0 ? key : `${key}#${count}`
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {mode === 'self' && grants.length === 0 && (
@@ -101,24 +132,32 @@ export function EffectiveAccessPanel({
           rowKey="base"
           badge={<Badge tone="neutral">Rol base</Badge>}
           title={`${baseRole} · ${access.baseCapabilities.length} capacidades`}
-          detail="En todo lo que no tenga un permiso propio."
+          detail={baseDetail}
           expanded={expanded.has('base')}
           onToggle={() => toggle('base')}
           catalog={catalog}
           capabilities={access.baseCapabilities}
         />
 
-        {access.grants.map(({ grant, capabilities, diff }, index) => {
-          const targetLabel = grants[index]?.targetLabel ?? `#${grant.scopeId}`
+        {access.grants.map(({ grant, capabilities, diff }) => {
+          // Por referencia: `resolveEffectiveAccess` descarta los permisos que el backend no
+          // carga, así que la posición no coincide con la de `grants`.
+          const targetLabel =
+            grants.find((candidate) => candidate === grant)?.targetLabel ?? `#${grant.scopeId}`
           const provenance = PROVENANCE[grant.scopeType] ?? {
             label: `Permiso de ${grant.scopeType}`,
             tone: 'info' as const,
           }
-          const key = `grant-${index}`
+          const key = grantKey(grant.scopeType, grant.scopeId)
           return (
             <AccessRow
               key={key}
               rowKey={key}
+              id={
+                idPrefix && !key.includes('#')
+                  ? effectiveAccessRowId(idPrefix, grant.scopeType, grant.scopeId)
+                  : undefined
+              }
               badge={<Badge tone={provenance.tone}>{provenance.label}</Badge>}
               title={`${targetLabel} · ${grant.role}`}
               detail={<DiffLine diff={diff} catalog={catalog} label={label} />}
@@ -160,7 +199,7 @@ export function EffectiveAccessPanel({
               key={key}
               rowKey={key}
               badge={<Badge tone="primary">Capacidad global</Badge>}
-              title={global.id}
+              title={`${globalCapabilityLabel(global.id)} · ${global.id}`}
               detail="En todo el gateway, sin importar el rol."
               expanded={expanded.has(key)}
               onToggle={() => toggle(key)}
@@ -221,39 +260,58 @@ function DiffLine({
   label: (ids: readonly string[]) => string[]
 }) {
   if (diff.gained.length === 0 && diff.lost.length === 0) return <>Igual que el rol base.</>
-  const touchesDestructive = sortByRisk([...diff.gained, ...diff.lost], catalog).some(isDestructive)
-  // Lo perdido solo se hace cumplir hoy en la capa 2: decir «pierde 5» sin más prometería un
-  // recorte que en la mayoría de las operaciones todavía no existe (F-37).
-  const enforcedLost = diff.lost.filter(isEnforcedByScopeToday)
-  const enforcement =
-    enforcedLost.length === diff.lost.length
-      ? ''
-      : enforcedLost.length > 0
-        ? ` (hoy solo se aplica a: ${summarizeLabels(label(enforcedLost))}; el resto todavía no)`
-        : ' (hoy todavía no se aplica a ninguna)'
   return (
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      {/* El color solo no alcanza para avisar (WCAG 1.4.1): la marca lleva icono y texto. */}
-      {touchesDestructive && (
+      <DestructiveMarks diff={diff} catalog={catalog} />
+      {diff.gained.length > 0 && (
+        <span className={gainsDestructive(diff, catalog) ? 'text-error' : 'text-warning'}>
+          Suma {diff.gained.length}: {summarizeLabels(label(diff.gained))}.
+        </span>
+      )}
+      {diff.lost.length > 0 && (
+        <span className="text-muted-foreground">
+          Pierde {diff.lost.length}: {summarizeLabels(label(diff.lost))}
+          {lostEnforcementNote(diff.lost, label)}.
+        </span>
+      )}
+    </span>
+  )
+}
+
+function gainsDestructive(diff: CapabilityDiff, catalog: readonly CapabilityDescriptor[]) {
+  return sortByRisk(diff.gained, catalog).some(isDestructive)
+}
+
+/**
+ * Las dos marcas de una diferencia que toca destructivas, con icono y texto (el color solo no
+ * alcanza, WCAG 1.4.1): **sumar** una destructiva es el riesgo (rojo); **quitarla** es un recorte,
+ * y va en neutro para no gritar lo mismo que la escalada.
+ */
+export function DestructiveMarks({
+  diff,
+  catalog,
+}: {
+  diff: CapabilityDiff
+  catalog: readonly CapabilityDescriptor[]
+}) {
+  const gains = gainsDestructive(diff, catalog)
+  const loses = sortByRisk(diff.lost, catalog).some(isDestructive)
+  if (!gains && !loses) return null
+  return (
+    <>
+      {gains && (
         <Badge tone="error" className="px-2 py-0">
           <TrashIcon className="h-3 w-3" />
-          Incluye destructivas
+          Suma destructivas
         </Badge>
       )}
-      <span className={touchesDestructive ? 'text-error' : 'text-warning'}>
-        {diff.gained.length > 0 && (
-          <>
-            Suma {diff.gained.length}: {summarizeLabels(label(diff.gained))}.{' '}
-          </>
-        )}
-        {diff.lost.length > 0 && (
-          <>
-            Pierde {diff.lost.length}: {summarizeLabels(label(diff.lost))}
-            {enforcement}.
-          </>
-        )}
-      </span>
-    </span>
+      {loses && (
+        <Badge tone="neutral" className="px-2 py-0">
+          <TrashIcon className="h-3 w-3" />
+          Quita destructivas
+        </Badge>
+      )}
+    </>
   )
 }
 
@@ -268,6 +326,8 @@ interface AccessRowProps {
   capabilities: readonly string[]
   /** Lo que se pierde respecto del base: se lista aparte, bajo «Pierde». */
   lost?: readonly string[]
+  /** `id` del `<li>`, para que se pueda enlazar a la fila. */
+  id?: string
 }
 
 function AccessRow({
@@ -280,12 +340,16 @@ function AccessRow({
   catalog,
   capabilities,
   lost = [],
+  id,
 }: AccessRowProps) {
   const listId = `effective-access-${useId()}-${rowKey}`
   const rows = catalog.filter((row) => capabilities.includes(row.id))
   const lostRows = sortByRisk(lost, catalog)
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+    <li
+      id={id}
+      className="flex scroll-mt-4 flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-center gap-2">
@@ -338,7 +402,9 @@ function CapabilityGroup({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className={cn('text-xs font-semibold', lost ? 'text-warning' : 'text-foreground')}>
+      <p
+        className={cn('text-xs font-semibold', lost ? 'text-muted-foreground' : 'text-foreground')}
+      >
         {title}
       </p>
       <ul className="flex flex-col gap-1">

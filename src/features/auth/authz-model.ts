@@ -34,6 +34,33 @@ export function roleRank(role: string): number {
   return (ROLE_CHAIN as readonly string[]).indexOf(role)
 }
 
+/** Tipos de alcance que el backend reconoce (`get_current_actor` descarta cualquier otro). */
+export const SCOPE_TYPES_KNOWN = ['environment', 'server'] as const
+
+/** ¿Es un rol de la cadena? */
+export function isKnownRole(role: string): boolean {
+  return roleRank(role) >= 0
+}
+
+/**
+ * Rol base tal como lo lee el backend: uno desconocido cae a `viewer` (`get_current_actor`:
+ * `GatewayRole(ctx["role"])` con `except ValueError: base = VIEWER`), nunca a «sin rol».
+ */
+export function normalizeBaseRole(role: string): string {
+  return isKnownRole(role) ? role : 'viewer'
+}
+
+/**
+ * Los permisos que el backend de verdad carga: descarta los de un tipo de alcance o un rol que no
+ * conoce, igual que `get_current_actor` (no los degrada a otro tipo ni a otro rol).
+ */
+export function knownGrants<T extends ScopeGrant>(grants: readonly T[]): T[] {
+  return grants.filter(
+    (grant) =>
+      (SCOPE_TYPES_KNOWN as readonly string[]).includes(grant.scopeType) && isKnownRole(grant.role),
+  )
+}
+
 /** El más restrictivo de una lista no vacía de roles (el `min` de `effective_role_at`). */
 export function mostRestrictiveRole(roles: readonly string[]): string {
   return roles.reduce((lowest, role) => (roleRank(role) < roleRank(lowest) ? role : lowest))
@@ -205,19 +232,26 @@ export interface RoleResolutionInput {
 /**
  * El rol en ESTE destino. Regla por regla igual que `effective_role_at`:
  *
+ * 0. Permisos de tipo o rol desconocido no existen (los descarta `get_current_actor`), y un rol
+ *    base desconocido es `viewer`.
  * 1. Sin ningún permiso por alcance → rol base, sin mirar el destino.
- * 2. Entorno del destino = el de la base, o el más protegido si no está clasificada.
- * 3. Aplican el permiso de ese entorno y el del servidor del destino.
- * 4. Ninguno → rol base (NUNCA el rol unión). Alguno → el más restrictivo.
+ * 2. Sin servidor NI entorno es una operación global → rol base (`resolve_environment_id`
+ *    devuelve `None` y no se inventa el más protegido).
+ * 3. Entorno del destino = el de la base, o el más protegido si no está clasificada.
+ * 4. Aplican el permiso de ese entorno y el del servidor del destino.
+ * 5. Ninguno → rol base (NUNCA el rol unión). Alguno → el más restrictivo.
  */
 export function effectiveRoleAt(
   input: RoleResolutionInput,
   target: AccessTarget,
   environments: readonly EnvironmentRank[],
 ): string {
-  if (input.grants.length === 0) return input.baseRole
+  const baseRole = normalizeBaseRole(input.baseRole)
+  const grants = knownGrants(input.grants)
+  if (grants.length === 0) return baseRole
+  if (target.serverId === null && target.environmentId === null) return baseRole
   const environmentId = target.environmentId ?? mostProtectedEnvironmentId(environments)
-  const applicable = input.grants
+  const applicable = grants
     .filter(
       (grant) =>
         (grant.scopeType === 'environment' &&
@@ -228,7 +262,7 @@ export function effectiveRoleAt(
           grant.scopeId === target.serverId),
     )
     .map((grant) => grant.role)
-  return applicable.length === 0 ? input.baseRole : mostRestrictiveRole(applicable)
+  return applicable.length === 0 ? baseRole : mostRestrictiveRole(applicable)
 }
 
 export interface AccessInput extends RoleResolutionInput {
@@ -238,7 +272,10 @@ export interface AccessInput extends RoleResolutionInput {
 
 /** El rol unión de la capa 1: el máximo entre el base y todos los permisos por alcance. */
 export function unionRole(input: RoleResolutionInput): string {
-  return highestRole([input.baseRole, ...input.grants.map((grant) => grant.role)])
+  return highestRole([
+    normalizeBaseRole(input.baseRole),
+    ...knownGrants(input.grants).map((grant) => grant.role),
+  ])
 }
 
 /** Lo que suman las capacidades globales. Nunca se recortan por alcance. */
@@ -321,7 +358,13 @@ export interface EffectiveAccess {
  * base, que es lo que rige en todo lo demás. Los cruces entorno × servidor se listan aparte
  * porque ahí ninguno de los dos rige solo: gana el más restrictivo.
  */
-export function resolveEffectiveAccess(input: AccessInput): EffectiveAccess {
+export function resolveEffectiveAccess(rawInput: AccessInput): EffectiveAccess {
+  // Lo mismo que carga el backend: sin permisos desconocidos y con el base normalizado.
+  const input: AccessInput = {
+    ...rawInput,
+    baseRole: normalizeBaseRole(rawInput.baseRole),
+    grants: knownGrants(rawInput.grants),
+  }
   const baseCapabilities = capabilitiesWithScopeRole(input, input.baseRole)
   const grants = input.grants.map((grant) => {
     const capabilities = capabilitiesWithScopeRole(input, grant.role)
@@ -373,6 +416,61 @@ export function summarizeLabels(labels: readonly string[], max = 3): string {
 export function joinWithNi(parts: readonly string[]): string {
   if (parts.length <= 1) return parts.join('')
   return `${parts.slice(0, -1).join(', ')} ni ${parts[parts.length - 1]}`
+}
+
+/**
+ * Para qué sirve cada rol y cada capacidad global, en una línea. **Es el único lugar** con esta
+ * prosa: la usan la matriz de roles, el modal de accesos y «Mi acceso». No reemplaza al catálogo
+ * —qué otorga cada uno sale siempre de `GET /authz/catalog`—, solo dice la intención, que el
+ * catálogo no publica. Si el backend cambia qué otorga un rol, revisá que la frase siga siendo
+ * cierta (`capability_catalog.py`, `ROLE_CAPABILITIES` y `GLOBAL_CAPABILITIES`).
+ */
+export const ROLE_PURPOSES: Record<string, string> = {
+  viewer: 'Consulta sin cambiar nada',
+  operator: 'Crea y edita sin borrar ni ejecutar cambios de esquema',
+  owner: 'Opera todo en su alcance, incluido lo destructivo',
+  access_admin: 'Administra usuarios y accesos',
+  security_officer: 'Administra servidores, catálogos y política',
+}
+
+/** Nombre legible de cada capacidad global; el id va aparte, en monoespaciada. */
+export const GLOBAL_CAPABILITY_LABELS: Record<string, string> = {
+  access_admin: 'Administración de accesos',
+  security_officer: 'Oficial de seguridad',
+}
+
+export function globalCapabilityLabel(id: string): string {
+  return GLOBAL_CAPABILITY_LABELS[id] ?? id
+}
+
+/**
+ * Qué parte de lo que un permiso QUITA se hace cumplir hoy, para decirlo junto a «Pierde N».
+ * Sin esto, «pierde 5» promete un recorte que en la mayoría de las operaciones todavía no existe
+ * (F-37). `databases.write` se recorta solo en dos de sus rutas, y se aclara.
+ *
+ * Devuelve el sufijo (con espacio inicial) o `''` si todo lo perdido ya se aplica.
+ */
+export function lostEnforcementNote(
+  lost: readonly string[],
+  labels: (ids: readonly string[]) => string[],
+): string {
+  const enforced = lost.filter(isEnforcedByScopeToday)
+  if (enforced.length === lost.length) return ''
+  if (enforced.length === 0) return ' (hoy todavía no se aplica a ninguna)'
+  const named = enforced.map((id) => {
+    const [label] = labels([id])
+    const text = label ?? id
+    return id === 'databases.write' ? `${text} (solo en borrar y aprovisionar)` : text
+  })
+  return ` (hoy solo se aplica a: ${summarizeLabels(named)}; el resto todavía no)`
+}
+
+/**
+ * `id` de la fila de un permiso en `EffectiveAccessPanel`, dado su `idPrefix`: para enlazar desde
+ * otra parte de la pantalla («Ver el efecto abajo»).
+ */
+export function effectiveAccessRowId(prefix: string, scopeType: string, scopeId: number): string {
+  return `${prefix}-${scopeType}-${scopeId}`
 }
 
 /** Nombre visible de cada módulo del catálogo. Uno desconocido se muestra con su clave. */

@@ -93,6 +93,7 @@ describe('GatewayUsersPage — sin acceso', () => {
   })
 
   it('sin `gateway.admin` entra a «Roles y capacidades» y no ofrece el alta', async () => {
+    let listRequests = 0
     server.use(
       http.get('http://localhost/api/v1/auth/me', () =>
         HttpResponse.json({
@@ -102,9 +103,10 @@ describe('GatewayUsersPage — sin acceso', () => {
       http.get('http://localhost/api/v1/authz/catalog', () =>
         HttpResponse.json({ data: CATALOG_FIXTURE }),
       ),
-      http.get('http://localhost/api/v1/gateway-users', () =>
-        HttpResponse.json({ data: [], pagination }),
-      ),
+      http.get('http://localhost/api/v1/gateway-users', () => {
+        listRequests += 1
+        return HttpResponse.json({ data: [], pagination })
+      }),
     )
     renderWithProviders(<GatewayUsersPage />)
     // Sin `?tab`, el listado sería un 403 seguro: la pestaña por defecto es la que le sirve.
@@ -116,6 +118,9 @@ describe('GatewayUsersPage — sin acceso', () => {
     )
     expect(await screen.findByText('Otorga 12 de 29')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
+    // Ni se ofrece la pestaña (como «Cifrado» en Administración) ni se pide el listado.
+    expect(screen.queryByRole('tab', { name: 'Usuarios' })).not.toBeInTheDocument()
+    expect(listRequests).toBe(0)
   })
 
   it('sin `gateway.admin`, pedir el listado a mano muestra el estado de acceso', async () => {
@@ -132,5 +137,29 @@ describe('GatewayUsersPage — sin acceso', () => {
     renderWithProviders(<GatewayUsersPage />, { route: '/gateway-users?tab=users' })
     expect(await screen.findByText('No tenés acceso a Usuarios del gateway')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
+  })
+})
+
+describe('GatewayUsersPage — estados de la cuenta', () => {
+  it('«Invitación pendiente» se explica en una leyenda visible, no en un `title`', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({
+          data: { id: 1, username: 'admin', role: 'owner', base_role: 'owner' },
+        }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json({
+          data: [{ ...gatewayUser(7, 'mlopez'), credential_set: false }],
+          pagination: { ...pagination, total: 1 },
+        }),
+      ),
+    )
+    renderWithProviders(<GatewayUsersPage />)
+    const legend = await screen.findByRole('region', { name: 'Qué significa cada estado' })
+    expect(legend).toHaveTextContent('todavía no puede iniciar sesión')
+    for (const badge of screen.getAllByText('Invitación pendiente')) {
+      expect(badge).not.toHaveAttribute('title')
+    }
   })
 })

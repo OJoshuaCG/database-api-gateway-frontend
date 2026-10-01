@@ -12,7 +12,7 @@ import {
   PageHeader,
   Pagination,
 } from '@/components/ui'
-import { ForbiddenState, isAccessForbidden, useCapabilities } from '@/features/auth'
+import { ForbiddenState, isAccessForbidden, useCapabilities, useSession } from '@/features/auth'
 import {
   CAPABILITIES,
   PAGINATION,
@@ -30,11 +30,18 @@ export function ApiTokensPage() {
   const [issued, setIssued] = useState<ApiTokenCreatedOut | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenOut | null>(null)
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useApiTokens({ page, size })
-  const revoke = useRevokeApiToken()
   // Todo el módulo va detrás de `gateway.admin`. Sin ella la pantalla no ofrece emitir ni revocar
-  // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403.
-  const forbidden = !useCapabilities().can(CAPABILITIES.gatewayAdmin) || isAccessForbidden(error)
+  // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403. Por eso el
+  // listado ni se pide: sería un 403 seguro.
+  const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  // Antes de que llegue la sesión `can()` falla abierto: se espera para no pedir un 403 seguro.
+  const { admin } = useSession()
+  const { data, isLoading, isFetching, isError, error, refetch } = useApiTokens(
+    { page, size },
+    admin !== null && canAdmin,
+  )
+  const revoke = useRevokeApiToken()
+  const forbidden = !canAdmin || isAccessForbidden(error)
 
   const columns = useMemo<ColumnDef<ApiTokenOut>[]>(
     () => [

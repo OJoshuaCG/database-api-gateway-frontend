@@ -1,10 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
-import { CATALOG_FIXTURE } from '@/test/fixtures/authz-catalog'
-import { SCOPE_ENFORCEMENT_NOTE } from '../authz-model'
-import { EffectiveAccessPanel } from './EffectiveAccessPanel'
+import { CATALOG_FIXTURE, environmentFixture, pageOf } from '@/test/fixtures/authz-catalog'
+import { SCOPE_ENFORCEMENT_NOTE, effectiveAccessRowId } from '../authz-model'
+import { EffectiveAccessPanel, type EffectiveAccessGrant } from './EffectiveAccessPanel'
+
+// Con un permiso de entorno el panel pide los entornos para nombrar el más protegido.
+beforeEach(() => {
+  server.use(
+    http.get('http://localhost/api/v1/environments', () =>
+      HttpResponse.json(
+        pageOf([environmentFixture(1, 'Desarrollo', 0), environmentFixture(3, 'Producción', 2)]),
+      ),
+    ),
+  )
+})
 
 describe('EffectiveAccessPanel', () => {
   it('una fila por permiso con lo que pierde respecto del base, y la nota honesta', () => {
@@ -26,7 +39,7 @@ describe('EffectiveAccessPanel', () => {
     // «Pierde 5» sin más exageraría: de las cinco, hoy solo se recorta `databases.write`.
     const lost = screen.getByText(/Pierde 5:/)
     expect(lost).toHaveTextContent(
-      '(hoy solo se aplica a: Crear y editar bases gestionadas; el resto todavía no).',
+      '(hoy solo se aplica a: Crear y editar bases gestionadas (solo en borrar y aprovisionar); el resto todavía no).',
     )
     // Solo recorta: la nota es informativa, no una alerta.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -50,8 +63,9 @@ describe('EffectiveAccessPanel', () => {
     expect(screen.getByText(/en esas otras operaciones tiene el rol/)).toBeInTheDocument()
     // Escalada real por encima del base: el aviso sube a `warning` (que se anuncia como alerta).
     expect(screen.getByRole('alert')).toHaveTextContent(SCOPE_ENFORCEMENT_NOTE)
-    // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1).
-    expect(screen.getByText('Incluye destructivas')).toBeInTheDocument()
+    // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1), y va en rojo.
+    expect(screen.getByText('Suma destructivas')).toBeInTheDocument()
+    expect(screen.getByText(/Suma 14:/)).toHaveClass('text-error')
   })
 
   it('el cruce entorno × servidor dice que rige el más restrictivo', () => {
@@ -82,7 +96,7 @@ describe('EffectiveAccessPanel', () => {
         catalog={CATALOG_FIXTURE}
       />,
     )
-    expect(screen.getByText('access_admin')).toBeInTheDocument()
+    expect(screen.getByText('Administración de accesos · access_admin')).toBeInTheDocument()
     expect(screen.getByText('Capacidad global')).toBeInTheDocument()
     const toggles = screen.getAllByRole('button', { name: /^Ver capacidades de / })
     // Base, el permiso y la global: las tres plegadas al empezar.
@@ -131,6 +145,73 @@ describe('EffectiveAccessPanel', () => {
     const lost = screen.getByText(/Pierde \d+:/)
     expect(lost).toHaveTextContent(/hoy solo se aplica a: .*Borrar bases de datos/)
     expect(lost).toHaveTextContent('; el resto todavía no).')
-    expect(screen.getByText('Incluye destructivas')).toBeInTheDocument()
+    // Quitar destructivas es un recorte: marca neutra, no la alarma de una escalada.
+    expect(screen.getByText('Quita destructivas')).toBeInTheDocument()
+    expect(screen.queryByText('Suma destructivas')).not.toBeInTheDocument()
+  })
+
+  it('con permisos de entorno, la fila base nombra el entorno al que caen las bases sin clasificar', async () => {
+    renderWithProviders(
+      <EffectiveAccessPanel
+        mode="admin"
+        baseRole="operator"
+        globalCapabilities={[]}
+        grants={[
+          { scopeType: 'environment', scopeId: 1, role: 'viewer', targetLabel: 'Desarrollo' },
+        ]}
+        catalog={CATALOG_FIXTURE}
+      />,
+    )
+    expect(
+      await screen.findByText(
+        /una base sin entorno no cae acá, cuenta como el entorno más protegido \(«Producción»\)/,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('cada fila de permiso tiene un id estable por destino, para enlazarla', () => {
+    renderWithProviders(
+      <EffectiveAccessPanel
+        mode="admin"
+        idPrefix="acceso"
+        baseRole="operator"
+        globalCapabilities={[]}
+        grants={[{ scopeType: 'server', scopeId: 9, role: 'viewer', targetLabel: 'db-01' }]}
+        catalog={CATALOG_FIXTURE}
+      />,
+    )
+    const row = document.getElementById(effectiveAccessRowId('acceso', 'server', 9))
+    expect(row).toHaveTextContent('db-01 · viewer')
+  })
+
+  it('lo desplegado sigue al destino, no a la posición, cuando se quita un permiso de arriba', async () => {
+    const first: EffectiveAccessGrant = {
+      scopeType: 'server',
+      scopeId: 9,
+      role: 'viewer',
+      targetLabel: 'db-01',
+    }
+    const second: EffectiveAccessGrant = {
+      scopeType: 'server',
+      scopeId: 4,
+      role: 'owner',
+      targetLabel: 'db-02',
+    }
+    const panel = (grants: EffectiveAccessGrant[]) => (
+      <EffectiveAccessPanel
+        mode="admin"
+        baseRole="operator"
+        globalCapabilities={[]}
+        grants={grants}
+        catalog={CATALOG_FIXTURE}
+      />
+    )
+    const { rerender } = renderWithProviders(panel([first, second]))
+    await userEvent.click(screen.getByRole('button', { name: 'Ver capacidades de db-01 · viewer' }))
+    rerender(panel([second]))
+    // db-02 ocupa ahora la posición de db-01, pero no hereda su despliegue.
+    expect(
+      screen.getByRole('button', { name: 'Ver capacidades de db-02 · owner' }),
+    ).toHaveAttribute('aria-expanded', 'false')
   })
 })

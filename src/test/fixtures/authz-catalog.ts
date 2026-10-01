@@ -1,8 +1,9 @@
 import type { CapabilityDescriptor } from '@/lib/contracts'
 /**
- * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (backend 0b43532,
- * `capability_matrix()`), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva del
- * catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
+ * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (backend 463dc4d, HEAD de
+ * `main` al escribir esto; `app/services/capability_catalog.py` no cambió desde 0b43532, donde se
+ * generó: `capability_matrix()`), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
+ * del catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
  */
 export const CATALOG_FIXTURE: CapabilityDescriptor[] = [
   {

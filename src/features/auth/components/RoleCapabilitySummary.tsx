@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom'
-import { Badge, TrashIcon } from '@/components/ui'
 import type { CapabilityDescriptor } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import {
   diffCapabilities,
   isDestructive,
+  lostEnforcementNote,
   roleCapabilityIds,
   sortByRisk,
   summarizeLabels,
 } from '../authz-model'
+import { DestructiveMarks } from './EffectiveAccessPanel'
 
 /** Ruta de la matriz completa de roles y capacidades. */
 export const ROLES_MATRIX_PATH = '/gateway-users?tab=roles'
@@ -56,7 +57,7 @@ export function RoleCapabilitySummary({
   }
 
   const granted = roleCapabilityIds(catalog, role)
-  const labels = (ids: string[]) => sortByRisk(ids, catalog).map((row) => row.label)
+  const labels = (ids: readonly string[]) => sortByRisk(ids, catalog).map((row) => row.label)
   const link = linkToMatrix ? (
     <>
       {' '}
@@ -69,7 +70,6 @@ export function RoleCapabilitySummary({
   if (compareTo !== undefined) {
     const diff = diffCapabilities(roleCapabilityIds(catalog, compareTo), granted)
     const gainsDestructive = sortByRisk(diff.gained, catalog).some(isDestructive)
-    const losesDestructive = sortByRisk(diff.lost, catalog).some(isDestructive)
     if (diff.gained.length === 0 && diff.lost.length === 0) {
       return (
         <p id={id} className={textClass}>
@@ -79,25 +79,19 @@ export function RoleCapabilitySummary({
     }
     return (
       <p id={id} className={textClass}>
-        {/* El color solo no alcanza para avisar (WCAG 1.4.1): la marca lleva icono y texto, y
-            cuenta tanto lo destructivo que se SUMA como lo que se pierde. */}
-        {(gainsDestructive || losesDestructive) && (
-          <>
-            <Badge tone="error" className="px-2 py-0">
-              <TrashIcon className="h-3 w-3" />
-              Incluye destructivas
-            </Badge>{' '}
-          </>
-        )}
+        {/* Mismas marcas y colores que `EffectiveAccessPanel`: sumar una destructiva es rojo,
+            quitarla es neutro. Y el «pierde» lleva la misma salvedad de qué se aplica hoy. */}
+        <DestructiveMarks diff={diff} catalog={catalog} />{' '}
         {diff.gained.length > 0 && (
-          <span className={gainsDestructive ? 'text-warning' : undefined}>
+          <span className={gainsDestructive ? 'text-error' : 'text-warning'}>
             Respecto de {compareTo} suma {diff.gained.length}:{' '}
             {summarizeLabels(labels(diff.gained))}.{' '}
           </span>
         )}
         {diff.lost.length > 0 && (
-          <span className={losesDestructive ? 'text-warning' : undefined}>
-            Respecto de {compareTo} pierde {diff.lost.length}: {summarizeLabels(labels(diff.lost))}.
+          <span>
+            Respecto de {compareTo} pierde {diff.lost.length}: {summarizeLabels(labels(diff.lost))}
+            {lostEnforcementNote(diff.lost, labels)}.
           </span>
         )}
         {link}

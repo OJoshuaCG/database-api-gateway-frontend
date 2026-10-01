@@ -27,11 +27,16 @@ function errorToast(title: string, error: unknown): [string, string] {
   return [title, gatewayUserErrorMessage(apiError) ?? apiError.message]
 }
 
-export function useGatewayUsers(params: QueryParams) {
+/**
+ * `enabled` lo apaga quien no tiene `gateway.admin` (o no está en la pestaña del listado): el
+ * pedido sería un 403 seguro, y además es ruido en el log de auditoría del backend.
+ */
+export function useGatewayUsers(params: QueryParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.gatewayUsers.list(params),
     queryFn: ({ signal }) => listGatewayUsers(params, signal),
     placeholderData: keepPreviousData,
+    enabled,
   })
 }
 

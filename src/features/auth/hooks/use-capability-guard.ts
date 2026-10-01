@@ -81,8 +81,10 @@ export function useCapabilityGuard(
    */
   const scoped =
     options.scope !== undefined && known && catalogVersion !== null && scopeRoles.length > 0
-  // Los entornos solo hacen falta para resolver «sin clasificar = el más protegido».
-  const needsEnvironments = scoped && options.scope?.environmentId === null
+  // Los entornos solo hacen falta para resolver «sin clasificar = el más protegido». Sin servidor
+  // ni entorno el destino es global y rige el base: no hay nada que resolver.
+  const needsEnvironments =
+    scoped && options.scope?.environmentId === null && options.scope.serverId !== null
   const environments = useEnvironmentOptions(needsEnvironments)
 
   const list: readonly Capability[] = typeof required === 'string' ? [required] : required

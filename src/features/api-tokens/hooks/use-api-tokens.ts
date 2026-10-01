@@ -14,11 +14,13 @@ function errorToast(title: string, error: unknown): [string, string] {
   return [title, apiTokenErrorMessage(apiError) ?? apiError.message]
 }
 
-export function useApiTokens(params: QueryParams) {
+/** `enabled` en `false` sin `gateway.admin`: el pedido sería un 403 seguro. */
+export function useApiTokens(params: QueryParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.apiTokens.list(params),
     queryFn: ({ signal }) => listApiTokens(params, signal),
     placeholderData: keepPreviousData,
+    enabled,
   })
 }
 

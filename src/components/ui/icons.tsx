@@ -259,6 +259,16 @@ export function CheckIcon({ className }: IconProps) {
   )
 }
 
+/** Persona: la cuenta propia («Mi cuenta»). */
+export function UserIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <circle cx="10" cy="6.8" r="3" />
+      <path d="M4.5 16.5a5.5 5.5 0 0111 0" />
+    </Glyph>
+  )
+}
+
 /** Llave: reautenticación (la capacidad va a volver a pedir la contraseña). */
 export function KeyIcon({ className }: IconProps) {
   return (

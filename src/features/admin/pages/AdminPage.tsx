@@ -56,7 +56,11 @@ export function AdminPage() {
         description="Operaciones sensibles sobre la plataforma y catálogos globales."
       />
 
-      <div className="flex gap-1 border-b border-border" role="tablist">
+      <div
+        className="flex gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Secciones de administración"
+      >
         {canRotate && (
           <TabButton active={tab === 'crypto'} onClick={() => setTab('crypto')}>
             Cifrado

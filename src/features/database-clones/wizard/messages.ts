@@ -87,5 +87,5 @@ export const CLONE_ACTION_HINTS: Partial<Record<CloneErrorAction, string>> = {
     'El plan cambió desde la última vista previa; se recomputará automáticamente el token.',
   switchToExistingTarget: "La BD destino ya existe: cambia el modo a 'existing' para usarla.",
   switchToNewTarget: "La BD destino no existe: cambia el modo a 'new' para crearla.",
-  rateLimited: 'Se alcanzó el límite de solicitudes. Espera unos segundos e inténtalo de nuevo.',
+  rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

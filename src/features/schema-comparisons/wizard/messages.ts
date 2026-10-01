@@ -93,5 +93,5 @@ export const ACTION_HINTS: Partial<Record<ComparisonErrorAction, string>> = {
   recomputeToken: 'El conjunto de sentencias a ejecutar cambió desde la última vista previa; se recomputará automáticamente.',
   resolveDependencies:
     'Tu selección depende de sentencias que no incluiste. Se agregarán las sugeridas por el backend a la selección; revisa y vuelve a confirmar.',
-  rateLimited: 'Se alcanzó el límite de solicitudes. Espera unos segundos e inténtalo de nuevo.',
+  rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

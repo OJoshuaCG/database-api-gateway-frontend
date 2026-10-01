@@ -1,6 +1,7 @@
 export * from './AdoptionBadge'
 export * from './Badge'
 export * from './Button'
+export { buttonClassName } from './button-styles'
 export * from './Callout'
 export * from './Card'
 export * from './Checkbox'

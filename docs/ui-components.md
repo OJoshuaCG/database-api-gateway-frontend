@@ -22,6 +22,10 @@ Botón con variantes y estado de carga. **No** usa neumorphism (rompería el con
 <Button variant="danger" isLoading={mutation.isPending} onClick={…}>Eliminar</Button>
 ```
 
+Para un **enlace con aspecto de botón** (navega, no ejecuta) usá `buttonClassName({ variant, size })`
+sobre el `<Link>`. Nunca un `<Button>` dentro de un `<Link>`: son dos controles anidados (HTML
+inválido y dos paradas de tabulación para una sola acción).
+
 #### Cuándo usar cada variante
 
 Todas las variantes deben verse como **botón** en reposo (fondo y/o borde visibles), no
@@ -76,10 +80,13 @@ Pensados para `react-hook-form` con `{...register('campo')}`.
 ```
 
 ### `Checkbox`
-Checkbox con `label` y `hint`. Para flags simples dentro de formularios.
+Checkbox con `label`, `hint` y `caption?` (una línea propia bajo la etiqueta, fuera del nombre
+accesible: p. ej. el id técnico en monoespaciada). Para flags simples dentro de formularios.
 
 ### `Switch`
 Interruptor accesible (`role="switch"`) **controlado**: `checked` + `onCheckedChange`.
+`describedBy?` suma a su `aria-describedby` un texto de afuera (el aviso de acceso de la pantalla
+cuando está deshabilitado).
 Úsalo para flags como `provision` / `drop_remote`.
 
 ```tsx
@@ -273,18 +280,28 @@ el catálogo no publica esa marca. La leyenda es `CAPABILITY_FLAG_LEGEND`, para 
 
 ### `RoleCapabilitySummary`
 Una línea bajo un selector de rol: «Otorga 17 de 29. No incluye: …». Props: `role`, `catalog`,
-`isLoading?`, `compareTo?` (en un permiso por alcance, el rol base: pasa a decir qué suma o
-pierde), `linkToMatrix?` (enlace a `/gateway-users?tab=roles`). Reemplaza a las descripciones de
-rol escritas a mano, que llegaron a ser falsas.
+`isLoading?`, `compareTo?` (pasa a decir qué suma o pierde respecto de ése, con las mismas marcas,
+colores y salvedad de «qué se aplica hoy» que `EffectiveAccessPanel`), `linkToMatrix?` (enlace a
+`/gateway-users?tab=roles`). Reemplaza a las descripciones de rol escritas a mano, que llegaron a
+ser falsas. La intención de cada rol y global en una línea («Consulta sin cambiar nada»…) vive en
+un solo mapa, `ROLE_PURPOSES` de `authz-model.ts`, y el nombre legible de cada global en
+`GLOBAL_CAPABILITY_LABELS`.
 
 ### `EffectiveAccessPanel`
 Qué puede hacer alguien y dónde: rol base, una fila por permiso con su diferencia respecto del
 base, los cruces entorno × servidor (rige el más restrictivo) y las capacidades globales; cada
 fila despliega sus capacidades con «Ver capacidades». Props: `baseRole`, `globalCapabilities`,
 `grants` (`{ scopeType, scopeId, role, targetLabel }[]`, con el nombre del destino ya resuelto),
-`catalog`, `isLoading?`, `mode` (`admin` en el modal de accesos, `self` en «Mi acceso»).
-**Lleva siempre la nota de dónde se aplica hoy el recorte por alcance** (`SCOPE_ENFORCEMENT_NOTE`):
-solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo demás rige el rol unión.
+`catalog`, `isLoading?`, `mode` (`admin` en el modal de accesos, `self` en «Mi acceso»), `idPrefix?`
+(da a cada fila de permiso el `id` de `effectiveAccessRowId(prefix, tipo, id)`, para enlazarla:
+el modal de accesos pone «Ver el efecto abajo» en cada permiso en vez de repetir la diferencia).
+Lo desplegado se recuerda por destino (`tipo:id`), no por posición. Las diferencias marcan
+«Suma destructivas» (rojo) y «Quita destructivas» (neutro) por separado, y lo perdido dice qué
+parte se hace cumplir hoy (`lostEnforcementNote`; `databases.write`, solo en borrar y aprovisionar).
+Con permisos de entorno, la fila base nombra el entorno más protegido, que es adonde caen las bases
+sin clasificar. **Lleva siempre la nota de dónde se aplica hoy el recorte por alcance**
+(`SCOPE_ENFORCEMENT_NOTE`): solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo
+demás rige el rol unión.
 
 ### `CapabilityCallout`
 **El** aviso de acceso de una pantalla: uno solo, arriba, en lugar de un motivo repetido junto a
@@ -311,7 +328,8 @@ acceso», **sin «Reintentar»** (el mismo pedido daría el mismo 403).
 
 `RolesCapabilitiesPanel` (en `features/gateway-users`) es la pestaña «Roles y capacidades» de
 `/gateway-users`: una tarjeta por rol y por global, y la matriz por módulo con `DataTable`
-(búsqueda, filtro por rol y por riesgo). `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella.
+(búsqueda, filtro por rol y por riesgo). `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella;
+`UserIcon`, para el enlace «Mi cuenta» de la `Topbar`.
 
 ## Layout (en `src/components/layout/`)
 

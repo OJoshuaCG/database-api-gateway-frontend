@@ -58,23 +58,30 @@ function mockBackend() {
   )
 }
 
+/** El botón «Abrir lista» del combobox `name` de la fila `index`. */
+function comboToggle(name: string, index: number) {
+  const input = screen.getAllByRole('combobox', { name })[index]
+  const box = input?.parentElement
+  if (!box) throw new Error(`falta el combobox ${name} ${index}`)
+  return within(box).getByRole('button', { name: 'Abrir lista' })
+}
+
 /** El botón «Abrir lista» del combobox de rol de la fila `index`. */
 function roleToggle(index: number) {
-  const input = screen.getAllByRole('combobox', { name: 'Rol en ese alcance' })[index]
-  const box = input?.parentElement
-  if (!box) throw new Error(`falta el combobox de rol ${index}`)
-  return within(box).getByRole('button', { name: 'Abrir lista' })
+  return comboToggle('Rol en ese alcance', index)
 }
 
 describe('GatewayUserAccessModal — techo de quien otorga', () => {
   it('deshabilita la global que el actor no tiene, con el motivo a la vista', async () => {
     mockBackend()
     renderWithProviders(<GatewayUserAccessModal user={target} onClose={() => undefined} />)
-    const officer = await screen.findByRole('checkbox', { name: 'security_officer' })
+    // Etiqueta legible; el id técnico va aparte, en monoespaciada.
+    const officer = await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
     // El techo llega con `/auth/me`: hasta entonces no se sabe qué ocultar.
     await screen.findByText(/Solo podés otorgar hasta operator/)
     expect(officer).toBeDisabled()
-    expect(screen.getByRole('checkbox', { name: 'access_admin' })).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Administración de accesos' })).toBeEnabled()
+    expect(screen.getByText('security_officer')).toBeInTheDocument()
     expect(screen.getByText(new RegExp(GLOBAL_CEILING_HINT))).toBeInTheDocument()
   })
 
@@ -99,7 +106,37 @@ describe('GatewayUserAccessModal — techo de quien otorga', () => {
     expect(await screen.findByText('Acceso efectivo al guardar')).toBeInTheDocument()
     // El título no repite la procedencia («Permiso de entorno»): ya la dice el badge.
     expect((await screen.findAllByText('Producción · owner')).length).toBeGreaterThan(0)
-    // La misma diferencia aparece bajo la fila del permiso y en el panel efectivo.
-    expect(screen.getAllByText(/suma 14|Suma 14/).length).toBeGreaterThanOrEqual(2)
+    // La diferencia se dice UNA vez, en el panel; la fila del permiso enlaza ahí.
+    expect(screen.getAllByText(/Suma 14:/)).toHaveLength(1)
+    const link = screen.getByRole('link', { name: 'Ver el efecto abajo' })
+    const anchor = (link.getAttribute('href') ?? '').slice(1)
+    expect(document.getElementById(anchor)).toHaveTextContent('Producción · owner')
+  })
+
+  it('al cambiar el destino baja el rol al techo y guarda el estado COMPLETO', async () => {
+    mockBackend()
+    let body: unknown = null
+    server.use(
+      http.put(`${API}/gateway-users/7/access`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ data: target })
+      }),
+    )
+    renderWithProviders(<GatewayUserAccessModal user={target} onClose={() => undefined} />)
+    await screen.findByText(/Solo podés otorgar hasta operator/)
+
+    // El `owner` sobre Producción se conservaba por ser el que ya tenía AHÍ. En Desarrollo es un
+    // permiso nuevo y supera el techo: sin el recorte, el backend respondería 409.
+    await userEvent.click(comboToggle('Entorno', 0))
+    await userEvent.click(screen.getByRole('option', { name: 'Desarrollo' }))
+    expect(screen.getByRole('combobox', { name: 'Rol en ese alcance' })).toHaveValue('operator')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar accesos' }))
+    await expect.poll(() => body).not.toBeNull()
+    // Reemplazo total: los dos campos, siempre, y sin campos internos del formulario.
+    expect(body).toEqual({
+      global_capabilities: [],
+      scope_grants: [{ scope_type: 'environment', scope_id: 1, role: 'operator' }],
+    })
   })
 })

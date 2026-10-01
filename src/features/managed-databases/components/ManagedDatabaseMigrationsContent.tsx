@@ -225,7 +225,7 @@ export function ManagedDatabaseMigrationsContent({
   const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones', {
     scope: target,
   })
-  const stampGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'marcar versiones (stamp)')
+  const stampGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'marcar versiones con stamp')
   const provisionGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'aprovisionar la base', {
     scope: target,
   })
@@ -604,7 +604,7 @@ export function ManagedDatabaseMigrationsContent({
         // Con salida: sin el botón, el aviso mandaba a asignar un blueprint sin decir dónde.
         <EmptyState
           title="Sin blueprint asignado"
-          description="Asigna un blueprint a esta base de datos para gestionar sus migraciones."
+          description="Asigná un blueprint a esta base de datos para gestionar sus migraciones."
           action={
             <div className="flex flex-col items-center gap-1">
               <Button
@@ -631,7 +631,11 @@ export function ManagedDatabaseMigrationsContent({
               unresolved={accessUnresolved}
             />
           )}
-          <div className="flex gap-1 border-b border-border" role="tablist">
+          <div
+            className="flex gap-1 border-b border-border"
+            role="tablist"
+            aria-label="Secciones de migraciones"
+          >
             <TabButton active={tab === 'actions'} onClick={() => setTab('actions')}>
               Estado y acciones
             </TabButton>
@@ -680,7 +684,7 @@ export function ManagedDatabaseMigrationsContent({
                     <h2 className="text-sm font-semibold text-foreground">En cuarentena</h2>
                     <p className="text-xs text-muted-foreground">
                       Esta base quedó en cuarentena por un apply fallido. Si el esquema ya coincide
-                      con el baseline, márcala con un stamp para recuperarla; si no, reintenta el
+                      con el baseline, marcala con un stamp para recuperarla; si no, reintentá el
                       apply forzando la cuarentena.
                     </p>
                   </div>
@@ -857,7 +861,7 @@ export function ManagedDatabaseMigrationsContent({
                     ) : (
                       <>
                         <Badge tone={pendingCount > 0 ? 'warning' : 'success'}>
-                          {pendingCount} pendiente(s)
+                          {pendingCount === 1 ? '1 pendiente' : `${pendingCount} pendientes`}
                         </Badge>
                         {status.data.pending_versions.length > 0 && (
                           <span className="text-xs text-muted-foreground">
@@ -926,9 +930,9 @@ export function ManagedDatabaseMigrationsContent({
                         )}
                         {!isPartialResolvable(entry) && (
                           <p className="text-xs text-muted-foreground">
-                            No hay vía automática. Salidas: <strong>reintenta el apply</strong>{' '}
+                            No hay vía automática. Salidas: <strong>reintentá el apply</strong>{' '}
                             (retoma del checkpoint, desde la sentencia{' '}
-                            {entry.applied_statements + 1}), o arregla el esquema a mano y declara
+                            {entry.applied_statements + 1}), o arreglá el esquema a mano y declará
                             la versión con <strong>stamp force</strong> (abajo, en «Marcar
                             versión»).
                           </p>
@@ -951,7 +955,7 @@ export function ManagedDatabaseMigrationsContent({
 
               {isArchived && (
                 <div className="rounded-lg border border-border bg-surface-muted p-4 text-xs text-muted-foreground">
-                  Esta base de datos está <strong>archivada</strong>: es de solo lectura. Puedes
+                  Esta base de datos está <strong>archivada</strong>: es de solo lectura. Podés
                   consultar el estado y el historial, pero las acciones sobre el motor (actualizar,
                   revertir, stamp) están deshabilitadas.
                 </div>
@@ -1063,7 +1067,10 @@ export function ManagedDatabaseMigrationsContent({
                             acaso», porque acá lo que se conserva se cree. */}
                         {preview && !hasOrphanAccounting && (
                           <div className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
-                            Plan: {preview.pending_versions.length} pendiente(s)
+                            Plan:{' '}
+                            {preview.pending_versions.length === 1
+                              ? '1 pendiente'
+                              : `${preview.pending_versions.length} pendientes`}
                             {preview.pending_versions.length > 0
                               ? ` · ${preview.pending_versions.join(', ')}`
                               : ' · nada que aplicar'}
@@ -1285,8 +1292,8 @@ export function ManagedDatabaseMigrationsContent({
                             La migración {lastRun.reconciliation.version} falló, pero el sistema
                             deshizo automáticamente los cambios aplicados (
                             {lastRun.reconciliation.undone_count} sentencia(s)). La base volvió a la
-                            versión anterior sin intervención necesaria. Corrige la migración y
-                            reintenta.
+                            versión anterior sin intervención necesaria. Corregí la migración y
+                            reintentá.
                           </p>
                         )}
                         {lastRun.reconciliation && !lastRun.reconciliation.fully_reconciled && (
@@ -1316,7 +1323,7 @@ export function ManagedDatabaseMigrationsContent({
                               </p>
                             )}
                             <p className="text-muted-foreground">
-                              Revisa el aviso de aplicación parcial de arriba para reconciliar lo
+                              Revisá el aviso de aplicación parcial de arriba para reconciliar lo
                               pendiente.
                             </p>
                           </div>
@@ -1336,7 +1343,7 @@ export function ManagedDatabaseMigrationsContent({
                           ) : (
                             <p className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
                               El apply falló sin dejar una aplicación parcial registrada; corrige la
-                              migración y reintenta.
+                              migración y reintentá.
                             </p>
                           ))}
                       </CardContent>
@@ -1372,8 +1379,8 @@ export function ManagedDatabaseMigrationsContent({
                                acción no existe para esta parcial. Se nombra la salida real. */
                             <p className="text-muted-foreground">
                               Esta parcial no tiene reconciliación automática (mira el motivo en el
-                              aviso de arriba). Para desbloquear el rollback: reintenta el apply
-                              para completarla, o arregla el esquema a mano y declara la versión con{' '}
+                              aviso de arriba). Para desbloquear el rollback: reintentá el apply
+                              para completarla, o arreglá el esquema a mano y declará la versión con{' '}
                               <strong>stamp force</strong>.
                             </p>
                           )}
@@ -1381,7 +1388,7 @@ export function ManagedDatabaseMigrationsContent({
                       )}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Input
-                          label="Confirma la versión actual"
+                          label="Confirmá la versión actual"
                           hint="Debe coincidir con la versión actual (doble confirmación)."
                           placeholder={currentVersion ?? 'sin versión actual'}
                           value={confirmVersion}
@@ -1561,7 +1568,7 @@ export function ManagedDatabaseMigrationsContent({
               itemToString={(m) => `${m.version} · ${m.name}`}
               itemToKey={(m) => m.id}
               label="Versión a marcar"
-              placeholder="Selecciona una versión del blueprint…"
+              placeholder="Elegí una versión del blueprint…"
               isLoading={versions.isLoading}
               // El catálogo se corta en el tope de páginas ante un historial desmedido. Se dice
               // en el propio control: un desplegable al que le faltan opciones y no lo avisa
@@ -1602,20 +1609,20 @@ export function ManagedDatabaseMigrationsContent({
             !versions.data?.truncated && (
               <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
                 La versión <strong>{stampVersion.trim()}</strong> no figura en el catálogo de este
-                blueprint. El backend exige que el destino exista, así que va a rechazarla. Revisa
+                blueprint. El backend exige que el destino exista, así que va a rechazarla. Revisá
                 el número, o créala en el blueprint antes de marcarla.
               </p>
             )}
           <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
-            El stamp <strong>no ejecuta SQL</strong>: solo marca la versión en el motor. Úsalo solo
+            El stamp <strong>no ejecuta SQL</strong>: solo marca la versión en el motor. Usalo solo
             si el esquema de la BD ya coincide con esa versión.
           </p>
           {stampUnreviewedCapture && stampUnreviewedCapture.length > 0 && (
             <div className="flex flex-col gap-2 rounded-lg border border-error/40 bg-error/5 p-2 text-xs">
               <p className="text-foreground">
                 La versión <strong>{stampUnreviewedCapture.join(', ')}</strong> tiene captura de
-                resultados sin revisar (api-reference-v9 §3.4). Revisa el SQL y apruébalo (
-                <code>PATCH reviewed=true</code>) en el blueprint, o activa «Forzar» abajo —{' '}
+                resultados sin revisar (api-reference-v9 §3.4). Revisá el SQL y aprobalo (
+                <code>PATCH reviewed=true</code>) en el blueprint, o activá «Forzar» abajo —{' '}
                 <strong>
                   forzar solo marca el puntero de versión, NO habilita la captura real
                 </strong>
@@ -1645,7 +1652,7 @@ export function ManagedDatabaseMigrationsContent({
             disabled={hasAutomaticWayOut}
             hint={
               hasAutomaticWayOut
-                ? 'Bloqueado: esta aplicación parcial SÍ se puede reconciliar; usa «Reconciliar» (reconcile-partial) en vez de forzar.'
+                ? 'Bloqueado: esta aplicación parcial SÍ se puede reconciliar; usá «Reconciliar» (reconcile-partial) en vez de forzar.'
                 : hasPartial
                   ? 'Esta aplicación parcial no tiene reconciliación automática: force es la salida prevista, pero solo después de haber arreglado el esquema a mano.'
                   : 'Solo si ya reconciliaste el estado físico de la BD a mano.'
@@ -1655,7 +1662,7 @@ export function ManagedDatabaseMigrationsContent({
             <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
               <strong>stamp force NO arregla un apply fallido a mitad</strong>: afirmaría que la
               migración corrió completa y un rollback posterior partiría de un estado que nunca
-              existió (un tercer estado inconsistente). Úsalo únicamente si ya reconciliaste el
+              existió (un tercer estado inconsistente). Usalo únicamente si ya reconciliaste el
               estado físico a mano y la BD coincide de verdad con esa versión.
             </p>
           )}
@@ -1701,7 +1708,7 @@ export function ManagedDatabaseMigrationsContent({
           )}
           {stampCooldown && (
             <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-error">
-              Has alcanzado el límite de 10/min. Espera unos segundos e inténtalo de nuevo.
+              Alcanzaste el límite de 10 por minuto. Esperá unos segundos y volvé a intentarlo.
             </p>
           )}
         </div>

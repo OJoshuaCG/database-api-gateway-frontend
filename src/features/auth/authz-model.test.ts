@@ -137,6 +137,56 @@ describe('effectiveRoleAt — espejo de app/core/scope.py', () => {
     }
     expect(effectiveRoleAt(role, { serverId: 9, environmentId: null }, environments)).toBe('viewer')
   })
+
+  it('sin servidor ni entorno es una operación global: rige el base', () => {
+    // `resolve_environment_id` devuelve `None` sin destino y no inventa el más protegido.
+    const role = {
+      baseRole: 'owner',
+      grants: [{ scopeType: 'environment', scopeId: PROD, role: 'viewer' }],
+    }
+    expect(effectiveRoleAt(role, { serverId: null, environmentId: null }, environments)).toBe(
+      'owner',
+    )
+  })
+
+  it('sin entornos cargados, una base sin clasificar no matchea ningún permiso de entorno', () => {
+    const role = {
+      baseRole: 'owner',
+      grants: [{ scopeType: 'environment', scopeId: PROD, role: 'viewer' }],
+    }
+    expect(mostProtectedEnvironmentId([])).toBeNull()
+    expect(effectiveRoleAt(role, { serverId: 9, environmentId: null }, [])).toBe('owner')
+  })
+
+  it('un permiso con rol desconocido se descarta, como en `get_current_actor`', () => {
+    const role = {
+      baseRole: 'operator',
+      grants: [{ scopeType: 'environment', scopeId: PROD, role: 'superuser' }],
+    }
+    expect(effectiveRoleAt(role, { serverId: 9, environmentId: PROD }, environments)).toBe(
+      'operator',
+    )
+  })
+
+  it('un permiso de tipo de alcance desconocido se descarta, no se lee como otro tipo', () => {
+    const role = {
+      baseRole: 'operator',
+      grants: [{ scopeType: 'project', scopeId: 9, role: 'viewer' }],
+    }
+    expect(effectiveRoleAt(role, { serverId: 9, environmentId: PROD }, environments)).toBe(
+      'operator',
+    )
+  })
+
+  it('un rol base desconocido vale `viewer`', () => {
+    expect(
+      effectiveRoleAt(
+        { baseRole: 'superuser', grants: [] },
+        { serverId: 9, environmentId: PROD },
+        environments,
+      ),
+    ).toBe('viewer')
+  })
 })
 
 describe('capacidades por destino', () => {
@@ -201,17 +251,39 @@ describe('resolveEffectiveAccess', () => {
     expect(resolved.overlaps[0]?.role).toBe('viewer')
     expect(resolved.unionRole).toBe('owner')
   })
+
+  it('no cuenta permisos que el backend descarta, ni para la fila ni para el rol unión', () => {
+    const resolved = resolveEffectiveAccess(
+      input({
+        baseRole: 'viewer',
+        grants: [
+          { scopeType: 'project', scopeId: 1, role: 'owner' },
+          { scopeType: 'environment', scopeId: PROD, role: 'superuser' },
+        ],
+      }),
+    )
+    expect(resolved.grants).toHaveLength(0)
+    expect(resolved.unionRole).toBe('viewer')
+  })
 })
 
 describe('LAYER2_CAPABILITIES', () => {
+  /*
+   * Copia a mano de las llamadas a `assert_scope_for_database` en
+   * `app/routes/v1/managed_databases.py` (backend 463dc4d). Es la fuente de verdad del test: si el
+   * backend suma una ruta con capa 2, esta tabla se actualiza leyendo el backend, no la constante.
+   */
+  const ROUTES_WITH_LAYER2: Record<string, readonly string[]> = {
+    'DELETE /managed-databases/{id}': ['databases.drop', 'databases.write'], // drop_remote o no
+    'POST /managed-databases/{id}/provision': ['databases.write'],
+    'POST /managed-databases/{id}/migrations/apply': ['blueprints.apply'],
+    'POST /managed-databases/{id}/migrations/rollback': ['blueprints.apply'],
+  }
+
   it('son exactamente las que hoy exige `assert_scope_for_database` en el backend', () => {
-    // DELETE (databases.drop | databases.write), provision (databases.write),
-    // migrations/apply y migrations/rollback (blueprints.apply).
-    expect([...LAYER2_CAPABILITIES].sort()).toEqual([
-      'blueprints.apply',
-      'databases.drop',
-      'databases.write',
-    ])
+    const expected = [...new Set(Object.values(ROUTES_WITH_LAYER2).flat())].sort()
+    expect(Object.keys(ROUTES_WITH_LAYER2)).toHaveLength(4)
+    expect([...LAYER2_CAPABILITIES].sort()).toEqual(expected)
     for (const id of LAYER2_CAPABILITIES) {
       expect(catalog.some((row) => row.id === id)).toBe(true)
     }

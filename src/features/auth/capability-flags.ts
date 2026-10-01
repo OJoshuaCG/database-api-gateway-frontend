@@ -29,7 +29,7 @@ export const CAPABILITY_FLAGS: Record<
   mutates: {
     label: 'Modifica',
     tone: 'warning',
-    description: 'Crea o cambia algo en el inventario o en un motor, sin borrar.',
+    description: 'Crea o cambia algo sin borrarlo; se puede revertir.',
   },
   discloses: {
     label: 'Divulga datos',
