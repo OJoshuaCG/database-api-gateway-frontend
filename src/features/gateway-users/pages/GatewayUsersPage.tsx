@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -13,12 +14,14 @@ import {
   PageHeader,
   Pagination,
   PencilIcon,
+  TabButton,
 } from '@/components/ui'
 import { useSession } from '@/features/auth'
 import { PAGINATION, isSyntheticGatewayEmail, type GatewayUserOut } from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils'
 import { GatewayUserAccessModal } from '../components/GatewayUserAccessModal'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
+import { RolesCapabilitiesPanel } from '../components/RolesCapabilitiesPanel'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
 import { buildInviteLink } from '../invite-link'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
@@ -32,7 +35,28 @@ interface PendingInvite {
   reissued: boolean
 }
 
+const TABS = ['users', 'roles'] as const
+type Tab = (typeof TABS)[number]
+
+function isTab(value: string | null): value is Tab {
+  return value !== null && (TABS as readonly string[]).includes(value)
+}
+
 export function GatewayUsersPage() {
+  // La pestaña vive en la URL (`?tab=roles`), igual que en `AdminPage`: los selectores de rol
+  // enlazan directo a la matriz, y un valor desconocido cae en el listado.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: Tab = isTab(tabParam) ? tabParam : 'users'
+  const setTab = (next: Tab) => {
+    setSearchParams((previous) => {
+      const updated = new URLSearchParams(previous)
+      if (next === 'users') updated.delete('tab')
+      else updated.set('tab', next)
+      return updated
+    })
+  }
+
   const { admin } = useSession()
   const [page, setPage] = useState(1)
   const [size, setSize] = useState<number>(PAGINATION.defaultSize)
@@ -78,7 +102,7 @@ export function GatewayUsersPage() {
       {
         accessorKey: 'gateway_role',
         header: 'Rol',
-        cell: ({ row }) => <Badge tone="info">{row.original.gateway_role}</Badge>,
+        cell: ({ row }) => <AccessSummary user={row.original} />,
       },
       {
         id: 'estado',
@@ -173,18 +197,31 @@ export function GatewayUsersPage() {
         title="Usuarios del gateway"
         description="Identidades que se autentican contra el gateway. No son los usuarios de los motores de base de datos."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(undefined)
-              setFormOpen(true)
-            }}
-          >
-            Nuevo usuario
-          </Button>
+          tab === 'users' ? (
+            <Button
+              onClick={() => {
+                setEditing(undefined)
+                setFormOpen(true)
+              }}
+            >
+              Nuevo usuario
+            </Button>
+          ) : undefined
         }
       />
 
-      {isError ? (
+      <div className="flex gap-1 border-b border-border" role="tablist">
+        <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
+          Usuarios
+        </TabButton>
+        <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>
+          Roles y capacidades
+        </TabButton>
+      </div>
+
+      {tab === 'roles' ? (
+        <RolesCapabilitiesPanel />
+      ) : isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (
         <>
@@ -250,6 +287,32 @@ export function GatewayUsersPage() {
       )}
 
       {invite && <InviteDeliveryModal invite={invite} onDone={() => setInvite(null)} />}
+    </div>
+  )
+}
+
+/**
+ * Rol base, capacidades globales y cuántos permisos por alcance tiene. Sin las dos últimas, una
+ * persona con `security_officer` o con cinco permisos de entorno se veía igual que un `viewer`
+ * pelado: el listado escondía justo lo que más acceso da.
+ */
+function AccessSummary({ user }: { user: GatewayUserOut }) {
+  const grants = user.scope_grants.length
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex flex-wrap items-center gap-1">
+        <Badge tone="info">{user.gateway_role}</Badge>
+        {user.global_capabilities.map((capability) => (
+          <Badge key={capability} tone="primary">
+            {capability}
+          </Badge>
+        ))}
+      </span>
+      {grants > 0 && (
+        <span className="text-xs text-muted-foreground">
+          {grants === 1 ? '1 permiso por alcance' : `${grants} permisos por alcance`}
+        </span>
+      )}
     </div>
   )
 }

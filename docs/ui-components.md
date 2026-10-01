@@ -256,6 +256,40 @@ cuanto se agarra, `maxHeightClass` deja de ser un tope y pasa a ser solo el alto
 partida, y entra en juego un mínimo de cuatro líneas. Es por bloque y no se recuerda entre
 montajes: es un ajuste de lectura del momento, no una preferencia como el ajuste de línea.
 
+## Autorización (en `src/features/auth/components/`)
+
+Piezas de la feature `auth`, exportadas por su barrel. **Todo sale del catálogo**
+(`GET /authz/catalog`, vía `useCapabilityCatalog`): ninguna lleva una lista de capacidades
+escrita a mano. Sin catálogo, lo dicen («No se pudo cargar qué incluye este rol.») y no inventan.
+La lógica vive aparte, en funciones puras de `features/auth/authz-model.ts`
+(`resolveEffectiveAccess`, `effectiveRoleAt`, `diffCapabilities`, `roleCapabilityIds`…), que es el
+espejo de `app/core/scope.py` del backend.
+
+### `CapabilityFlags`
+Marcas de una capacidad, siempre icono + texto visible: Destructiva, Modifica, Divulga datos,
+Pedirá reautenticación, Usable por agentes, Solo lectura. Props: `capability`, `compact?` (solo
+las de riesgo). «Destructiva» sale de `DESTRUCTIVE_CAPABILITIES` (`lib/contracts/auth.ts`), porque
+el catálogo no publica esa marca. La leyenda es `CAPABILITY_FLAG_LEGEND`, para una `StatusLegend`.
+
+### `RoleCapabilitySummary`
+Una línea bajo un selector de rol: «Otorga 17 de 29. No incluye: …». Props: `role`, `catalog`,
+`isLoading?`, `compareTo?` (en un permiso por alcance, el rol base: pasa a decir qué suma o
+pierde), `linkToMatrix?` (enlace a `/gateway-users?tab=roles`). Reemplaza a las descripciones de
+rol escritas a mano, que llegaron a ser falsas.
+
+### `EffectiveAccessPanel`
+Qué puede hacer alguien y dónde: rol base, una fila por permiso con su diferencia respecto del
+base, los cruces entorno × servidor (rige el más restrictivo) y las capacidades globales; cada
+fila despliega sus capacidades con «Ver capacidades». Props: `baseRole`, `globalCapabilities`,
+`grants` (`{ scopeType, scopeId, role, targetLabel }[]`, con el nombre del destino ya resuelto),
+`catalog`, `isLoading?`, `mode` (`admin` en el modal de accesos, `self` en «Mi acceso»).
+**Lleva siempre la nota de dónde se aplica hoy el recorte por alcance** (`SCOPE_ENFORCEMENT_NOTE`):
+solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo demás rige el rol unión.
+
+`RolesCapabilitiesPanel` (en `features/gateway-users`) es la pestaña «Roles y capacidades» de
+`/gateway-users`: una tarjeta por rol y por global, y la matriz por módulo con `DataTable`
+(búsqueda, filtro por rol y por riesgo). `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella.
+
 ## Layout (en `src/components/layout/`)
 
 `AppShell` (sidebar + topbar + boundary por sección), `Sidebar` (navegación),

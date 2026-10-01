@@ -110,7 +110,8 @@ export const gatewayUserOutSchema = z.object({
   last_login_at: z.string().nullable().optional(),
   previous_login_at: z.string().nullable().optional(),
   last_failed_at: z.string().nullable().optional(),
-  created_at: z.string(),
+  /** `datetime | None` en el backend: una fila legada puede no tenerlo. */
+  created_at: z.string().nullish(),
 })
 export type GatewayUserOut = z.infer<typeof gatewayUserOutSchema>
 

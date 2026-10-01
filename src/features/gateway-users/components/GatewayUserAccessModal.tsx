@@ -9,7 +9,17 @@ import {
   Modal,
   TrashIcon,
 } from '@/components/ui'
-import { useScopeReadiness } from '@/features/auth'
+import {
+  EffectiveAccessPanel,
+  RoleCapabilitySummary,
+  globalCapabilityIds,
+  sortByRisk,
+  summarizeLabels,
+  useCapabilities,
+  useCapabilityCatalog,
+  useScopeReadiness,
+  type EffectiveAccessGrant,
+} from '@/features/auth'
 import { useSelectableEnvironments } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import {
@@ -24,14 +34,9 @@ import {
   type ScopeGrantIn,
   type ScopeType,
 } from '@/lib/contracts'
+import { GLOBAL_CEILING_HINT, roleCeilingHint, withinCeiling } from '../grant-ceiling'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
 import { SELF_ACCESS_NOTE } from '../self-access'
-
-/** Qué otorga cada capacidad global. Ninguna la da el rol `owner`: son independientes. */
-const CAPABILITY_HINTS: Record<GlobalCapability, string> = {
-  access_admin: 'Administrar usuarios del gateway y sus accesos (incluye esta pantalla).',
-  security_officer: 'Supervisión de seguridad sobre todo el gateway.',
-}
 
 const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
   environment: 'Entorno',
@@ -52,6 +57,11 @@ interface RoleOption {
   label: string
 }
 const ROLE_OPTIONS: RoleOption[] = GATEWAY_ROLES.map((value) => ({ value, label: value }))
+
+/** Clave de un permiso, para comparar el formulario contra lo que la persona ya tenía. */
+function grantKey(grant: { scope_type: string; scope_id: number; role: string }): string {
+  return `${grant.scope_type}:${grant.scope_id}:${grant.role}`
+}
 
 interface TargetOption {
   id: number
@@ -88,6 +98,13 @@ export function GatewayUserAccessModal({
   const environments = useSelectableEnvironments()
   const servers = useServerOptions()
   const readiness = useScopeReadiness()
+  const catalogQuery = useCapabilityCatalog()
+  const catalog = catalogQuery.data
+  // Techo del ACTOR (quien edita), no de la persona editada: ver `grant-ceiling.ts`.
+  const actor = useCapabilities()
+  const actorGlobals = new Set(actor.globalCapabilities)
+  const originalGlobals = new Set(user.global_capabilities)
+  const originalGrants = new Set(user.scope_grants.map(grantKey))
   const unclassifiedServers = (readiness.data?.servers ?? []).filter(
     (server) => server.unclassified > 0,
   )
@@ -142,6 +159,53 @@ export function GatewayUserAccessModal({
     scopeType === 'environment'
       ? environments.selectable.map((env) => ({ id: env.id, label: env.name }))
       : (servers.data ?? []).map((server) => ({ id: server.id, label: server.name }))
+
+  /*
+   * Los roles que se ofrecen en un permiso: hasta el techo del actor, MÁS el que ese permiso ya
+   * tenía si se está conservando tal cual (el backend solo mide lo que se agrega). Ofrecer uno por
+   * encima del techo sería llevar al administrador hasta un 409 al guardar.
+   */
+  const roleOptionsFor = (grant: ScopeGrantIn): RoleOption[] =>
+    ROLE_OPTIONS.filter(
+      (option) =>
+        withinCeiling(option.value, actor.role) ||
+        originalGrants.has(grantKey({ ...grant, role: option.value })),
+    )
+  const scopeCeilingHint = roleCeilingHint(GATEWAY_ROLES, actor.role, 'scope')
+
+  const targetLabel = (grant: ScopeGrantIn): string => {
+    const found = targetsFor(grant.scope_type).find((target) => target.id === grant.scope_id)
+    if (found) return found.label
+    if (grant.scope_id < 1) return `${SCOPE_TYPE_LABELS[grant.scope_type]} sin elegir`
+    return `${SCOPE_TYPE_LABELS[grant.scope_type]} #${grant.scope_id}`
+  }
+  const effectiveGrants: EffectiveAccessGrant[] = grants
+    .filter((grant) => grant.scope_id >= 1)
+    .map((grant) => ({
+      scopeType: grant.scope_type,
+      scopeId: grant.scope_id,
+      role: grant.role,
+      targetLabel: targetLabel(grant),
+    }))
+
+  /** Qué suma una capacidad global, leído del catálogo; sin catálogo no se inventa nada. */
+  const globalHint = (capability: GlobalCapability): string => {
+    const reason =
+      !actorGlobals.has(capability) && !originalGlobals.has(capability) && actor.role !== null
+        ? ` ${GLOBAL_CEILING_HINT}`
+        : ''
+    if (!catalog) return `No se pudo cargar qué incluye.${reason}`
+    const ids = globalCapabilityIds(catalog, capability)
+    const labels = sortByRisk(ids, catalog).map((row) => row.label)
+    return `Suma ${ids.length}: ${summarizeLabels(labels, ids.length)}.${reason}`
+  }
+  // Una global que el actor no tiene solo se puede QUITAR (si la persona ya la tenía), nunca
+  // poner. Con roles desconocidos (`actor.role === null`) no hay techo que aplicar.
+  const globalLocked = (capability: GlobalCapability, checked: boolean): boolean =>
+    actor.role !== null &&
+    !actorGlobals.has(capability) &&
+    !originalGlobals.has(capability) &&
+    !checked
 
   // `scope_id` 0 es el centinela de "fila sin destino elegido": el contrato exige >= 1, así que no
   // colisiona con ningún id real y mantiene el guardado deshabilitado hasta que se complete.
@@ -203,19 +267,22 @@ export function GatewayUserAccessModal({
           <div className="flex flex-col gap-0.5">
             <h3 className="text-sm font-semibold text-foreground">Capacidades globales</h3>
             <p className="text-xs text-muted-foreground">
-              Valen en todo el gateway y no dependen del rol base.
+              Valen en todo el gateway, se suman a cualquier rol y no se recortan por alcance.
             </p>
           </div>
-          {GLOBAL_CAPABILITIES.map((capability) => (
-            <Checkbox
-              key={capability}
-              label={capability}
-              hint={CAPABILITY_HINTS[capability]}
-              checked={capabilities.includes(capability)}
-              disabled={blocked}
-              onChange={(event) => toggleCapability(capability, event.target.checked)}
-            />
-          ))}
+          {GLOBAL_CAPABILITIES.map((capability) => {
+            const checked = capabilities.includes(capability)
+            return (
+              <Checkbox
+                key={capability}
+                label={capability}
+                hint={globalHint(capability)}
+                checked={checked}
+                disabled={blocked || globalLocked(capability, checked)}
+                onChange={(event) => toggleCapability(capability, event.target.checked)}
+              />
+            )
+          })}
         </section>
 
         {/* ── Alcances ─────────────────────────────────────────────────────── */}
@@ -226,15 +293,19 @@ export function GatewayUserAccessModal({
             </h3>
             {/*
               La semántica que más sorprende, y por eso va escrita y no implícita: un permiso de
-              alcance REEMPLAZA al rol base dentro de ese alcance, no se suma. Presentarlos como
-              "permisos extra" comunicaría lo contrario de lo que hace el servidor.
+              alcance ocupa el lugar del rol base dentro de ese alcance, no se suma. Pero NO se
+              promete más de lo que el servidor cumple: hoy esa regla solo se hace cumplir en
+              cuatro rutas, y eso lo dice la sección «Acceso efectivo al guardar» de abajo.
             */}
             <p className="text-xs text-muted-foreground">
-              Cada permiso <strong>reemplaza</strong> el rol base{' '}
-              <Badge tone="neutral">{user.gateway_role}</Badge> dentro de su alcance — puede bajar
-              el acceso, no solo subirlo. Si hay dos sobre el mismo destino, gana el más
-              restrictivo.
+              Dentro de su alcance, el permiso ocupa el lugar del rol base{' '}
+              <Badge tone="neutral">{user.gateway_role}</Badge> — no se suma a él. Si hay dos sobre
+              el mismo destino rige el más restrictivo. Abajo, en «Acceso efectivo al guardar», se
+              ve qué queda y en qué operaciones se aplica hoy.
             </p>
+            {scopeCeilingHint && !blocked && (
+              <p className="text-xs text-muted-foreground">{scopeCeilingHint}</p>
+            )}
           </div>
 
           {/*
@@ -288,76 +359,88 @@ export function GatewayUserAccessModal({
               {grants.map((grant, index) => {
                 const targets = targetsFor(grant.scope_type)
                 const selected = targets.find((target) => target.id === grant.scope_id) ?? null
+                const roleOptions = roleOptionsFor(grant)
                 return (
                   <li
                     key={index}
-                    className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-end"
+                    className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3"
                   >
-                    <div className="w-full sm:w-40">
-                      <Combobox<ScopeTypeOption>
-                        items={SCOPE_TYPE_OPTIONS}
-                        value={
-                          SCOPE_TYPE_OPTIONS.find((option) => option.value === grant.scope_type) ??
-                          null
-                        }
-                        onChange={(option) => {
-                          // Cambiar el tipo invalida el destino: un id de entorno no significa
-                          // nada como id de servidor. Se limpia para obligar a re-elegirlo.
-                          if (!option) return
-                          updateGrant(index, { scope_type: option.value, scope_id: 0 })
-                        }}
-                        itemToString={(option) => option.label}
-                        itemToKey={(option) => option.value}
-                        label="Tipo"
-                        disabled={blocked}
-                      />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                      <div className="w-full sm:w-40">
+                        <Combobox<ScopeTypeOption>
+                          items={SCOPE_TYPE_OPTIONS}
+                          value={
+                            SCOPE_TYPE_OPTIONS.find(
+                              (option) => option.value === grant.scope_type,
+                            ) ?? null
+                          }
+                          onChange={(option) => {
+                            // Cambiar el tipo invalida el destino: un id de entorno no significa
+                            // nada como id de servidor. Se limpia para obligar a re-elegirlo.
+                            if (!option) return
+                            updateGrant(index, { scope_type: option.value, scope_id: 0 })
+                          }}
+                          itemToString={(option) => option.label}
+                          itemToKey={(option) => option.value}
+                          label="Tipo"
+                          disabled={blocked}
+                        />
+                      </div>
+                      <div className="w-full flex-1">
+                        <Combobox<TargetOption>
+                          items={targets}
+                          value={selected}
+                          onChange={(option) => updateGrant(index, { scope_id: option?.id ?? 0 })}
+                          itemToString={(option) => option.label}
+                          itemToKey={(option) => option.id}
+                          label={SCOPE_TYPE_LABELS[grant.scope_type]}
+                          placeholder="Elegí un destino"
+                          disabled={blocked}
+                          isLoading={
+                            grant.scope_type === 'environment'
+                              ? environments.isPending
+                              : servers.isPending
+                          }
+                          error={grant.scope_id < 1 ? 'Falta elegir el destino' : undefined}
+                        />
+                      </div>
+                      <div className="w-full sm:w-40">
+                        <Combobox<RoleOption>
+                          items={roleOptions}
+                          value={ROLE_OPTIONS.find((option) => option.value === grant.role) ?? null}
+                          onChange={(option) =>
+                            updateGrant(index, { role: option?.value ?? 'viewer' })
+                          }
+                          itemToString={(option) => option.label}
+                          itemToKey={(option) => option.value}
+                          label="Rol en ese alcance"
+                          disabled={blocked}
+                        />
+                      </div>
+                      <div className="shrink-0 pb-1">
+                        <IconButton
+                          type="button"
+                          label="Quitar este permiso"
+                          icon={<TrashIcon />}
+                          variant="danger-soft"
+                          size="icon-sm"
+                          disabled={blocked}
+                          onClick={() =>
+                            setGrants((current) =>
+                              current.filter((_, position) => position !== index),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
-                    <div className="w-full flex-1">
-                      <Combobox<TargetOption>
-                        items={targets}
-                        value={selected}
-                        onChange={(option) => updateGrant(index, { scope_id: option?.id ?? 0 })}
-                        itemToString={(option) => option.label}
-                        itemToKey={(option) => option.id}
-                        label={SCOPE_TYPE_LABELS[grant.scope_type]}
-                        placeholder="Elegí un destino"
-                        disabled={blocked}
-                        isLoading={
-                          grant.scope_type === 'environment'
-                            ? environments.isPending
-                            : servers.isPending
-                        }
-                        error={grant.scope_id < 1 ? 'Falta elegir el destino' : undefined}
-                      />
-                    </div>
-                    <div className="w-full sm:w-40">
-                      <Combobox<RoleOption>
-                        items={ROLE_OPTIONS}
-                        value={ROLE_OPTIONS.find((option) => option.value === grant.role) ?? null}
-                        onChange={(option) =>
-                          updateGrant(index, { role: option?.value ?? 'viewer' })
-                        }
-                        itemToString={(option) => option.label}
-                        itemToKey={(option) => option.value}
-                        label="Rol en ese alcance"
-                        disabled={blocked}
-                      />
-                    </div>
-                    <div className="shrink-0 pb-1">
-                      <IconButton
-                        type="button"
-                        label="Quitar este permiso"
-                        icon={<TrashIcon />}
-                        variant="danger-soft"
-                        size="icon-sm"
-                        disabled={blocked}
-                        onClick={() =>
-                          setGrants((current) =>
-                            current.filter((_, position) => position !== index),
-                          )
-                        }
-                      />
-                    </div>
+                    {/* Qué cambia este permiso respecto del rol base: es lo que decide si
+                        conviene otorgarlo, y no se puede leer del nombre del rol. */}
+                    <RoleCapabilitySummary
+                      role={grant.role}
+                      compareTo={user.gateway_role}
+                      catalog={catalog}
+                      isLoading={catalogQuery.isLoading}
+                    />
                   </li>
                 )
               })}
@@ -380,6 +463,24 @@ export function GatewayUserAccessModal({
               Añadir permiso
             </Button>
           </div>
+        </section>
+
+        {/* ── Acceso efectivo ──────────────────────────────────────────────── */}
+        <section className="flex flex-col gap-3 border-t border-border pt-4">
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-sm font-semibold text-foreground">Acceso efectivo al guardar</h3>
+            <p className="text-xs text-muted-foreground">
+              Lo que va a poder hacer {user.username} con lo que quede en esta pantalla.
+            </p>
+          </div>
+          <EffectiveAccessPanel
+            mode="admin"
+            baseRole={user.gateway_role}
+            globalCapabilities={capabilities}
+            grants={effectiveGrants}
+            catalog={catalog}
+            isLoading={catalogQuery.isLoading}
+          />
         </section>
 
         <Callout tone="info" title="Al guardar se cierran sus sesiones">

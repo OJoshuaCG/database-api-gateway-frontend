@@ -246,3 +246,25 @@ export function WrapIcon({ className }: IconProps) {
     </Glyph>
   )
 }
+
+/**
+ * Marca de «sí»: la usa la matriz de capacidades por rol. Como todo icono del set es decorativo:
+ * la celda que lo lleva pone al lado el texto visible («Sí») que lo dice.
+ */
+export function CheckIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M4.6 10.4l3.4 3.4 7.4-7.6" />
+    </Glyph>
+  )
+}
+
+/** Llave: reautenticación (la capacidad va a volver a pedir la contraseña). */
+export function KeyIcon({ className }: IconProps) {
+  return (
+    <Glyph className={className}>
+      <circle cx="7" cy="12.6" r="3.2" />
+      <path d="M9.3 10.3l6.3-6.3M13.4 6.2l1.8 1.8M11.6 8l1.4 1.4" />
+    </Glyph>
+  )
+}

@@ -52,7 +52,7 @@ el handler global lo guarda en `queryKeys.auth.sessionEndReason()` y `LoginPage`
 `Callout`. El copy vive en `features/auth/messages.ts`; `unknown` y `missing` se mapean a `null` a
 propósito, para no mostrarle «tu sesión terminó» a alguien que nunca entró.
 
-`SessionsPanel` (pestaña «Mis sesiones» de Administración) lista las sesiones vivas y permite
+`SessionsPanel` (pestaña «Mis sesiones» de «Mi cuenta», `/mi-cuenta?tab=sesiones`) lista las sesiones vivas y permite
 cerrar las demás. `sid_prefix` es un **prefijo** y nunca el identificador completo: ese
 identificador *es* la credencial de sesión.
 

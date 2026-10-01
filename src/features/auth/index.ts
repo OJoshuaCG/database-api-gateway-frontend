@@ -13,3 +13,8 @@ export { useCapabilityGuard, type CapabilityGuard } from './hooks/use-capability
 export { csrfErrorCopy, isCsrfError, sessionEndReason, type SessionEndReason } from './messages'
 export { useLogin } from './hooks/use-login'
 export { useLogout } from './hooks/use-logout'
+export * from './authz-model'
+export { CapabilityFlags } from './components/CapabilityFlags'
+export { CAPABILITY_FLAG_LEGEND, CAPABILITY_FLAGS, capabilityFlagKeys } from './capability-flags'
+export { RoleCapabilitySummary, ROLES_MATRIX_PATH } from './components/RoleCapabilitySummary'
+export { EffectiveAccessPanel, type EffectiveAccessGrant } from './components/EffectiveAccessPanel'

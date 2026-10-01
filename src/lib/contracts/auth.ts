@@ -214,6 +214,23 @@ export const CAPABILITIES = {
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES]
 
 /**
+ * Las capacidades que **borran o cambian algo en un motor real y no se deshacen**. El catálogo no
+ * publica esta marca —solo `mutates`, que también es `true` para editar el inventario—, así que
+ * la lista vive acá, junto al vocabulario, y se revisa cuando el catálogo cambia.
+ *
+ * Dos borran (`*.drop`) y cuatro ejecutan DDL o SQL sobre el motor. Lo que solo toca el inventario
+ * o la configuración del gateway queda fuera: eso es «modifica», no «destructiva».
+ */
+export const DESTRUCTIVE_CAPABILITIES = [
+  CAPABILITIES.databasesDrop,
+  CAPABILITIES.engineUsersDrop,
+  CAPABILITIES.blueprintsApply,
+  CAPABILITIES.schemaDiffExecute,
+  CAPABILITIES.collationExecute,
+  CAPABILITIES.sqlConsoleExecute,
+] as const satisfies readonly Capability[]
+
+/**
  * Los cinco endpoints donde un PARÁMETRO sube el requisito (§4).
  *
  * Son los que la UI tiene que reflejar deshabilitando el control concreto, porque el usuario ya

@@ -97,6 +97,7 @@ const PermissionProfilesPage = lazyPage(
 const AdminPage = lazyPage(() => import('@/features/admin'), 'AdminPage')
 const GatewayUsersPage = lazyPage(() => import('@/features/gateway-users'), 'GatewayUsersPage')
 const ApiTokensPage = lazyPage(() => import('@/features/api-tokens'), 'ApiTokensPage')
+const MyAccountPage = lazyPage(() => import('@/features/account'), 'MyAccountPage')
 const AcceptInvitationPage = lazyPage(
   () => import('@/features/gateway-users'),
   'AcceptInvitationPage',
@@ -194,6 +195,9 @@ export const router = createBrowserRouter([
           { path: 'gateway-users', element: <GatewayUsersPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
           { path: 'admin', element: <AdminPage /> },
+          // Autoservicio de la propia sesión: «Mi acceso» y «Mis sesiones» (que antes era una
+          // pestaña de Administración; `/admin?tab=sessions` redirige acá).
+          { path: 'mi-cuenta', element: <MyAccountPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

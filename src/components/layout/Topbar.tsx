@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button, SqlThemeSelect } from '@/components/ui'
 import { useSession } from '@/features/auth/hooks/use-session'
 import { useLogout } from '@/features/auth/hooks/use-logout'
@@ -79,7 +79,14 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
         <SqlThemeSelect className="hidden lg:flex" hideLabel />
         <ThemeToggle />
         {admin && (
-          <span className="hidden text-sm text-muted-foreground sm:inline">{admin.username}</span>
+          // El nombre lleva a «Mi cuenta»: es donde la persona ve su acceso y sus sesiones, y
+          // el destino del «Ver mi acceso» de cada 403.
+          <Link
+            to="/mi-cuenta"
+            className="hidden rounded-md px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline"
+          >
+            {admin.username}
+          </Link>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} isLoading={logout.isPending}>
           Cerrar sesión

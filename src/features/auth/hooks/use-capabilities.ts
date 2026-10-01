@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import type { Capability } from '@/lib/contracts'
+import type { Capability, ScopeRole } from '@/lib/contracts'
 import { getCapabilityCatalog, getScopeReadiness } from '../api/auth.api'
 import { useSession } from './use-session'
 
@@ -20,8 +20,17 @@ export interface Capabilities {
   canAll: (...capabilities: Capability[]) => boolean
   /** ¿El backend publicó capacidades? `false` = estamos operando sin la pista. */
   known: boolean
-  /** Rol efectivo, o `null` si el backend no lo publica. */
+  /** Rol efectivo (la UNIÓN: el más alto sobre todos los alcances), o `null` si no se publica. */
   role: string | null
+  /**
+   * Rol BASE: el que rige donde ningún permiso por alcance aplica. Cae a `role` con un backend
+   * que no lo publica, igual que `actor.base_role or actor.role` del servidor.
+   */
+  baseRole: string | null
+  /** Permisos por alcance de la sesión (`/auth/me.scope_roles`). */
+  scopeRoles: ScopeRole[]
+  /** Capacidades globales (`access_admin`, `security_officer`). */
+  globalCapabilities: string[]
   /**
    * ¿Esta capacidad va a pedir reautenticación? **Se publica pero TODAVÍA NO SE EXIGE** (§1/§6):
    * sirve solo para poder avisar antes de mandar la operación. No construyas un flujo que dependa
@@ -29,6 +38,10 @@ export interface Capabilities {
    */
   requiresStepUp: (capability: Capability) => boolean
 }
+
+// Referencias estables para «sin sesión»: un `[]` nuevo por render rompería los `useMemo` de abajo.
+const EMPTY_SCOPE_ROLES: ScopeRole[] = []
+const EMPTY_GLOBALS: string[] = []
 
 export function useCapabilities(): Capabilities {
   const { admin } = useSession()
@@ -65,7 +78,17 @@ export function useCapabilities(): Capabilities {
 
   const requiresStepUp = useCallback((capability: Capability) => stepUp.has(capability), [stepUp])
 
-  return { can, canAll, known, role: admin?.role ?? null, requiresStepUp }
+  const role = admin?.role ?? null
+  return {
+    can,
+    canAll,
+    known,
+    role,
+    baseRole: admin?.base_role ?? role,
+    scopeRoles: admin?.scope_roles ?? EMPTY_SCOPE_ROLES,
+    globalCapabilities: admin?.global_capabilities ?? EMPTY_GLOBALS,
+    requiresStepUp,
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Callout, Combobox, Input, Modal, Switch, Textarea } from '@/components/ui'
+import { RoleCapabilitySummary, useCapabilities, useCapabilityCatalog } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
 import {
   GATEWAY_EMAIL_MAX,
@@ -16,26 +17,45 @@ import {
   type GatewayUserCreatedOut,
   type GatewayUserOut,
 } from '@/lib/contracts'
+import { roleCeilingHint, withinCeiling } from '../grant-ceiling'
 import { useCreateGatewayUser, useUpdateGatewayUser } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
-
-/** Qué significa cada rol base, en una línea. Alimenta el `hint` del selector. */
-const ROLE_HINTS: Record<GatewayRole, string> = {
-  viewer: 'Solo lectura en todo el gateway.',
-  operator: 'Puede operar: crear, aplicar y ejecutar.',
-  owner: 'Todo lo del operador, más los resultados capturados y la administración de su alcance.',
-}
 
 interface RoleOption {
   value: GatewayRole
   label: string
 }
 
-const ROLE_OPTIONS: RoleOption[] = GATEWAY_ROLES.map((value) => ({
-  value,
-  label: `${value} — ${ROLE_HINTS[value]}`,
-}))
+/*
+ * Solo el nombre del rol: qué otorga cada uno lo dice `RoleCapabilitySummary` debajo del
+ * selector, leído del catálogo. Las descripciones escritas a mano que vivían acá llegaron a ser
+ * falsas (decían que `operator` puede «aplicar», y `blueprints.apply` es de `owner`).
+ */
+const ROLE_OPTIONS: RoleOption[] = GATEWAY_ROLES.map((value) => ({ value, label: value }))
+
+/** Hint honesto del rol base: rige donde no haya permiso propio, y los permisos van aparte. */
+const BASE_ROLE_HINT =
+  'Es el rol en todo lo que no tenga un permiso por entorno o servidor. Esos permisos se asignan después, desde «Accesos».'
+
+/**
+ * Selector de rol base con su resumen de capacidades y el techo del actor aplicado: los roles por
+ * encima del rol base de quien edita no se ofrecen (el backend respondería 409), salvo el que la
+ * cuenta ya tiene, que se puede conservar.
+ */
+function useBaseRoleOptions(currentRole?: string) {
+  const actor = useCapabilities()
+  const catalog = useCapabilityCatalog()
+  const options = ROLE_OPTIONS.filter(
+    (option) => withinCeiling(option.value, actor.baseRole) || option.value === currentRole,
+  )
+  return {
+    options,
+    ceilingHint: roleCeilingHint(GATEWAY_ROLES, actor.baseRole, 'base'),
+    catalog: catalog.data,
+    catalogLoading: catalog.isLoading,
+  }
+}
 
 const emailField = z
   .string()
@@ -95,6 +115,7 @@ export function GatewayUserFormModal(props: GatewayUserFormModalProps) {
 // ── Alta ───────────────────────────────────────────────────────────────────────
 function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
   const create = useCreateGatewayUser()
+  const roles = useBaseRoleOptions()
   const [usernameConflict, setUsernameConflict] = useState<string | null>(null)
   const [roleError, setRoleError] = useState<string | null>(null)
 
@@ -195,20 +216,28 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
           control={control}
           name="gateway_role"
           render={({ field }) => (
-            <Combobox<RoleOption>
-              items={ROLE_OPTIONS}
-              value={ROLE_OPTIONS.find((option) => option.value === field.value) ?? null}
-              onChange={(option) => {
-                setRoleError(null)
-                field.onChange(option?.value ?? 'viewer')
-              }}
-              itemToString={(option) => option.label}
-              itemToKey={(option) => option.value}
-              label="Rol base"
-              required
-              hint="Se puede acotar o ampliar por entorno y por servidor desde «Accesos», una vez creada la cuenta."
-              error={roleError ?? errors.gateway_role?.message}
-            />
+            <div className="flex flex-col gap-1">
+              <Combobox<RoleOption>
+                items={roles.options}
+                value={ROLE_OPTIONS.find((option) => option.value === field.value) ?? null}
+                onChange={(option) => {
+                  setRoleError(null)
+                  field.onChange(option?.value ?? 'viewer')
+                }}
+                itemToString={(option) => option.label}
+                itemToKey={(option) => option.value}
+                label="Rol base"
+                required
+                hint={roles.ceilingHint ? `${BASE_ROLE_HINT} ${roles.ceilingHint}` : BASE_ROLE_HINT}
+                error={roleError ?? errors.gateway_role?.message}
+              />
+              <RoleCapabilitySummary
+                role={field.value}
+                catalog={roles.catalog}
+                isLoading={roles.catalogLoading}
+                linkToMatrix
+              />
+            </div>
           )}
         />
 
@@ -241,6 +270,7 @@ function EditForm({
   currentUserId,
 }: GatewayUserFormModalProps & { user: GatewayUserOut }) {
   const update = useUpdateGatewayUser(user.id)
+  const roles = useBaseRoleOptions(user.gateway_role)
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
@@ -346,18 +376,32 @@ function EditForm({
           control={control}
           name="gateway_role"
           render={({ field }) => (
-            <Combobox<RoleOption>
-              items={ROLE_OPTIONS}
-              value={ROLE_OPTIONS.find((option) => option.value === field.value) ?? null}
-              onChange={(option) => field.onChange(option?.value ?? 'viewer')}
-              itemToString={(option) => option.label}
-              itemToKey={(option) => option.value}
-              label="Rol base"
-              required
-              disabled={editingSelf}
-              hint={editingSelf ? SELF_ACCESS_NOTE : undefined}
-              error={errors.gateway_role?.message}
-            />
+            <div className="flex flex-col gap-1">
+              <Combobox<RoleOption>
+                items={roles.options}
+                value={ROLE_OPTIONS.find((option) => option.value === field.value) ?? null}
+                onChange={(option) => field.onChange(option?.value ?? 'viewer')}
+                itemToString={(option) => option.label}
+                itemToKey={(option) => option.value}
+                label="Rol base"
+                required
+                disabled={editingSelf}
+                hint={
+                  editingSelf
+                    ? SELF_ACCESS_NOTE
+                    : roles.ceilingHint
+                      ? `${BASE_ROLE_HINT} ${roles.ceilingHint}`
+                      : BASE_ROLE_HINT
+                }
+                error={errors.gateway_role?.message}
+              />
+              <RoleCapabilitySummary
+                role={field.value}
+                catalog={roles.catalog}
+                isLoading={roles.catalogLoading}
+                linkToMatrix
+              />
+            </div>
           )}
         />
 
