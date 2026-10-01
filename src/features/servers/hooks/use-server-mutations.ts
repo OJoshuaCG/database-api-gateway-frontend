@@ -4,6 +4,7 @@ import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { ServerCreate, ServerUpdate } from '@/lib/contracts'
 import { createServer, deleteServer, testConnection, updateServer } from '../api/servers.api'
+import { serverRebindErrorMessage } from '../server-rebind'
 
 export function useCreateServer() {
   const queryClient = useQueryClient()
@@ -28,7 +29,13 @@ export function useUpdateServer(id: number) {
       queryClient.setQueryData(queryKeys.servers.detail(id), server)
       toast.success('Servidor actualizado', server.name)
     },
-    onError: (error) => toast.error('No se pudo actualizar el servidor', toApiError(error).message),
+    onError: (error) => {
+      const apiError = toApiError(error)
+      toast.error(
+        'No se pudo actualizar el servidor',
+        serverRebindErrorMessage(apiError) ?? apiError.message,
+      )
+    },
   })
 }
 

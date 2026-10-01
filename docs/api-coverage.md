@@ -85,7 +85,7 @@ Credenciales portadoras para procesos automáticos. Todo detrás de `gateway.adm
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog` |
+| 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog`. En el `PATCH`, re-apuntar el servidor —otro host, puerto o motor, o un `ssl_mode` más débil que uno desde `require`— exige reenviar `root_password` (422 `server.credential_required_for_rebind`, con `public_context.fields`). `ServerForm` lo anticipa con la misma regla (`server-rebind.ts`): la contraseña pasa a obligatoria en vivo con el porqué y los campos cambiados, y si el 422 llega igual la marca y la enfoca. Decide el backend |
 | 11 | `POST /{id}/test-connection` 🔌 | ✅ | `ServerDetailPage` → "Probar conexión" (muestra `dialect` + `server_version`) |
 | 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario; una base gestionada tiene las mismas acciones que en `ManagedDatabasesPage`, vía `DatabaseRowActions`, y «Adoptar» abre `AdoptDatabaseModal` en el sitio) + tab "Introspección" + selectores de los asistentes + **el selector de bases de las pantallas de permisos**: `DatabaseMultiSelect` (elegir N bases al otorgar) y `ServerDatabaseCombobox` (la BD de "Permisos efectivos" en PostgreSQL). Sustituyó a teclear el nombre a mano —lista las bases del motor en vivo, adoptadas o no— y los dos controles caen a captura manual si la introspección falla |
 | 14 | `GET .../tables` 🔌 | ✅ | `IntrospectionExplorer` |
