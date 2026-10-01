@@ -17,8 +17,10 @@ interface ForbiddenStateProps {
 export function ForbiddenState({ title }: ForbiddenStateProps) {
   const copy = forbiddenCopy()
   return (
+    // `status`, no `alert`: es el contenido de la página, no un aviso urgente que interrumpa al
+    // lector de pantalla.
     <div
-      role="alert"
+      role="status"
       className="flex flex-col items-center justify-center gap-3 rounded-card border border-border bg-surface-muted px-6 py-10 text-center"
     >
       <span className="text-muted-foreground">

@@ -7,6 +7,8 @@ import {
   diffCapabilities,
   effectiveRoleAt,
   globalCapabilityIds,
+  isEnforcedByScopeToday,
+  LAYER2_CAPABILITIES,
   mostProtectedEnvironmentId,
   resolveEffectiveAccess,
   roleCapabilityIds,
@@ -198,5 +200,26 @@ describe('resolveEffectiveAccess', () => {
     expect(resolved.overlaps).toHaveLength(1)
     expect(resolved.overlaps[0]?.role).toBe('viewer')
     expect(resolved.unionRole).toBe('owner')
+  })
+})
+
+describe('LAYER2_CAPABILITIES', () => {
+  it('son exactamente las que hoy exige `assert_scope_for_database` en el backend', () => {
+    // DELETE (databases.drop | databases.write), provision (databases.write),
+    // migrations/apply y migrations/rollback (blueprints.apply).
+    expect([...LAYER2_CAPABILITIES].sort()).toEqual([
+      'blueprints.apply',
+      'databases.drop',
+      'databases.write',
+    ])
+    for (const id of LAYER2_CAPABILITIES) {
+      expect(catalog.some((row) => row.id === id)).toBe(true)
+    }
+  })
+
+  it('el resto de las capacidades por alcance todavía no se recorta', () => {
+    expect(isEnforcedByScopeToday('databases.drop')).toBe(true)
+    expect(isEnforcedByScopeToday('engine_users.drop')).toBe(false)
+    expect(isEnforcedByScopeToday('exports.execute')).toBe(false)
   })
 })

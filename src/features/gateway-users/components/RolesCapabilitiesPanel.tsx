@@ -92,7 +92,13 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
   const roles = useMemo(() => catalogRoles(catalog), [catalog])
   const globals = useMemo(() => catalogGlobalCapabilities(catalog), [catalog])
   const [search, setSearch] = useState('')
-  const [role, setRole] = useState<string | null>(null)
+  // En pantallas estrechas no entran cinco columnas de rol: arranca filtrado por el primer rol
+  // (una sola columna «¿La otorga …?»). `matchMedia` puede no existir (jsdom, SSR).
+  const [role, setRole] = useState<string | null>(() =>
+    typeof window !== 'undefined' && window.matchMedia?.('(max-width: 47.99rem)').matches
+      ? (roles[0] ?? null)
+      : null,
+  )
   const [onlyDestructive, setOnlyDestructive] = useState(false)
   const [onlyDisclosing, setOnlyDisclosing] = useState(false)
 
@@ -130,7 +136,7 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
     const grantColumns: ColumnDef<CapabilityDescriptor>[] = (selected ? [selected] : grantors).map(
       (grantor) => ({
         id: `grant-${grantor.key}`,
-        header: selected ? '¿La otorga?' : grantor.key,
+        header: selected ? `¿La otorga ${selected.key}?` : grantor.key,
         enableSorting: false,
         cell: ({ row }) => <GrantMark granted={grantor.grants(row.original)} />,
       }),
@@ -217,9 +223,16 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
             onChange={(option) => setRole(option?.value ?? null)}
             itemToString={(option) => option.label}
             itemToKey={(option) => option.value ?? '__all__'}
-            label="Rol"
+            label="Rol o capacidad global"
           />
         </div>
+        {/* El `hint` del buscador no se anuncia al cambiar: el conteo va también en una región
+            viva, para que quien filtra sin ver la pantalla sepa cuántas quedaron. */}
+        <p className="sr-only" aria-live="polite">
+          {filtered.length === 1
+            ? `1 de ${catalog.length} capacidades coincide`
+            : `${filtered.length} de ${catalog.length} capacidades coinciden`}
+        </p>
         <div className="flex flex-wrap gap-4">
           <Checkbox
             label="Solo destructivas"
@@ -287,10 +300,10 @@ function RiskBadges({ ids, catalog }: { ids: readonly string[]; catalog: Capabil
   return (
     <span className="flex flex-wrap gap-1">
       <Badge tone={counts.destructive > 0 ? 'error' : 'neutral'}>
-        {counts.destructive} destructiva(s)
+        {counts.destructive} {counts.destructive === 1 ? 'destructiva' : 'destructivas'}
       </Badge>
       <Badge tone={counts.disclosing > 0 ? 'warning' : 'neutral'}>
-        {counts.disclosing} divulgan datos
+        {counts.disclosing} {counts.disclosing === 1 ? 'divulga datos' : 'divulgan datos'}
       </Badge>
     </span>
   )
@@ -345,7 +358,8 @@ function GlobalCard({
       <CardHeader>
         <CardTitle>{globalCapability}</CardTitle>
         <CardDescription>
-          Suma {granted.length} capacidad(es), en todo el gateway y sin importar el rol.
+          Suma {granted.length} {granted.length === 1 ? 'capacidad' : 'capacidades'}, en todo el
+          gateway y sin importar el rol.
         </CardDescription>
       </CardHeader>
       <CardContent className="text-xs text-muted-foreground">

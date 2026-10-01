@@ -20,6 +20,25 @@ describe('RoleCapabilitySummary', () => {
       <RoleCapabilitySummary role="viewer" compareTo="operator" catalog={CATALOG_FIXTURE} />,
     )
     expect(screen.getByText(/Respecto de operator pierde 5/)).toBeInTheDocument()
+    // Operator tiene `collation.execute`, que reescribe tablas en el motor y no se deshace: bajar a
+    // viewer pierde una capacidad destructiva, y eso tiene que verse sin depender del color.
+    expect(screen.getByText('Incluye destructivas')).toBeInTheDocument()
+  })
+
+  it('marca con texto (no solo color) lo destructivo que se SUMA', () => {
+    renderWithProviders(
+      <RoleCapabilitySummary role="owner" compareTo="viewer" catalog={CATALOG_FIXTURE} />,
+    )
+    expect(screen.getByText(/Respecto de viewer suma/)).toBeInTheDocument()
+    expect(screen.getByText('Incluye destructivas')).toBeInTheDocument()
+  })
+
+  it('marca con texto lo destructivo que se pierde', () => {
+    renderWithProviders(
+      <RoleCapabilitySummary role="viewer" compareTo="owner" catalog={CATALOG_FIXTURE} />,
+    )
+    expect(screen.getByText(/Respecto de owner pierde/)).toBeInTheDocument()
+    expect(screen.getByText('Incluye destructivas')).toBeInTheDocument()
   })
 
   it('igual que el base lo dice en vez de listar nada', () => {

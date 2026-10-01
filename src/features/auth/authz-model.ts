@@ -52,6 +52,29 @@ export function highestRole(roles: readonly string[]): string {
 export const SCOPE_ENFORCEMENT_NOTE =
   'Hoy el gateway aplica esta restricción por alcance en borrar bases, aprovisionar, aplicar y revertir versiones; en el resto de las operaciones rige el rol más alto que tenga en cualquier alcance. Se completa en una próxima versión.'
 
+/**
+ * Las capacidades que el backend HOY vuelve a exigir en el destino (capa 2), y por lo tanto las
+ * únicas que un permiso por alcance de verdad recorta. Espejo de las llamadas a
+ * `assert_scope_for_database` en `app/routes/v1/managed_databases.py`:
+ *
+ * - `DELETE /managed-databases/{id}` → `databases.drop` (con `drop_remote`) o `databases.write`;
+ * - `POST /managed-databases/{id}/provision` → `databases.write`;
+ * - `POST .../migrations/apply` y `.../migrations/rollback` → `blueprints.apply`.
+ *
+ * Ojo: `databases.write` se recorta solo en esas dos rutas; crear o editar una base todavía mira el
+ * rol unión. Cuando `scope-enforcement-hardening` extienda la capa 2, esta lista crece con él.
+ */
+export const LAYER2_CAPABILITIES = [
+  'databases.write',
+  'databases.drop',
+  'blueprints.apply',
+] as const
+
+/** ¿El backend hoy recorta esta capacidad por alcance? Ver `LAYER2_CAPABILITIES`. */
+export function isEnforcedByScopeToday(id: string): boolean {
+  return (LAYER2_CAPABILITIES as readonly string[]).includes(id)
+}
+
 // ── Derivación desde el catálogo ───────────────────────────────────────────────
 
 /** Capacidades que otorga un rol, en el orden del catálogo. */

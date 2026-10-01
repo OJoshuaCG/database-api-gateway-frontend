@@ -1,7 +1,8 @@
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, TabButton } from '@/components/ui'
 import {
   EffectiveAccessPanel,
+  ROLES_MATRIX_PATH,
   SessionsPanel,
   useCapabilities,
   useCapabilityCatalog,
@@ -46,7 +47,11 @@ export function MyAccountPage() {
           admin ? `Sesión de ${admin.username}: tu acceso y dónde está abierta.` : undefined
         }
       />
-      <div className="flex gap-1 border-b border-border" role="tablist">
+      <div
+        className="flex gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Secciones de mi cuenta"
+      >
         <TabButton active={tab === 'acceso'} onClick={() => setTab('acceso')}>
           Mi acceso
         </TabButton>
@@ -102,6 +107,10 @@ function MyAccessPanel() {
         catalog={catalog.data}
         isLoading={catalog.isLoading || (admin.catalog_version != null && catalog.isPending)}
       />
+      {/* La matriz es `self.read`: cualquiera puede ver qué otorga cada rol antes de pedir uno. */}
+      <Link to={ROLES_MATRIX_PATH} className="text-sm font-medium text-primary hover:underline">
+        Ver qué otorga cada rol
+      </Link>
     </section>
   )
 }

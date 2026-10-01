@@ -36,8 +36,8 @@ describe('MyAccountPage — «Mi acceso»', () => {
       }),
     )
     renderWithProviders(<MyAccountPage />, { route: '/mi-cuenta' })
-    expect(await screen.findByText('Rol base · operator · 17 capacidades')).toBeInTheDocument()
-    expect(await screen.findByText('Producción · Permiso de entorno · viewer')).toBeInTheDocument()
+    expect(await screen.findByText('operator · 17 capacidades')).toBeInTheDocument()
+    expect(await screen.findByText('Producción · viewer')).toBeInTheDocument()
     expect(screen.getByText(SCOPE_ENFORCEMENT_NOTE)).toBeInTheDocument()
     // Es de solo lectura: nada para guardar.
     expect(screen.queryByRole('button', { name: /Guardar/ })).not.toBeInTheDocument()
@@ -50,5 +50,11 @@ describe('MyAccountPage — «Mi acceso»', () => {
       await screen.findByText(/en todo el gateway, sin permisos por alcance/),
     ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Mi acceso' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tablist')).toHaveAccessibleName('Secciones de mi cuenta')
+    // La matriz es `self.read`: enlazada desde acá para ver qué otorgaría otro rol.
+    expect(screen.getByRole('link', { name: 'Ver qué otorga cada rol' })).toHaveAttribute(
+      'href',
+      '/gateway-users?tab=roles',
+    )
   })
 })

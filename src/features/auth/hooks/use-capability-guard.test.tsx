@@ -50,7 +50,8 @@ describe('useCapabilityGuard', () => {
   it('un operator ve «Aplicar» deshabilitado con el motivo, que nombra la capacidad', async () => {
     mockSession(meFixture({ role: 'operator' }))
     renderWithProviders(<ApplyButton />)
-    const hint = await screen.findByText(/Tu acceso no permite aplicar versiones/)
+    // El catálogo llega después de la sesión: hasta entonces el motivo solo trae el id.
+    const hint = await screen.findByText(/«Aplicar y revertir versiones sobre bases reales»/)
     // El label sale del catálogo, y el id va al lado: es lo que se le pide a quien administra.
     expect(hint).toHaveTextContent(
       '«Aplicar y revertir versiones sobre bases reales», blueprints.apply',

@@ -97,7 +97,8 @@ describe('GatewayUserAccessModal — techo de quien otorga', () => {
     mockBackend()
     renderWithProviders(<GatewayUserAccessModal user={target} onClose={() => undefined} />)
     expect(await screen.findByText('Acceso efectivo al guardar')).toBeInTheDocument()
-    expect(await screen.findByText('Producción · Permiso de entorno · owner')).toBeInTheDocument()
+    // El título no repite la procedencia («Permiso de entorno»): ya la dice el badge.
+    expect((await screen.findAllByText('Producción · owner')).length).toBeGreaterThan(0)
     // La misma diferencia aparece bajo la fila del permiso y en el panel efectivo.
     expect(screen.getAllByText(/suma 14|Suma 14/).length).toBeGreaterThanOrEqual(2)
   })

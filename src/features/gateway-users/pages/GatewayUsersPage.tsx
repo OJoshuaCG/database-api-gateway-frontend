@@ -50,13 +50,18 @@ function isTab(value: string | null): value is Tab {
 export function GatewayUsersPage() {
   // La pestaña vive en la URL (`?tab=roles`), igual que en `AdminPage`: los selectores de rol
   // enlazan directo a la matriz, y un valor desconocido cae en el listado.
+  //
+  // Sin `gateway.admin` el listado es un 403 seguro, así que sin `?tab` se entra a «Roles y
+  // capacidades», que sí le sirve (es `self.read`). La pestaña por defecto no se escribe en la URL.
   const [searchParams, setSearchParams] = useSearchParams()
+  const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  const defaultTab: Tab = canAdmin ? 'users' : 'roles'
   const tabParam = searchParams.get('tab')
-  const tab: Tab = isTab(tabParam) ? tabParam : 'users'
+  const tab: Tab = isTab(tabParam) ? tabParam : defaultTab
   const setTab = (next: Tab) => {
     setSearchParams((previous) => {
       const updated = new URLSearchParams(previous)
-      if (next === 'users') updated.delete('tab')
+      if (next === defaultTab) updated.delete('tab')
       else updated.set('tab', next)
       return updated
     })
@@ -75,7 +80,7 @@ export function GatewayUsersPage() {
   const sessionUserId = admin?.id ?? null
   // El listado y sus acciones van detrás de `gateway.admin`; «Roles y capacidades» no (es
   // `self.read`), así que la pestaña sigue sirviendo a quien solo quiere saber qué otorga un rol.
-  const forbidden = !useCapabilities().can(CAPABILITIES.gatewayAdmin) || isAccessForbidden(error)
+  const forbidden = !canAdmin || isAccessForbidden(error)
 
   const columns = useMemo<ColumnDef<GatewayUserOut>[]>(
     () => [
@@ -218,7 +223,11 @@ export function GatewayUsersPage() {
         }
       />
 
-      <div className="flex gap-1 border-b border-border" role="tablist">
+      <div
+        className="flex gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Secciones de usuarios del gateway"
+      >
         <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
           Usuarios
         </TabButton>
@@ -230,7 +239,7 @@ export function GatewayUsersPage() {
       {tab === 'roles' ? (
         <RolesCapabilitiesPanel />
       ) : forbidden ? (
-        <ForbiddenState />
+        <ForbiddenState title="No tenés acceso a Usuarios del gateway" />
       ) : isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (

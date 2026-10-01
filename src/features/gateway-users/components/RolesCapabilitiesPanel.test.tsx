@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -25,6 +25,9 @@ describe('RolesCapabilitiesPanel', () => {
     expect(screen.getByText('Otorga 26 de 29')).toBeInTheDocument()
     expect(screen.getByText('Capacidades globales (se suman a cualquier rol)')).toBeInTheDocument()
     expect(screen.getByText('29 de 29 capacidades')).toBeInTheDocument()
+    // Plurales sin «(s)»: viewer no tiene ninguna destructiva.
+    expect(screen.getAllByText('0 destructivas').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/\(s\)|\(es\)/)).not.toBeInTheDocument()
     // Una sección por módulo, con su encabezado.
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()
   })
@@ -35,6 +38,8 @@ describe('RolesCapabilitiesPanel', () => {
     await screen.findByText('Otorga 12 de 29')
     await userEvent.click(screen.getByLabelText('Solo destructivas'))
     expect(screen.getByText('6 de 29 capacidades')).toBeInTheDocument()
+    // El conteo también va en una región viva, para quien filtra sin ver la pantalla.
+    expect(screen.getByText('6 de 29 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
     expect(screen.queryByRole('heading', { name: 'Entornos' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()
   })
@@ -50,13 +55,15 @@ describe('RolesCapabilitiesPanel', () => {
     expect(within(section).getAllByText('exports.download').length).toBeGreaterThan(0)
   })
 
-  it('elegir un rol colapsa las columnas en «¿La otorga?»', async () => {
+  it('elegir un rol colapsa las columnas en «¿La otorga <rol>?»', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
     await screen.findByText('Otorga 12 de 29')
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
     await userEvent.click(screen.getByRole('option', { name: 'operator' }))
-    expect(screen.getAllByRole('columnheader', { name: '¿La otorga?' }).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByRole('columnheader', { name: '¿La otorga operator?' }).length,
+    ).toBeGreaterThan(0)
   })
 
   it('con un backend sin catálogo lo dice en vez de quedarse cargando', async () => {
@@ -67,5 +74,30 @@ describe('RolesCapabilitiesPanel', () => {
         'Este backend no publica el catálogo de capacidades. Actualizalo para ver qué otorga cada rol.',
       ),
     ).toBeInTheDocument()
+  })
+
+  describe('en pantallas estrechas', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('arranca filtrado por el primer rol: una sola columna en vez de cinco', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        (query: string) =>
+          ({
+            matches: query === '(max-width: 47.99rem)',
+            media: query,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+          }) as unknown as MediaQueryList,
+      )
+      mockSession()
+      renderWithProviders(<RolesCapabilitiesPanel />)
+      await screen.findByText('Otorga 12 de 29')
+      expect(
+        screen.getAllByRole('columnheader', { name: '¿La otorga viewer?' }).length,
+      ).toBeGreaterThan(0)
+    })
   })
 })

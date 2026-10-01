@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
-import { meFixture } from '@/test/fixtures/authz-catalog'
+import { CATALOG_FIXTURE, meFixture } from '@/test/fixtures/authz-catalog'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { GatewayUsersPage } from './GatewayUsersPage'
 
@@ -79,7 +79,10 @@ describe('GatewayUsersPage — sin acceso', () => {
       ),
     )
     renderWithProviders(<GatewayUsersPage />)
-    expect(await screen.findByText('No tenés acceso a esta acción')).toBeInTheDocument()
+    // El título nombra la pantalla; es contenido de página (`status`), no una alerta.
+    const title = await screen.findByText('No tenés acceso a Usuarios del gateway')
+    expect(title.closest('[role="status"]')).not.toBeNull()
+    expect(screen.getByRole('tablist')).toHaveAccessibleName('Secciones de usuarios del gateway')
     expect(screen.getByRole('link', { name: 'Ver mi acceso' })).toHaveAttribute(
       'href',
       '/mi-cuenta',
@@ -89,7 +92,33 @@ describe('GatewayUsersPage — sin acceso', () => {
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
   })
 
-  it('sin `gateway.admin` en la sesión ni siquiera ofrece el alta', async () => {
+  it('sin `gateway.admin` entra a «Roles y capacidades» y no ofrece el alta', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({
+          data: { ...meFixture({ role: 'owner' }), id: 3, username: 'duena' },
+        }),
+      ),
+      http.get('http://localhost/api/v1/authz/catalog', () =>
+        HttpResponse.json({ data: CATALOG_FIXTURE }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json({ data: [], pagination }),
+      ),
+    )
+    renderWithProviders(<GatewayUsersPage />)
+    // Sin `?tab`, el listado sería un 403 seguro: la pestaña por defecto es la que le sirve.
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Roles y capacidades' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+    expect(await screen.findByText('Otorga 12 de 29')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
+  })
+
+  it('sin `gateway.admin`, pedir el listado a mano muestra el estado de acceso', async () => {
     server.use(
       http.get('http://localhost/api/v1/auth/me', () =>
         HttpResponse.json({
@@ -100,9 +129,8 @@ describe('GatewayUsersPage — sin acceso', () => {
         HttpResponse.json({ data: [], pagination }),
       ),
     )
-    renderWithProviders(<GatewayUsersPage />)
-    expect(await screen.findByText('No tenés acceso a esta acción')).toBeInTheDocument()
-    // La pestaña de roles sigue disponible: es `self.read`.
-    expect(screen.getByRole('tab', { name: 'Roles y capacidades' })).toBeInTheDocument()
+    renderWithProviders(<GatewayUsersPage />, { route: '/gateway-users?tab=users' })
+    expect(await screen.findByText('No tenés acceso a Usuarios del gateway')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
   })
 })

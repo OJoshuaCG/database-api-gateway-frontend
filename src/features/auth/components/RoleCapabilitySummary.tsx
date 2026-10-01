@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Badge, TrashIcon } from '@/components/ui'
 import type { CapabilityDescriptor } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import {
@@ -67,6 +68,7 @@ export function RoleCapabilitySummary({
 
   if (compareTo !== undefined) {
     const diff = diffCapabilities(roleCapabilityIds(catalog, compareTo), granted)
+    const gainsDestructive = sortByRisk(diff.gained, catalog).some(isDestructive)
     const losesDestructive = sortByRisk(diff.lost, catalog).some(isDestructive)
     if (diff.gained.length === 0 && diff.lost.length === 0) {
       return (
@@ -77,8 +79,18 @@ export function RoleCapabilitySummary({
     }
     return (
       <p id={id} className={textClass}>
+        {/* El color solo no alcanza para avisar (WCAG 1.4.1): la marca lleva icono y texto, y
+            cuenta tanto lo destructivo que se SUMA como lo que se pierde. */}
+        {(gainsDestructive || losesDestructive) && (
+          <>
+            <Badge tone="error" className="px-2 py-0">
+              <TrashIcon className="h-3 w-3" />
+              Incluye destructivas
+            </Badge>{' '}
+          </>
+        )}
         {diff.gained.length > 0 && (
-          <span>
+          <span className={gainsDestructive ? 'text-warning' : undefined}>
             Respecto de {compareTo} suma {diff.gained.length}:{' '}
             {summarizeLabels(labels(diff.gained))}.{' '}
           </span>

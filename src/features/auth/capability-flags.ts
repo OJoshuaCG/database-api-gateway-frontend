@@ -29,7 +29,7 @@ export const CAPABILITY_FLAGS: Record<
   mutates: {
     label: 'Modifica',
     tone: 'warning',
-    description: 'Cambia el inventario o la configuración del gateway.',
+    description: 'Crea o cambia algo en el inventario o en un motor, sin borrar.',
   },
   discloses: {
     label: 'Divulga datos',
@@ -71,5 +71,5 @@ export function capabilityFlagKeys(
 
 /** La leyenda de las marcas, para una `StatusLegend` puesta una vez sobre la matriz. */
 export const CAPABILITY_FLAG_LEGEND: StatusLegendItem[] = (
-  ['destructive', 'mutates', 'discloses', 'stepUp', 'agent'] as const
+  ['destructive', 'mutates', 'discloses', 'readOnly', 'stepUp', 'agent'] as const
 ).map((key) => ({ key, ...CAPABILITY_FLAGS[key] }))

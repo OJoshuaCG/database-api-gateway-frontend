@@ -1,11 +1,12 @@
-import { useState, type ReactNode } from 'react'
-import { Badge, Button, Callout, type BadgeTone } from '@/components/ui'
+import { useId, useState, type ReactNode } from 'react'
+import { Badge, Button, Callout, TrashIcon, type BadgeTone } from '@/components/ui'
 import type { CapabilityDescriptor } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import {
   SCOPE_ENFORCEMENT_NOTE,
   groupByModule,
   isDestructive,
+  isEnforcedByScopeToday,
   resolveEffectiveAccess,
   sortByRisk,
   summarizeLabels,
@@ -99,7 +100,7 @@ export function EffectiveAccessPanel({
         <AccessRow
           rowKey="base"
           badge={<Badge tone="neutral">Rol base</Badge>}
-          title={`Rol base · ${baseRole} · ${access.baseCapabilities.length} capacidades`}
+          title={`${baseRole} · ${access.baseCapabilities.length} capacidades`}
           detail="En todo lo que no tenga un permiso propio."
           expanded={expanded.has('base')}
           onToggle={() => toggle('base')}
@@ -119,7 +120,7 @@ export function EffectiveAccessPanel({
               key={key}
               rowKey={key}
               badge={<Badge tone={provenance.tone}>{provenance.label}</Badge>}
-              title={`${targetLabel} · ${provenance.label} · ${grant.role}`}
+              title={`${targetLabel} · ${grant.role}`}
               detail={<DiffLine diff={diff} catalog={catalog} label={label} />}
               expanded={expanded.has(key)}
               onToggle={() => toggle(key)}
@@ -159,7 +160,7 @@ export function EffectiveAccessPanel({
               key={key}
               rowKey={key}
               badge={<Badge tone="primary">Capacidad global</Badge>}
-              title={`Capacidad global · ${global.id}`}
+              title={global.id}
               detail="En todo el gateway, sin importar el rol."
               expanded={expanded.has(key)}
               onToggle={() => toggle(key)}
@@ -178,7 +179,13 @@ export function EffectiveAccessPanel({
       )}
 
       {grants.length > 0 && (
-        <Callout tone="info" title="Dónde se aplica hoy cada permiso por alcance">
+        // `warning` solo cuando un permiso ELEVA por encima del base: ahí el rol más alto rige en
+        // todo el gateway fuera de las cuatro rutas, y eso es una escalada real. Si los permisos
+        // solo recortan, la nota es informativa.
+        <Callout
+          tone={access.unionRole !== baseRole ? 'warning' : 'info'}
+          title="Dónde se aplica hoy cada permiso por alcance"
+        >
           <p>{SCOPE_ENFORCEMENT_NOTE}</p>
           {access.unionRole !== baseRole && (
             <p>
@@ -215,18 +222,37 @@ function DiffLine({
 }) {
   if (diff.gained.length === 0 && diff.lost.length === 0) return <>Igual que el rol base.</>
   const touchesDestructive = sortByRisk([...diff.gained, ...diff.lost], catalog).some(isDestructive)
+  // Lo perdido solo se hace cumplir hoy en la capa 2: decir «pierde 5» sin más prometería un
+  // recorte que en la mayoría de las operaciones todavía no existe (F-37).
+  const enforcedLost = diff.lost.filter(isEnforcedByScopeToday)
+  const enforcement =
+    enforcedLost.length === diff.lost.length
+      ? ''
+      : enforcedLost.length > 0
+        ? ` (hoy solo se aplica a: ${summarizeLabels(label(enforcedLost))}; el resto todavía no)`
+        : ' (hoy todavía no se aplica a ninguna)'
   return (
-    <span className={touchesDestructive ? 'text-error' : 'text-warning'}>
-      {diff.gained.length > 0 && (
-        <>
-          Suma {diff.gained.length}: {summarizeLabels(label(diff.gained))}.{' '}
-        </>
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      {/* El color solo no alcanza para avisar (WCAG 1.4.1): la marca lleva icono y texto. */}
+      {touchesDestructive && (
+        <Badge tone="error" className="px-2 py-0">
+          <TrashIcon className="h-3 w-3" />
+          Incluye destructivas
+        </Badge>
       )}
-      {diff.lost.length > 0 && (
-        <>
-          Pierde {diff.lost.length}: {summarizeLabels(label(diff.lost))}.
-        </>
-      )}
+      <span className={touchesDestructive ? 'text-error' : 'text-warning'}>
+        {diff.gained.length > 0 && (
+          <>
+            Suma {diff.gained.length}: {summarizeLabels(label(diff.gained))}.{' '}
+          </>
+        )}
+        {diff.lost.length > 0 && (
+          <>
+            Pierde {diff.lost.length}: {summarizeLabels(label(diff.lost))}
+            {enforcement}.
+          </>
+        )}
+      </span>
     </span>
   )
 }
@@ -255,7 +281,7 @@ function AccessRow({
   capabilities,
   lost = [],
 }: AccessRowProps) {
-  const listId = `effective-access-${rowKey}`
+  const listId = `effective-access-${useId()}-${rowKey}`
   const rows = catalog.filter((row) => capabilities.includes(row.id))
   const lostRows = sortByRisk(lost, catalog)
   return (
@@ -276,17 +302,27 @@ function AccessRow({
           aria-controls={listId}
           onClick={onToggle}
         >
-          {expanded ? 'Ocultar capacidades' : 'Ver capacidades'}
+          {expanded ? 'Ocultar capacidades' : 'Ver capacidades'}{' '}
+          {/* Hay un botón igual por fila: sin el destino, el lector de pantalla oye tres
+              «Ver capacidades» indistinguibles. */}
+          <span className="sr-only">de {title}</span>
         </Button>
       </div>
-      {expanded && (
-        <div id={listId} className="flex flex-col gap-2 border-t border-border pt-2">
-          {groupByModule(rows).map((group) => (
-            <CapabilityGroup key={group.module} title={group.label} rows={group.rows} />
-          ))}
-          {lostRows.length > 0 && <CapabilityGroup title="Pierde" rows={lostRows} lost />}
-        </div>
-      )}
+      {/* Siempre en el DOM (con `hidden` al plegar) para que `aria-controls` apunte a algo. */}
+      <div
+        id={listId}
+        hidden={!expanded}
+        className="flex flex-col gap-2 border-t border-border pt-2"
+      >
+        {expanded && (
+          <>
+            {groupByModule(rows).map((group) => (
+              <CapabilityGroup key={group.module} title={group.label} rows={group.rows} />
+            ))}
+            {lostRows.length > 0 && <CapabilityGroup title="Pierde" rows={lostRows} lost />}
+          </>
+        )}
+      </div>
     </li>
   )
 }
