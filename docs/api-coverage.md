@@ -159,6 +159,19 @@ gestionar permisos (enlazada desde el username/host de cada fila y desde "Ver gr
 > admin ya conoce, sin tocar el motor; `password`/`password-all-hosts` (#66/#72) cambian
 > la contraseña real. Son modales separados a propósito: no los unifiques.
 
+> **Cuentas protegidas (409, las dos tablas de esta sección).** Toda escritura sobre una
+> identidad —alta con provisión, cambio o rotación de contraseña, agregar host, `DROP`,
+> otorgar, revocar, aplicar perfil y aprovisionar con permisos iniciales— puede responder
+> `engine_user.protected_account` con `public_context.reason` ∈ `gateway_credential` (la propia
+> credencial pseudo-root del gateway), `reserved_account` (cuenta reservada del motor o de la
+> nube administrada) o `privileged_role` (rol de administración, hoy solo PostgreSQL). Y
+> `engine_user.protection_unverifiable` cuando PostgreSQL no dejó comprobar los atributos del
+> rol: es fail-closed, e invita a **reintentar**, no a desistir. Los dos se traducen en
+> `features/servers/engine-user-messages.ts` (`engineUserErrorDescription`), que usan todos los
+> hooks de escritura de `servers` y `server-users`, incluido el resultado por base del fan-out
+> de privilegios. La UI no intenta adivinar de antemano qué cuenta está protegida: lo decide el
+> backend, y el mensaje sale del error.
+
 ## Blueprints y sus migraciones
 
 | # | Endpoint | Estado | Dónde |

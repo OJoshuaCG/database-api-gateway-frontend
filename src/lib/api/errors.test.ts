@@ -491,3 +491,61 @@ describe('public_context del borrado de una versión intermedia (api-reference-v
     ])
   })
 })
+
+describe('guardContext (guards de alcance y protección)', () => {
+  it('lee `reason` de `engine_user.protected_account`', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: { code: 'engine_user.protected_account', reason: 'privileged_role' },
+      },
+    })
+    expect(error.guardContext).toEqual({ reason: 'privileged_role' })
+  })
+
+  it('lee `reason`, `side` y la base (de `context`, solo en desarrollo) del scope_not_allowed', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        context: { database: 'mysql' },
+        public_context: {
+          code: 'engine_database.scope_not_allowed',
+          reason: 'system_database',
+          side: 'target',
+        },
+      },
+    })
+    expect(error.guardContext).toEqual({
+      reason: 'system_database',
+      side: 'target',
+      databaseName: 'mysql',
+    })
+  })
+
+  it('lee `fields` de `server.credential_required_for_rebind`', () => {
+    const error = normalizeApiError(422, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'server.credential_required_for_rebind',
+          fields: ['host', 'ssl_mode', 7],
+        },
+      },
+    })
+    expect(error.guardContext?.fields).toEqual(['host', 'ssl_mode'])
+  })
+
+  it('no se construye para códigos ajenos aunque traigan las mismas claves', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'x',
+        type: 'AppHttpException',
+        public_context: { code: 'export.invalid_row_filter', reason: 'danger' },
+      },
+    })
+    expect(error.guardContext).toBeUndefined()
+  })
+})

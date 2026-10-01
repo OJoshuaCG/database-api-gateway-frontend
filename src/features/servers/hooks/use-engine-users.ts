@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { engineUserErrorDescription } from '../engine-user-messages'
 import type {
   AddHostIn,
   AdoptAllHostsIn,
@@ -52,7 +53,8 @@ export function useCreateEngineUser(serverId: number) {
       invalidate()
       toast.success('Usuario creado en el motor 🔌', result.username)
     },
-    onError: (error) => toast.error('No se pudo crear el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo crear el usuario', engineUserErrorDescription(error)),
   })
 }
 
@@ -65,7 +67,8 @@ export function useChangeEngineUserPassword(serverId: number) {
       invalidate()
       toast.success('Contraseña actualizada 🔌', result.username)
     },
-    onError: (error) => toast.error('No se pudo cambiar la contraseña', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo cambiar la contraseña', engineUserErrorDescription(error)),
   })
 }
 
@@ -79,7 +82,8 @@ export function useDeleteEngineUser(serverId: number) {
       invalidate()
       toast.success('Usuario eliminado del motor 🔌', username)
     },
-    onError: (error) => toast.error('No se pudo eliminar el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo eliminar el usuario', engineUserErrorDescription(error)),
   })
 }
 
@@ -99,7 +103,8 @@ export function useAddEngineUserHost(serverId: number) {
         toast.success(`Host «${result.new_host}» agregado 🔌`, result.username)
       }
     },
-    onError: (error) => toast.error('No se pudo agregar el host', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo agregar el host', engineUserErrorDescription(error)),
   })
 }
 
@@ -123,7 +128,7 @@ export function useAdoptAllHosts(serverId: number) {
       )
     },
     onError: (error) =>
-      toast.error('No se pudieron adoptar las identidades', toApiError(error).message),
+      toast.error('No se pudieron adoptar las identidades', engineUserErrorDescription(error)),
   })
 }
 
@@ -158,7 +163,8 @@ export function useDefineKnownPassword(serverId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo guardar la contraseña', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo guardar la contraseña', engineUserErrorDescription(error)),
   })
 }
 
@@ -190,7 +196,8 @@ export function useChangeEngineUserPasswordAllHosts(serverId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo rotar la contraseña', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo rotar la contraseña', engineUserErrorDescription(error)),
   })
 }
 

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type { ServerUserCreate, ServerUserUpdate } from '@/lib/contracts'
 import { createServerUser, deleteServerUser, updateServerUser } from '../api/server-users.api'
 
@@ -32,7 +32,8 @@ export function useCreateServerUser() {
         user.username,
       )
     },
-    onError: (error) => toast.error('No se pudo crear el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo crear el usuario', engineUserErrorDescription(error)),
   })
 }
 
@@ -48,7 +49,8 @@ export function useUpdateServerUser(id: number) {
       queryClient.setQueryData(queryKeys.serverUsers.detail(id), user)
       toast.success('Usuario actualizado', user.username)
     },
-    onError: (error) => toast.error('No se pudo actualizar el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo actualizar el usuario', engineUserErrorDescription(error)),
   })
 }
 
@@ -84,6 +86,7 @@ export function useDeleteServerUser() {
         dropRemote ? 'Usuario eliminado del motor 🔌' : 'Usuario quitado del inventario',
       )
     },
-    onError: (error) => toast.error('No se pudo eliminar el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo eliminar el usuario', engineUserErrorDescription(error)),
   })
 }

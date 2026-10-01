@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type { ServerUserFullCreate } from '@/lib/contracts'
 import { provisionServerUser } from '../api/server-users.api'
 
@@ -44,6 +44,6 @@ export function useProvisionServerUser() {
       }
     },
     onError: (error) =>
-      toast.error('No se pudo aprovisionar el usuario', toApiError(error).message),
+      toast.error('No se pudo aprovisionar el usuario', engineUserErrorDescription(error)),
   })
 }

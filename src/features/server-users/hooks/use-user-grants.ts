@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type {
   ApplyProfileBulkItem,
   ApplyProfileRequest,
@@ -78,7 +78,7 @@ async function runInSeries<TBody>(
       await call(item.body)
       outcomes.push({ label: item.label, ok: true })
     } catch (error) {
-      outcomes.push({ label: item.label, ok: false, error: toApiError(error).message })
+      outcomes.push({ label: item.label, ok: false, error: engineUserErrorDescription(error) })
     }
   }
   return outcomes
@@ -115,7 +115,7 @@ export function useGrantPrivilegesToDatabases(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudieron otorgar los privilegios', toApiError(error).message),
+      toast.error('No se pudieron otorgar los privilegios', engineUserErrorDescription(error)),
   })
 }
 
@@ -144,7 +144,7 @@ export function useRevokePrivilegesFromDatabases(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudieron revocar los privilegios', toApiError(error).message),
+      toast.error('No se pudieron revocar los privilegios', engineUserErrorDescription(error)),
   })
 }
 
@@ -174,7 +174,8 @@ export function useApplyProfile(id: number, serverId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo aplicar el perfil', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo aplicar el perfil', engineUserErrorDescription(error)),
   })
 }
 
@@ -242,6 +243,7 @@ export function useApplyProfileToDatabases(id: number, serverId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo aplicar el perfil', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo aplicar el perfil', engineUserErrorDescription(error)),
   })
 }

@@ -256,6 +256,41 @@ export interface GrantErrorContext {
   itemErrors?: string[]
 }
 
+/**
+ * Datos accionables de los guards de ALCANCE Y PROTECCIÓN que comparten varios módulos:
+ * `engine_user.protected_account`, `engine_user.protection_unverifiable`,
+ * `engine_database.scope_not_allowed` y `server.credential_required_for_rebind`.
+ *
+ * Se agrupan en un solo campo porque son pocas claves, cada código trae solo las suyas y ninguna
+ * colisiona de significado entre ellos. Solo se construye para esos cuatro códigos: un `reason` o
+ * un `fields` de cualquier otro endpoint no acaba disfrazado de este contexto.
+ */
+export interface GuardErrorContext {
+  /**
+   * `protected_account`: `gateway_credential` | `reserved_account` | `privileged_role`.
+   * `scope_not_allowed`: `system_database` | `gateway_metadata`.
+   * `z.string()` y no un enum cerrado: un motivo nuevo degrada al mensaje genérico, no rompe.
+   */
+  readonly reason?: string
+  /** `scope_not_allowed`: qué lado del pedido nombró la base (`source` | `target`). */
+  readonly side?: string
+  /**
+   * `scope_not_allowed`: la base rechazada. Viaja en `context`, que el backend solo expone en
+   * desarrollo; en producción llega ausente y quien pinte el mensaje debe tolerarlo.
+   */
+  readonly databaseName?: string
+  /** `credential_required_for_rebind`: campos que re-apuntan la credencial (`host`, `port`…). */
+  readonly fields?: string[]
+}
+
+/** Los códigos cuyo `public_context` se lee como `GuardErrorContext`. */
+const GUARD_ERROR_CODES: ReadonlySet<string> = new Set([
+  'engine_user.protected_account',
+  'engine_user.protection_unverifiable',
+  'engine_database.scope_not_allowed',
+  'server.credential_required_for_rebind',
+])
+
 export class ApiError extends Error {
   /** Status HTTP (0 = error de red / CORS / fetch abortado por el navegador). */
   readonly status: number
@@ -421,6 +456,8 @@ export class ApiError extends Error {
    * un mensaje que le pide algo sin decirle sobre qué.
    */
   readonly collationContext?: CollationErrorContext
+  /** Contexto de los guards de alcance y protección; ver `GuardErrorContext`. */
+  readonly guardContext?: GuardErrorContext
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
   /**
@@ -464,6 +501,7 @@ export class ApiError extends Error {
     environmentContext?: EnvironmentErrorContext
     databaseModelContext?: DatabaseModelErrorContext
     collationContext?: CollationErrorContext
+    guardContext?: GuardErrorContext
     requestId?: string
     unrecognizedBody?: boolean
   }) {
@@ -501,6 +539,7 @@ export class ApiError extends Error {
     this.environmentContext = args.environmentContext
     this.databaseModelContext = args.databaseModelContext
     this.collationContext = args.collationContext
+    this.guardContext = args.guardContext
     this.requestId = args.requestId
     this.unrecognizedBody = args.unrecognizedBody
   }
@@ -1199,6 +1238,21 @@ function extractCollationContext(
   }
 }
 
+function extractGuardContext(
+  code: string | undefined,
+  context: unknown,
+  publicContext: unknown,
+): GuardErrorContext | undefined {
+  if (!code || !GUARD_ERROR_CODES.has(code) || !isRecord(publicContext)) return undefined
+  const guardContext: GuardErrorContext = {
+    reason: nonEmptyString(publicContext.reason),
+    side: nonEmptyString(publicContext.side),
+    databaseName: isRecord(context) ? nonEmptyString(context.database) : undefined,
+    fields: stringList(publicContext.fields),
+  }
+  return Object.values(guardContext).some((value) => value !== undefined) ? guardContext : undefined
+}
+
 function extractGrantContext(
   context: unknown,
   publicContext: unknown,
@@ -1395,6 +1449,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         environmentContext: extractEnvironmentContext(code, d.public_context),
         databaseModelContext: extractDatabaseModelContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
+        guardContext: extractGuardContext(code, d.context, d.public_context),
         requestId,
       })
     }

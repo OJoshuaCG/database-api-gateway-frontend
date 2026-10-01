@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
+import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type { AdoptUserIn } from '@/lib/contracts'
 import { adoptUser } from '../api/server-users.api'
 
@@ -22,6 +22,7 @@ export function useAdoptUser() {
       })
       toast.success('Usuario adoptado', `${user.username}${user.host ? `@${user.host}` : ''}`)
     },
-    onError: (error) => toast.error('No se pudo adoptar el usuario', toApiError(error).message),
+    onError: (error) =>
+      toast.error('No se pudo adoptar el usuario', engineUserErrorDescription(error)),
   })
 }
