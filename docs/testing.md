@@ -23,6 +23,9 @@ pnpm test:coverage   # con cobertura (v8)
 - **`src/test/utils.tsx`**: `renderWithProviders` y `createTestQueryClient` (con `retry:
   false` para que los errores se propaguen al instante) — montan Theme + Query + Toast +
   Router.
+  Ese router es un `MemoryRouter` clásico: una página que usa `useBlocker` (solo existe en un
+  data router) se prueba con `createMemoryRouter` + `RouterProvider`, como
+  `GatewayUserAccessPage.test.tsx`.
 - **`.env.test`**: define `VITE_API_BASE_URL=http://localhost/api/v1` (el cliente lo exige
   en arranque).
 

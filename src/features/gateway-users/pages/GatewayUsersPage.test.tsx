@@ -28,7 +28,7 @@ function gatewayUser(id: number, username: string) {
 const pagination = { page: 1, size: 20, total: 2, pages: 1, has_next: false, has_prev: false }
 
 describe('GatewayUsersPage — la fila de la propia cuenta', () => {
-  it('deshabilita «Accesos» en la fila propia, con el motivo a la vista, y no en las demás', async () => {
+  it('deshabilita «Accesos» en la fila propia, con el motivo a la vista, y enlaza en las demás', async () => {
     server.use(
       http.get('http://localhost/api/v1/auth/me', () =>
         HttpResponse.json({
@@ -49,12 +49,13 @@ describe('GatewayUsersPage — la fila de la propia cuenta', () => {
     const notes = await screen.findAllByText(SELF_ACCESS_NOTE)
     expect(notes.length).toBeGreaterThan(0)
 
-    const buttons = screen.getAllByRole('button', { name: 'Accesos' })
-    const disabled = buttons.filter((button) => button.hasAttribute('disabled'))
-    const enabled = buttons.filter((button) => !button.hasAttribute('disabled'))
-    // Mitad y mitad: la fila propia deshabilitada, la de la otra persona habilitada, en cada vista.
-    expect(disabled).toHaveLength(buttons.length / 2)
-    expect(enabled).toHaveLength(buttons.length / 2)
+    // La fila propia lleva un botón deshabilitado; la de la otra persona, un enlace a su página
+    // de accesos. Una de cada por vista (tabla y tarjetas).
+    const disabled = screen.getAllByRole('button', { name: 'Accesos' })
+    expect(disabled.every((button) => button.hasAttribute('disabled'))).toBe(true)
+    const links = screen.getAllByRole('link', { name: 'Accesos' })
+    expect(links).toHaveLength(disabled.length)
+    for (const link of links) expect(link).toHaveAttribute('href', '/gateway-users/7/accesos')
     expect(notes).toHaveLength(disabled.length)
   })
 })

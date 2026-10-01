@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -16,6 +16,7 @@ import {
   PencilIcon,
   StatusLegend,
   TabButton,
+  buttonClassName,
 } from '@/components/ui'
 import { ForbiddenState, isAccessForbidden, useCapabilities, useSession } from '@/features/auth'
 import {
@@ -24,8 +25,8 @@ import {
   isSyntheticGatewayEmail,
   type GatewayUserOut,
 } from '@/lib/contracts'
+import { gatewayUserAccessPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/utils'
-import { GatewayUserAccessModal } from '../components/GatewayUserAccessModal'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
 import { RolesCapabilitiesPanel } from '../components/RolesCapabilitiesPanel'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
@@ -73,7 +74,6 @@ export function GatewayUsersPage() {
   const [size, setSize] = useState<number>(PAGINATION.defaultSize)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<GatewayUserOut | undefined>(undefined)
-  const [accessTarget, setAccessTarget] = useState<GatewayUserOut | null>(null)
   const [invite, setInvite] = useState<PendingInvite | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useGatewayUsers(
@@ -164,14 +164,21 @@ export function GatewayUsersPage() {
                 «Editar» sigue disponible porque los datos de contacto sí se pueden cambiar; el
                 formulario deshabilita ahí el rol y el estado.
               */}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={own}
-                onClick={() => setAccessTarget(row.original)}
-              >
-                Accesos
-              </Button>
+              {/* Navega a la página de accesos: es un `Link` con aspecto de botón, no un botón.
+                  Un enlace no se puede deshabilitar, así que en la fila propia va un `Button`
+                  deshabilitado en su lugar. */}
+              {own ? (
+                <Button variant="ghost" size="sm" disabled>
+                  Accesos
+                </Button>
+              ) : (
+                <Link
+                  to={gatewayUserAccessPath(row.original.id)}
+                  className={buttonClassName({ variant: 'ghost', size: 'sm' })}
+                >
+                  Accesos
+                </Link>
+              )}
               {/*
                 El botón DESAPARECE cuando la cuenta ya fijó su contraseña: sobre ella el endpoint
                 responde 409 `credential_already_set`, porque la invitación es solo para la primera
@@ -322,14 +329,6 @@ export function GatewayUsersPage() {
               reissued: false,
             })
           }}
-        />
-      )}
-
-      {accessTarget && (
-        <GatewayUserAccessModal
-          user={accessTarget}
-          isSelf={isOwnAccount(sessionUserId, accessTarget)}
-          onClose={() => setAccessTarget(null)}
         />
       )}
 

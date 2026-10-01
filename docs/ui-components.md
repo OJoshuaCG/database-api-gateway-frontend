@@ -152,6 +152,11 @@ client-side**; la paginación/filtros server-side se controlan fuera (ver
   ya usada en toda la app — al final sin etiqueta). Esto es automático para cualquier
   consumidor: no hay que hacer nada especial al definir `columns` más allá de seguir esa
   convención de `header: ''` en la columna de acciones.
+- `columnWidths?` (`{ [idDeColumna]: '14%' }`): pasa la tabla a `table-layout: fixed` con un
+  `<colgroup>`, así el ancho deja de depender del contenido. **Solo** para varias tablas
+  apiladas que tienen que leerse como una —la matriz de «Roles y capacidades», una tabla por
+  módulo que con ancho automático salía en escalera—. Las columnas sin ancho se reparten el
+  resto; usá porcentajes para no desbordar en `md`. No toca las tarjetas de `< md`.
 
 ### `Pagination`
 Controles de paginación **server-side** (`page`/`size` del backend): `page`, `pages`,
@@ -292,9 +297,9 @@ Qué puede hacer alguien y dónde: rol base, una fila por permiso con su diferen
 base, los cruces entorno × servidor (rige el más restrictivo) y las capacidades globales; cada
 fila despliega sus capacidades con «Ver capacidades». Props: `baseRole`, `globalCapabilities`,
 `grants` (`{ scopeType, scopeId, role, targetLabel }[]`, con el nombre del destino ya resuelto),
-`catalog`, `isLoading?`, `mode` (`admin` en el modal de accesos, `self` en «Mi acceso»), `idPrefix?`
+`catalog`, `isLoading?`, `mode` (`admin` en la página de accesos, `self` en «Mi acceso»), `idPrefix?`
 (da a cada fila de permiso el `id` de `effectiveAccessRowId(prefix, tipo, id)`, para enlazarla:
-el modal de accesos pone «Ver el efecto abajo» en cada permiso en vez de repetir la diferencia).
+la página de accesos pone «Ver el efecto al guardar» en cada permiso en vez de repetir la diferencia).
 Lo desplegado se recuerda por destino (`tipo:id`), no por posición. Las diferencias marcan
 «Suma destructivas» (rojo) y «Quita destructivas» (neutro) por separado, y lo perdido dice qué
 parte se hace cumplir hoy (`lostEnforcementNote`; `databases.write`, solo en borrar y aprovisionar).
@@ -328,7 +333,15 @@ acceso», **sin «Reintentar»** (el mismo pedido daría el mismo 403).
 
 `RolesCapabilitiesPanel` (en `features/gateway-users`) es la pestaña «Roles y capacidades» de
 `/gateway-users`: una tarjeta por rol y por global, y la matriz por módulo con `DataTable`
-(búsqueda, filtro por rol y por riesgo). `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella;
+(búsqueda, filtro por rol y por riesgo). Cada módulo es una tabla, pero todas comparten los mismos
+anchos (`columnWidths`), así que se leen como una sola matriz con secciones.
+
+`GatewayUserAccessPage` (`/gateway-users/:userId/accesos`, en `features/gateway-users`) es el
+editor de accesos de una persona, que antes era un modal: cabecera con el usuario y su rol base,
+y en dos columnas desde `lg` el formulario (`GatewayUserAccessEditor`: «Capacidades globales»,
+«Permisos por entorno o servidor» y el aviso de «Capacidades puntuales», que todavía no existen)
+y al costado «Acceso efectivo al guardar». «Guardar accesos» va en una barra fija al pie con la
+nota de sesiones; salir con cambios sin guardar pide confirmación. `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella;
 `UserIcon`, para el enlace «Mi cuenta» de la `Topbar`.
 
 ## Layout (en `src/components/layout/`)

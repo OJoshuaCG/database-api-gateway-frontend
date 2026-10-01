@@ -48,3 +48,15 @@ export function serverUserPath(
   const path = `/servers/${serverId}/users/${encodeURIComponent(username)}${hostSegment}`
   return tab ? `${path}?tab=${tab}` : path
 }
+
+/** Listado de usuarios del gateway (pestaña «Usuarios»). */
+export const GATEWAY_USERS_PATH = '/gateway-users'
+
+/**
+ * Editor de accesos de un usuario del gateway: `/gateway-users/:userId/accesos`. Era un modal y
+ * pasó a página propia: con capacidades globales, permisos por alcance y el acceso efectivo, no
+ * entraba en un diálogo sin volverse un scroll interminable.
+ */
+export function gatewayUserAccessPath(userId: number): string {
+  return `${GATEWAY_USERS_PATH}/${userId}/accesos`
+}

@@ -73,6 +73,32 @@ describe('RolesCapabilitiesPanel', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('todas las secciones comparten los mismos anchos de columna (una sola matriz, sin escalera)', async () => {
+    mockSession()
+    const { container } = renderWithProviders(<RolesCapabilitiesPanel />)
+    await screen.findByText('Otorga 12 de 29')
+    const widthsOf = (colgroup: Element) =>
+      Array.from(colgroup.querySelectorAll('col')).map((col) => (col as HTMLElement).style.width)
+
+    const colgroups = Array.from(container.querySelectorAll('colgroup'))
+    // Una tabla por módulo, y todas con anchos fijos: el ancho ya no sale del contenido.
+    expect(colgroups.length).toBeGreaterThan(1)
+    const first = widthsOf(colgroups[0] as Element)
+    // Capacidad (resto), Alcance y las cinco columnas de rol y global, repartidas por igual.
+    expect(first).toEqual(['', '14%', '9.2%', '9.2%', '9.2%', '9.2%', '9.2%'])
+    for (const colgroup of colgroups) expect(widthsOf(colgroup)).toEqual(first)
+    for (const table of container.querySelectorAll('table')) {
+      expect(table).toHaveClass('table-fixed')
+    }
+
+    // Con un rol elegido queda una sola columna, y sigue igual en todas las secciones.
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    await userEvent.click(screen.getByRole('option', { name: 'operator' }))
+    const filtered = Array.from(container.querySelectorAll('colgroup')).map(widthsOf)
+    expect(filtered[0]).toEqual(['', '14%', '20%'])
+    for (const widths of filtered) expect(widths).toEqual(filtered[0])
+  })
+
   it('con un backend sin catálogo lo dice en vez de quedarse cargando', async () => {
     mockSession({ id: 1, username: 'admin', role: 'owner' })
     renderWithProviders(<RolesCapabilitiesPanel />)

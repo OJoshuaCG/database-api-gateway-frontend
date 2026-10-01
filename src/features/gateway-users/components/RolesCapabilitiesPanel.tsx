@@ -133,18 +133,19 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
     )
   }, [catalog, search, onlyDestructive, onlyDisclosing])
 
+  const selected = role === null ? null : (grantors.find((grantor) => grantor.key === role) ?? null)
+  const shownGrantors = useMemo(() => (selected ? [selected] : grantors), [selected, grantors])
+
   const columns = useMemo<ColumnDef<CapabilityDescriptor>[]>(() => {
-    const selected = role === null ? null : grantors.find((grantor) => grantor.key === role)
-    const grantColumns: ColumnDef<CapabilityDescriptor>[] = (selected ? [selected] : grantors).map(
-      (grantor) => ({
-        id: `grant-${grantor.key}`,
-        header: selected ? `¿La otorga ${selected.key}?` : grantor.key,
-        enableSorting: false,
-        cell: ({ row }) => <GrantMark granted={grantor.grants(row.original)} />,
-      }),
-    )
+    const grantColumns: ColumnDef<CapabilityDescriptor>[] = shownGrantors.map((grantor) => ({
+      id: grantColumnId(grantor.key),
+      header: selected ? `¿La otorga ${breakable(selected.key)}?` : breakable(grantor.key),
+      enableSorting: false,
+      cell: ({ row }) => <GrantMark granted={grantor.grants(row.original)} />,
+    }))
     return [
       {
+        id: 'label',
         accessorKey: 'label',
         header: 'Capacidad',
         cell: ({ row }) => (
@@ -167,7 +168,15 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
       },
       ...grantColumns,
     ]
-  }, [grantors, role])
+  }, [shownGrantors, selected])
+
+  // Un solo juego de anchos para TODAS las secciones: cada módulo es una tabla aparte, y con el
+  // ancho automático cada una medía sus columnas según su propio contenido (la misma «Capacidad»
+  // salía de 180, 200 o 220 px) y la matriz se leía como una escalera.
+  const columnWidths = useMemo(
+    () => matrixColumnWidths(shownGrantors.map((grantor) => grantor.key)),
+    [shownGrantors],
+  )
 
   const roleOptions = useMemo<RoleFilterOption[]>(
     () => [
@@ -265,6 +274,7 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
                 columns={columns}
                 enableGlobalFilter={false}
                 getRowId={(row) => row.id}
+                columnWidths={columnWidths}
               />
             </section>
           ))}
@@ -272,6 +282,33 @@ function RolesMatrix({ catalog }: { catalog: CapabilityDescriptor[] }) {
       )}
     </div>
   )
+}
+
+/** Id de la columna de un rol o una global en la matriz. */
+function grantColumnId(key: string): string {
+  return `grant-${key}`
+}
+
+/**
+ * Ancho de cada columna de la matriz, en porcentaje. «Capacidad» no lleva: se queda con el resto
+ * (40 % con las cinco columnas de rol y global, 66 % con una sola). En porcentaje y no en `rem`
+ * para que cinco columnas fijas no desborden la tabla en `md`. Depende solo de QUÉ columnas se
+ * muestran, nunca de las filas: por eso es el mismo en todas las secciones.
+ */
+function matrixColumnWidths(grantorKeys: readonly string[]): Record<string, string> {
+  const grantShare = grantorKeys.length <= 1 ? 20 : 46 / grantorKeys.length
+  return {
+    scope: '14%',
+    ...Object.fromEntries(grantorKeys.map((key) => [grantColumnId(key), `${grantShare}%`])),
+  }
+}
+
+/**
+ * Corte de línea posible tras cada `_`: con anchos fijos, `security_officer` no entra entero en su
+ * columna y sin esto se partiría en cualquier letra.
+ */
+function breakable(id: string): string {
+  return id.replaceAll('_', '_\u200b')
 }
 
 /** «Sí» o «—», siempre con texto visible; el lector de pantalla oye «No» en vez de «guion». */

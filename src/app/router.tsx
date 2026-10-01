@@ -60,7 +60,10 @@ const ManagedDatabaseMigrationsPage = lazyPage(
   () => import('@/features/managed-databases'),
   'ManagedDatabaseMigrationsPage',
 )
-const SelectResultsPage = lazyPage(() => import('@/features/managed-databases'), 'SelectResultsPage')
+const SelectResultsPage = lazyPage(
+  () => import('@/features/managed-databases'),
+  'SelectResultsPage',
+)
 const SchemaComparisonWizardPage = lazyPage(
   () => import('@/features/schema-comparisons'),
   'SchemaComparisonWizardPage',
@@ -77,10 +80,7 @@ const CloneBatchLegacyRedirect = lazyPage(
   () => import('@/features/clone-batches'),
   'CloneBatchLegacyRedirect',
 )
-const CloneHistoryPage = lazyPage(
-  () => import('@/features/database-clones'),
-  'CloneHistoryPage',
-)
+const CloneHistoryPage = lazyPage(() => import('@/features/database-clones'), 'CloneHistoryPage')
 const CollationConversionWizardPage = lazyPage(
   () => import('@/features/collation-conversions'),
   'CollationConversionWizardPage',
@@ -96,6 +96,10 @@ const PermissionProfilesPage = lazyPage(
 )
 const AdminPage = lazyPage(() => import('@/features/admin'), 'AdminPage')
 const GatewayUsersPage = lazyPage(() => import('@/features/gateway-users'), 'GatewayUsersPage')
+const GatewayUserAccessPage = lazyPage(
+  () => import('@/features/gateway-users'),
+  'GatewayUserAccessPage',
+)
 const ApiTokensPage = lazyPage(() => import('@/features/api-tokens'), 'ApiTokensPage')
 const MyAccountPage = lazyPage(() => import('@/features/account'), 'MyAccountPage')
 const AcceptInvitationPage = lazyPage(
@@ -194,6 +198,9 @@ export const router = createBrowserRouter([
           },
           // Identidades del GATEWAY, no del motor: `/server-users` es la otra población.
           { path: 'gateway-users', element: <GatewayUsersPage /> },
+          // Los accesos de una persona, en página propia (antes un modal del listado). Usa el
+          // `useBlocker` del data router para avisar de cambios sin guardar al salir.
+          { path: 'gateway-users/:userId/accesos', element: <GatewayUserAccessPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
           { path: 'admin', element: <AdminPage /> },
           // Autoservicio de la propia sesión: «Mi acceso» y «Mis sesiones» (que antes era una

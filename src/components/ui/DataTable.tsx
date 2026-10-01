@@ -15,6 +15,7 @@ import { Checkbox } from './Checkbox'
 import { IconButton } from './IconButton'
 import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { Input } from './Input'
+import { cn } from '@/lib/utils'
 
 interface ColumnOption {
   id: string
@@ -36,6 +37,16 @@ export interface DataTableProps<T> {
   /** Si se indica, activa paginación client-side (para listas NO paginadas como privilegios). */
   clientPageSize?: number
   getRowId?: (row: T) => string
+  /**
+   * Anchos por id de columna (`'40%'`, `'8rem'`). Con esta prop la tabla pasa a
+   * `table-layout: fixed` con un `<colgroup>`: el ancho de cada columna deja de depender del
+   * contenido de ESTA instancia. Existe para varias tablas apiladas que tienen que leerse como una
+   * sola —la matriz por módulo de «Roles y capacidades»—, donde el ancho automático daba una
+   * escalera (la misma columna con 180, 200 y 220 px según la sección). Las columnas sin ancho se
+   * reparten lo que sobra. Usá porcentajes: un ancho fijo grande en una tabla de muchas columnas
+   * suma un mínimo que puede desbordar en `md`. No afecta a la vista de tarjetas de `< md`.
+   */
+  columnWidths?: Readonly<Record<string, string>>
 }
 
 function headerLabel<T>(column: ColumnDef<T>): string {
@@ -56,6 +67,7 @@ export function DataTable<T>({
   toolbar,
   clientPageSize,
   getRowId,
+  columnWidths,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -176,7 +188,14 @@ export function DataTable<T>({
           de encoger columnas hasta ilegibilidad o esconder el contenido detrás de un scroll que
           en móvil nadie descubre arrastrando. */}
       <div className="hidden overflow-x-auto rounded-card border border-border bg-surface md:block">
-        <table className="w-full border-collapse text-sm">
+        <table className={cn('w-full border-collapse text-sm', columnWidths && 'table-fixed')}>
+          {columnWidths && (
+            <colgroup>
+              {table.getVisibleLeafColumns().map((column) => (
+                <col key={column.id} style={{ width: columnWidths[column.id] }} />
+              ))}
+            </colgroup>
+          )}
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
@@ -196,7 +215,12 @@ export function DataTable<T>({
                               ? 'none'
                               : undefined
                       }
-                      className="whitespace-nowrap px-4 py-3 text-left font-semibold text-muted-foreground"
+                      // Con anchos fijos el encabezado no puede empujar la columna: parte la
+                      // línea en vez de invadir la de al lado.
+                      className={cn(
+                        'px-4 py-3 text-left font-semibold text-muted-foreground',
+                        columnWidths ? 'break-words' : 'whitespace-nowrap',
+                      )}
                     >
                       {header.isPlaceholder ? null : canSort ? (
                         <button
@@ -237,7 +261,10 @@ export function DataTable<T>({
                   className="border-b border-border transition-colors last:border-0 hover:bg-surface-muted"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3 text-foreground">
+                    <td
+                      key={cell.id}
+                      className={cn('px-4 py-3 text-foreground', columnWidths && 'break-words')}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
