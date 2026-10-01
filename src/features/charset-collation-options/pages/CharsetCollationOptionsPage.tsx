@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
+  Callout,
   Combobox,
   DataTable,
   EmptyState,
@@ -10,8 +11,9 @@ import {
   PageHeader,
   Switch,
 } from '@/components/ui'
+import { useCapabilityGuard } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
-import type { CharsetCollationOptionOut, EngineFamily } from '@/lib/contracts'
+import { CAPABILITIES, type CharsetCollationOptionOut, type EngineFamily } from '@/lib/contracts'
 import {
   useCharsetCollationOptions,
   useUpdateCharsetCollationOption,
@@ -49,6 +51,13 @@ export function CharsetCollationOptionsPage() {
 
   const { data, isLoading, isFetching, isError, error, refetch } = useCharsetCollationOptions()
   const update = useUpdateCharsetCollationOption()
+  // Crear y editar exigen `catalogs.write`, que solo da `security_officer`. Sin ella los
+  // controles quedan deshabilitados y el motivo se muestra arriba, visible.
+  const writeGuard = useCapabilityGuard(
+    CAPABILITIES.catalogsWrite,
+    'modificar el catálogo de charsets y collations',
+  )
+  const canWrite = writeGuard.allowed
 
   const filtered = useMemo(() => {
     let list = data ?? []
@@ -126,7 +135,7 @@ export function CharsetCollationOptionsPage() {
         cell: ({ row }) => (
           <Switch
             checked={row.original.enabled}
-            disabled={update.isPending}
+            disabled={!canWrite || update.isPending}
             onCheckedChange={(checked) => handleToggleEnabled(row.original, checked)}
             ariaLabel={`Habilitar «${formatOptionLabel(row.original)}» para creación de bases de datos`}
           />
@@ -152,7 +161,7 @@ export function CharsetCollationOptionsPage() {
               type="button"
               variant="ghost"
               size="sm"
-              disabled={update.isPending}
+              disabled={!canWrite || update.isPending}
               onClick={() => update.mutate({ id: row.original.id, body: { is_default: true } })}
             >
               Marcar sugerida
@@ -161,7 +170,7 @@ export function CharsetCollationOptionsPage() {
         },
       },
     ],
-    [update, handleToggleEnabled],
+    [update, handleToggleEnabled, canWrite],
   )
 
   return (
@@ -169,8 +178,18 @@ export function CharsetCollationOptionsPage() {
       <PageHeader
         title="Charsets y collations"
         description="Define qué combinaciones de charset/collation se pueden elegir al crear una base de datos nueva. No afecta a las bases ya creadas."
-        actions={<Button onClick={() => setAddOpen(true)}>Agregar combinación</Button>}
+        actions={
+          <Button disabled={!canWrite} onClick={() => setAddOpen(true)}>
+            Agregar combinación
+          </Button>
+        }
       />
+
+      {!canWrite && (
+        <Callout tone="info" title="Solo lectura">
+          <p>{writeGuard.hint}</p>
+        </Callout>
+      )}
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
