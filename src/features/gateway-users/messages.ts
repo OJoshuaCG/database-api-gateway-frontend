@@ -24,12 +24,23 @@ export const RATE_LIMIT_HINT =
 export const SELF_MODIFICATION_MESSAGE = `No podés cambiar tu propio rol, tu propio acceso ni desactivar tu cuenta. ${SELF_ACCESS_NOTE}`
 
 /**
- * `access.grant_ceiling_exceeded` sin el detalle del backend. El `msg` del backend es mejor —dice
- * QUÉ se excedió: «rol base 'owner'», «capacidades globales [security_officer]»— y se usa cuando
- * viene; este texto es solo el respaldo.
+ * `access.grant_ceiling_exceeded`: el texto propio (en voseo). El `msg` del backend viene en tú
+ * («No puedes otorgar más acceso del que tienes: rol base 'owner'. Pídeselo…»), así que no se
+ * muestra tal cual: de él se toma solo el DETALLE de qué se excedió (`grantCeilingDetail`).
  */
 export const GRANT_CEILING_FALLBACK =
   'No podés otorgar más acceso del que tenés. Pedíselo a alguien que tenga ese nivel.'
+
+/**
+ * Lo que se excedió, tal como lo enumera el backend (`_assert_within_ceiling`): «rol base
+ * 'owner'», «rol por alcance 'owner'», «capacidades globales [security_officer]», separados por
+ * «; ». `null` si el mensaje no tiene esa forma: entonces solo va el respaldo.
+ */
+export function grantCeilingDetail(backendMessage: string): string | null {
+  const match = /tienes:\s*(.+?)\.\s*P[ií]d/u.exec(backendMessage)
+  const detail = match?.[1]?.trim()
+  return detail ? detail : null
+}
 
 /**
  * Mensaje para un error de las pantallas ADMINISTRADAS (listado, alta, edición, accesos,
@@ -54,10 +65,12 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
         : null
     case GATEWAY_USER_ERROR_CODES.selfModificationForbidden:
       return SELF_MODIFICATION_MESSAGE
-    case GATEWAY_USER_ERROR_CODES.grantCeilingExceeded:
-      // `type` presente = el cuerpo era el envelope del backend, así que `message` es su `msg`
-      // (redactado para el operador y con el detalle de qué se excedió), no el genérico del status.
-      return error.type ? error.message : GRANT_CEILING_FALLBACK
+    case GATEWAY_USER_ERROR_CODES.grantCeilingExceeded: {
+      // `type` presente = el cuerpo era el envelope del backend, así que `message` es su `msg`,
+      // no el genérico del status. De ahí sale solo el detalle; la frase es la nuestra.
+      const detail = error.type ? grantCeilingDetail(error.message) : null
+      return detail ? `${GRANT_CEILING_FALLBACK} Lo que excede: ${detail}.` : GRANT_CEILING_FALLBACK
+    }
     case GATEWAY_USER_ERROR_CODES.invalidRole:
       return roleOrCapabilityMessage(error, 'El rol enviado no es válido.')
     case GATEWAY_USER_ERROR_CODES.invalidGlobalCapability:

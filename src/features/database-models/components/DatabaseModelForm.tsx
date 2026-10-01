@@ -11,7 +11,7 @@ import {
 } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
 import { Button, Checkbox, Input, Textarea } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import {
   CharsetCollationSelector,
   type CharsetCollationValue,
@@ -255,17 +255,16 @@ export function DatabaseModelForm({
                 variant="outline"
                 size="sm"
                 disabled={!renameGuard.allowed}
-                title={renameGuard.hint}
+                aria-describedby={renameGuard.describedBy}
                 onClick={onRenameSlug}
               >
                 Renombrar el slug… 🔌
               </Button>
             </div>
-            {/* El motivo, también como texto: el `title` de un control deshabilitado no llega ni al
-                táctil ni al lector de pantalla, y aquí es lo único que dice a quién pedirle acceso. */}
-            {renameGuard.hint && (
-              <p className="text-xs text-muted-foreground">{renameGuard.hint}</p>
-            )}
+            {/* El motivo, como texto visible y referenciado por `aria-describedby`: el `title` de un
+                control deshabilitado no llega ni al táctil ni al lector de pantalla, y aquí es lo
+                único que dice a quién pedirle acceso. */}
+            <CapabilityHint guard={renameGuard} />
           </div>
         )}
       </Section>

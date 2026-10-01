@@ -13,7 +13,7 @@ import {
   ErrorState,
   StatusLegend,
 } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES, type VersionTableDatabase, type VersionTableStatus } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import { formatDateTime } from '@/lib/utils'
@@ -421,7 +421,7 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
               variant="outline"
               size="sm"
               disabled={!guardFormato.allowed}
-              title={guardFormato.hint}
+              aria-describedby={guardFormato.describedBy}
               onClick={() => setActualizando(true)}
             >
               Actualizar al formato Datum… 🔌
@@ -429,10 +429,8 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
             {botonComprobar}
           </div>
           {/* Un `<button disabled>` no dispara el tooltip nativo: el motivo va como texto
-              visible, igual que en `DatabaseModelForm`. */}
-          {!guardFormato.allowed && guardFormato.hint && (
-            <p className="text-xs text-muted-foreground">{guardFormato.hint}</p>
-          )}
+              visible y el botón lo referencia con `aria-describedby`. */}
+          <CapabilityHint guard={guardFormato} />
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   Combobox,
@@ -19,7 +20,7 @@ import {
   HistoryIcon,
   PlayIcon,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard, type CapabilityGuard } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerDatabases } from '@/features/servers/hooks/use-introspection'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
@@ -76,7 +77,15 @@ export function SqlConsolePage() {
 
   const rawServerId = Number(searchParams.get('server'))
   const serverId = Number.isInteger(rawServerId) && rawServerId > 0 ? rawServerId : null
-  const tab: Tab = isTab(searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'console'
+  // Analizar y ejecutar piden la MISMA capacidad (`POST .../query/preview` y `.../query`
+  // exigen `sql_console.execute`). Sin ella la consola no ejecuta nada, pero el historial sigue
+  // disponible (`sql_console.history`): sin `?tab` explícito, se entra directo ahí.
+  const executeGuard = useCapabilityGuard(
+    CAPABILITIES.sqlConsoleExecute,
+    'ejecutar SQL en la consola',
+  )
+  const rawTab = searchParams.get('tab')
+  const tab: Tab = isTab(rawTab) ? rawTab : executeGuard.allowed ? 'console' : 'history'
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams)
@@ -91,7 +100,11 @@ export function SqlConsolePage() {
     <div className="space-y-6">
       <PageHeader
         title="Consola SQL"
-        description="Ejecutá SQL contra cualquier base del inventario eligiendo con qué usuario del motor se conecta. Sirve para comprobar en la práctica que un permiso quedó como esperabas."
+        description={
+          executeGuard.allowed
+            ? 'Ejecutá SQL contra cualquier base del inventario eligiendo con qué usuario del motor se conecta. Sirve para comprobar en la práctica que un permiso quedó como esperabas.'
+            : 'Revisá qué consultas se ejecutaron contra cada servidor del inventario, con qué usuario del motor y con qué resultado.'
+        }
       />
 
       <Card>
@@ -148,6 +161,7 @@ export function SqlConsolePage() {
           key={server.id}
           server={server}
           tab={tab}
+          executeGuard={executeGuard}
           onGoToConsole={() => setParam('tab', 'console')}
         />
       )}
@@ -193,10 +207,12 @@ function SegmentedTabButton({
 interface ServerSqlConsoleProps {
   server: ServerOut
   tab: Tab
+  /** Se resuelve en la página: también decide la pestaña por defecto y la descripción. */
+  executeGuard: CapabilityGuard
   onGoToConsole: () => void
 }
 
-function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps) {
+function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSqlConsoleProps) {
   const sqlConsole = useSqlConsole(server.id, server.engine)
   const databases = useServerDatabases(server.id, true)
   const storedUsers = useServerUserOptions(server.id)
@@ -236,13 +252,7 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
   const busy = sqlConsole.isAnalyzing || sqlConsole.isExecuting
 
   const blockedByPolicy = path === 'blocked'
-  // Analizar y ejecutar piden la MISMA capacidad (`POST .../query/preview` y `.../query`
-  // exigen `sql_console.execute`). Sin ella los dos botones van deshabilitados con el motivo al
-  // lado; el historial sigue disponible (`sql_console.history`).
-  const executeGuard = useCapabilityGuard(
-    CAPABILITIES.sqlConsoleExecute,
-    'ejecutar SQL en la consola',
-  )
+  // Sin `sql_console.execute` los dos botones van deshabilitados con el motivo al lado.
   const canRun =
     sqlConsole.canAnalyze &&
     !blockedByPolicy &&
@@ -275,7 +285,8 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
     return (
       <QueryHistoryPanel
         serverId={server.id}
-        onLoadInEditor={handleLoadFromHistory}
+        // Cargar en el editor solo sirve si después se puede ejecutar.
+        onLoadInEditor={executeGuard.allowed ? handleLoadFromHistory : undefined}
         initialDatabase={sqlConsole.database}
       />
     )
@@ -283,6 +294,14 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
 
   return (
     <div className="space-y-6">
+      {!executeGuard.allowed && (
+        <Callout tone="info" title="Podés ver el historial, pero no ejecutar SQL">
+          <p>
+            Con tu acceso podés ver el historial de consultas, pero no ejecutar SQL. Pedíselo a
+            quien administra los accesos.
+          </p>
+        </Callout>
+      )}
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div className="max-w-md">

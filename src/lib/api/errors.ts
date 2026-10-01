@@ -586,7 +586,7 @@ const FALLBACK_BY_STATUS: Record<number, string> = {
   404: 'El recurso solicitado no existe.',
   409: 'Conflicto: el recurso ya existe o tiene dependencias.',
   422: 'Hay datos inválidos en el formulario.',
-  429: 'Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.',
+  429: 'Demasiadas solicitudes. Esperá un momento y volvé a intentarlo.',
   502: 'No se pudo conectar con el servidor de base de datos destino.',
   503: 'El servicio no está disponible temporalmente.',
   504: 'La operación en el servidor destino excedió el tiempo de espera.',

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Callout, Checkbox, Input, Modal } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { toApiError, type ApiRenameSlugDatabase } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import {
@@ -482,7 +482,7 @@ export function RenameSlugDialog(props: RenameSlugDialogProps) {
                 {verdict?.kind === 'local' && (
                   <Button
                     disabled={!guard.allowed || error !== null}
-                    title={guard.hint}
+                    aria-describedby={guard.describedBy}
                     isLoading={inFlight}
                     onClick={submit}
                   >
@@ -493,7 +493,7 @@ export function RenameSlugDialog(props: RenameSlugDialogProps) {
                 {ready !== null && (
                   <Button
                     disabled={!guard.allowed || !tokenOk || error !== null}
-                    title={guard.hint}
+                    aria-describedby={guard.describedBy}
                     onClick={goToConfirm}
                   >
                     {executeLabel}
@@ -510,7 +510,7 @@ export function RenameSlugDialog(props: RenameSlugDialogProps) {
                 <Button
                   variant="danger"
                   disabled={!canSubmitRemote}
-                  title={guard.hint}
+                  aria-describedby={guard.describedBy}
                   isLoading={inFlight}
                   onClick={submit}
                 >
@@ -522,14 +522,11 @@ export function RenameSlugDialog(props: RenameSlugDialogProps) {
 
           {/*
             El motivo del bloqueo por capacidad, VISIBLE y una sola vez para todo el pie.
-            No basta con el `title` de cada botón: un `<button disabled>` **no dispara el tooltip
-            nativo en ningún navegador**, así que ese texto no llega ni con ratón, ni por teclado,
-            ni en táctil, ni al lector de pantalla — y es justo el único texto que dice a quién
-            pedirle el acceso. Mismo patrón que `DatabaseModelForm`, que ya lo pinta así.
+            Nunca en un `title`: un `<button disabled>` **no dispara el tooltip nativo en ningún
+            navegador**, así que ese texto no llegaría ni con ratón, ni por teclado, ni en táctil,
+            ni al lector de pantalla. Cada botón lo referencia con `aria-describedby`.
           */}
-          {!guard.allowed && guard.hint && !isResult && (
-            <p className="text-xs text-muted-foreground">{guard.hint}</p>
-          )}
+          {!isResult && <CapabilityHint guard={guard} />}
         </div>
       }
     >

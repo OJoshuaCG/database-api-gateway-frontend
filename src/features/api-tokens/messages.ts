@@ -3,7 +3,7 @@ import type { ApiError } from '@/lib/api/errors'
 
 /** Espera fija sugerida tras un 429. El backend no manda `Retry-After` (§6). */
 export const RATE_LIMIT_HINT =
-  'Se alcanzó el límite de solicitudes (10/min al emitir tokens). Espera unos segundos y vuelve a intentarlo.'
+  'Se alcanzó el límite de solicitudes (10/min al emitir tokens). Esperá unos segundos y volvé a intentarlo.'
 
 /**
  * Copy de los errores del módulo de tokens de agente (§3).

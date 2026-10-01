@@ -29,8 +29,11 @@ import { useQueryHistory } from '../hooks/use-query-history'
 
 export interface QueryHistoryPanelProps {
   serverId: number
-  /** Carga esa consulta en el editor y vuelve a la pestaña de consola. */
-  onLoadInEditor: (entry: QueryHistoryOut) => void
+  /**
+   * Carga esa consulta en el editor y vuelve a la pestaña de consola. Sin él (quien no puede
+   * ejecutar SQL) no se ofrece «Cargar en el editor»: cargaría algo que no se puede correr.
+   */
+  onLoadInEditor?: (entry: QueryHistoryOut) => void
   /** Filtro inicial por base de datos (el de la consola). Opcional. */
   initialDatabase?: string
 }
@@ -255,20 +258,22 @@ export function QueryHistoryPanel({
               size="icon-sm"
               onClick={() => setDetail(row.original)}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              // Con `provided` la contraseña no existe en ninguna parte (tampoco en el backend):
-              // se avisa en el tooltip y el hook orquestador lo repite al cargar la consulta.
-              title={
-                row.original.connection_mode === 'provided'
-                  ? 'Restaura el SQL, la base y el usuario. La contraseña no se guarda: vas a tener que escribirla otra vez.'
-                  : 'Restaura el SQL, la base y la identidad de esta ejecución en el editor.'
-              }
-              onClick={() => onLoadInEditor(row.original)}
-            >
-              Cargar en el editor
-            </Button>
+            {onLoadInEditor && (
+              <Button
+                variant="ghost"
+                size="sm"
+                // Con `provided` la contraseña no existe en ninguna parte (tampoco en el backend):
+                // se avisa en el tooltip y el hook orquestador lo repite al cargar la consulta.
+                title={
+                  row.original.connection_mode === 'provided'
+                    ? 'Restaura el SQL, la base y el usuario. La contraseña no se guarda: vas a tener que escribirla otra vez.'
+                    : 'Restaura el SQL, la base y la identidad de esta ejecución en el editor.'
+                }
+                onClick={() => onLoadInEditor(row.original)}
+              >
+                Cargar en el editor
+              </Button>
+            )}
           </div>
         ),
       },
@@ -376,10 +381,14 @@ export function QueryHistoryPanel({
         <QueryHistoryDetailModal
           entry={detail}
           onClose={() => setDetail(null)}
-          onLoadInEditor={(entry) => {
-            setDetail(null)
-            onLoadInEditor(entry)
-          }}
+          onLoadInEditor={
+            onLoadInEditor
+              ? (entry) => {
+                  setDetail(null)
+                  onLoadInEditor(entry)
+                }
+              : undefined
+          }
         />
       )}
     </div>
@@ -389,7 +398,7 @@ export function QueryHistoryPanel({
 interface QueryHistoryDetailModalProps {
   entry: QueryHistoryOut
   onClose: () => void
-  onLoadInEditor: (entry: QueryHistoryOut) => void
+  onLoadInEditor?: (entry: QueryHistoryOut) => void
 }
 
 /** Detalle de una fila: el SQL tal como quedó registrado, más el error nativo si lo hubo. */
@@ -410,7 +419,9 @@ function QueryHistoryDetailModal({ entry, onClose, onLoadInEditor }: QueryHistor
           <Button variant="ghost" onClick={onClose}>
             Cerrar
           </Button>
-          <Button onClick={() => onLoadInEditor(entry)}>Cargar en el editor</Button>
+          {onLoadInEditor && (
+            <Button onClick={() => onLoadInEditor(entry)}>Cargar en el editor</Button>
+          )}
         </>
       }
     >

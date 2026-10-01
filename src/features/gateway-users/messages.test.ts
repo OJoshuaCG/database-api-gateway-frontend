@@ -98,16 +98,30 @@ describe('guards anti auto-escalada', () => {
     expect(message).toContain(SELF_ACCESS_NOTE)
   })
 
-  it('`grant_ceiling_exceeded` conserva el detalle del backend (qué se excedió)', () => {
+  it('`grant_ceiling_exceeded` usa la frase propia en voseo y conserva solo el detalle del backend', () => {
     const backend =
-      "No puedes otorgar más acceso del que tienes: rol base 'owner'. Pídeselo a alguien que tenga ese nivel."
+      "No puedes otorgar más acceso del que tienes: rol base 'owner'; capacidades globales [security_officer]. Pídeselo a alguien que tenga ese nivel."
     const message = gatewayUserErrorMessage(
       error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded, {
         message: backend,
         type: 'AppHttpException',
       }),
     )
-    expect(message).toBe(backend)
+    expect(message).toBe(
+      `${GRANT_CEILING_FALLBACK} Lo que excede: rol base 'owner'; capacidades globales [security_officer].`,
+    )
+    expect(message).not.toContain('puedes')
+    expect(message).not.toContain('Pídeselo')
+  })
+
+  it('`grant_ceiling_exceeded` con un `msg` de otra forma cae en el respaldo, sin copiarlo', () => {
+    const message = gatewayUserErrorMessage(
+      error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded, {
+        message: 'Otro texto cualquiera.',
+        type: 'AppHttpException',
+      }),
+    )
+    expect(message).toBe(GRANT_CEILING_FALLBACK)
   })
 
   it('`grant_ceiling_exceeded` sin envelope del backend cae en el respaldo, no en el genérico', () => {

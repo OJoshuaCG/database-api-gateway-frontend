@@ -80,13 +80,32 @@ export function Topbar({ onMenuClick, onToggleSidebar, sidebarCollapsed }: Topba
         <ThemeToggle />
         {admin && (
           // El nombre lleva a «Mi cuenta»: es donde la persona ve su acceso y sus sesiones, y
-          // el destino del «Ver mi acceso» de cada 403.
-          <Link
-            to="/mi-cuenta"
-            className="hidden rounded-md px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline"
-          >
-            {admin.username}
-          </Link>
+          // el destino del «Ver mi acceso» de cada 403. En pantallas estrechas el nombre no entra
+          // y queda un icono con nombre accesible: «Mi cuenta» tiene que poder alcanzarse igual.
+          <>
+            <Link
+              to="/mi-cuenta"
+              aria-label={`Mi cuenta (${admin.username})`}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input text-foreground hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                aria-hidden
+              >
+                <circle cx="12" cy="8" r="3.5" strokeWidth="1.6" />
+                <path d="M5 20a7 7 0 0 1 14 0" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </Link>
+            <Link
+              to="/mi-cuenta"
+              className="hidden rounded-md px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline"
+            >
+              {admin.username}
+            </Link>
+          </>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} isLoading={logout.isPending}>
           Cerrar sesión

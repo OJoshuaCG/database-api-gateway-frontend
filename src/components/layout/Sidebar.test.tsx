@@ -11,7 +11,7 @@ function mockMe(me: Record<string, unknown>) {
 }
 
 describe('Sidebar — entradas según capacidades', () => {
-  it('sin `gateway.admin` esconde usuarios del gateway y tokens; sin ejecutar SQL, la consola', async () => {
+  it('sin `gateway.admin` esconde usuarios del gateway y tokens', async () => {
     mockMe(meFixture({ role: 'operator' }))
     renderWithProviders(<Sidebar />)
     // La sesión llega asíncrona: hasta entonces falla abierto y muestra todo.
@@ -20,8 +20,25 @@ describe('Sidebar — entradas según capacidades', () => {
       expect(screen.queryByRole('link', { name: 'Usuarios del gateway' })).not.toBeInTheDocument(),
     )
     expect(screen.queryByRole('link', { name: 'Tokens de agente' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Consola SQL' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Bases de datos' })).toBeInTheDocument()
+  })
+
+  it('un viewer con solo `sql_console.history` sigue viendo la consola (entra al historial)', async () => {
+    mockMe(meFixture({ role: 'viewer' }))
+    renderWithProviders(<Sidebar />)
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Usuarios del gateway' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('link', { name: 'Consola SQL' })).toBeInTheDocument()
+  })
+
+  it('sin ejecutar ni ver el historial, esconde la consola', async () => {
+    mockMe(meFixture({ role: 'viewer', capabilities: ['self.read', 'servers.read'] }))
+    renderWithProviders(<Sidebar />)
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Consola SQL' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('link', { name: 'Servidores' })).toBeInTheDocument()
   })
 
   it('con `access_admin` y owner las muestra', async () => {
