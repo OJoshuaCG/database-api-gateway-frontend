@@ -1,5 +1,9 @@
 import { Badge, Button, Input, Textarea } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
+import {
+  engineDatabaseScopeMessage,
+  isEngineDatabaseScopeError,
+} from '@/features/server-databases/scope-messages'
 import type { SnapshotLayout } from '@/lib/contracts'
 import { summarizeCounts } from '../logic'
 import { describeSkippedReason, describeViolation, violationTarget } from '../messages'
@@ -17,7 +21,11 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
   const nonPortable = !wizard.schemaPortable || wizard.dataCount > 0
 
   const error = wizard.create.error ? toApiError(wizard.create.error) : null
-  const is409 = error?.status === 409
+  // El 409 de alcance (base de sistema o de metadatos del gateway como origen) no es el 409 de
+  // nombre/slug en uso: sin esta distinción se marcarían en rojo dos campos que están bien.
+  const outOfScope = isEngineDatabaseScopeError(error)
+  const is409 = error?.status === 409 && !outOfScope
+  const scopeMessage = error ? engineDatabaseScopeMessage(error, { source: wizard.database }) : null
   const is422 = error?.status === 422
   const is429 = error?.status === 429
   const violations = error?.violations ?? []
@@ -127,7 +135,9 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
       {error && (
         <div className="flex flex-col gap-2 rounded-lg border border-error/30 bg-error/5 p-3">
           {/* `detail.msg` puede venir formateado como lista multilínea desde el backend. */}
-          <p className="whitespace-pre-line text-sm font-semibold text-error">{error.message}</p>
+          <p className="whitespace-pre-line text-sm font-semibold text-error">
+            {scopeMessage ?? error.message}
+          </p>
           {is429 && (
             <p className="text-sm text-muted-foreground">
               Límite de 10/min excedido. Espera un momento e inténtalo de nuevo.
@@ -168,6 +178,11 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
+            {outOfScope && (
+              <Button variant="outline" size="sm" onClick={() => wizard.goToStep('origin')}>
+                Cambiar origen
+              </Button>
+            )}
             {is422 && wizard.layout === 'manual' && (
               <Button variant="outline" size="sm" onClick={() => wizard.goToStep('manual')}>
                 Revisar layout manual

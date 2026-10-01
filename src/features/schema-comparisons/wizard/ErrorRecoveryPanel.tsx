@@ -1,5 +1,9 @@
 import { Button, ErrorState } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
+import {
+  engineDatabaseScopeMessage,
+  type ScopeDatabaseNames,
+} from '@/features/server-databases/scope-messages'
 import { ACTION_LABELS, classifyComparisonError, type ComparisonErrorAction } from './messages'
 
 interface ErrorRecoveryPanelProps {
@@ -15,6 +19,11 @@ interface ErrorRecoveryPanelProps {
   onResolveDependencies?: () => void
   /** Refleja el estado de carga de la acción de recuperación disparada (p. ej. recalcular). */
   isRecovering?: boolean
+  /**
+   * Nombres de origen y target, para nombrar la base en el 409
+   * `engine_database.scope_not_allowed` (su `public_context` dice el lado, no el nombre).
+   */
+  databaseNames?: ScopeDatabaseNames
 }
 
 /**
@@ -33,8 +42,10 @@ export function ErrorRecoveryPanel({
   onRecomputeToken,
   onResolveDependencies,
   isRecovering = false,
+  databaseNames,
 }: ErrorRecoveryPanelProps) {
   const apiError = toApiError(error)
+  const scopeMessage = engineDatabaseScopeMessage(apiError, databaseNames)
   const action = classifyComparisonError(apiError)
   const handlers: Partial<Record<ComparisonErrorAction, () => void>> = {
     recalculate: onRecalculate,
@@ -49,7 +60,7 @@ export function ErrorRecoveryPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      <ErrorState error={error} title={title} />
+      <ErrorState error={error} title={title} message={scopeMessage} />
       {action === 'resolveDependencies' &&
         apiError.missingDependencies &&
         apiError.missingDependencies.length > 0 && (

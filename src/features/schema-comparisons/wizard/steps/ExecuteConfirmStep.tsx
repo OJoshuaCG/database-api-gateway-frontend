@@ -120,6 +120,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
       {Boolean(error) && (
         <ErrorRecoveryPanel
           error={error}
+          databaseNames={{ source: wizard.sourceName, target: wizard.targetName }}
           title="No se pudo ejecutar el diff"
           onRecalculate={wizard.recalculate}
           onSwitchToAdopt={() => wizard.goToStep('adoptSelect')}

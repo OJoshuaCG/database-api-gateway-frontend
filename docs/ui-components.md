@@ -157,6 +157,8 @@ Estado "sin datos": `title`, `description?`, `action?`, `icon?`.
 ### `ErrorState`
 Estado de error: recibe `error` (cualquier cosa), lo normaliza con `toApiError`, muestra
 el mensaje y un botón `onRetry`. Añade una nota cuando es error de motor (502/504).
+`message?` reemplaza el texto del backend cuando la feature ya tradujo el `code` del error
+(`ui` no conoce los códigos de ninguna feature: el llamador lo resuelve y lo pasa).
 
 ### `Badge` y `StatusLegend`
 `Badge` es la etiqueta de estado (`tone`, `children`, `title?`). **Su `title` es solo matiz para

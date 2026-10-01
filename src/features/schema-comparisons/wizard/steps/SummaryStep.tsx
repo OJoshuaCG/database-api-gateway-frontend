@@ -20,6 +20,7 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
     return (
       <ErrorRecoveryPanel
         error={summary.error}
+        databaseNames={{ source: wizard.sourceName, target: wizard.targetName }}
         title="No se pudo cargar el resumen"
         onRecalculate={wizard.recalculate}
         isRecovering={wizard.createComparisonState.isPending}

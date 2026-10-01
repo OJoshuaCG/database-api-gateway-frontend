@@ -1,5 +1,7 @@
 import type { ExecuteMode } from '@/lib/contracts'
 import { ErrorState, RadioCardGroup, Spinner, type RadioCardOption } from '@/components/ui'
+import { toApiError } from '@/lib/api/errors'
+import { engineDatabaseScopeMessage } from '@/features/server-databases/scope-messages'
 import { opGroupObjectNames } from '../logic'
 import { ItemSelectionPanel } from '../ItemSelectionPanel'
 import { PlanWarningsList } from '../PlanWarningsList'
@@ -77,6 +79,10 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
             error={wizard.preview.error}
             onRetry={() => void wizard.preview.refetch()}
             title="No se pudo previsualizar la ejecución"
+            message={engineDatabaseScopeMessage(toApiError(wizard.preview.error), {
+              source: wizard.sourceName,
+              target: wizard.targetName,
+            })}
           />
         ) : wizard.preview.data ? (
           <div className="flex flex-col gap-2">

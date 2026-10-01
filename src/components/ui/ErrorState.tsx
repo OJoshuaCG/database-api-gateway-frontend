@@ -6,6 +6,12 @@ interface ErrorStateProps {
   error: unknown
   onRetry?: () => void
   title?: string
+  /**
+   * Texto a mostrar en lugar de `apiError.message`, cuando la feature tiene un copy propio para el
+   * código del error (p. ej. `engineDatabaseScopeMessage`). `ui` no conoce los códigos de ninguna
+   * feature: el llamador lo traduce y lo pasa ya resuelto. Ausente = el mensaje del backend.
+   */
+  message?: string | null
 }
 
 /** Estado de error reutilizable. Muestra el mensaje normalizado de la API y permite reintentar. */
@@ -13,6 +19,7 @@ export function ErrorState({
   error,
   onRetry,
   title = 'No se pudieron cargar los datos',
+  message,
 }: ErrorStateProps) {
   const apiError = toApiError(error)
   return (
@@ -22,7 +29,7 @@ export function ErrorState({
     >
       <div className="flex flex-col gap-1">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="max-w-md text-sm text-muted-foreground">{apiError.message}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{message ?? apiError.message}</p>
         {apiError.isEngineError && (
           <p className="max-w-md text-xs text-muted-foreground">
             El servidor de base de datos destino no respondió. Verifica su disponibilidad y la

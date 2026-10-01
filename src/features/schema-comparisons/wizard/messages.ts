@@ -1,5 +1,6 @@
 import { SCHEMA_COMPARISON_ERROR_CODES } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
+import { isEngineDatabaseScopeError } from '@/features/server-databases/scope-messages'
 
 /**
  * Clasificación de errores del asistente de comparación de esquemas a una ACCIÓN accionable
@@ -38,6 +39,11 @@ const MESSAGE_PATTERNS: [RegExp, ComparisonErrorAction][] = [
 export function classifyComparisonError(error: ApiError): ComparisonErrorAction {
   if (error.status === 410) return 'recalculate'
   if (error.status === 429) return 'rateLimited'
+  // 409 `engine_database.scope_not_allowed`: origen o target es una base de sistema o la de
+  // metadatos del gateway. No hay recuperación dentro del asistente —ni recalcular ni forzar
+  // cambian qué base es—; la salida es volver a elegir, así que no se ofrece ningún CTA. Va antes
+  // de los patrones de texto para que ninguno lo capture por casualidad.
+  if (isEngineDatabaseScopeError(error)) return 'none'
   // Primer error del módulo con `public_context.code` estable. Se reconoce por código y no por
   // texto a propósito: su `detail.msg` ("'confirm_target_name' debe coincidir exactamente…") NO
   // encaja con el patrón /nombre de confirmación no coincide/ que usa la Opción B, así que sin

@@ -11,6 +11,11 @@ import {
   Switch,
 } from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
+import { toApiError } from '@/lib/api/errors'
+import {
+  engineDatabaseScopeMessage,
+  isEngineDatabaseScopeError,
+} from '@/features/server-databases/scope-messages'
 import { OBJECT_TYPE_LABELS, snapshotObjectCounts, summarizeCounts, TYPE_ORDER } from '../logic'
 import { ObjectCompositionChart } from '../ObjectCompositionChart'
 import type { SnapshotWizard } from '../use-snapshot-wizard'
@@ -45,12 +50,17 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
   }
 
   if (snapshot.isError && !dump) {
+    // Una base de sistema o la de metadatos del gateway (409 `engine_database.scope_not_allowed`)
+    // no se puede fotografiar: reintentar falla igual, la salida es «Cambiar origen».
+    const apiError = toApiError(snapshot.error)
+    const outOfScope = isEngineDatabaseScopeError(apiError)
     return (
       <div className="flex flex-col gap-4">
         <ErrorState
-          error={snapshot.error}
-          onRetry={() => void snapshot.refetch()}
+          error={apiError}
+          onRetry={outOfScope ? undefined : () => void snapshot.refetch()}
           title="No se pudo leer la estructura"
+          message={engineDatabaseScopeMessage(apiError, { source: wizard.database })}
         />
         <div className="flex justify-start border-t border-border pt-4">
           <Button variant="ghost" onClick={wizard.back}>

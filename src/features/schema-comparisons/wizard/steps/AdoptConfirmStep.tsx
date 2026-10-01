@@ -176,6 +176,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
       {Boolean(error) && (
         <ErrorRecoveryPanel
           error={error}
+          databaseNames={{ source: wizard.sourceName, target: wizard.targetName }}
           title="No se pudo adoptar la versión"
           onRecalculate={wizard.recalculate}
           onSwitchToExecute={() => wizard.goToStep('executeSelect')}

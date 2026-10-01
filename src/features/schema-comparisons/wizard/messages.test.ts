@@ -89,3 +89,16 @@ describe('classifyComparisonError', () => {
     )
   })
 })
+
+describe('classifyComparisonError — base fuera de alcance', () => {
+  it('el 409 `engine_database.scope_not_allowed` no ofrece ningún CTA de recuperación', () => {
+    // Ni recalcular ni forzar cambian QUÉ base se eligió: la salida es volver a elegir. Aunque el
+    // texto contuviera una frase de otro patrón, el código gana.
+    const scope = new ApiError({
+      status: 409,
+      message: 'El target está en cuarentena y además es una base de sistema.',
+      code: 'engine_database.scope_not_allowed',
+    })
+    expect(classifyComparisonError(scope)).toBe('none')
+  })
+})

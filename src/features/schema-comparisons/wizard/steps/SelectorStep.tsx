@@ -7,6 +7,11 @@ import {
   type RadioCardOption,
 } from '@/components/ui'
 import type { ServerOut } from '@/lib/contracts'
+import { toApiError } from '@/lib/api/errors'
+import {
+  engineDatabaseScopeMessage,
+  isEngineDatabaseScopeError,
+} from '@/features/server-databases/scope-messages'
 import { ENGINE_FAMILY_LABELS, type DatabaseSideOption, type EngineFamily } from '../logic'
 import type { SchemaComparisonWizard, SelectionMode } from '../use-schema-comparison-wizard'
 
@@ -323,13 +328,28 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
         </p>
       )}
 
-      {wizard.createComparisonState.isError && (
-        <ErrorState
-          error={wizard.createComparisonState.error}
-          onRetry={wizard.createComparison}
-          title="No se pudo crear la comparación"
-        />
-      )}
+      {wizard.createComparisonState.isError && <CreateComparisonError wizard={wizard} />}
     </div>
+  )
+}
+
+/**
+ * Error al crear la comparación. El 409 `engine_database.scope_not_allowed` (origen o target es
+ * una base de sistema o la de metadatos del gateway) se nombra con el copy de `server-databases`
+ * y **sin «Reintentar»**: reenviar la misma selección falla igual; la salida es cambiar la base
+ * del lado que indica el mensaje, en los selectores de arriba.
+ */
+function CreateComparisonError({ wizard }: { wizard: SchemaComparisonWizard }) {
+  const apiError = toApiError(wizard.createComparisonState.error)
+  return (
+    <ErrorState
+      error={apiError}
+      onRetry={isEngineDatabaseScopeError(apiError) ? undefined : wizard.createComparison}
+      title="No se pudo crear la comparación"
+      message={engineDatabaseScopeMessage(apiError, {
+        source: wizard.sourceSelection?.name,
+        target: wizard.targetSelection?.name,
+      })}
+    />
   )
 }

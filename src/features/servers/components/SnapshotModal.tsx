@@ -2,6 +2,11 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, CodeBlock, ErrorState, Modal, Spinner } from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
+import { toApiError } from '@/lib/api/errors'
+import {
+  engineDatabaseScopeMessage,
+  isEngineDatabaseScopeError,
+} from '@/features/server-databases/scope-messages'
 import { useDatabaseSnapshot } from '../hooks/use-snapshot'
 
 interface SnapshotModalProps {
@@ -56,7 +61,13 @@ export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProp
           <Spinner className="h-4 w-4" /> Capturando estructura…
         </div>
       ) : isError ? (
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        // Una base de sistema o la de metadatos del gateway no se fotografía (409
+        // `engine_database.scope_not_allowed`): sin «Reintentar», que fallaría igual.
+        <ErrorState
+          error={error}
+          onRetry={isEngineDatabaseScopeError(toApiError(error)) ? undefined : () => void refetch()}
+          message={engineDatabaseScopeMessage(toApiError(error), { source: database })}
+        />
       ) : data ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
