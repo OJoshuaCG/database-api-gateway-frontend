@@ -21,6 +21,7 @@ import { GatewayUserAccessModal } from '../components/GatewayUserAccessModal'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
 import { buildInviteLink } from '../invite-link'
+import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
 
 /** Invitación pendiente de entregar, con el nombre de a quién pertenece. */
 interface PendingInvite {
@@ -42,6 +43,7 @@ export function GatewayUsersPage() {
 
   const { data, isLoading, isFetching, isError, error, refetch } = useGatewayUsers({ page, size })
   const reissue = useReissueGatewayUserInvite()
+  const sessionUserId = admin?.id ?? null
 
   const columns = useMemo<ColumnDef<GatewayUserOut>[]>(
     () => [
@@ -50,7 +52,10 @@ export function GatewayUsersPage() {
         header: 'Usuario',
         cell: ({ row }) => (
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono font-medium text-foreground">{row.original.username}</span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="font-mono font-medium text-foreground">{row.original.username}</span>
+              {isOwnAccount(sessionUserId, row.original) && <Badge tone="neutral">Tu cuenta</Badge>}
+            </span>
             {row.original.full_name && (
               <span className="text-xs text-muted-foreground">{row.original.full_name}</span>
             )}
@@ -94,52 +99,72 @@ export function GatewayUsersPage() {
         header: '',
         enableSorting: false,
         enableHiding: false,
-        cell: ({ row }) => (
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            <IconButton
-              label="Editar"
-              icon={<PencilIcon />}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setEditing(row.original)
-                setFormOpen(true)
-              }}
-            />
-            {/* Acciones de dominio: conservan el texto, no se reducen a un icono. */}
-            <Button variant="ghost" size="sm" onClick={() => setAccessTarget(row.original)}>
-              Accesos
-            </Button>
-            {/*
-              El botón DESAPARECE cuando la cuenta ya fijó su contraseña: sobre ella el endpoint
-              responde 409 `credential_already_set`, porque la invitación es solo para la primera
-              credencial. Para reemplazarla, la persona la cambia desde su propia sesión.
-            */}
-            {!row.original.credential_set && (
+        cell: ({ row }) => {
+          const own = isOwnAccount(sessionUserId, row.original)
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              <IconButton
+                label="Editar"
+                icon={<PencilIcon />}
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setEditing(row.original)
+                  setFormOpen(true)
+                }}
+              />
+              {/*
+                Acciones de dominio: conservan el texto, no se reducen a un icono.
+
+                Sobre la propia cuenta «Accesos» va deshabilitado CON el motivo a la vista, no
+                escondido: el backend rechaza el cambio (409 `access.self_modification_forbidden`).
+                «Editar» sigue disponible porque los datos de contacto sí se pueden cambiar; el
+                formulario deshabilita ahí el rol y el estado.
+              */}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                isLoading={reissue.isPending && reissue.variables === row.original.id}
-                onClick={() =>
-                  reissue.mutate(row.original.id, {
-                    onSuccess: (data) =>
-                      setInvite({
-                        username: row.original.username,
-                        token: data.invite_token,
-                        expiresAt: data.invite_expires_at,
-                        reissued: true,
-                      }),
-                  })
-                }
+                disabled={own}
+                onClick={() => setAccessTarget(row.original)}
               >
-                Reinvitar
+                Accesos
               </Button>
-            )}
-          </div>
-        ),
+              {/*
+                El botón DESAPARECE cuando la cuenta ya fijó su contraseña: sobre ella el endpoint
+                responde 409 `credential_already_set`, porque la invitación es solo para la primera
+                credencial. Para reemplazarla, la persona la cambia desde su propia sesión.
+              */}
+              {!row.original.credential_set && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isLoading={reissue.isPending && reissue.variables === row.original.id}
+                  onClick={() =>
+                    reissue.mutate(row.original.id, {
+                      onSuccess: (data) =>
+                        setInvite({
+                          username: row.original.username,
+                          token: data.invite_token,
+                          expiresAt: data.invite_expires_at,
+                          reissued: true,
+                        }),
+                    })
+                  }
+                >
+                  Reinvitar
+                </Button>
+              )}
+              {own && (
+                <p className="basis-full text-right text-xs text-muted-foreground">
+                  {SELF_ACCESS_NOTE}
+                </p>
+              )}
+            </div>
+          )
+        },
       },
     ],
-    [reissue],
+    [reissue, sessionUserId],
   )
 
   return (
@@ -199,7 +224,7 @@ export function GatewayUsersPage() {
         <GatewayUserFormModal
           open
           user={editing}
-          currentUsername={admin?.username ?? null}
+          currentUserId={sessionUserId}
           onClose={() => setFormOpen(false)}
           onCreated={(created) => {
             // El modal de alta se cierra y da paso INMEDIATAMENTE a la entrega del token: es la
@@ -217,7 +242,11 @@ export function GatewayUsersPage() {
       )}
 
       {accessTarget && (
-        <GatewayUserAccessModal user={accessTarget} onClose={() => setAccessTarget(null)} />
+        <GatewayUserAccessModal
+          user={accessTarget}
+          isSelf={isOwnAccount(sessionUserId, accessTarget)}
+          onClose={() => setAccessTarget(null)}
+        />
       )}
 
       {invite && <InviteDeliveryModal invite={invite} onDone={() => setInvite(null)} />}

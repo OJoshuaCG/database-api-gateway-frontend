@@ -1,5 +1,6 @@
 import { GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
+import { SELF_ACCESS_NOTE } from './self-access'
 
 /**
  * Copy de los errores del módulo de usuarios del gateway (§2.9 y §6).
@@ -18,6 +19,17 @@ import type { ApiError } from '@/lib/api/errors'
 /** Espera fija sugerida tras un 429. No hay `Retry-After` con qué calcular un backoff (§6). */
 export const RATE_LIMIT_HINT =
   'Se alcanzó el límite de solicitudes. Espera unos segundos y vuelve a intentarlo.'
+
+/** `access.self_modification_forbidden`: el mismo motivo que muestra la fila propia. */
+export const SELF_MODIFICATION_MESSAGE = `No puedes cambiar tu propio rol, tu propio acceso ni desactivar tu cuenta. ${SELF_ACCESS_NOTE}`
+
+/**
+ * `access.grant_ceiling_exceeded` sin el detalle del backend. El `msg` del backend es mejor —dice
+ * QUÉ se excedió: «rol base 'owner'», «capacidades globales [security_officer]»— y se usa cuando
+ * viene; este texto es solo el respaldo.
+ */
+export const GRANT_CEILING_FALLBACK =
+  'No puedes otorgar más acceso del que tienes. Pídeselo a alguien que tenga ese nivel.'
 
 /**
  * Mensaje para un error de las pantallas ADMINISTRADAS (listado, alta, edición, accesos,
@@ -40,6 +52,12 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
       return error.status === 404
         ? 'Este usuario ya no existe. Vuelve al listado y refréscalo.'
         : null
+    case GATEWAY_USER_ERROR_CODES.selfModificationForbidden:
+      return SELF_MODIFICATION_MESSAGE
+    case GATEWAY_USER_ERROR_CODES.grantCeilingExceeded:
+      // `type` presente = el cuerpo era el envelope del backend, así que `message` es su `msg`
+      // (redactado para el operador y con el detalle de qué se excedió), no el genérico del status.
+      return error.type ? error.message : GRANT_CEILING_FALLBACK
     case GATEWAY_USER_ERROR_CODES.invalidRole:
       return roleOrCapabilityMessage(error, 'El rol enviado no es válido.')
     case GATEWAY_USER_ERROR_CODES.invalidGlobalCapability:

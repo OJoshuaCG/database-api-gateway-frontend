@@ -33,8 +33,8 @@ export type ScopeRole = z.infer<typeof scopeRoleSchema>
 /**
  * `AdminOut` — el usuario autenticado y **con qué decidir la UI** (§1).
  *
- * Son DIEZ campos, no ocho: `previous_login_at` y `last_failed_at` entran acá aunque el §7.4 los
- * describa aparte. Tipar este schema desde un ejemplo recortado es exactamente cómo se dispara el
+ * Son ONCE campos, no ocho: `previous_login_at` y `last_failed_at` entran acá aunque el §7.4 los
+ * describa aparte, y `base_role` llegó después. Tipar este schema desde un ejemplo recortado es exactamente cómo se dispara el
  * `safeParse` que el propio documento advierte.
  *
  * Todo lo nuevo va **nullish con default**, nunca `.optional()` a secas: así un backend viejo —que
@@ -53,6 +53,11 @@ export const adminOutSchema = z.object({
   username: z.string(),
   /** Rol efectivo = el máximo sobre todos los alcances. */
   role: z.string().nullish(),
+  /**
+   * Rol BASE: el que rige donde ningún permiso por alcance aplica. `role` sigue siendo el efectivo
+   * (la unión) por compatibilidad. Nullish porque un backend anterior no lo manda.
+   */
+  base_role: z.string().nullish(),
   /** Las capacidades EFECTIVAS. Única fuente para habilitar o deshabilitar controles. */
   capabilities: z
     .array(z.string())

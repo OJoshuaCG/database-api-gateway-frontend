@@ -18,6 +18,7 @@ import {
 } from '@/lib/contracts'
 import { useCreateGatewayUser, useUpdateGatewayUser } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
+import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
 
 /** Qué significa cada rol base, en una línea. Alimenta el `hint` del selector. */
 const ROLE_HINTS: Record<GatewayRole, string> = {
@@ -74,8 +75,11 @@ interface GatewayUserFormModalProps {
   user?: GatewayUserOut
   /** Solo en alta: entrega el usuario recién creado CON su token de invitación. */
   onCreated?: (created: GatewayUserCreatedOut) => void
-  /** `username` del administrador con la sesión abierta, para avisar si se está editando a sí mismo. */
-  currentUsername?: string | null
+  /**
+   * `id` de la cuenta con la sesión abierta. Sobre la propia cuenta el rol y el estado van
+   * deshabilitados: el backend rechaza cambiarlos (409 `access.self_modification_forbidden`).
+   */
+  currentUserId?: number | null
 }
 
 export function GatewayUserFormModal(props: GatewayUserFormModalProps) {
@@ -92,6 +96,7 @@ export function GatewayUserFormModal(props: GatewayUserFormModalProps) {
 function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
   const create = useCreateGatewayUser()
   const [usernameConflict, setUsernameConflict] = useState<string | null>(null)
+  const [roleError, setRoleError] = useState<string | null>(null)
 
   const {
     register,
@@ -106,6 +111,7 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
 
   const submit = (values: CreateValues) => {
     setUsernameConflict(null)
+    setRoleError(null)
     create.mutate(
       {
         username: values.username,
@@ -121,6 +127,11 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
           if (apiError.code === GATEWAY_USER_ERROR_CODES.usernameTaken) {
             setUsernameConflict('Ya existe un usuario con ese nombre.')
             setFocus('username')
+          }
+          // El techo de otorgamiento en el alta solo puede venir del rol base: es el único acceso
+          // que este formulario otorga. Se marca en el campo, además del toast del hook.
+          if (apiError.code === GATEWAY_USER_ERROR_CODES.grantCeilingExceeded) {
+            setRoleError(gatewayUserErrorMessage(apiError))
           }
         },
       },
@@ -187,13 +198,16 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
             <Combobox<RoleOption>
               items={ROLE_OPTIONS}
               value={ROLE_OPTIONS.find((option) => option.value === field.value) ?? null}
-              onChange={(option) => field.onChange(option?.value ?? 'viewer')}
+              onChange={(option) => {
+                setRoleError(null)
+                field.onChange(option?.value ?? 'viewer')
+              }}
               itemToString={(option) => option.label}
               itemToKey={(option) => option.value}
               label="Rol base"
               required
               hint="Se puede acotar o ampliar por entorno y por servidor desde «Accesos», una vez creada la cuenta."
-              error={errors.gateway_role?.message}
+              error={roleError ?? errors.gateway_role?.message}
             />
           )}
         />
@@ -224,7 +238,7 @@ function EditForm({
   open,
   onClose,
   user,
-  currentUsername,
+  currentUserId,
 }: GatewayUserFormModalProps & { user: GatewayUserOut }) {
   const update = useUpdateGatewayUser(user.id)
   const [formError, setFormError] = useState<string | null>(null)
@@ -250,7 +264,9 @@ function EditForm({
 
   const nextRole = watch('gateway_role')
   const nextActive = watch('is_active')
-  const editingSelf = currentUsername != null && currentUsername === user.username
+  // Sobre la propia cuenta solo se editan los datos de contacto: rol y estado van deshabilitados
+  // porque el backend los rechaza (409). Por eso tampoco hay aviso de «vas a volver al login».
+  const editingSelf = isOwnAccount(currentUserId, user)
   // Solo estos dos cambios tachan las sesiones de la persona (§2.5). Cambiar el correo o el
   // nombre no, y avisar ahí sería ruido que entrena a ignorar el aviso cuando importa.
   const invalidatesSessions = nextRole !== user.gateway_role || nextActive !== user.is_active
@@ -338,6 +354,8 @@ function EditForm({
               itemToKey={(option) => option.value}
               label="Rol base"
               required
+              disabled={editingSelf}
+              hint={editingSelf ? SELF_ACCESS_NOTE : undefined}
               error={errors.gateway_role?.message}
             />
           )}
@@ -351,7 +369,12 @@ function EditForm({
               checked={field.value}
               onCheckedChange={field.onChange}
               label="Cuenta activa"
-              hint="Desactivarla impide iniciar sesión y corta las sesiones abiertas. No borra nada."
+              disabled={editingSelf}
+              hint={
+                editingSelf
+                  ? SELF_ACCESS_NOTE
+                  : 'Desactivarla impide iniciar sesión y corta las sesiones abiertas. No borra nada.'
+              }
             />
           )}
         />
@@ -365,17 +388,9 @@ function EditForm({
         />
 
         {invalidatesSessions && (
-          <Callout
-            tone={editingSelf ? 'danger' : 'warning'}
-            title={
-              editingSelf
-                ? 'Te estás editando a vos mismo: vas a volver al login'
-                : 'Esto cierra las sesiones abiertas de esta persona'
-            }
-          >
-            {editingSelf
-              ? 'Cambiar tu propio rol o desactivarte tacha tus sesiones. Vas a tener que iniciar sesión otra vez, y si te quitás permisos puede que ya no puedas volver acá.'
-              : 'Cambiar el rol o el estado de la cuenta invalida sus sesiones: va a tener que iniciar sesión de nuevo.'}
+          <Callout tone="warning" title="Esto cierra las sesiones abiertas de esta persona">
+            Cambiar el rol o el estado de la cuenta invalida sus sesiones: va a tener que iniciar
+            sesión de nuevo.
           </Callout>
         )}
 

@@ -23,7 +23,7 @@ está integrado y desde qué botón se dispara?"* sin volver a auditar el códig
 |---|---|---|---|
 | 3 | `POST /auth/login` | ✅ | `LoginPage` (`/login`) |
 | 4 | `POST /auth/logout` | ✅ | `Topbar` → "Cerrar sesión" |
-| 5 | `GET /auth/me` | ✅ | `ProtectedRoute` (guarda de sesión) + `Topbar`. Desde v23 trae **diez** campos: rol efectivo, `capabilities`, `global_capabilities`, `scope_roles`, `step_up_capabilities`, `previous_login_at`, `last_failed_at` y `catalog_version`. Lo consumen `useCapabilities` (gating de UI) y `SessionsPanel` |
+| 5 | `GET /auth/me` | ✅ | `ProtectedRoute` (guarda de sesión) + `Topbar`. Desde v23 trae **diez** campos —once con `base_role`, el rol base sin los alcances, que el contrato Zod acepta como nullish y ninguna pantalla consume todavía—: rol efectivo, `capabilities`, `global_capabilities`, `scope_roles`, `step_up_capabilities`, `previous_login_at`, `last_failed_at` y `catalog_version`. Lo consumen `useCapabilities` (gating de UI) y `SessionsPanel` |
 | v23 §2 | `GET /authz/catalog` | 🧩 | `useCapabilityCatalog` existe y cachea contra `catalog_version` (`staleTime`/`gcTime` infinitos: son 29 filas que no se mueven), pero **ningún componente lo consume todavía**. Queda listo para la pantalla que muestre qué puede cada rol; el gating de hoy se resuelve con `capabilities` de `/auth/me`, que no necesita el catálogo |
 | v23 §8 | `GET /authz/scope-readiness` | ✅ | `GatewayUserAccessModal`, **antes** de otorgar un permiso por alcance: una base sin entorno resuelve al entorno MÁS protegido, no al default, así que acotar a alguien a un entorno también le acota esas bases |
 | v23 §7.4 | `GET /auth/sessions` | ✅ | `SessionsPanel` → Administración, pestaña «Mis sesiones» |
@@ -58,11 +58,11 @@ entero pegado.
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | v23.1 §2 | `GET /gateway-users` | ✅ | `GatewayUsersPage` (`/gateway-users`). Único del módulo **paginado**; los demás usan el `success()` plano |
-| v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el enlace de invitación en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño |
+| v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el enlace de invitación en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño. El 409 `access.grant_ceiling_exceeded` (rol base por encima del de quien crea) se marca en el selector de rol con el `msg` del backend, que dice qué se excedió |
 | v23.1 §2.4 | `POST /gateway-users/invite/accept` | ✅ | `AcceptInvitationPage` (`/invitacion?token=…`) — **ruta pública**, fuera de `ProtectedRoute`: quien la usa todavía no puede iniciar sesión |
 | v23.1 §2 | `GET /gateway-users/{id}` | 🧩 | Existe en `api/`; el listado ya trae `GatewayUserOut` completo, así que ninguna pantalla necesita el detalle todavía |
-| v23.1 §2.5 | `PATCH /gateway-users/{id}` | ✅ | `GatewayUserFormModal` (edición). `username` va deshabilitado **con el motivo a la vista**: es la identidad que audita `audit_log`, guardada sin FK |
-| v23.1 §2.6 | `PUT /gateway-users/{id}/access` | ✅ | `GatewayUserAccessModal` → «Accesos». ⚠️ **Reemplazo TOTAL**: el contrato exige los dos campos justamente para que un formulario no pueda mandar un delta y revocar la otra mitad con un 200 |
+| v23.1 §2.5 | `PATCH /gateway-users/{id}` | ✅ | `GatewayUserFormModal` (edición). `username` va deshabilitado **con el motivo a la vista**: es la identidad que audita `audit_log`, guardada sin FK. Sobre la **propia cuenta** (se compara `id` con el de `/auth/me`) el rol y «Cuenta activa» van deshabilitados con el motivo a la vista: el backend responde 409 `access.self_modification_forbidden`. El 409 `access.grant_ceiling_exceeded` se muestra con el `msg` del backend |
+| v23.1 §2.6 | `PUT /gateway-users/{id}/access` | ✅ | `GatewayUserAccessModal` → «Accesos». ⚠️ **Reemplazo TOTAL**: el contrato exige los dos campos justamente para que un formulario no pueda mandar un delta y revocar la otra mitad con un 200. En la fila de la **propia cuenta** «Accesos» va deshabilitado con la nota «Tu propio acceso lo cambia otra persona…» (409 `access.self_modification_forbidden`); si el modal se abriera igual, queda en solo lectura. `access.grant_ceiling_exceeded` (otorgar un rol o una capacidad global que uno no tiene) llega como toast con el detalle del backend |
 | v23.1 §2.7 | `POST /gateway-users/{id}/invite` | ✅ | Botón «Reinvitar» de la fila, que **desaparece** cuando `credential_set` es `true` (ahí responde 409) |
 
 **Defectos de contrato conocidos, tratados en la UI** (§2.8): `notes` se acepta y **nunca se

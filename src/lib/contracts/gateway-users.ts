@@ -300,6 +300,11 @@ export type AcceptInviteIn = z.infer<typeof acceptInviteInSchema>
  * global inválida (que trae `public_context.allowed[]`) y un `scope_type` inválido en `PUT /access`
  * (que **no trae `allowed` en absoluto**). Un cliente que asuma que el campo siempre está rompe en
  * ese caso.
+ *
+ * Los dos guards anti auto-escalada son 409 y van siempre juntos en el backend:
+ * `selfModificationForbidden` (nadie cambia su propio rol, su propio acceso ni se desactiva) y
+ * `grantCeilingExceeded` (nadie otorga más de lo que tiene, que es lo que impide esquivar el
+ * primero creando una cuenta títere).
  */
 export const GATEWAY_USER_ERROR_CODES = {
   lastAdminProtected: 'access.last_admin_protected',
@@ -309,4 +314,6 @@ export const GATEWAY_USER_ERROR_CODES = {
   invalidRole: 'gateway_user.invalid_role',
   invalidGlobalCapability: 'gateway_user.invalid_global_capability',
   weakPassword: 'gateway_user.weak_password',
+  selfModificationForbidden: 'access.self_modification_forbidden',
+  grantCeilingExceeded: 'access.grant_ceiling_exceeded',
 } as const

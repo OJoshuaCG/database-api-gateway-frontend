@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/errors'
 import { GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
-import { acceptInviteErrorMessage, gatewayUserErrorMessage, RATE_LIMIT_HINT } from './messages'
+import {
+  acceptInviteErrorMessage,
+  gatewayUserErrorMessage,
+  GRANT_CEILING_FALLBACK,
+  RATE_LIMIT_HINT,
+  SELF_MODIFICATION_MESSAGE,
+} from './messages'
+import { isOwnAccount, SELF_ACCESS_NOTE } from './self-access'
 
-function error(status: number, code?: string, extra?: Partial<ConstructorParameters<typeof ApiError>[0]>) {
+function error(
+  status: number,
+  code?: string,
+  extra?: Partial<ConstructorParameters<typeof ApiError>[0]>,
+) {
   return new ApiError({ status, message: 'mensaje del backend', code, ...extra })
 }
 
@@ -75,5 +86,45 @@ describe('acceptInviteErrorMessage', () => {
 
   it('cae al mensaje del backend si no reconoce el caso', () => {
     expect(acceptInviteErrorMessage(error(500))).toBe('mensaje del backend')
+  })
+})
+
+describe('guards anti auto-escalada', () => {
+  it('`self_modification_forbidden` dice quién puede hacerlo, con la misma nota de la fila propia', () => {
+    const message = gatewayUserErrorMessage(
+      error(409, GATEWAY_USER_ERROR_CODES.selfModificationForbidden),
+    )
+    expect(message).toBe(SELF_MODIFICATION_MESSAGE)
+    expect(message).toContain(SELF_ACCESS_NOTE)
+  })
+
+  it('`grant_ceiling_exceeded` conserva el detalle del backend (qué se excedió)', () => {
+    const backend =
+      "No puedes otorgar más acceso del que tienes: rol base 'owner'. Pídeselo a alguien que tenga ese nivel."
+    const message = gatewayUserErrorMessage(
+      error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded, {
+        message: backend,
+        type: 'AppHttpException',
+      }),
+    )
+    expect(message).toBe(backend)
+  })
+
+  it('`grant_ceiling_exceeded` sin envelope del backend cae en el respaldo, no en el genérico', () => {
+    expect(gatewayUserErrorMessage(error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded))).toBe(
+      GRANT_CEILING_FALLBACK,
+    )
+  })
+})
+
+describe('isOwnAccount', () => {
+  it('compara por id, que es lo que compara el backend', () => {
+    expect(isOwnAccount(7, { id: 7 })).toBe(true)
+    expect(isOwnAccount(7, { id: 8 })).toBe(false)
+  })
+
+  it('sin sesión cargada no bloquea nada', () => {
+    expect(isOwnAccount(null, { id: 7 })).toBe(false)
+    expect(isOwnAccount(undefined, { id: 7 })).toBe(false)
   })
 })

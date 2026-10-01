@@ -25,6 +25,7 @@ import {
   type ScopeType,
 } from '@/lib/contracts'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
+import { SELF_ACCESS_NOTE } from '../self-access'
 
 /** Qué otorga cada capacidad global. Ninguna la da el rol `owner`: son independientes. */
 const CAPABILITY_HINTS: Record<GlobalCapability, string> = {
@@ -59,6 +60,13 @@ interface TargetOption {
 
 interface GatewayUserAccessModalProps {
   user: GatewayUserOut
+  /**
+   * `true` si `user` es la cuenta con la sesión abierta. El backend rechaza que alguien cambie su
+   * propio acceso (409 `access.self_modification_forbidden`), así que la pantalla queda de solo
+   * lectura con el motivo a la vista. El listado ya no la abre para la fila propia; esto cubre
+   * cualquier otro camino.
+   */
+  isSelf?: boolean
   onClose: () => void
 }
 
@@ -71,7 +79,11 @@ interface GatewayUserAccessModalProps {
  * siempre las dos secciones —aunque una esté vacía— y envía las dos juntas. Un editor que mostrara
  * solo la sección que el operador vino a tocar destruiría la otra con un 200 y sin un aviso.
  */
-export function GatewayUserAccessModal({ user, onClose }: GatewayUserAccessModalProps) {
+export function GatewayUserAccessModal({
+  user,
+  isSelf = false,
+  onClose,
+}: GatewayUserAccessModalProps) {
   const replaceAccess = useReplaceGatewayUserAccess(user.id)
   const environments = useSelectableEnvironments()
   const servers = useServerOptions()
@@ -94,7 +106,8 @@ export function GatewayUserAccessModal({ user, onClose }: GatewayUserAccessModal
   const unknownCapabilities = user.global_capabilities.filter(
     (cap) => !isKnownGlobalCapability(cap),
   )
-  const blocked = unrepresentable.length > 0 || unknownCapabilities.length > 0
+  const unrepresentableState = unrepresentable.length > 0 || unknownCapabilities.length > 0
+  const blocked = isSelf || unrepresentableState
 
   const [capabilities, setCapabilities] = useState<GlobalCapability[]>(() =>
     user.global_capabilities.filter(isKnownGlobalCapability),
@@ -157,7 +170,13 @@ export function GatewayUserAccessModal({ user, onClose }: GatewayUserAccessModal
           acá. Lo que borres de la lista queda revocado al guardar.
         </Callout>
 
-        {blocked && (
+        {isSelf && (
+          <Callout tone="info" title="Es tu propia cuenta">
+            {SELF_ACCESS_NOTE}
+          </Callout>
+        )}
+
+        {unrepresentableState && (
           <Callout tone="danger" title="No se puede editar desde esta pantalla">
             <p>
               Esta cuenta tiene{' '}
