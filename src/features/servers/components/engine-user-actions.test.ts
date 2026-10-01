@@ -3,6 +3,7 @@ import type { EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
 import {
   ACTION_LABELS,
   DESTRUCTIVE_IDENTITY_ACTIONS,
+  engineUserAccessNote,
   identityActions,
   liveHostsOf,
   rowIdentityActions,
@@ -191,5 +192,31 @@ describe('usernameActions', () => {
     expect(
       ids(usernameActions(user([identity(), identity({ host: 'localhost' })]), true)),
     ).toContain('rotateAllHosts')
+  })
+})
+
+describe('acciones según capacidades', () => {
+  // Un `operator`: escribe, pero ni revela contraseñas ni borra del motor.
+  const operator = (capability: string) =>
+    capability === 'engine_users.read' || capability === 'engine_users.write'
+
+  it('sin `engine_users.secrets` no ofrece «Revelar» y sin `drop` no ofrece «Eliminar del motor»', () => {
+    const actions = ids(identityActions(identity(), operator))
+    expect(actions).not.toContain('reveal')
+    expect(actions).not.toContain('dropFromEngine')
+    expect(actions).toContain('rotatePassword')
+  })
+
+  it('un lector solo ve los permisos efectivos', () => {
+    const viewer = (capability: string) => capability === 'engine_users.read'
+    expect(ids(identityActions(identity(), viewer))).toEqual(['viewGrants'])
+    expect(usernameActions(user([identity()]), true, viewer)).toEqual([])
+  })
+
+  it('el aviso único nombra lo que falta, con voseo', () => {
+    expect(engineUserAccessNote(operator)).toBe(
+      'Con tu acceso podés ver estos usuarios, pero no revelar sus contraseñas ni borrarlos del motor. Pedíselo a quien administra los accesos.',
+    )
+    expect(engineUserAccessNote(() => true)).toBeNull()
   })
 })

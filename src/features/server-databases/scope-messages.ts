@@ -26,8 +26,8 @@ const SCOPE_FALLBACK =
   'Esa base de datos no se puede usar como origen ni como destino de esta operación: es una base de sistema del motor o la base de metadatos del gateway.'
 
 const SIDE_HINT: Record<string, string> = {
-  source: 'Revisa la base de origen.',
-  target: 'Revisa la base de destino.',
+  source: 'Revisá la base de origen.',
+  target: 'Revisá la base de destino.',
 }
 
 /** Nombres que el llamador ya conoce, por lado del pedido. */

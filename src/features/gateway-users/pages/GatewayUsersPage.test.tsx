@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
+import { meFixture } from '@/test/fixtures/authz-catalog'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { GatewayUsersPage } from './GatewayUsersPage'
 
@@ -55,5 +56,53 @@ describe('GatewayUsersPage — la fila de la propia cuenta', () => {
     expect(disabled).toHaveLength(buttons.length / 2)
     expect(enabled).toHaveLength(buttons.length / 2)
     expect(notes).toHaveLength(disabled.length)
+  })
+})
+
+describe('GatewayUsersPage — sin acceso', () => {
+  it('un 403 muestra el estado de acceso compartido, sin «Reintentar» y con «Ver mi acceso»', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({ data: { id: 3, username: 'lector', role: 'viewer' } }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'No tienes permiso para esta operación.',
+              type: 'AppHttpException',
+              public_context: { code: 'access.forbidden' },
+            },
+          },
+          { status: 403 },
+        ),
+      ),
+    )
+    renderWithProviders(<GatewayUsersPage />)
+    expect(await screen.findByText('No tenés acceso a esta acción')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver mi acceso' })).toHaveAttribute(
+      'href',
+      '/mi-cuenta',
+    )
+    // El mismo pedido con el mismo acceso da el mismo 403: no hay nada que reintentar.
+    expect(screen.queryByRole('button', { name: /Reintentar/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
+  })
+
+  it('sin `gateway.admin` en la sesión ni siquiera ofrece el alta', async () => {
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({
+          data: { ...meFixture({ role: 'owner' }), id: 3, username: 'duena' },
+        }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json({ data: [], pagination }),
+      ),
+    )
+    renderWithProviders(<GatewayUsersPage />)
+    expect(await screen.findByText('No tenés acceso a esta acción')).toBeInTheDocument()
+    // La pestaña de roles sigue disponible: es `self.read`.
+    expect(screen.getByRole('tab', { name: 'Roles y capacidades' })).toBeInTheDocument()
   })
 })

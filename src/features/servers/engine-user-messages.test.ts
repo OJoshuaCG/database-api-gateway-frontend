@@ -56,7 +56,7 @@ describe('engineUserErrorMessage', () => {
       },
     })
     expect(engineUserErrorMessage(error)).toBe(PROTECTION_UNVERIFIABLE_MESSAGE)
-    expect(PROTECTION_UNVERIFIABLE_MESSAGE).toContain('Reintenta')
+    expect(PROTECTION_UNVERIFIABLE_MESSAGE).toContain('Reintentá')
   })
 
   it('devuelve null ante otro código, para no ocultar el mensaje real', () => {
@@ -75,7 +75,7 @@ describe('engineUserErrorDescription', () => {
 
   it('usa el copy del guard cuando aplica', () => {
     expect(engineUserErrorDescription(protectedAccount('reserved_account'))).toContain(
-      'Gestiónala fuera del gateway',
+      'Gestionala fuera del gateway',
     )
   })
 })

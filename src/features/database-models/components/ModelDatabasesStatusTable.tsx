@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
+  Callout,
   DataTable,
   EmptyState,
   EnvironmentBadge,
@@ -36,8 +37,11 @@ interface ModelDatabasesStatusTableProps {
   modelId: number
   /** Collation de referencia declarado; si falta, se ofrece adoptar el de las BDs. */
   blueprintCollation?: string | null
-  /** Abre el diálogo de aplicar con esta BD ya preseleccionada. */
-  onApplyTo: (database: ModelDatabaseStatus) => void
+  /**
+   * Abre el diálogo de aplicar con esta BD ya preseleccionada. Ausente = el usuario no puede
+   * aplicar (`blueprints.apply`): la acción se esconde de las filas y un único aviso lo explica.
+   */
+  onApplyTo?: (database: ModelDatabaseStatus) => void
 }
 
 /**
@@ -135,19 +139,23 @@ export function ModelDatabasesStatusTable({
         </span>
       ),
     },
-    {
-      id: 'actions',
-      header: '',
-      enableSorting: false,
-      enableHiding: false,
-      cell: ({ row }) => (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => onApplyTo(row.original)}>
-            Aplicar aquí 🔌
-          </Button>
-        </div>
-      ),
-    },
+    ...(onApplyTo
+      ? [
+          {
+            id: 'actions',
+            header: '',
+            enableSorting: false,
+            enableHiding: false,
+            cell: ({ row }: { row: { original: ModelDatabaseStatus } }) => (
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={() => onApplyTo(row.original)}>
+                  Aplicar aquí 🔌
+                </Button>
+              </div>
+            ),
+          } satisfies ColumnDef<ModelDatabaseStatus>,
+        ]
+      : []),
     ],
     // `onApplyTo` va en las deps: sin él, un `useMemo` que solo mira `environmentMap` congelaría
     // el handler de la primera render y el botón llamaría a un closure viejo. Si el padre no lo
@@ -194,6 +202,17 @@ export function ModelDatabasesStatusTable({
             Declarar {adoptable}
           </Button>
         </div>
+      )}
+      {/* Una acción repetida en cada fila que el usuario no puede usar no se pinta deshabilitada
+          N veces: se esconde y se explica una sola vez, acá. */}
+      {!onApplyTo && (
+        <Callout tone="info" title="Podés ver el estado, pero no aplicar versiones">
+          <p>
+            Con tu acceso podés ver en qué versión está cada base, pero no aplicarles versiones
+            (requiere <code className="font-mono">blueprints.apply</code>). Pedíselo a quien
+            administra los accesos.
+          </p>
+        </Callout>
       )}
       <DataTable
         data={databases.data ?? []}

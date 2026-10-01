@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, CAPABILITY_ESCALATIONS } from '@/lib/contracts'
 import type { SchemaComparisonWizard } from './use-schema-comparison-wizard'
 
 /**
@@ -12,6 +14,21 @@ import type { SchemaComparisonWizard } from './use-schema-comparison-wizard'
 export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
   const busy =
     wizard.createComparisonState.isPending || wizard.adopt.isPending || wizard.execute.isPending
+
+  /*
+   * Adoptar exige `schema_diff.execute` Y `blueprints.write` (crea una versión de blueprint desde
+   * otro módulo, regla §6.6); ejecutar exige `schema_diff.execute`. Comparar y ver el diff no
+   * piden nada más que lectura, así que el asistente se recorre igual y solo el CTA final se
+   * deshabilita, con el motivo al lado.
+   */
+  const adoptGuard = useCapabilityGuard(
+    [CAPABILITIES.schemaDiffExecute, CAPABILITY_ESCALATIONS.schemaDiffAdopt],
+    'adoptar el diff como versión',
+  )
+  const executeGuard = useCapabilityGuard(
+    CAPABILITIES.schemaDiffExecute,
+    'ejecutar el DDL de la comparación',
+  )
 
   let left: ReactNode = null
   let right: ReactNode = null
@@ -83,9 +100,17 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
         !closureReady
       left = <BackButton wizard={wizard} disabled={busy} />
       right = (
-        <Button onClick={wizard.submitAdopt} isLoading={wizard.adopt.isPending} disabled={disabled}>
-          {wizard.adoptExecuteImmediately ? 'Adoptar y aplicar 🔌' : 'Adoptar versión'}
-        </Button>
+        <>
+          <CapabilityHint guard={adoptGuard} className="max-w-xs text-right" />
+          <Button
+            onClick={wizard.submitAdopt}
+            isLoading={wizard.adopt.isPending}
+            disabled={disabled || !adoptGuard.allowed}
+            aria-describedby={adoptGuard.describedBy}
+          >
+            {wizard.adoptExecuteImmediately ? 'Adoptar y aplicar 🔌' : 'Adoptar versión'}
+          </Button>
+        </>
       )
       break
     }
@@ -123,13 +148,17 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
         wizard.pendingReviewIds.length > 0
       left = <BackButton wizard={wizard} disabled={busy} />
       right = (
-        <Button
-          onClick={wizard.submitExecute}
-          isLoading={wizard.execute.isPending}
-          disabled={disabled}
-        >
-          Ejecutar sobre el target 🔌
-        </Button>
+        <>
+          <CapabilityHint guard={executeGuard} className="max-w-xs text-right" />
+          <Button
+            onClick={wizard.submitExecute}
+            isLoading={wizard.execute.isPending}
+            disabled={disabled || !executeGuard.allowed}
+            aria-describedby={executeGuard.describedBy}
+          >
+            Ejecutar sobre el target 🔌
+          </Button>
+        </>
       )
       break
     }
@@ -142,7 +171,7 @@ export function WizardNav({ wizard }: { wizard: SchemaComparisonWizard }) {
   return (
     <div className="sticky bottom-0 z-10 mt-auto flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-elevated">
       {left ?? <span aria-hidden />}
-      <div className="flex flex-wrap justify-end gap-2">{right}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">{right}</div>
     </div>
   )
 }

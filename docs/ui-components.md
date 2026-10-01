@@ -286,6 +286,14 @@ fila despliega sus capacidades con «Ver capacidades». Props: `baseRole`, `glob
 **Lleva siempre la nota de dónde se aplica hoy el recorte por alcance** (`SCOPE_ENFORCEMENT_NOTE`):
 solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo demás rige el rol unión.
 
+### `CapabilityHint` y `ForbiddenState`
+`CapabilityHint` es el motivo **visible** de un control deshabilitado por `useCapabilityGuard`
+(`guard`, `className?`): pinta `guard.hint` con el `id` que el control referencia por
+`aria-describedby={guard.describedBy}`, y nada si está permitido. Una guarda por control: cada una
+trae su propio `hintId`. `ForbiddenState` (`title?`) es el estado de página para un 403
+`access.forbidden`, en lugar de `ErrorState`: el copy de `forbiddenCopy()` y el enlace «Ver mi
+acceso», **sin «Reintentar»** (el mismo pedido daría el mismo 403).
+
 `RolesCapabilitiesPanel` (en `features/gateway-users`) es la pestaña «Roles y capacidades» de
 `/gateway-users`: una tarjeta por rol y por global, y la matriz por módulo con `DataTable`
 (búsqueda, filtro por rol y por riesgo). `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella.

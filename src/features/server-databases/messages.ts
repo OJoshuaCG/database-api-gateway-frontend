@@ -1,4 +1,5 @@
 import type { ApiError } from '@/lib/api/errors'
+import { forbiddenCopy, isAccessForbidden } from '@/features/auth/messages'
 
 /**
  * Clasificación de los errores del módulo a una ACCIÓN de recuperación concreta (§4.2, §4.5).
@@ -41,7 +42,11 @@ export function classifyCreateError(error: ApiError): CreateErrorInfo {
     return {
       field: null,
       terminal: true,
-      hint: 'La credencial del gateway no tiene permisos para crear bases en este servidor.',
+      // `access.forbidden` es el acceso de la PERSONA en el gateway; un 403 sin ese código
+      // viene del motor, y ahí sí es la credencial del gateway la que no alcanza.
+      hint: isAccessForbidden(error)
+        ? forbiddenCopy().body
+        : 'La credencial del gateway no tiene permisos para crear bases en este servidor.',
     }
   }
   if (error.status === 429) {
@@ -111,8 +116,10 @@ export type DropErrorAction =
   | 'needsForceDisconnect'
   /** La base ya no existe: resultado aceptable, no un fallo. */
   | 'alreadyGone'
-  /** Estado terminal (BD de sistema, sin permisos): no hay reintento útil. */
+  /** Estado terminal (BD de sistema, sin permisos en el motor): no hay reintento útil. */
   | 'terminal'
+  /** 403 `access.forbidden`: el acceso de la persona en el gateway no incluye borrar acá. */
+  | 'forbidden'
   /** Límite de 3/min alcanzado: espera visible, jamás reintento automático. */
   | 'rateLimited'
   /** ⚠️ El borrado PUDO ejecutarse: solo se ofrece comprobar estado. */
@@ -125,6 +132,7 @@ export function classifyDropError(error: ApiError): DropErrorAction {
 
   if (error.status === 410) return 'expiredToken'
   if (error.status === 429) return 'rateLimited'
+  if (isAccessForbidden(error)) return 'forbidden'
   if (error.status === 403) return 'terminal'
   if (error.status === 404) return 'alreadyGone'
   // `isOutcomeUncertain` cubre el 504 y la página de un proxy; el 502 del backend se suma acá
@@ -151,6 +159,7 @@ export const DROP_ACTION_HINTS: Partial<Record<DropErrorAction, string>> = {
   needsForceDisconnect:
     'PostgreSQL rechazó el borrado porque hay sesiones abiertas contra la base. Volvé a comprobar y marcá «terminar las conexiones activas».',
   alreadyGone: 'La base de datos ya no existía en el servidor.',
+  forbidden: forbiddenCopy().body,
   rateLimited: 'Alcanzaste el límite de 3 borrados por minuto. Esperá antes de reintentar.',
   uncertain:
     'No se recibió respuesta del servidor. El borrado PUDO haberse ejecutado: no se reintenta automáticamente. Comprobá el estado de la lista de bases.',
@@ -166,6 +175,7 @@ export const DROP_ACTION_LABELS: Record<DropErrorAction, string | null> = {
   needsForceDisconnect: 'Volver a comprobar y terminar conexiones',
   alreadyGone: null,
   terminal: null,
+  forbidden: null,
   rateLimited: null,
   uncertain: 'Comprobar estado',
   checkStatus: 'Comprobar estado',
@@ -182,9 +192,11 @@ export function isAuditFailure(error: ApiError): boolean {
 
 // ── Preview, paso 1 (§4.4) ──────────────────────────────────────────────────
 
-export type PreviewErrorAction = 'alreadyGone' | 'terminal' | 'rateLimited' | 'retry'
+export type PreviewErrorAction = 'alreadyGone' | 'terminal' | 'forbidden' | 'rateLimited' | 'retry'
 
 export function classifyPreviewError(error: ApiError): PreviewErrorAction {
+  // Un 403 de acceso no se reintenta: el mismo pedido con el mismo acceso da el mismo 403.
+  if (isAccessForbidden(error)) return 'forbidden'
   if (error.status === 404) return 'alreadyGone'
   if (error.status === 409) return 'terminal'
   if (error.status === 429) return 'rateLimited'
@@ -194,6 +206,7 @@ export function classifyPreviewError(error: ApiError): PreviewErrorAction {
 export const PREVIEW_ACTION_HINTS: Record<PreviewErrorAction, string> = {
   alreadyGone: 'Esta base de datos ya no existe en el servidor.',
   terminal: 'No se puede eliminar una base de datos del sistema.',
+  forbidden: forbiddenCopy().body,
   rateLimited: 'Demasiados intentos; esperá un momento antes de volver a comprobar.',
   retry: 'No se pudo comprobar la base de datos en el motor.',
 }

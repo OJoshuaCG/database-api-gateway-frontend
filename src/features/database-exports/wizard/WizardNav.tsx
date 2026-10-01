@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import type { DatabaseExportWizard } from './use-database-export-wizard'
 
 /**
@@ -12,6 +14,8 @@ import type { DatabaseExportWizard } from './use-database-export-wizard'
  * scroll de distancia del control que lo desbloquea.
  */
 export function WizardNav({ wizard }: { wizard: DatabaseExportWizard }) {
+  // Crear el plan ya es `exports.execute` (`POST /database-exports`).
+  const planGuard = useCapabilityGuard(CAPABILITIES.exportsExecute, 'exportar bases')
   let left: ReactNode = null
   let right: ReactNode = null
 
@@ -23,13 +27,22 @@ export function WizardNav({ wizard }: { wizard: DatabaseExportWizard }) {
        * quizá nunca se ejecute— es barata: un plan no toca el motor y vence solo a las 24 h.
        */
       right = (
-        <Button
-          onClick={wizard.submitPlan}
-          isLoading={wizard.createPlan.isPending}
-          disabled={wizard.spec == null || wizard.createPlan.isPending || wizard.actionCooldown}
-        >
-          {wizard.createPlan.isPending ? 'Creando plan…' : 'Continuar →'}
-        </Button>
+        <>
+          <CapabilityHint guard={planGuard} className="max-w-xs text-right" />
+          <Button
+            onClick={wizard.submitPlan}
+            isLoading={wizard.createPlan.isPending}
+            disabled={
+              wizard.spec == null ||
+              wizard.createPlan.isPending ||
+              wizard.actionCooldown ||
+              !planGuard.allowed
+            }
+            aria-describedby={planGuard.describedBy}
+          >
+            {wizard.createPlan.isPending ? 'Creando plan…' : 'Continuar →'}
+          </Button>
+        </>
       )
       break
 
@@ -69,7 +82,7 @@ export function WizardNav({ wizard }: { wizard: DatabaseExportWizard }) {
   return (
     <div className="sticky bottom-0 z-10 mt-auto flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-elevated">
       {left ?? <span aria-hidden />}
-      <div className="flex flex-wrap justify-end gap-2">{right}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">{right}</div>
     </div>
   )
 }

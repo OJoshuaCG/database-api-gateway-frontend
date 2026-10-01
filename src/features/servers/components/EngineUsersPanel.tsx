@@ -4,17 +4,24 @@ import {
   AdoptionBadge,
   Badge,
   Button,
+  Callout,
   EmptyState,
   ErrorState,
   IconButton,
   RefreshIcon,
   Spinner,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
 import { cn } from '@/lib/utils'
 import { serverUserPath } from '@/lib/routes'
-import type { EngineType, EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
+import {
+  CAPABILITIES,
+  type EngineType,
+  type EngineUserIdentity,
+  type GroupedEngineUser,
+} from '@/lib/contracts'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
-import { rowIdentityActions, usernameActions } from './engine-user-actions'
+import { engineUserAccessNote, rowIdentityActions, usernameActions } from './engine-user-actions'
 import { IdentityActionButtons, UsernameActionButtons } from './EngineUserActionButtons'
 import { useEngineUserDialogs } from './use-engine-user-dialogs'
 
@@ -34,6 +41,9 @@ import { useEngineUserDialogs } from './use-engine-user-dialogs'
 export function EngineUsersPanel({ serverId }: { serverId: number; engine: EngineType }) {
   const { data, isLoading, isError, error, refetch, isFetching } = useGroupedEngineUsers(serverId)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const { can } = useCapabilities()
+  const createGuard = useCapabilityGuard(CAPABILITIES.engineUsersWrite, 'crear usuarios del motor')
+  const accessNote = engineUserAccessNote(can)
   const actions = useEngineUserDialogs({
     serverId,
     supportsHosts: data?.supports_hosts ?? false,
@@ -72,7 +82,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
   const identityActions = (username: string, identity: EngineUserIdentity) => (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
       <IdentityActionButtons
-        actions={rowIdentityActions(identity)}
+        actions={rowIdentityActions(identity, can)}
         layout="row"
         subject={identity.host ? `${username}@${identity.host}` : username}
         isRemoving={actions.isRemovingOrphan(identity)}
@@ -89,7 +99,9 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
   const batchActions = (user: GroupedEngineUser) => (
     <div className="flex flex-wrap justify-end gap-1.5">
       <UsernameActionButtons
-        actions={usernameActions(user, supportsHosts).filter((action) => action.id !== 'addHost')}
+        actions={usernameActions(user, supportsHosts, can).filter(
+          (action) => action.id !== 'addHost',
+        )}
         onRun={(action) => actions.runUsernameAction(action.id, user.username)}
       />
     </div>
@@ -98,7 +110,9 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
   const addHostAction = (user: GroupedEngineUser) => (
     <div className="flex flex-wrap justify-end gap-1.5">
       <UsernameActionButtons
-        actions={usernameActions(user, supportsHosts).filter((action) => action.id === 'addHost')}
+        actions={usernameActions(user, supportsHosts, can).filter(
+          (action) => action.id === 'addHost',
+        )}
         onRun={(action) => actions.runUsernameAction(action.id, user.username)}
       />
     </div>
@@ -120,11 +134,23 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
             onClick={() => void refetch()}
             isLoading={isFetching}
           />
-          <Button size="sm" onClick={actions.openCreate}>
+          <Button
+            size="sm"
+            onClick={actions.openCreate}
+            disabled={!createGuard.allowed}
+            aria-describedby={createGuard.describedBy}
+          >
             Crear usuario
           </Button>
         </div>
+        <CapabilityHint guard={createGuard} className="basis-full text-right" />
       </div>
+
+      {accessNote && (
+        <Callout tone="info" title="Algunas acciones no están disponibles con tu acceso">
+          <p>{accessNote}</p>
+        </Callout>
+      )}
 
       {data.users.length === 0 ? (
         <EmptyState

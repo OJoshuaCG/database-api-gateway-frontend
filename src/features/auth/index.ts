@@ -9,8 +9,24 @@ export {
   useScopeReadiness,
   type Capabilities,
 } from './hooks/use-capabilities'
-export { useCapabilityGuard, type CapabilityGuard } from './hooks/use-capability-guard'
-export { csrfErrorCopy, isCsrfError, sessionEndReason, type SessionEndReason } from './messages'
+export {
+  capabilityHint,
+  useCapabilityGuard,
+  type CapabilityGuard,
+  type CapabilityGuardOptions,
+} from './hooks/use-capability-guard'
+export { CapabilityHint } from './components/CapabilityHint'
+export { ForbiddenState } from './components/ForbiddenState'
+export {
+  MY_ACCESS_PATH,
+  csrfErrorCopy,
+  forbiddenCopy,
+  isAccessForbidden,
+  isCsrfError,
+  sessionEndReason,
+  type ForbiddenCopy,
+  type SessionEndReason,
+} from './messages'
 export { useLogin } from './hooks/use-login'
 export { useLogout } from './hooks/use-logout'
 export * from './authz-model'

@@ -3,6 +3,7 @@ import {
   AdoptionBadge,
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   EmptyState,
@@ -13,6 +14,7 @@ import {
   TabButton,
 } from '@/components/ui'
 import type { EngineType, EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
+import { useCapabilities } from '@/features/auth'
 import { useServerUser } from '@/features/server-users/hooks/use-server-users'
 import { EffectiveGrantsPanel } from '@/features/server-users/components/EffectiveGrantsPanel'
 import { GrantPanel } from '@/features/server-users/components/GrantPanel'
@@ -21,6 +23,7 @@ import { useServer } from '../hooks/use-servers'
 import { useGroupedEngineUsers } from '../hooks/use-engine-users'
 import {
   DESTRUCTIVE_IDENTITY_ACTIONS,
+  engineUserAccessNote,
   identityActions,
   usernameActions,
 } from '../components/engine-user-actions'
@@ -171,6 +174,9 @@ function ServerUserDetailContent({
   // funciona por identidad (§1).
   const serverUser = useServerUser(serverUserId ?? 0, serverUserId != null)
 
+  // Las acciones que el acceso no permite no se ofrecen; un único aviso dice cuáles faltan.
+  const { can } = useCapabilities()
+  const accessNote = engineUserAccessNote(can)
   const actions = useEngineUserDialogs({
     serverId,
     serverName,
@@ -178,7 +184,9 @@ function ServerUserDetailContent({
     users: [groupedUser],
   })
   // «Permisos efectivos» es una pestaña de esta misma ficha, no un botón de la cabecera.
-  const headerActions = identityActions(identity).filter((action) => action.id !== 'viewGrants')
+  const headerActions = identityActions(identity, can).filter(
+    (action) => action.id !== 'viewGrants',
+  )
   const editAction = headerActions.find((action) => action.id === 'edit')
   const runAction = (action: (typeof headerActions)[number]) =>
     actions.runIdentityAction(action, username, identity, serverUser.data)
@@ -191,7 +199,7 @@ function ServerUserDetailContent({
   const destructiveGroup = headerActions.filter((action) =>
     DESTRUCTIVE_IDENTITY_ACTIONS.has(action.id),
   )
-  const batchActions = usernameActions(groupedUser, supportsHosts)
+  const batchActions = usernameActions(groupedUser, supportsHosts, can)
   const subject = `${username}${host ? `@${host}` : ''}`
 
   const requiresAdoption = tab === 'manage' || tab === 'databases'
@@ -267,6 +275,15 @@ function ServerUserDetailContent({
             </Badge>
           )}
         </div>
+        {accessNote && (
+          <Callout
+            tone="info"
+            title="Algunas acciones no están disponibles con tu acceso"
+            className="mt-2"
+          >
+            <p>{accessNote}</p>
+          </Callout>
+        )}
       </div>
 
       <div className="flex gap-1 border-b border-border" role="tablist">

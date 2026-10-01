@@ -62,9 +62,12 @@ export function useCapabilities(): Capabilities {
    * capacidad en cada request, y lo peor que produce fallar abierto es que alguien llegue hasta un
    * 403 que igual lo iba a frenar. Fallar cerrado, en cambio, rompe a quien SÍ tenía permiso.
    *
-   * Con la lista presente sí se decide por ella: ahí el backend está afirmando algo.
+   * Con la lista presente sí se decide por ella: ahí el backend está afirmando algo. Y un backend
+   * que publica `catalog_version` es un backend con el modelo de capacidades: ahí una lista vacía
+   * SÍ significa «no tiene ninguna», y fallar abierto le mostraría botones que el servidor va a
+   * rechazar. Solo el backend viejo —sin versión de catálogo y sin lista— cae en el «no sé».
    */
-  const known = granted.size > 0
+  const known = granted.size > 0 || (admin?.catalog_version ?? null) !== null
 
   const can = useCallback(
     (capability: Capability) => (known ? granted.has(capability) : true),

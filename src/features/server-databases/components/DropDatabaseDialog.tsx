@@ -257,7 +257,7 @@ export function DropDatabaseDialog({
           <Button variant="danger-soft" onClick={onDeleted}>
             {DROP_ACTION_LABELS[dropAction]}
           </Button>
-        ) : dropAction === 'terminal' ? (
+        ) : dropAction === 'terminal' || dropAction === 'forbidden' ? (
           <Button onClick={onClose}>Cerrar</Button>
         ) : dropAction === 'alreadyGone' ? (
           <Button onClick={onDeleted}>Cerrar</Button>
@@ -584,7 +584,9 @@ function PreviewErrorFooter({
     // La base ya no existe: el padre igual tiene que refrescar su lista.
     return <Button onClick={onDeleted}>Cerrar y actualizar la lista</Button>
   }
-  if (action === 'terminal') return <Button onClick={onClose}>Cerrar</Button>
+  if (action === 'terminal' || action === 'forbidden') {
+    return <Button onClick={onClose}>Cerrar</Button>
+  }
   return (
     <>
       <Button variant="ghost" onClick={onClose}>

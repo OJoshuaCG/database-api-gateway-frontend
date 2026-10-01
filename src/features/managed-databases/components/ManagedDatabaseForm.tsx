@@ -2,6 +2,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
+  CAPABILITY_ESCALATIONS,
   IDENTIFIER_PATTERN,
   type DatabaseModelOut,
   type EnvironmentOut,
@@ -15,6 +16,7 @@ import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
 import { useSelectableEnvironments } from '@/features/environments'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import {
   CharsetCollationSelector,
   engineToFamily,
@@ -157,6 +159,13 @@ export function ManagedDatabaseForm({
   onCancel,
 }: ManagedDatabaseFormProps) {
   const environments = useSelectableEnvironments()
+  // Migrar en el alta (`apply_migrations=true`) suma `blueprints.apply` al `databases.write` del
+  // alta: sin ella las dos opciones «migrada» van deshabilitadas con el motivo, y el alta vacía
+  // sigue disponible.
+  const migrateGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.createWithApplyMigrations,
+    'crear la base ya migrada',
+  )
   const selectableEnvironments = environments.selectable
 
   const {
@@ -344,11 +353,13 @@ export function ManagedDatabaseForm({
                   value: 'ultima',
                   label: 'Migrada a la última 🔌',
                   hint: 'Ejecuta en el motor todas las migraciones del blueprint, en orden.',
+                  disabled: !migrateGuard.allowed,
                 },
                 {
                   value: 'version',
                   label: 'Migrada hasta una versión 🔌',
                   hint: 'Ejecuta las migraciones hasta la versión que elijas, inclusive.',
+                  disabled: !migrateGuard.allowed,
                 },
               ]}
               value={field.value}
@@ -359,6 +370,7 @@ export function ManagedDatabaseForm({
           )}
         />
       )}
+      {mode === 'create' && watchedModelId != null && <CapabilityHint guard={migrateGuard} />}
       {mode === 'create' && watchedModelId != null && watchedInitialState === 'version' && (
         <Input
           label="Versión objetivo"

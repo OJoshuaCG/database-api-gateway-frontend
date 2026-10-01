@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import type { DatabaseCloneWizard } from './use-database-clone-wizard'
 
 /**
@@ -9,6 +11,9 @@ import type { DatabaseCloneWizard } from './use-database-clone-wizard'
  */
 export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
   const busy = wizard.createClone.isPending || wizard.execute.isPending
+  // Crear el plan, previsualizarlo y ejecutarlo piden `clones.execute` (solo `owner`): un clon
+  // COPIA DATOS, y por eso es divulgación. Sin ella los dos CTAs van deshabilitados con el motivo.
+  const guard = useCapabilityGuard(CAPABILITIES.clonesExecute, 'clonar bases')
 
   let left: ReactNode = null
   let right: ReactNode = null
@@ -27,7 +32,8 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
         <Button
           onClick={wizard.createPlan}
           isLoading={wizard.createClone.isPending}
-          disabled={wizard.createPlanDisabled}
+          disabled={wizard.createPlanDisabled || !guard.allowed}
+          aria-describedby={guard.describedBy}
         >
           {wizard.createClone.isPending ? 'Creando plan…' : 'Crear plan →'}
         </Button>
@@ -77,7 +83,8 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
         <Button
           onClick={wizard.submitExecute}
           isLoading={wizard.execute.isPending}
-          disabled={disabled}
+          disabled={disabled || !guard.allowed}
+          aria-describedby={guard.describedBy}
         >
           Ejecutar clonación 🔌
         </Button>
@@ -93,7 +100,10 @@ export function WizardNav({ wizard }: { wizard: DatabaseCloneWizard }) {
   return (
     <div className="sticky bottom-0 z-10 mt-auto flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-elevated">
       {left ?? <span aria-hidden />}
-      <div className="flex flex-wrap justify-end gap-2">{right}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <CapabilityHint guard={guard} className="max-w-xs text-right" />
+        {right}
+      </div>
     </div>
   )
 }

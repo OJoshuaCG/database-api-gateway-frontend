@@ -3,6 +3,8 @@ import { engineLabel, formatBytes, formatInteger } from '@/lib/utils'
 import { Callout } from '@/components/ui'
 import { PlainDataNotice, WarningList } from '../../components/Callout'
 import { readSpecValue } from '../../logic'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { DatabaseExportWizard } from '../use-database-export-wizard'
 
@@ -26,6 +28,11 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 export function ConfirmStep({ wizard }: { wizard: DatabaseExportWizard }) {
   const preview = wizard.confirmPreview
   const spec = wizard.spec
+  const executeGuard = useCapabilityGuard(CAPABILITIES.exportsExecute, 'exportar bases')
+  // `download` NO viene con `execute`: generar el artefacto no divulga nada mientras no se
+  // entregue. Por eso se avisa ACÁ, antes de exportar: descubrirlo con el artefacto ya generado
+  // es haber tocado el motor para nada.
+  const canDownload = useCapabilities().can(CAPABILITIES.exportsDownload)
 
   // El campo del `DROP DATABASE` se exige en el paso de opciones; acá solo se comprueba que no quedó
   // vacío, porque desde esta pantalla no se vuelve a pedir un dato que ya tiene su sitio.
@@ -265,10 +272,22 @@ export function ConfirmStep({ wizard }: { wizard: DatabaseExportWizard }) {
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        {!canDownload && (
+          <Callout tone="warning" title="Vas a poder generar el artefacto, pero no descargarlo">
+            <p>
+              Tu acceso no incluye descargar los datos exportados en claro, así que ni «Descargar
+              artefacto» ni «Copiar contenido» van a estar disponibles (requiere{' '}
+              <code className="font-mono">exports.download</code>). Pedíselo a quien administra los
+              accesos antes de exportar.
+            </p>
+          </Callout>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="danger"
-            disabled={wizard.submitDisabled}
+            disabled={wizard.submitDisabled || !executeGuard.allowed}
+            aria-describedby={executeGuard.describedBy}
             isLoading={wizard.preview.isPending || wizard.execute.isPending}
             onClick={wizard.submitExport}
           >
@@ -281,13 +300,14 @@ export function ConfirmStep({ wizard }: { wizard: DatabaseExportWizard }) {
           {wizard.pendingReview != null && (
             <Button
               variant="danger"
-              disabled={!wizard.nameMatches || wizard.actionCooldown}
+              disabled={!wizard.nameMatches || wizard.actionCooldown || !executeGuard.allowed}
               isLoading={wizard.execute.isPending}
               onClick={wizard.confirmAfterReview}
             >
               Revisado, exportar 🔌
             </Button>
           )}
+          <CapabilityHint guard={executeGuard} className="basis-full" />
         </div>
       </div>
 

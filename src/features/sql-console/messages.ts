@@ -1,4 +1,6 @@
 import { type ApiError } from '@/lib/api/errors'
+import { ACCESS_FORBIDDEN_CODE } from '@/lib/contracts'
+import { forbiddenCopy } from '@/features/auth/messages'
 
 /**
  * Clasificación de errores de la Consola SQL y mapeo de los códigos de motivo a la pantalla
@@ -12,6 +14,11 @@ import { type ApiError } from '@/lib/api/errors'
 export type QueryErrorAction =
   /** 410, o 422 de token que no corresponde: se re-pide el preview de forma transparente. */
   | 'retryPreview'
+  /**
+   * 403 `access.forbidden`: la sesión no tiene `sql_console.execute`. No es la política de la
+   * consola —esa sí tiene un módulo alternativo al que mandar—, es el acceso de la persona.
+   */
+  | 'forbidden'
   /** 403 de política: no se reintenta nunca, se enlaza al módulo correcto. */
   | 'blockedByPolicy'
   /** 403 por escribir sobre una BD de sistema — el preview no lo detecta, solo el execute. */
@@ -42,6 +49,7 @@ export function classifyQueryError(error: ApiError): QueryErrorAction {
   if (error.status === 410) return 'retryPreview'
 
   if (error.status === 403) {
+    if (error.code === ACCESS_FORBIDDEN_CODE) return 'forbidden'
     const isSystemDatabase = error.reasons?.some((reason) => reason.code === SYSTEM_DATABASE_CODE)
     return isSystemDatabase ? 'systemDatabase' : 'blockedByPolicy'
   }
@@ -90,6 +98,7 @@ export function suggestsProvidedMode(action: QueryErrorAction): boolean {
  * que falta siempre es el "y ahora qué hago".
  */
 export const QUERY_ACTION_HINTS: Record<QueryErrorAction, string> = {
+  forbidden: forbiddenCopy().body,
   retryPreview:
     'La confirmación caducó o dejó de corresponder. Se vuelve a clasificar la consulta y se pide la confirmación otra vez.',
   blockedByPolicy:

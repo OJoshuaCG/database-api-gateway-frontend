@@ -11,7 +11,7 @@ import {
 } from '@/components/ui'
 import { formatBytes, formatDateTime } from '@/lib/utils'
 import { resolveEnvironmentState, useEnvironmentMap } from '@/features/environments'
-import { useCapabilities } from '@/features/auth'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
 import {
   CAPABILITIES,
   type MigrationBlockReason,
@@ -136,6 +136,9 @@ export function VersionFactsCard({
   const needsReview = reviewed === false
   const capturesSelects = summary.capture_selects === true
   const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
+  // Planear y ejecutar el borrado de una versión van detrás de `blueprints.apply`: puede mover el
+  // puntero de versión de bases reales, así que es del que ejecuta, no del que escribe.
+  const deleteGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'eliminar versiones')
   const isCurrent = blueprintCurrentVersion === summary.version
 
   // La versión existe en el listado pero el detalle no la encuentra: se borró por debajo. No es un
@@ -382,10 +385,12 @@ export function VersionFactsCard({
                 habría que mover su puntero de versión. El plan lo confirma antes de tocar nada.
               </p>
             )}
+            <CapabilityHint guard={deleteGuard} className="mr-auto" />
             <Button
               variant="danger-soft"
               size="sm"
-              disabled={!summary.deletable || !canMutate}
+              disabled={!summary.deletable || !canMutate || !deleteGuard.allowed}
+              aria-describedby={deleteGuard.describedBy}
               onClick={() => onRequestDelete(summary.version)}
             >
               Eliminar la versión {summary.version}

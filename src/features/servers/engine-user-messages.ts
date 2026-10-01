@@ -24,19 +24,19 @@ export const ENGINE_USER_ERROR_CODES = {
 /** Motivo de `engine_user.protected_account` → texto. Vocabulario del backend. */
 const PROTECTED_ACCOUNT_MESSAGES: Record<string, string> = {
   gateway_credential:
-    'No se puede operar sobre la propia credencial pseudo-root del gateway (riesgo de auto-bloqueo). Para gestionar esa cuenta, hazlo fuera del gateway.',
+    'No se puede operar sobre la propia credencial pseudo-root del gateway (riesgo de auto-bloqueo). Para gestionar esa cuenta, hacelo fuera del gateway.',
   reserved_account:
-    'La cuenta es una cuenta reservada del motor o de la nube administrada y el gateway no la modifica. Gestiónala fuera del gateway.',
+    'La cuenta es una cuenta reservada del motor o de la nube administrada y el gateway no la modifica. Gestionala fuera del gateway.',
   privileged_role:
-    'La cuenta tiene privilegios de administración del servidor (superusuario, creación de roles, replicación o equivalente) y el gateway no la modifica. Gestiónala fuera del gateway.',
+    'La cuenta tiene privilegios de administración del servidor (superusuario, creación de roles, replicación o equivalente) y el gateway no la modifica. Gestionala fuera del gateway.',
 }
 
 /** Motivo ausente o desconocido: vale para los tres casos sin afirmar cuál es. */
 const PROTECTED_ACCOUNT_FALLBACK =
-  'La cuenta está protegida y el gateway no la modifica. Gestiónala fuera del gateway.'
+  'La cuenta está protegida y el gateway no la modifica. Gestionala fuera del gateway.'
 
 export const PROTECTION_UNVERIFIABLE_MESSAGE =
-  'No se pudo verificar en el motor si la cuenta tiene privilegios de administración; por seguridad la operación no se ejecuta. Reintenta cuando el servidor responda.'
+  'No se pudo verificar en el motor si la cuenta tiene privilegios de administración; por seguridad la operación no se ejecuta. Reintentá cuando el servidor responda.'
 
 /**
  * Mensaje de un rechazo de cuenta protegida, o `null` si el error no es de este guard, para que

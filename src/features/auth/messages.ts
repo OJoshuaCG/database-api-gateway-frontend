@@ -1,5 +1,9 @@
-import { AUTH_CSRF_ERROR_CODES, AUTH_SESSION_ERROR_CODES } from '@/lib/contracts'
-import type { ApiError } from '@/lib/api/errors'
+import {
+  ACCESS_FORBIDDEN_CODE,
+  AUTH_CSRF_ERROR_CODES,
+  AUTH_SESSION_ERROR_CODES,
+} from '@/lib/contracts'
+import { ApiError, toApiError } from '@/lib/api/errors'
 
 /**
  * Copy de los finales de sesión y de los rechazos de CSRF (api-reference-v23 §7.1 y §7.3).
@@ -88,4 +92,45 @@ export function csrfErrorCopy(error: ApiError): string | null {
 /** ¿Este error es un rechazo de CSRF? Para decidir si conviene registrar el bug en consola. */
 export function isCsrfError(error: ApiError): boolean {
   return csrfErrorCopy(error) !== null
+}
+
+// ── 403 de autorización (§3) ───────────────────────────────────────────────────
+
+/** Adónde manda el 403: la persona ve ahí qué incluye su acceso. */
+export const MY_ACCESS_PATH = '/mi-cuenta'
+
+export interface ForbiddenCopy {
+  title: string
+  body: string
+  actionLabel: string
+  actionTo: string
+}
+
+/**
+ * Copy compartido de un 403 `access.forbidden`. Es UNO para toda la app a propósito: el backend
+ * no dice qué capacidad faltó —para no regalar un mapa de la superficie por fuerza bruta—, así
+ * que la pantalla tampoco puede, y lo único útil es mandar a ver el propio acceso.
+ *
+ * Nunca se ofrece «Reintentar»: el mismo request con el mismo acceso da el mismo 403. La salida
+ * real es pedir acceso, o recargar si se lo cambiaron hace poco.
+ */
+export function forbiddenCopy(): ForbiddenCopy {
+  return {
+    title: 'No tenés acceso a esta acción',
+    body: 'Tu acceso actual no la incluye en este destino. Revisá «Mi acceso» para ver qué podés hacer, o pedíselo a quien administra los accesos. Si te cambiaron los permisos hace poco, recargá la página.',
+    actionLabel: 'Ver mi acceso',
+    actionTo: MY_ACCESS_PATH,
+  }
+}
+
+/**
+ * ¿Es el 403 de autorización del gateway? Se reconoce por el código y no solo por el status: un
+ * 403 de CSRF significa otra cosa (un fallo del cliente, que se arregla recargando) y varios
+ * módulos tienen 403 propios sin código —la política de la consola SQL, la base de sistema— que
+ * tampoco son esto.
+ */
+export function isAccessForbidden(error: unknown): boolean {
+  if (error === null || error === undefined) return false
+  const apiError = error instanceof ApiError ? error : toApiError(error)
+  return apiError.status === 403 && apiError.code === ACCESS_FORBIDDEN_CODE
 }

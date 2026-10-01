@@ -12,7 +12,13 @@ import {
   PageHeader,
   Pagination,
 } from '@/components/ui'
-import { PAGINATION, type ApiTokenOut, type ApiTokenCreatedOut } from '@/lib/contracts'
+import { ForbiddenState, isAccessForbidden, useCapabilities } from '@/features/auth'
+import {
+  CAPABILITIES,
+  PAGINATION,
+  type ApiTokenOut,
+  type ApiTokenCreatedOut,
+} from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils'
 import { ApiTokenFormModal } from '../components/ApiTokenFormModal'
 import { useApiTokens, useRevokeApiToken } from '../hooks/use-api-tokens'
@@ -26,6 +32,9 @@ export function ApiTokensPage() {
 
   const { data, isLoading, isFetching, isError, error, refetch } = useApiTokens({ page, size })
   const revoke = useRevokeApiToken()
+  // Todo el módulo va detrás de `gateway.admin`. Sin ella la pantalla no ofrece emitir ni revocar
+  // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403.
+  const forbidden = !useCapabilities().can(CAPABILITIES.gatewayAdmin) || isAccessForbidden(error)
 
   const columns = useMemo<ColumnDef<ApiTokenOut>[]>(
     () => [
@@ -112,10 +121,14 @@ export function ApiTokensPage() {
       <PageHeader
         title="Tokens de agente"
         description="Credenciales portadoras para procesos automáticos. Cada token vive dentro de un proyecto y siempre tiene vencimiento."
-        actions={<Button onClick={() => setFormOpen(true)}>Emitir token</Button>}
+        actions={
+          forbidden ? undefined : <Button onClick={() => setFormOpen(true)}>Emitir token</Button>
+        }
       />
 
-      {isError ? (
+      {forbidden ? (
+        <ForbiddenState />
+      ) : isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (
         <>

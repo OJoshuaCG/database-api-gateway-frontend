@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toApiError } from '@/lib/api/errors'
 import {
+  CAPABILITIES,
   type AdoptComparisonOut,
   type EngineType,
   type ExecuteComparisonOut,
@@ -9,6 +10,7 @@ import {
   type SchemaObjectType,
   type ServerOut,
 } from '@/lib/contracts'
+import { useCapabilities } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import {
@@ -679,7 +681,11 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
   }, [])
 
   // ── Opción B ──────────────────────────────────────────────────────────────────
-  const previewActive = step === 'executeSelect' || step === 'executeConfirm'
+  // El execute-preview ya exige `schema_diff.execute`: sin ella no se pide (daría 403 en cada
+  // paso) y el CTA de la barra explica por qué no se puede ejecutar.
+  const canExecuteDiff = useCapabilities().can(CAPABILITIES.schemaDiffExecute)
+  const previewActive =
+    canExecuteDiff && (step === 'executeSelect' || step === 'executeConfirm')
   // En la CONFIRMACIÓN del modo custom, la vista previa (y por tanto el `confirm_token`) se
   // calcula sobre la selección YA CERRADA por resolve-selection — no sobre la cruda — y queda
   // deshabilitada hasta tener ese cierre. En el paso de selección sigue usando la selección en

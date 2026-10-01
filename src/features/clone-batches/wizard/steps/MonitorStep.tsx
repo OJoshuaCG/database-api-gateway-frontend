@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Badge, Button, Callout, ErrorState, Pagination, Spinner } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import {
   batchStatusLabel,
   batchStatusTone,
@@ -20,6 +22,9 @@ import type { CloneBatchWizard } from '../use-clone-batch-wizard'
  */
 export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
   const { batch, items, retryCandidates } = wizard
+  // Cancelar y reintentar son `clones.execute`: quien solo puede mirar el monitor (`clones.read`)
+  // ve el avance pero no los controles que lo cambian.
+  const cancelGuard = useCapabilityGuard(CAPABILITIES.clonesExecute, 'cancelar el lote')
 
   if (batch.isLoading && !batch.data) {
     return (
@@ -51,14 +56,18 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
           </p>
         </div>
         {enCurso && (
-          <Button
-            variant="danger-soft"
-            onClick={() => wizard.cancel.mutate()}
-            isLoading={wizard.cancel.isPending}
-            disabled={data.cancel_requested}
-          >
-            {data.cancel_requested ? 'Cancelación pedida' : 'Cancelar lote'}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              variant="danger-soft"
+              onClick={() => wizard.cancel.mutate()}
+              isLoading={wizard.cancel.isPending}
+              disabled={data.cancel_requested || !cancelGuard.allowed}
+              aria-describedby={cancelGuard.describedBy}
+            >
+              {data.cancel_requested ? 'Cancelación pedida' : 'Cancelar lote'}
+            </Button>
+            <CapabilityHint guard={cancelGuard} className="max-w-xs text-right" />
+          </div>
         )}
       </div>
 
@@ -138,6 +147,7 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
 }
 
 function RetryPanel({ wizard }: { wizard: CloneBatchWizard }) {
+  const retryGuard = useCapabilityGuard(CAPABILITIES.clonesExecute, 'reintentar el lote')
   const data = wizard.retryCandidates.data
   if (!data) return null
   if (data.retryable.length === 0 && data.needs_manual.length === 0) return null
@@ -149,14 +159,19 @@ function RetryPanel({ wizard }: { wizard: CloneBatchWizard }) {
           tone="info"
           title={`${data.retryable.length} bases se pueden reintentar`}
           action={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={wizard.submitRetry}
-              isLoading={wizard.retry.isPending}
-            >
-              Reintentar las que faltaron
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={wizard.submitRetry}
+                isLoading={wizard.retry.isPending}
+                disabled={!retryGuard.allowed}
+                aria-describedby={retryGuard.describedBy}
+              >
+                Reintentar las que faltaron
+              </Button>
+              <CapabilityHint guard={retryGuard} className="basis-full" />
+            </>
           }
         >
           Su destino quedó intacto, así que se pueden relanzar sin riesgo:{' '}

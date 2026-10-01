@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, PageHeader, TabButton } from '@/components/ui'
+import { useCapabilityGuard } from '@/features/auth'
 import { useDatabaseModel } from '@/features/database-models/hooks/use-database-models'
-import type {
-  CollationBatchCreate,
-  CollationBatchExecuteIn,
-  CollationBatchPlanOut,
-  CollationBlueprintVersionOut,
+import {
+  CAPABILITIES,
+  CAPABILITY_ESCALATIONS,
+  type CollationBatchCreate,
+  type CollationBatchExecuteIn,
+  type CollationBatchPlanOut,
+  type CollationBlueprintVersionOut,
 } from '@/lib/contracts'
 import { BatchConfirmStep } from '../batch/BatchConfirmStep'
 import { BatchMonitorStep } from '../batch/BatchMonitorStep'
@@ -57,6 +60,10 @@ export function BlueprintCollationBatchPage() {
   const [executed, setExecuted] = useState(false)
 
   const planMutation = usePlanCollationBatch(modelId)
+  const versionGuard = useCapabilityGuard(
+    [CAPABILITIES.collationExecute, CAPABILITY_ESCALATIONS.collationBlueprintVersion],
+    'registrar el lote como versión del blueprint',
+  )
   const executeMutation = useExecuteCollationBatch(modelId, batchId)
   const cancelMutation = useCancelCollationBatch(modelId, batchId)
   const versionMutation = useCreateCollationBlueprintVersion(modelId, batchId)
@@ -160,6 +167,7 @@ export function BlueprintCollationBatchPage() {
               onCreate={(name) =>
                 versionMutation.mutate({ name }, { onSuccess: setVersionResult })
               }
+              guard={versionGuard}
             />
           }
         />

@@ -43,15 +43,21 @@ export function useGatewayUser(id: number, enabled = true) {
 }
 
 /**
- * Alta de usuario. **No hace `toast` del token ni lo guarda en caché**: el token de invitación
- * viaja una sola vez y su entrega es una vista propia, no una notificación que se autodestruye a
- * los cinco segundos. El llamador recibe el `GatewayUserCreatedOut` y se encarga de entregarlo.
+ * Alta de usuario. **No hace `toast` del token ni lo escribe en ninguna query**: el token de
+ * invitación viaja una sola vez y su entrega es una vista propia, no una notificación que se
+ * autodestruye a los cinco segundos. El llamador recibe el `GatewayUserCreatedOut` y se encarga de
+ * entregarlo.
+ *
+ * Eso no bastaba para que el token no quedara guardado: una mutación conserva su respuesta en el
+ * MutationCache aunque nadie la lea, cinco minutos por defecto. `gcTime: 0` la descarta en cuanto
+ * el formulario de alta se desmonta, que es justo cuando se abre la entrega.
  */
 export function useCreateGatewayUser() {
   const queryClient = useQueryClient()
   const toast = useToast()
   return useMutation({
     mutationFn: (body: GatewayUserCreate) => createGatewayUser(body),
+    gcTime: 0,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
     },
@@ -110,6 +116,9 @@ export function useReissueGatewayUserInvite() {
   const toast = useToast()
   return useMutation({
     mutationFn: (id: number) => reissueGatewayUserInvite(id),
+    // El token nuevo vive en la respuesta. Este hook queda montado con el listado, así que además
+    // del `gcTime: 0` el llamador hace `reset()` al cerrar la entrega (ver `GatewayUsersPage`).
+    gcTime: 0,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
     },
@@ -130,5 +139,7 @@ export function useReissueGatewayUserInvite() {
 export function useAcceptGatewayUserInvite() {
   return useMutation({
     mutationFn: (body: AcceptInviteIn) => acceptGatewayUserInvite(body),
+    // Las variables llevan el token de invitación y la contraseña nueva en claro.
+    gcTime: 0,
   })
 }

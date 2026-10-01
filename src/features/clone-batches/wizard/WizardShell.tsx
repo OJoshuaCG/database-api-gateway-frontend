@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import type { BatchStep, CloneBatchWizard } from './use-clone-batch-wizard'
 
@@ -47,6 +49,8 @@ export function WizardStepper({ wizard }: { wizard: CloneBatchWizard }) {
 }
 
 export function WizardNav({ wizard }: { wizard: CloneBatchWizard }) {
+  // Armar el lote y ejecutarlo piden `clones.execute`, como el clon individual.
+  const guard = useCapabilityGuard(CAPABILITIES.clonesExecute, 'clonar bases')
   let left: React.ReactNode = null
   let right: React.ReactNode = null
 
@@ -74,7 +78,8 @@ export function WizardNav({ wizard }: { wizard: CloneBatchWizard }) {
           isLoading={wizard.createBatch.isPending}
           // `createBody` es `null` mientras el plan no sea enviable: sin filas, con nombres
           // repetidos, con un nombre vacío o con una fila que pide un modo no representable.
-          disabled={wizard.createBody == null || wizard.createBatch.isPending}
+          disabled={wizard.createBody == null || wizard.createBatch.isPending || !guard.allowed}
+          aria-describedby={guard.describedBy}
         >
           Revisar el lote →
         </Button>
@@ -91,7 +96,13 @@ export function WizardNav({ wizard }: { wizard: CloneBatchWizard }) {
         <Button
           onClick={wizard.submitExecute}
           isLoading={wizard.execute.isPending}
-          disabled={!wizard.confirmMatches || wizard.execute.isPending || !wizard.batch.data}
+          disabled={
+            !wizard.confirmMatches ||
+            wizard.execute.isPending ||
+            !wizard.batch.data ||
+            !guard.allowed
+          }
+          aria-describedby={guard.describedBy}
         >
           Clonar {wizard.batch.data?.total ?? 0} bases 🔌
         </Button>
@@ -107,7 +118,10 @@ export function WizardNav({ wizard }: { wizard: CloneBatchWizard }) {
   return (
     <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-surface px-1 py-3">
       <div>{left}</div>
-      <div>{right}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {right && <CapabilityHint guard={guard} className="max-w-xs text-right" />}
+        {right}
+      </div>
     </div>
   )
 }

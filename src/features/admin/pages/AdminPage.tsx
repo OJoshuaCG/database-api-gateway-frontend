@@ -15,6 +15,8 @@ import {
 import { PrivilegesPage } from '@/features/privileges'
 import { CharsetCollationOptionsPage } from '@/features/charset-collation-options'
 import { EnvironmentsPanel } from '@/features/environments'
+import { ForbiddenState, useCapabilities } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { useRotateCrypto } from '../hooks/use-crypto-rotation'
 
 const TABS = ['crypto', 'privileges', 'charset-collation', 'environments'] as const
@@ -29,7 +31,10 @@ export function AdminPage() {
   // pestaña concreta y un valor desconocido cae en `crypto` en vez de dejar la página vacía.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const tab: Tab = isTab(tabParam) ? tabParam : 'crypto'
+  // Cifrado es `gateway.admin`. Sin ella la pestaña no se ofrece y la página arranca en la primera
+  // que sí sirve; un enlace directo a `?tab=crypto` muestra el 403 compartido.
+  const canRotate = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  const tab: Tab = isTab(tabParam) ? tabParam : canRotate ? 'crypto' : 'privileges'
   const setTab = (next: Tab) => {
     setSearchParams((previous) => {
       const updated = new URLSearchParams(previous)
@@ -52,9 +57,11 @@ export function AdminPage() {
       />
 
       <div className="flex gap-1 border-b border-border" role="tablist">
-        <TabButton active={tab === 'crypto'} onClick={() => setTab('crypto')}>
-          Cifrado
-        </TabButton>
+        {canRotate && (
+          <TabButton active={tab === 'crypto'} onClick={() => setTab('crypto')}>
+            Cifrado
+          </TabButton>
+        )}
         <TabButton active={tab === 'privileges'} onClick={() => setTab('privileges')}>
           Privilegios
         </TabButton>
@@ -66,7 +73,8 @@ export function AdminPage() {
         </TabButton>
       </div>
 
-      {tab === 'crypto' && (
+      {tab === 'crypto' && !canRotate && <ForbiddenState />}
+      {tab === 'crypto' && canRotate && (
         <Card>
           <CardHeader>
             <CardTitle>Rotación de cifrado (DEK)</CardTitle>

@@ -10,6 +10,8 @@ import {
   PageHeader,
   TabButton,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils'
 import { useServer } from '../hooks/use-servers'
 import { useTestConnection } from '../hooks/use-server-mutations'
@@ -50,6 +52,12 @@ export function ServerDetailPage() {
 
   const { data: server, isLoading, isError, error, refetch } = useServer(serverId)
   const testConnection = useTestConnection(serverId)
+  // Editar y dar de baja son `servers.admin` (de `security_officer`, ni `owner` la tiene).
+  const adminGuard = useCapabilityGuard(
+    CAPABILITIES.serversAdmin,
+    'editar ni dar de baja servidores',
+  )
+  const canUseConsole = useCapabilities().can(CAPABILITIES.sqlConsoleExecute)
 
   if (Number.isNaN(serverId)) {
     return <ErrorState error={new Error('Identificador de servidor inválido.')} />
@@ -72,9 +80,11 @@ export function ServerDetailPage() {
             <>
               {/* Atajo al sitio donde se comprueba que los permisos que se acaban de tocar
                   hacen lo que se espera, sin tener que volver a elegir el servidor. */}
-              <Link to={`/sql-console?server=${server.id}`}>
-                <Button variant="outline">Consola SQL</Button>
-              </Link>
+              {canUseConsole && (
+                <Link to={`/sql-console?server=${server.id}`}>
+                  <Button variant="outline">Consola SQL</Button>
+                </Link>
+              )}
               <Button
                 variant="outline"
                 onClick={() => testConnection.mutate()}
@@ -82,17 +92,28 @@ export function ServerDetailPage() {
               >
                 Probar conexión
               </Button>
-              <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditOpen(true)}
+                disabled={!adminGuard.allowed}
+                aria-describedby={adminGuard.describedBy}
+              >
                 Editar
               </Button>
               {/* `danger-soft` y no `danger`: esto solo abre el diálogo. El rojo pleno queda para
                   la confirmación final, que es donde de verdad se decide. */}
-              <Button variant="danger-soft" onClick={() => setDeleteOpen(true)}>
+              <Button
+                variant="danger-soft"
+                onClick={() => setDeleteOpen(true)}
+                disabled={!adminGuard.allowed}
+                aria-describedby={adminGuard.describedBy}
+              >
                 Eliminar
               </Button>
             </>
           }
         />
+        <CapabilityHint guard={adminGuard} />
       </div>
 
       {testConnection.data && (

@@ -13,8 +13,10 @@ import {
   Spinner,
   TabButton,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { BlueprintProjectsSection } from '@/features/projects'
 import {
+  CAPABILITIES,
   MIGRATION_ERROR_CODES,
   PAGINATION,
   type MigrationDeletePlanOut,
@@ -146,6 +148,9 @@ export function BlueprintMigrationsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const model = useDatabaseModel(modelId)
+  // El apply masivo es `blueprints.apply` (solo `owner`): sin ella, «Aplicar…» va deshabilitado
+  // con el motivo y la tabla de estado esconde «Aplicar aquí» de cada fila.
+  const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones')
   /**
    * El catálogo se pide **descendente** (api-reference-v22 §2): así la PUNTA viene en la página 1
    * de la API y la pantalla abre sobre las versiones recientes, que es con las que se trabaja.
@@ -331,6 +336,8 @@ export function BlueprintMigrationsPage() {
             <>
               <Button
                 variant="outline"
+                disabled={!applyGuard.allowed}
+                aria-describedby={applyGuard.describedBy}
                 onClick={() => {
                   setApplyTargets([])
                   setApplyAllOpen(true)
@@ -365,6 +372,7 @@ export function BlueprintMigrationsPage() {
             {model.data.is_active ? 'Activo' : 'Inactivo'}
           </Badge>
         </div>
+        <CapabilityHint guard={applyGuard} />
       </div>
 
       {/* A qué proyectos pertenece este blueprint (api-reference-v16 §3.9). Va con la cabecera y
@@ -419,10 +427,14 @@ export function BlueprintMigrationsPage() {
         <ModelDatabasesStatusTable
           modelId={modelId}
           blueprintCollation={model.data.collation}
-          onApplyTo={(database) => {
-            setApplyTargets([database])
-            setApplyAllOpen(true)
-          }}
+          onApplyTo={
+            applyGuard.allowed
+              ? (database) => {
+                  setApplyTargets([database])
+                  setApplyAllOpen(true)
+                }
+              : undefined
+          }
         />
       ) : tab === 'contabilidad' ? (
         /* Pestaña propia y no una sección de «Estado en las BDs»: esa tabla sale de datos locales

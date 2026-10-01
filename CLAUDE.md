@@ -11,8 +11,13 @@ otorgar privilegios, versionar esquemas y aplicarlos, comparar y clonar bases.
 
 - Es **solo cliente**. No tiene backend propio, ni lógica de negocio, ni de seguridad: consume el
   contrato de `backend/docs/api-reference.md` y nunca lee ni modifica código del backend.
-- Es **single-admin**: no hay roles, tenants ni permisos por usuario. No implementes lógica de
-  "ocultar botón según rol"; el único control es sesión válida o no (401 → login).
+- **Hay roles y capacidades.** Cada endpoint exige una capacidad; qué otorga cada rol
+  (`viewer`/`operator`/`owner`) y cada global (`access_admin`/`security_officer`) sale del
+  catálogo `GET /authz/catalog`, nunca de una lista del frontend. El servidor chequea el rol
+  unión (capa 1) y, **hoy solo en cuatro rutas**, el rol por alcance del destino (capa 2): ver
+  `features/auth/authz-model.ts`. Los guards de UI son **pistas**: deshabilitá o escondé con
+  `useCapabilityGuard` (motivo visible), pero toda pantalla tiene que manejar el 403
+  (`isAccessForbidden` → `ForbiddenState`/`forbiddenCopy`, sin «Reintentar»).
 - Muchas acciones **tocan un motor de BD real** y son irreversibles. Se marcan con 🔌 en la UI.
   Trátalas con la seriedad que merecen: confirmación explícita, nada de reintentos automáticos.
 

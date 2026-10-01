@@ -24,10 +24,13 @@ import { listEnvironments } from '../api/environments.api'
  * entorno que después se desactivó. Filtrando en el servidor esas filas caen en "id sin match" y
  * se pintarían como desconocidas. Se trae completo y el subconjunto activo se deriva acá.
  */
-export function useEnvironmentOptions() {
+export function useEnvironmentOptions(enabled = true) {
   return useQuery({
     queryKey: queryKeys.environments.list({ options: 'all' }),
     queryFn: ({ signal }) => listEnvironments({ page: 1, size: PAGINATION.maxSize }, signal),
+    // `enabled` NO entra en la key: el que no lo necesita simplemente no dispara el request, y
+    // en cuanto otro consumidor lo pide la entrada es la misma.
+    enabled,
     staleTime: Infinity,
     gcTime: Infinity,
     select: (page): EnvironmentOut[] => [...page.items].sort(compareEnvironments),

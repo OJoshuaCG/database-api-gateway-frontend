@@ -18,10 +18,10 @@ import { SELF_ACCESS_NOTE } from './self-access'
 
 /** Espera fija sugerida tras un 429. No hay `Retry-After` con qué calcular un backoff (§6). */
 export const RATE_LIMIT_HINT =
-  'Se alcanzó el límite de solicitudes. Espera unos segundos y vuelve a intentarlo.'
+  'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.'
 
 /** `access.self_modification_forbidden`: el mismo motivo que muestra la fila propia. */
-export const SELF_MODIFICATION_MESSAGE = `No puedes cambiar tu propio rol, tu propio acceso ni desactivar tu cuenta. ${SELF_ACCESS_NOTE}`
+export const SELF_MODIFICATION_MESSAGE = `No podés cambiar tu propio rol, tu propio acceso ni desactivar tu cuenta. ${SELF_ACCESS_NOTE}`
 
 /**
  * `access.grant_ceiling_exceeded` sin el detalle del backend. El `msg` del backend es mejor —dice
@@ -29,7 +29,7 @@ export const SELF_MODIFICATION_MESSAGE = `No puedes cambiar tu propio rol, tu pr
  * viene; este texto es solo el respaldo.
  */
 export const GRANT_CEILING_FALLBACK =
-  'No puedes otorgar más acceso del que tienes. Pídeselo a alguien que tenga ese nivel.'
+  'No podés otorgar más acceso del que tenés. Pedíselo a alguien que tenga ese nivel.'
 
 /**
  * Mensaje para un error de las pantallas ADMINISTRADAS (listado, alta, edición, accesos,
@@ -41,16 +41,16 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
 
   switch (error.code) {
     case GATEWAY_USER_ERROR_CODES.lastAdminProtected:
-      return 'Es el último administrador de accesos activo. Otorga `access_admin` a otro usuario activo antes de quitárselo o desactivarlo.'
+      return 'Es el último administrador de accesos activo. Otorgá `access_admin` a otro usuario activo antes de quitárselo o desactivarlo.'
     case GATEWAY_USER_ERROR_CODES.usernameTaken:
-      return 'Ya existe un usuario con ese nombre. Elige otro.'
+      return 'Ya existe un usuario con ese nombre. Elegí otro.'
     case GATEWAY_USER_ERROR_CODES.credentialAlreadySet:
       return 'Esta cuenta ya fijó su contraseña: la invitación es solo para la primera credencial. Para reemplazarla, la persona la cambia desde su propia sesión.'
     case GATEWAY_USER_ERROR_CODES.notFound:
       // Solo el 404 corresponde a estas pantallas. El 422 del mismo código es de la pantalla
       // pública de invitación y lo resuelve `acceptInviteErrorMessage`.
       return error.status === 404
-        ? 'Este usuario ya no existe. Vuelve al listado y refréscalo.'
+        ? 'Este usuario ya no existe. Volvé al listado y refrescalo.'
         : null
     case GATEWAY_USER_ERROR_CODES.selfModificationForbidden:
       return SELF_MODIFICATION_MESSAGE
@@ -66,7 +66,7 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
       // backend los separe, el mensaje genérico tiene que servir para los dos.
       return roleOrCapabilityMessage(
         error,
-        'Hay un valor no admitido en los accesos: revisa las capacidades globales y el tipo de alcance de cada permiso.',
+        'Hay un valor no admitido en los accesos: revisá las capacidades globales y el tipo de alcance de cada permiso.',
       )
     default:
       return null
@@ -92,7 +92,7 @@ function roleOrCapabilityMessage(error: ApiError, fallback: string): string {
  */
 export function acceptInviteErrorMessage(error: ApiError): string {
   if (error.status === 410) {
-    return 'Esta invitación venció. Pídele una nueva a quien administra los accesos.'
+    return 'Esta invitación venció. Pedile una nueva a quien administra los accesos.'
   }
   if (error.status === 429) return RATE_LIMIT_HINT
   if (error.code === GATEWAY_USER_ERROR_CODES.weakPassword) {
@@ -102,7 +102,7 @@ export function acceptInviteErrorMessage(error: ApiError): string {
       : 'La contraseña es demasiado corta.'
   }
   if (error.code === GATEWAY_USER_ERROR_CODES.notFound) {
-    return 'La invitación no es válida o ya se usó. Pídele una nueva a quien administra los accesos.'
+    return 'La invitación no es válida o ya se usó. Pedile una nueva a quien administra los accesos.'
   }
   return error.message
 }

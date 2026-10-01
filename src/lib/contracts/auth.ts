@@ -231,10 +231,14 @@ export const DESTRUCTIVE_CAPABILITIES = [
 ] as const satisfies readonly Capability[]
 
 /**
- * Los cinco endpoints donde un PARÁMETRO sube el requisito (§4).
+ * Los endpoints donde un PARÁMETRO, o una segunda capacidad, sube el requisito (§4 y §6.6).
  *
- * Son los que la UI tiene que reflejar deshabilitando el control concreto, porque el usuario ya
- * está en la pantalla y el 403 llegaría recién al enviar — después de haber llenado el formulario.
+ * Son siete. Cuatro dependen de un parámetro (encender la captura, sembrar datos, los dos
+ * `drop_remote`), uno de un flag del alta (`apply_migrations`) y dos son acciones que crean una
+ * versión de blueprint DESDE OTRO MÓDULO y por eso exigen `blueprints.write` además de la propia
+ * (adoptar un diff, registrar un lote de collation como versión). Son los que la UI tiene que
+ * reflejar deshabilitando el control concreto, porque el usuario ya está en la pantalla y el 403
+ * llegaría recién al enviar — después de haber llenado el formulario.
  *
  * **Apagar la captura no pide nada extra: solo encenderla.** Modelarlo al revés dejaría a un
  * operador sin poder desactivar algo que sí puede desactivar.
@@ -248,6 +252,12 @@ export const CAPABILITY_ESCALATIONS = {
   dropManagedDatabaseRemote: CAPABILITIES.databasesDrop,
   /** `drop_remote=true` en `DELETE /server-users/{id}`. */
   dropServerUserRemote: CAPABILITIES.engineUsersDrop,
+  /** `apply_migrations=true` en `POST /managed-databases`: el alta pasa a ejecutar migraciones. */
+  createWithApplyMigrations: CAPABILITIES.blueprintsApply,
+  /** `POST /schema-comparisons/{id}/adopt`: además de `schema_diff.execute`. */
+  schemaDiffAdopt: CAPABILITIES.blueprintsWrite,
+  /** `POST .../collation-batches/{id}/blueprint-version`: además de `collation.execute`. */
+  collationBlueprintVersion: CAPABILITIES.blueprintsWrite,
 } as const
 
 // ── Alcance por destino (§8) ───────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { Badge, Button, Checkbox, CodeBlock, Input, Modal } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { type ApiError } from '@/lib/api/errors'
-import { type EngineType, type QueryPreviewOut } from '@/lib/contracts'
+import { CAPABILITIES, type EngineType, type QueryPreviewOut } from '@/lib/contracts'
 import { cn, engineLabel, formatInteger } from '@/lib/utils'
 import { formatCountdown } from '@/lib/utils/countdown'
 import { useCountdown } from '@/lib/utils/use-countdown'
@@ -72,7 +73,13 @@ function ConfirmExecutionDialogBody({
   const ddlTrap = dryRunCannotRevertDdl(engine, preview.danger, dryRun)
 
   const nameMatches = typedName === database
-  const canExecute = nameMatches && !expired && !isExecuting
+  // Red de contención: sin `sql_console.execute` el preview ya habría fallado, pero si la sesión
+  // cambió entre el análisis y la confirmación, el botón no lleva hasta un 403.
+  const executeGuard = useCapabilityGuard(
+    CAPABILITIES.sqlConsoleExecute,
+    'ejecutar SQL en la consola',
+  )
+  const canExecute = nameMatches && !expired && !isExecuting && executeGuard.allowed
 
   // El rojo se reserva a los fallos de sistema; el resto de los errores son condiciones del
   // flujo con salida propia y no merecen la alarma máxima.
@@ -94,11 +101,13 @@ function ConfirmExecutionDialogBody({
           <Button variant="ghost" onClick={onClose} disabled={isExecuting}>
             Cancelar
           </Button>
+          <CapabilityHint guard={executeGuard} className="mr-auto" />
           <Button
             variant="danger"
             onClick={() => onConfirm(typedName)}
             isLoading={isExecuting}
             disabled={!canExecute}
+            aria-describedby={executeGuard.describedBy}
           >
             {isExecuting ? 'Ejecutando…' : 'Ejecutar'}
           </Button>

@@ -27,6 +27,8 @@ import {
 } from '../../messages'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import type { DatabaseExportWizard } from '../use-database-export-wizard'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 
 /**
  * Vista de job: sigue la exportación por polling de `GET /{id}` y, al terminar, muestra el artefacto
@@ -180,6 +182,11 @@ function RunningView({ wizard }: { wizard: DatabaseExportWizard }) {
 /** Metadatos del artefacto, TTL y las dos entregas de un solo uso. */
 function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
   const toast = useToast()
+  // Las dos entregas (ticket de descarga y contenido en línea) son `exports.download`.
+  const downloadGuard = useCapabilityGuard(
+    CAPABILITIES.exportsDownload,
+    'descargar los datos exportados',
+  )
   const manifest = wizard.manifest.data
 
   if (wizard.manifest.isLoading && !manifest) {
@@ -341,7 +348,13 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
         <div className="flex flex-wrap gap-2">
           <Button
             variant="primary"
-            disabled={deliveryBlocked || wizard.download.isPending || wizard.copyContent.isPending}
+            disabled={
+              deliveryBlocked ||
+              wizard.download.isPending ||
+              wizard.copyContent.isPending ||
+              !downloadGuard.allowed
+            }
+            aria-describedby={downloadGuard.describedBy}
             isLoading={wizard.download.isPending}
             onClick={wizard.downloadArtifact}
           >
@@ -354,14 +367,17 @@ function ArtifactPanel({ wizard }: { wizard: DatabaseExportWizard }) {
               inlineNotViable ||
               !clipboardAvailable ||
               wizard.copyContent.isPending ||
-              wizard.download.isPending
+              wizard.download.isPending ||
+              !downloadGuard.allowed
             }
+            aria-describedby={downloadGuard.describedBy}
             isLoading={wizard.copyContent.isPending}
             onClick={wizard.copyArtifact}
           >
             Copiar contenido
           </Button>
         </div>
+        <CapabilityHint guard={downloadGuard} />
         {inlineNotViable && (
           <p className="text-xs text-muted-foreground">
             Copiar el contenido está deshabilitado porque el plan marcó la entrega en línea como no

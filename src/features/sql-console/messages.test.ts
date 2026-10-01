@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, type ApiReason } from '@/lib/api/errors'
 import {
+  QUERY_ACTION_HINTS,
   classifyQueryError,
   isAutoRecoverable,
   isSystemFailure,
@@ -197,5 +198,14 @@ describe('reasonLink', () => {
     // Inventar un enlace para un motivo nuevo del backend confundiría más de lo que ayuda.
     expect(reasonLink('opaque_statement', SERVER_ID)).toBeNull()
     expect(reasonLink('codigo_que_no_existe', SERVER_ID)).toBeNull()
+  })
+})
+
+describe('classifyQueryError — 403 de acceso', () => {
+  it('el 403 `access.forbidden` es el acceso de la persona, no la política de la consola', () => {
+    const forbidden = new ApiError({ status: 403, message: 'No.', code: 'access.forbidden' })
+    expect(classifyQueryError(forbidden)).toBe('forbidden')
+    expect(isSystemFailure('forbidden')).toBe(false)
+    expect(QUERY_ACTION_HINTS.forbidden).toContain('Mi acceso')
   })
 })

@@ -49,6 +49,8 @@ export function useCreateEngineUser(serverId: number) {
   const toast = useToast()
   return useMutation({
     mutationFn: (body: EngineUserCreateIn) => createEngineUser(serverId, body),
+    // Lleva una contraseña en las variables: que no sobreviva al diálogo en el MutationCache.
+    gcTime: 0,
     onSuccess: (result) => {
       invalidate()
       toast.success('Usuario creado en el motor 🔌', result.username)
@@ -63,6 +65,8 @@ export function useChangeEngineUserPassword(serverId: number) {
   const toast = useToast()
   return useMutation({
     mutationFn: (body: EnginePasswordChangeIn) => changeEngineUserPassword(serverId, body),
+    // La contraseña nueva viaja en las VARIABLES de la mutación: misma razón que el reveal.
+    gcTime: 0,
     onSuccess: (result) => {
       invalidate()
       toast.success('Contraseña actualizada 🔌', result.username)
@@ -142,6 +146,8 @@ export function useDefineKnownPassword(serverId: number) {
   const toast = useToast()
   return useMutation({
     mutationFn: (body: DefineKnownPasswordIn) => defineKnownPassword(serverId, body),
+    // Lleva una contraseña en las variables: que no sobreviva al diálogo en el MutationCache.
+    gcTime: 0,
     onSuccess: (result) => {
       invalidate()
       const saved = result.results.filter(
@@ -179,6 +185,8 @@ export function useChangeEngineUserPasswordAllHosts(serverId: number) {
   return useMutation({
     mutationFn: (body: EnginePasswordChangeAllHostsIn) =>
       changeEngineUserPasswordAllHosts(serverId, body),
+    // Lleva una contraseña en las variables: que no sobreviva al diálogo en el MutationCache.
+    gcTime: 0,
     onSuccess: (result) => {
       invalidate()
       const failed = result.results.filter((item) => item.status === 'error').length
@@ -202,14 +210,19 @@ export function useChangeEngineUserPasswordAllHosts(serverId: number) {
 }
 
 /**
- * Revela un secreto efímero: deliberadamente NO invalida ni cachea nada (React Query nunca
- * debe guardar una contraseña en claro). El resultado vive solo en el estado del componente
- * que lo solicitó, mientras el diálogo permanece abierto.
+ * Revela un secreto efímero: no invalida ni escribe ninguna query. Ojo, eso NO alcanzaba: una
+ * mutación guarda su resultado en el MutationCache aunque nadie lo pida, y ahí la contraseña en
+ * claro sobrevivía al diálogo. Con `gcTime: 0` la entrada se descarta en cuanto el diálogo (que se
+ * monta condicionalmente) se desmonta; mientras está abierto vive en el observer del componente.
  */
 export function useRevealEngineUserPassword(serverId: number) {
   const toast = useToast()
   return useMutation({
     mutationFn: (body: EngineRevealPasswordIn) => revealEngineUserPassword(serverId, body),
+    // Sin `gcTime: 0` TanStack conserva la mutación —con su respuesta y sus variables— cinco
+    // minutos en el MutationCache después de que el diálogo se desmonta: el secreto seguiría en
+    // memoria, alcanzable desde las devtools, mucho después de entregarlo.
+    gcTime: 0,
     onError: (error) => toast.error('No se pudo revelar la contraseña', toApiError(error).message),
   })
 }

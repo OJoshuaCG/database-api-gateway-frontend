@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useCapabilities } from '@/features/auth'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
@@ -85,6 +85,8 @@ export function ApplyMigrationsDialog({
   const [wasDryRun, setWasDryRun] = useState(false)
 
   const applyAll = useApplyAllMigrations(modelId)
+  // `apply-all` es `blueprints.apply`, también en dry-run: es el mismo endpoint.
+  const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones')
   // Catálogo COMPLETO, no una página: este aviso no lista versiones, las CALCULA. Con una sola
   // página, un blueprint con más versiones que el tope producía un «van a capturar estas» y un
   // «estas están bloqueadas por review» incompletos, sin ninguna señal de que lo estaban —y el
@@ -320,22 +322,25 @@ export function ApplyMigrationsDialog({
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             isLoading={applyAll.isPending}
-            disabled={nothingSelected}
+            disabled={nothingSelected || !applyGuard.allowed}
+            aria-describedby={applyGuard.describedBy}
             onClick={() => run(true)}
           >
             Previsualizar (dry-run)
           </Button>
           <Button
             isLoading={applyAll.isPending}
-            disabled={nothingSelected}
+            disabled={nothingSelected || !applyGuard.allowed}
+            aria-describedby={applyGuard.describedBy}
             onClick={() => run(false)}
           >
             {mode === 'selection' ? `Aplicar a ${targets.length} BD(s) 🔌` : 'Aplicar a todas 🔌'}
           </Button>
+          <CapabilityHint guard={applyGuard} className="basis-full" />
         </div>
 
         {result && <ApplyResult result={result} wasDryRun={wasDryRun} />}

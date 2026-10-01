@@ -1,4 +1,9 @@
-import type { EngineUserIdentity, GroupedEngineUser } from '@/lib/contracts'
+import {
+  CAPABILITIES,
+  type Capability,
+  type EngineUserIdentity,
+  type GroupedEngineUser,
+} from '@/lib/contracts'
 
 /**
  * Qué acciones corresponden a un usuario del motor, en UN solo lugar.
@@ -79,6 +84,49 @@ export const ACTION_LABELS: Record<IdentityActionId | UsernameActionId, string> 
 export const DESTRUCTIVE_IDENTITY_ACTIONS: ReadonlySet<IdentityActionId> =
   new Set<IdentityActionId>(['removeFromInventory', 'dropFromEngine'])
 
+/**
+ * Qué capacidad exige cada acción (verificado contra `app/routes/v1/servers.py` y
+ * `server_users.py`). Una acción que el usuario no puede ejecutar NO se ofrece: en una fila se
+ * repetiría deshabilitada N veces, así que se esconde y la vista lo explica UNA vez con
+ * `engineUserAccessNote`. Es una pista de UI; el servidor decide igual.
+ */
+export const ACTION_CAPABILITY: Record<IdentityActionId | UsernameActionId, Capability> = {
+  adopt: CAPABILITIES.engineUsersWrite,
+  viewGrants: CAPABILITIES.engineUsersRead,
+  reveal: CAPABILITIES.engineUsersSecrets,
+  rotatePassword: CAPABILITIES.engineUsersWrite,
+  edit: CAPABILITIES.engineUsersWrite,
+  // Quitar del inventario es `write`; con `drop_remote` sube a `drop`, y eso lo guarda el diálogo.
+  removeFromInventory: CAPABILITIES.engineUsersWrite,
+  dropFromEngine: CAPABILITIES.engineUsersDrop,
+  recreate: CAPABILITIES.engineUsersWrite,
+  addHost: CAPABILITIES.engineUsersWrite,
+  adoptAllHosts: CAPABILITIES.engineUsersWrite,
+  definePassword: CAPABILITIES.engineUsersWrite,
+  rotateAllHosts: CAPABILITIES.engineUsersWrite,
+}
+
+/** Predicado de capacidades (`useCapabilities().can`). Sin él no se filtra nada. */
+export type CanPredicate = (capability: Capability) => boolean
+const ALLOW_ALL: CanPredicate = () => true
+
+/**
+ * El aviso único que explica las acciones escondidas por capacidad, o `null` si no falta nada.
+ * Nombra qué no puede hacer, no qué capacidad le falta en abstracto: es lo que la persona busca.
+ */
+export function engineUserAccessNote(can: CanPredicate): string | null {
+  const missing: string[] = []
+  if (!can(CAPABILITIES.engineUsersWrite)) missing.push('crearlos, adoptarlos ni cambiarlos')
+  if (!can(CAPABILITIES.engineUsersSecrets)) missing.push('revelar sus contraseñas')
+  if (!can(CAPABILITIES.engineUsersDrop)) missing.push('borrarlos del motor')
+  if (missing.length === 0) return null
+  const list =
+    missing.length === 1
+      ? missing.join('')
+      : `${missing.slice(0, -1).join(', ')} ni ${missing.slice(-1).join('')}`
+  return `Con tu acceso podés ver estos usuarios, pero no ${list}. Pedíselo a quien administra los accesos.`
+}
+
 const ALL_HOSTS_ORPHAN =
   'Ningún host de este usuario existe hoy en el motor (todos huérfanos): no hay de dónde clonarlo.'
 
@@ -94,7 +142,14 @@ const action = (id: IdentityActionId, needsRecord = false): IdentityAction => ({
  *   que eliminar del motor; quitarla del inventario es inmediato porque no hay nada físico que
  *   perder, y por eso no necesita el registro completo.
  */
-export function identityActions(identity: EngineUserIdentity): IdentityAction[] {
+export function identityActions(
+  identity: EngineUserIdentity,
+  can: CanPredicate = ALLOW_ALL,
+): IdentityAction[] {
+  return stateActions(identity).filter((candidate) => can(ACTION_CAPABILITY[candidate.id]))
+}
+
+function stateActions(identity: EngineUserIdentity): IdentityAction[] {
   const hasRecord = identity.server_user_id != null
   switch (identity.status) {
     case 'adopted':
@@ -128,8 +183,11 @@ export function identityActions(identity: EngineUserIdentity): IdentityAction[] 
  * Las acciones de una identidad en una FILA de tabla: las de la ficha menos las que la fila no
  * sabe ejecutar. Filtrar —y no recalcular— es lo que garantiza R1.
  */
-export function rowIdentityActions(identity: EngineUserIdentity): IdentityAction[] {
-  return identityActions(identity).filter((candidate) => !candidate.needsRecord)
+export function rowIdentityActions(
+  identity: EngineUserIdentity,
+  can: CanPredicate = ALLOW_ALL,
+): IdentityAction[] {
+  return identityActions(identity, can).filter((candidate) => !candidate.needsRecord)
 }
 
 /**
@@ -156,7 +214,17 @@ export function liveHostsOf(user: GroupedEngineUser): string[] {
  * - Rotar en todos los hosts: solo con hosts y >1 identidad (con una sola ya existe la rotación
  *   individual).
  */
-export function usernameActions(user: GroupedEngineUser, supportsHosts: boolean): UsernameAction[] {
+export function usernameActions(
+  user: GroupedEngineUser,
+  supportsHosts: boolean,
+  can: CanPredicate = ALLOW_ALL,
+): UsernameAction[] {
+  return stateUsernameActions(user, supportsHosts).filter((candidate) =>
+    can(ACTION_CAPABILITY[candidate.id]),
+  )
+}
+
+function stateUsernameActions(user: GroupedEngineUser, supportsHosts: boolean): UsernameAction[] {
   const actions: UsernameAction[] = []
   if (supportsHosts) {
     actions.push({

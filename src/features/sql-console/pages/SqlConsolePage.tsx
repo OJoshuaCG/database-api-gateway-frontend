@@ -19,10 +19,11 @@ import {
   HistoryIcon,
   PlayIcon,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerDatabases } from '@/features/servers/hooks/use-introspection'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
-import { QUERY_LIMITS, type QueryHistoryOut, type ServerOut } from '@/lib/contracts'
+import { CAPABILITIES, QUERY_LIMITS, type QueryHistoryOut, type ServerOut } from '@/lib/contracts'
 import { cn } from '@/lib/utils/cn'
 import { formatCountdown } from '@/lib/utils/countdown'
 import { engineLabel, formatInteger } from '@/lib/utils/format'
@@ -235,7 +236,18 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
   const busy = sqlConsole.isAnalyzing || sqlConsole.isExecuting
 
   const blockedByPolicy = path === 'blocked'
-  const canRun = sqlConsole.canAnalyze && !blockedByPolicy && !sqlConsole.systemDatabaseBlocked
+  // Analizar y ejecutar piden la MISMA capacidad (`POST .../query/preview` y `.../query`
+  // exigen `sql_console.execute`). Sin ella los dos botones van deshabilitados con el motivo al
+  // lado; el historial sigue disponible (`sql_console.history`).
+  const executeGuard = useCapabilityGuard(
+    CAPABILITIES.sqlConsoleExecute,
+    'ejecutar SQL en la consola',
+  )
+  const canRun =
+    sqlConsole.canAnalyze &&
+    !blockedByPolicy &&
+    !sqlConsole.systemDatabaseBlocked &&
+    executeGuard.allowed
 
   /**
    * Un solo gesto: si todavía no hay clasificación, clasifica y actúa según el nivel; si ya
@@ -402,6 +414,7 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
             <Button
               onClick={handleRun}
               disabled={!canRun}
+              aria-describedby={executeGuard.describedBy}
               isLoading={busy}
               variant={
                 preview?.danger === 'write' || preview?.danger === 'ddl' ? 'accent' : 'primary'
@@ -413,10 +426,12 @@ function ServerSqlConsole({ server, tab, onGoToConsole }: ServerSqlConsoleProps)
             <Button
               variant="ghost"
               onClick={() => void sqlConsole.analyze()}
-              disabled={!sqlConsole.canAnalyze}
+              disabled={!sqlConsole.canAnalyze || !executeGuard.allowed}
+              aria-describedby={executeGuard.describedBy}
             >
               Solo analizar
             </Button>
+            <CapabilityHint guard={executeGuard} className="basis-full" />
             {sqlConsole.isAnalyzing && (
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Spinner className="h-4 w-4" /> Clasificando la consulta…

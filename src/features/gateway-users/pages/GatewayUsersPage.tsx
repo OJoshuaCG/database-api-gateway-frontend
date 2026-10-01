@@ -16,8 +16,13 @@ import {
   PencilIcon,
   TabButton,
 } from '@/components/ui'
-import { useSession } from '@/features/auth'
-import { PAGINATION, isSyntheticGatewayEmail, type GatewayUserOut } from '@/lib/contracts'
+import { ForbiddenState, isAccessForbidden, useCapabilities, useSession } from '@/features/auth'
+import {
+  CAPABILITIES,
+  PAGINATION,
+  isSyntheticGatewayEmail,
+  type GatewayUserOut,
+} from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils'
 import { GatewayUserAccessModal } from '../components/GatewayUserAccessModal'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
@@ -68,6 +73,9 @@ export function GatewayUsersPage() {
   const { data, isLoading, isFetching, isError, error, refetch } = useGatewayUsers({ page, size })
   const reissue = useReissueGatewayUserInvite()
   const sessionUserId = admin?.id ?? null
+  // El listado y sus acciones van detrás de `gateway.admin`; «Roles y capacidades» no (es
+  // `self.read`), así que la pestaña sigue sirviendo a quien solo quiere saber qué otorga un rol.
+  const forbidden = !useCapabilities().can(CAPABILITIES.gatewayAdmin) || isAccessForbidden(error)
 
   const columns = useMemo<ColumnDef<GatewayUserOut>[]>(
     () => [
@@ -197,7 +205,7 @@ export function GatewayUsersPage() {
         title="Usuarios del gateway"
         description="Identidades que se autentican contra el gateway. No son los usuarios de los motores de base de datos."
         actions={
-          tab === 'users' ? (
+          tab === 'users' && !forbidden ? (
             <Button
               onClick={() => {
                 setEditing(undefined)
@@ -221,6 +229,8 @@ export function GatewayUsersPage() {
 
       {tab === 'roles' ? (
         <RolesCapabilitiesPanel />
+      ) : forbidden ? (
+        <ForbiddenState />
       ) : isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (
@@ -286,7 +296,17 @@ export function GatewayUsersPage() {
         />
       )}
 
-      {invite && <InviteDeliveryModal invite={invite} onDone={() => setInvite(null)} />}
+      {invite && (
+        <InviteDeliveryModal
+          invite={invite}
+          onDone={() => {
+            setInvite(null)
+            // El hook de reinvitar vive con el listado: sin `reset()` el token nuevo seguiría en
+            // su `data` hasta la próxima reinvitación.
+            reissue.reset()
+          }}
+        />
+      )}
     </div>
   )
 }

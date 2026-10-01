@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -51,7 +51,19 @@ export function AcceptInvitationPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
-  const tokenFromUrl = searchParams.get('token') ?? ''
+  /*
+   * El token se lee UNA vez y queda solo en memoria. Es una credencial: en la URL se filtra al
+   * historial del navegador, a la barra (que se comparte en pantalla), a capturas y al `Referer`
+   * de cualquier recurso que la página pida. Por eso, apenas se lee, se quita de la dirección con
+   * un `replace` —que reemplaza la entrada del historial en vez de sumar otra— y el formulario lo
+   * conserva en su estado.
+   */
+  const [tokenFromUrl] = useState(() => searchParams.get('token') ?? '')
+  const tokenInUrl = searchParams.has('token')
+  useEffect(() => {
+    if (!tokenInUrl) return
+    void navigate({ search: '' }, { replace: true })
+  }, [tokenInUrl, navigate])
 
   const {
     register,

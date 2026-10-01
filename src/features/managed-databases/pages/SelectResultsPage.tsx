@@ -12,6 +12,7 @@ import {
   FullPageSpinner,
   PageHeader,
 } from '@/components/ui'
+import { forbiddenCopy } from '@/features/auth'
 import { ApiError } from '@/lib/api/errors'
 import { formatDateTime } from '@/lib/utils'
 import type { MigrationSelectResultItem } from '@/lib/contracts'
@@ -44,18 +45,17 @@ export function SelectResultsPage() {
   }
   if (results.isError || !results.data) {
     /*
-     * Este endpoint subió de capacidad: ahora exige `blueprints.captures`, que solo tiene `owner`.
-     * Es un endpoint de LECTURA que un `operator` deja de poder llamar, y es deliberado — devuelve
-     * datos de negocio de la base gestionada, la única excepción del gateway a no almacenar datos,
-     * así que pertenece al eje de divulgación y no al de lectura.
+     * Este endpoint exige `blueprints.captures`, que solo tiene `owner`: es de LECTURA, pero
+     * devuelve datos de negocio de la base gestionada —la única excepción del gateway a no
+     * almacenar datos—, así que pertenece al eje de divulgación.
      *
-     * El 403 se explica en vez de dejar el error genérico: sin la explicación, alguien que ayer
-     * podía entrar acá y hoy no, concluye que la pantalla se rompió. Y NO se puede ocultar el
-     * enlace de origen según la capacidad, que sería lo ideal: `/auth/me` todavía no devuelve
-     * `capabilities` en este frontend, así que no hay dato con el que condicionarlo. Cuando llegue,
-     * el enlace se condiciona a `blueprints.captures` y esta rama pasa a ser la red de contención.
+     * El 403 se explica con el copy compartido (`forbiddenCopy`) más el porqué de ESTA pantalla,
+     * y sin «Reintentar»: el mismo pedido con el mismo acceso da el mismo 403. El enlace de
+     * origen ya se condiciona a la capacidad; esta rama es la red de contención para un enlace
+     * directo o una sesión cuyo acceso cambió.
      */
     if (results.error instanceof ApiError && results.error.status === 403) {
+      const copy = forbiddenCopy()
       return (
         <div className="flex flex-col gap-4">
           <Link
@@ -64,13 +64,20 @@ export function SelectResultsPage() {
           >
             ← Migraciones
           </Link>
-          <Callout tone="info" title="No tenés permiso para ver los resultados capturados">
+          <Callout
+            tone="info"
+            title={copy.title}
+            action={
+              <Link to={copy.actionTo} className="text-sm font-medium text-primary hover:underline">
+                {copy.actionLabel}
+              </Link>
+            }
+          >
             <p>
               Estas filas son datos de negocio de la base gestionada, así que leerlas exige la
-              capacidad <code className="font-mono">blueprints.captures</code>, reservada al rol{' '}
-              <code className="font-mono">owner</code>.
+              capacidad <code className="font-mono">blueprints.captures</code>.
             </p>
-            <p className="mt-1">{results.error.message}</p>
+            <p className="mt-1">{copy.body}</p>
           </Callout>
         </div>
       )

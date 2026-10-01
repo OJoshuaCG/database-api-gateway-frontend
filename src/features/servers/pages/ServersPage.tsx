@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
+  Callout,
   DataTable,
   EmptyState,
   ErrorState,
@@ -13,8 +14,9 @@ import {
   PencilIcon,
   TrashIcon,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { formatDateTime } from '@/lib/utils'
-import type { ServerOut } from '@/lib/contracts'
+import { CAPABILITIES, type ServerOut } from '@/lib/contracts'
 import { useServers } from '../hooks/use-servers'
 import { useTestConnection } from '../hooks/use-server-mutations'
 import { ServerStatusBadge } from '../components/ServerStatusBadge'
@@ -37,6 +39,14 @@ export function ServersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ServerOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useServers({ page, size })
+  /*
+   * Registrar, editar y dar de baja son `servers.admin`, que ni `owner` tiene (es de
+   * `security_officer`): editar un servidor puede re-apuntar un `server_id` a otro host. Sin ella,
+   * «Registrar servidor» va deshabilitado con el motivo y las filas esconden editar/eliminar, con
+   * un único aviso sobre la tabla. «Probar conexión» queda: es `servers.read`.
+   */
+  const adminGuard = useCapabilityGuard(CAPABILITIES.serversAdmin, 'registrar servidores')
+  const canAdmin = adminGuard.allowed
 
   const columns = useMemo<ColumnDef<ServerOut>[]>(
     () => [
@@ -89,28 +99,32 @@ export function ServersPage() {
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
             <TestConnectionButton serverId={row.original.id} />
-            <IconButton
-              label="Editar"
-              icon={<PencilIcon />}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setEditing(row.original)
-                setFormOpen(true)
-              }}
-            />
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget(row.original)}
-            />
+            {canAdmin && (
+              <>
+                <IconButton
+                  label="Editar"
+                  icon={<PencilIcon />}
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setEditing(row.original)
+                    setFormOpen(true)
+                  }}
+                />
+                <IconButton
+                  label="Eliminar"
+                  icon={<TrashIcon />}
+                  variant="danger-soft"
+                  size="icon-sm"
+                  onClick={() => setDeleteTarget(row.original)}
+                />
+              </>
+            )}
           </div>
         ),
       },
     ],
-    [],
+    [canAdmin],
   )
 
   return (
@@ -119,16 +133,29 @@ export function ServersPage() {
         title="Servidores"
         description="Inventario de servidores destino (MySQL, MariaDB, PostgreSQL)."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(undefined)
-              setFormOpen(true)
-            }}
-          >
-            Registrar servidor
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              disabled={!canAdmin}
+              aria-describedby={adminGuard.describedBy}
+              onClick={() => {
+                setEditing(undefined)
+                setFormOpen(true)
+              }}
+            >
+              Registrar servidor
+            </Button>
+            <CapabilityHint guard={adminGuard} className="max-w-xs text-right" />
+          </div>
         }
       />
+
+      {!canAdmin && (
+        <Callout tone="info" title="Podés ver los servidores, pero no cambiarlos">
+          <p>
+            Con tu acceso podés ver y probar estos servidores, pero no editarlos ni darlos de baja.
+          </p>
+        </Callout>
+      )}
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
@@ -146,14 +173,16 @@ export function ServersPage() {
                 title="Aún no hay servidores"
                 description="Registra tu primer servidor destino para empezar a gestionarlo."
                 action={
-                  <Button
-                    onClick={() => {
-                      setEditing(undefined)
-                      setFormOpen(true)
-                    }}
-                  >
-                    Registrar servidor
-                  </Button>
+                  canAdmin ? (
+                    <Button
+                      onClick={() => {
+                        setEditing(undefined)
+                        setFormOpen(true)
+                      }}
+                    >
+                      Registrar servidor
+                    </Button>
+                  ) : undefined
                 }
               />
             }

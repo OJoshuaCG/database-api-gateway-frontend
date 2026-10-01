@@ -83,7 +83,19 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
 5. **UI** — consume el hook en una página/componente y pinta `loading`/`empty`/`error`
    con `<Spinner/>`, `<EmptyState/>`, `<ErrorState onRetry={refetch}/>`.
 
-6. **Test** — añade al menos un test del hook con MSW (mira
+6. **Capacidad y 403** — mirá en el backend qué capacidad exige el endpoint (y si un parámetro
+   la sube: va a `CAPABILITY_ESCALATIONS`). En la UI:
+   - acción única en contexto → `useCapabilityGuard(cap, 'acción en infinitivo')`, botón
+     `disabled` + `aria-describedby={guard.describedBy}` y `<CapabilityHint guard={guard} />` al
+     lado (el motivo nunca va en un `title`);
+   - acción repetida en filas → se esconde de las filas y un único `Callout` sobre la tabla lo
+     explica;
+   - módulo entero que no sirve sin la capacidad → `capability` en su entrada del `Sidebar`;
+   - el 403 `access.forbidden` se trata igual: `isAccessForbidden(error)` → `ForbiddenState`
+     (página) o `forbiddenCopy()` (mensaje), **sin «Reintentar»**. Solo pasá `scope` a la guarda
+     en las rutas donde el backend aplica la capa 2 (`assert_scope`).
+
+7. **Test** — añade al menos un test del hook con MSW (mira
    `features/servers/hooks/use-servers.test.tsx` como plantilla).
 
 ## Receta: añadir una feature nueva

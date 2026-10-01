@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useCapabilities } from '@/features/auth'
+import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
@@ -201,6 +201,41 @@ export function ManagedDatabaseMigrationsContent({
   const db = useManagedDatabase(databaseId, true)
   const modelId = db.data?.model_id ?? 0
   const hasModel = modelId > 0
+
+  /*
+   * Aplicar, revertir, previsualizar y stampear piden `blueprints.apply` (solo `owner`). Aplicar
+   * y revertir son dos de las cuatro rutas donde el backend YA mira el rol EN ESTA base (capa 2),
+   * así que esa guarda resuelve el alcance; el stamp y el dry-run usan el mismo endpoint o la
+   * misma capacidad y se resuelven igual para no ofrecer acá lo que el apply va a rechazar.
+   */
+  const applyScope = {
+    scope: db.data
+      ? { serverId: db.data.server_id, environmentId: db.data.environment_id ?? null }
+      : undefined,
+  }
+  // Una guarda por control y no una compartida: cada una trae su `hintId`, y el motivo visible
+  // tiene que estar al lado de SU botón sin repetir el mismo `id` en la página.
+  const applyGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'aplicar versiones',
+    applyScope,
+  )
+  const dryRunGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'previsualizar ni aplicar versiones',
+    applyScope,
+  )
+  const versionGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'aplicar versiones',
+    applyScope,
+  )
+  const rollbackGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'revertir versiones',
+    applyScope,
+  )
+  const stampGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'marcar versiones (stamp)')
 
   const status = useMigrationStatus(databaseId, hasModel)
   const apply = useApplyMigrations(databaseId)
@@ -473,18 +508,28 @@ export function ManagedDatabaseMigrationsContent({
           actions={
             hasModel && !isArchived ? (
               <>
-                <Button
-                  variant="outline"
-                  onClick={openStamp}
-                  disabled={stamp.isPending || notProvisioned}
-                  title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
-                >
-                  Marcar versión (stamp)…
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    variant="outline"
+                    onClick={openStamp}
+                    disabled={stamp.isPending || notProvisioned || !stampGuard.allowed}
+                    aria-describedby={stampGuard.describedBy}
+                    title={notProvisioned ? NOT_PROVISIONED_HINT : undefined}
+                  >
+                    Marcar versión (stamp)…
+                  </Button>
+                  <CapabilityHint guard={stampGuard} className="max-w-xs text-right" />
+                </div>
                 <div className="flex flex-col items-end gap-1">
                   <Button
                     isLoading={apply.isPending}
-                    disabled={pendingCount === 0 || notProvisioned || hasOrphanAccounting}
+                    disabled={
+                      pendingCount === 0 ||
+                      notProvisioned ||
+                      hasOrphanAccounting ||
+                      !applyGuard.allowed
+                    }
+                    aria-describedby={applyGuard.describedBy}
                     title={
                       notProvisioned
                         ? NOT_PROVISIONED_HINT
@@ -512,6 +557,7 @@ export function ManagedDatabaseMigrationsContent({
                   {hasOrphanAccounting && (
                     <p className="max-w-xs text-right text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
                   )}
+                  <CapabilityHint guard={applyGuard} className="max-w-xs text-right" />
                 </div>
               </>
             ) : undefined
@@ -922,7 +968,13 @@ export function ManagedDatabaseMigrationsContent({
                             variant="outline"
                             size="sm"
                             isLoading={apply.isPending}
-                            disabled={pendingCount === 0 || notProvisioned || hasOrphanAccounting}
+                            disabled={
+                              pendingCount === 0 ||
+                              notProvisioned ||
+                              hasOrphanAccounting ||
+                              !dryRunGuard.allowed
+                            }
+                            aria-describedby={dryRunGuard.describedBy}
                             title={
                               notProvisioned
                                 ? NOT_PROVISIONED_HINT
@@ -937,6 +989,7 @@ export function ManagedDatabaseMigrationsContent({
                           {hasOrphanAccounting && (
                             <p className="basis-full text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
                           )}
+                          <CapabilityHint guard={dryRunGuard} className="basis-full" />
                           <Switch
                             checked={force}
                             onCheckedChange={setForce}
@@ -988,8 +1041,10 @@ export function ManagedDatabaseMigrationsContent({
                             disabled={
                               applyVersion.trim().length === 0 ||
                               notProvisioned ||
-                              hasOrphanAccounting
+                              hasOrphanAccounting ||
+                              !versionGuard.allowed
                             }
+                            aria-describedby={versionGuard.describedBy}
                             title={
                               notProvisioned
                                 ? NOT_PROVISIONED_HINT
@@ -1007,6 +1062,7 @@ export function ManagedDatabaseMigrationsContent({
                         {hasOrphanAccounting && (
                           <p className="text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
                         )}
+                        <CapabilityHint guard={versionGuard} />
                       </CardContent>
                     </Card>
                   </div>
@@ -1328,10 +1384,17 @@ export function ManagedDatabaseMigrationsContent({
                         {hasOrphanAccounting && (
                           <p className="text-xs text-error">{ORPHAN_BLOCK_REASON}</p>
                         )}
+                        <CapabilityHint guard={rollbackGuard} />
                         <Button
                           variant="danger"
                           size="sm"
-                          disabled={!canRollback || notProvisioned || hasOrphanAccounting}
+                          disabled={
+                            !canRollback ||
+                            notProvisioned ||
+                            hasOrphanAccounting ||
+                            !rollbackGuard.allowed
+                          }
+                          aria-describedby={rollbackGuard.describedBy}
                           title={
                             notProvisioned
                               ? NOT_PROVISIONED_HINT
@@ -1400,7 +1463,10 @@ export function ManagedDatabaseMigrationsContent({
             <Button
               onClick={confirmStamp}
               isLoading={stamp.isPending}
-              disabled={!stampValid || stampCooldown}
+              // El diálogo también se abre solo, precargado por `?stamp=`: sin la guarda acá,
+              // ese camino esquivaría la del botón de la cabecera.
+              disabled={!stampValid || stampCooldown || !stampGuard.allowed}
+              aria-describedby={stampGuard.describedBy}
             >
               Marcar versión
             </Button>

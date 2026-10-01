@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Badge, Button, Input, Spinner } from '@/components/ui'
+import { CapabilityHint, type CapabilityGuard } from '@/features/auth'
 import { ApiError } from '@/lib/api/errors'
 import type { CollationBlueprintVersionOut } from '@/lib/contracts'
 import { collationMessage } from '../messages'
@@ -23,6 +24,7 @@ export function BlueprintVersionCard({
   createError,
   result,
   onCreate,
+  guard,
 }: {
   /** `blueprint_version_id` del lote: si ya existe, no se ofrece crear otra. */
   alreadyCreatedId: number | null
@@ -30,6 +32,12 @@ export function BlueprintVersionCard({
   createError: unknown
   result: CollationBlueprintVersionOut | null
   onCreate: (name: string | null) => void
+  /**
+   * Guarda de capacidades, resuelta por la página: registrar la versión exige `collation.execute`
+   * Y `blueprints.write` (crea una versión de blueprint desde otro módulo, regla §6.6). Ausente =
+   * sin pista, se ofrece igual y decide el servidor.
+   */
+  guard?: CapabilityGuard
 }) {
   const [name, setName] = useState('')
 
@@ -138,11 +146,18 @@ export function BlueprintVersionCard({
         </div>
       )}
 
-      <div>
-        <Button onClick={() => onCreate(name.trim() || null)} disabled={isCreating}>
-          {isCreating && <Spinner />}
-          Crear la versión
-        </Button>
+      <div className="flex flex-col gap-1">
+        <div>
+          <Button
+            onClick={() => onCreate(name.trim() || null)}
+            disabled={isCreating || (guard ? !guard.allowed : false)}
+            aria-describedby={guard?.describedBy}
+          >
+            {isCreating && <Spinner />}
+            Crear la versión
+          </Button>
+        </div>
+        {guard && <CapabilityHint guard={guard} />}
       </div>
     </div>
   )

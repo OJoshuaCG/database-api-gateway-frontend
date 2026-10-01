@@ -1,11 +1,19 @@
 import { NavLink } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { useCapabilities } from '@/features/auth/hooks/use-capabilities'
+import { CAPABILITIES, type Capability } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
   to: string
   label: string
   icon: ReactNode
+  /**
+   * Capacidad sin la cual el módulo no sirve para nada: la entrada se esconde. Es una PISTA de
+   * navegación, no autorización — un enlace directo igual llega a la página, que muestra el 403
+   * compartido. Con un backend que no publica capacidades no se esconde nada (falla abierto).
+   */
+  capability?: Capability
 }
 
 const iconClass = 'h-5 w-5 shrink-0'
@@ -96,6 +104,10 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: '/sql-console',
     label: 'Consola SQL',
+    // La consola es para ejecutar. El historial (`sql_console.history`, que tienen los tres
+    // roles) sigue en `/sql-console?tab=history` por enlace directo, pero no justifica una
+    // entrada de menú que abre una pantalla cuyo control principal está deshabilitado.
+    capability: CAPABILITIES.sqlConsoleExecute,
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <rect x="3" y="4" width="18" height="16" rx="2" strokeWidth="1.6" />
@@ -139,6 +151,7 @@ const NAV_ITEMS: NavItem[] = [
     // poblaciones distintas. Sin el sufijo, las dos se leen igual y se entra a la equivocada.
     to: '/gateway-users',
     label: 'Usuarios del gateway',
+    capability: CAPABILITIES.gatewayAdmin,
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <circle cx="9" cy="8" r="3.2" strokeWidth="1.6" />
@@ -155,6 +168,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: '/api-tokens',
     label: 'Tokens de agente',
+    capability: CAPABILITIES.gatewayAdmin,
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <circle cx="7.5" cy="12" r="3.5" strokeWidth="1.6" />
@@ -196,6 +210,8 @@ const brandLogo = (
 )
 
 export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: SidebarProps) {
+  const { can } = useCapabilities()
+  const items = NAV_ITEMS.filter((item) => !item.capability || can(item.capability))
   return (
     <nav
       className={cn('flex h-full flex-col gap-1', collapsed ? 'p-3' : 'p-4')}
@@ -247,7 +263,7 @@ export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: Sid
           </>
         )}
       </div>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

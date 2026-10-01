@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/errors'
 import { AUTH_CSRF_ERROR_CODES, AUTH_SESSION_ERROR_CODES } from '@/lib/contracts'
-import { csrfErrorCopy, isCsrfError, sessionEndReason } from './messages'
+import {
+  csrfErrorCopy,
+  forbiddenCopy,
+  isAccessForbidden,
+  isCsrfError,
+  sessionEndReason,
+} from './messages'
 
 function error(status: number, code?: string) {
   return new ApiError({ status, message: 'mensaje del backend', code })
@@ -61,5 +67,22 @@ describe('csrfErrorCopy', () => {
     // `access.forbidden` es otra cosa: falta una capacidad, no el token del formulario.
     expect(csrfErrorCopy(error(403, 'access.forbidden'))).toBeNull()
     expect(isCsrfError(error(403, 'access.forbidden'))).toBe(false)
+  })
+})
+
+describe('forbiddenCopy / isAccessForbidden', () => {
+  it('el copy compartido manda a «Mi acceso» y habla con voseo', () => {
+    const copy = forbiddenCopy()
+    expect(copy.title).toBe('No tenés acceso a esta acción')
+    expect(copy.actionTo).toBe('/mi-cuenta')
+    expect(copy.body).toContain('Revisá «Mi acceso»')
+  })
+
+  it('solo reconoce el 403 `access.forbidden`, no el de CSRF ni uno sin código', () => {
+    expect(isAccessForbidden(error(403, 'access.forbidden'))).toBe(true)
+    expect(isAccessForbidden(error(403, AUTH_CSRF_ERROR_CODES.invalid))).toBe(false)
+    expect(isAccessForbidden(error(403))).toBe(false)
+    expect(isAccessForbidden(error(401, 'access.forbidden'))).toBe(false)
+    expect(isAccessForbidden(null)).toBe(false)
   })
 })

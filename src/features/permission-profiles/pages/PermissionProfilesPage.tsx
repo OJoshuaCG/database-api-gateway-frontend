@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
+  Callout,
   Combobox,
   ConfirmDialog,
   DataTable,
@@ -13,8 +14,9 @@ import {
   PencilIcon,
   TrashIcon,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { formatDateTime } from '@/lib/utils'
-import type { EngineType, PermissionProfileOut } from '@/lib/contracts'
+import { CAPABILITIES, type EngineType, type PermissionProfileOut } from '@/lib/contracts'
 import { usePermissionProfiles, useDeletePermissionProfile } from '../hooks/use-permission-profiles'
 import { PermissionProfileFormModal } from '../components/PermissionProfileFormModal'
 
@@ -39,6 +41,11 @@ export function PermissionProfilesPage() {
     engine: engine?.value,
   })
   const deleteProfile = useDeletePermissionProfile()
+  // Los perfiles son la plantilla de GRANTs: escribirlos es `catalogs.write` (de
+  // `security_officer`). Sin ella, «Crear perfil» va deshabilitado con el motivo y las filas
+  // esconden editar/eliminar, con un único aviso sobre la tabla.
+  const writeGuard = useCapabilityGuard(CAPABILITIES.catalogsWrite, 'crear perfiles de permisos')
+  const canWrite = writeGuard.allowed
 
   const columns = useMemo<ColumnDef<PermissionProfileOut>[]>(
     () => [
@@ -83,30 +90,31 @@ export function PermissionProfilesPage() {
         header: '',
         enableSorting: false,
         enableHiding: false,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <IconButton
-              label="Editar"
-              icon={<PencilIcon />}
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setEditing(row.original)
-                setFormOpen(true)
-              }}
-            />
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget(row.original)}
-            />
-          </div>
-        ),
+        cell: ({ row }) =>
+          canWrite ? (
+            <div className="flex justify-end gap-1">
+              <IconButton
+                label="Editar"
+                icon={<PencilIcon />}
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setEditing(row.original)
+                  setFormOpen(true)
+                }}
+              />
+              <IconButton
+                label="Eliminar"
+                icon={<TrashIcon />}
+                variant="danger-soft"
+                size="icon-sm"
+                onClick={() => setDeleteTarget(row.original)}
+              />
+            </div>
+          ) : null,
       },
     ],
-    [],
+    [canWrite],
   )
 
   return (
@@ -115,16 +123,27 @@ export function PermissionProfilesPage() {
         title="Perfiles de permisos"
         description="Plantillas de privilegios por motor, reutilizables al aplicar permisos a un usuario."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(undefined)
-              setFormOpen(true)
-            }}
-          >
-            Crear perfil
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              disabled={!canWrite}
+              aria-describedby={writeGuard.describedBy}
+              onClick={() => {
+                setEditing(undefined)
+                setFormOpen(true)
+              }}
+            >
+              Crear perfil
+            </Button>
+            <CapabilityHint guard={writeGuard} className="max-w-xs text-right" />
+          </div>
         }
       />
+
+      {!canWrite && (
+        <Callout tone="info" title="Podés ver los perfiles, pero no cambiarlos">
+          <p>Con tu acceso podés ver y usar estos perfiles, pero no editarlos ni eliminarlos.</p>
+        </Callout>
+      )}
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />

@@ -22,14 +22,20 @@ export function useApiTokens(params: QueryParams) {
 }
 
 /**
- * Emisión. **No hace `toast` del secreto ni lo cachea**: el bearer viaja una sola vez y su entrega
- * es una vista propia. El llamador recibe el `ApiTokenCreatedOut` y se encarga de entregarlo.
+ * Emisión. **No hace `toast` del secreto ni lo escribe en ninguna query**: el bearer viaja una sola
+ * vez y su entrega es una vista propia. El llamador recibe el `ApiTokenCreatedOut` y se encarga
+ * de entregarlo.
+ *
+ * Y `gcTime: 0` porque «no cachearlo» no alcanzaba: la mutación guarda su respuesta en el
+ * MutationCache aunque nadie la pida, y ahí el bearer en claro sobrevivía cinco minutos al
+ * formulario (que se monta condicionalmente y se desmonta al emitir).
  */
 export function useCreateApiToken() {
   const queryClient = useQueryClient()
   const toast = useToast()
   return useMutation({
     mutationFn: (body: ApiTokenCreate) => createApiToken(body),
+    gcTime: 0,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.apiTokens.all })
     },

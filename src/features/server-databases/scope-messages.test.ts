@@ -32,7 +32,7 @@ describe('engineDatabaseScopeMessage', () => {
       { source: 'crm', target: 'sys' },
     )
     expect(message).toContain("'sys' es una base de datos de sistema del motor")
-    expect(message).toContain('Revisa la base de destino.')
+    expect(message).toContain('Revisá la base de destino.')
   })
 
   it('prefiere el nombre de `context` (desarrollo) al del llamador', () => {
@@ -41,7 +41,7 @@ describe('engineDatabaseScopeMessage', () => {
       { source: 'otra' },
     )
     expect(message).toContain("'mysql'")
-    expect(message).toContain('Revisa la base de origen.')
+    expect(message).toContain('Revisá la base de origen.')
   })
 
   it('sin ningún nombre usa el `msg` del backend, que es el único que la nombra', () => {

@@ -12,8 +12,13 @@ import {
   Switch,
   XIcon,
 } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
-import type { PartialApplicationEntry, ReconcilePartialResult } from '@/lib/contracts'
+import {
+  CAPABILITIES,
+  type PartialApplicationEntry,
+  type ReconcilePartialResult,
+} from '@/lib/contracts'
 import { useReconcilePartial, useReconcilePreview } from '../hooks/use-db-migrations'
 
 interface ReconcilePartialSectionProps {
@@ -53,7 +58,10 @@ export function ReconcilePartialSection({ dbId, entry, onClose }: ReconcileParti
   // Reversos de mayor a menor `seq`: se deshace desde la última sentencia aplicada hacia atrás.
   const statements = plan ? [...plan.statements].sort((a, b) => b.seq - a.seq) : []
   const confirmed = confirmTyped.trim() === entry.version
-  const canExecute = confirmed && plan !== null && !cooldown && (!requiresForce || forceAck)
+  // `reconcile-partial` va detrás de `blueprints.apply`, como aplicar y revertir.
+  const guard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'deshacer una aplicación parcial')
+  const canExecute =
+    confirmed && plan !== null && !cooldown && (!requiresForce || forceAck) && guard.allowed
 
   const runExecute = () => {
     execute.mutate(
@@ -218,7 +226,8 @@ export function ReconcilePartialSection({ dbId, entry, onClose }: ReconcileParti
               </>
             ) : null}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <CapabilityHint guard={guard} className="basis-full text-right" />
               <Button variant="ghost" onClick={onClose} disabled={execute.isPending}>
                 Cancelar
               </Button>
@@ -227,6 +236,7 @@ export function ReconcilePartialSection({ dbId, entry, onClose }: ReconcileParti
                 onClick={runExecute}
                 isLoading={execute.isPending}
                 disabled={!canExecute}
+                aria-describedby={guard.describedBy}
               >
                 Deshacer {plan?.statements_to_undo ?? entry.statements_to_undo} sentencia(s) 🔌
               </Button>
