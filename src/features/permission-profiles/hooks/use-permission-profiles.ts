@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
 import type { PermissionProfileCreate, PermissionProfileUpdate } from '@/lib/contracts'
@@ -11,6 +10,7 @@ import {
   listPermissionProfiles,
   updatePermissionProfile,
 } from '../api/permission-profiles.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function usePermissionProfiles(params: QueryParams) {
   return useQuery({
@@ -36,7 +36,7 @@ export function useCreatePermissionProfile() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.permissionProfiles.all })
       toast.success('Perfil de permisos creado', `${profile.name} (${profile.engine})`)
     },
-    onError: (error) => toast.error('No se pudo crear el perfil', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo crear el perfil'),
   })
 }
 
@@ -50,7 +50,7 @@ export function useUpdatePermissionProfile(id: number) {
       queryClient.setQueryData(queryKeys.permissionProfiles.detail(id), profile)
       toast.success('Perfil actualizado', profile.name)
     },
-    onError: (error) => toast.error('No se pudo actualizar el perfil', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo actualizar el perfil'),
   })
 }
 
@@ -63,6 +63,6 @@ export function useDeletePermissionProfile() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.permissionProfiles.all })
       toast.success('Perfil eliminado')
     },
-    onError: (error) => toast.error('No se pudo eliminar el perfil', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo eliminar el perfil'),
   })
 }

@@ -1,5 +1,5 @@
-import { Badge, Button, Callout, Checkbox, Spinner } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { Badge, Button, Checkbox, Spinner } from '@/components/ui'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES, MAX_DATA_TABLES, type OnOversize } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { HIGH_ROW_ESTIMATE } from '../logic'
@@ -39,13 +39,17 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
       </div>
 
       {!seedGuard.allowed ? (
-        <Callout tone="info" title="Tu rol no incluye datos-semilla">
-          <p>{seedGuard.hint}</p>
-          <p className="mt-1">
-            El snapshot se puede crear igual: los datos-semilla son opcionales y solo aportan
-            catálogos pequeños. Continuá al paso siguiente.
+        <CapabilityCallout
+          canDo="crear el snapshot"
+          cannotDo="incluirle datos-semilla"
+          missing={seedGuard.missing}
+          unresolved={seedGuard.unresolved}
+        >
+          <p>
+            Los datos-semilla son opcionales y solo aportan catálogos pequeños. Continuá al paso
+            siguiente.
           </p>
-        </Callout>
+        </CapabilityCallout>
       ) : !statsLoaded ? (
         <div className="flex flex-col items-start gap-3 rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">

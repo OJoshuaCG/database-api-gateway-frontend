@@ -5,6 +5,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import type { ServerCreate, ServerUpdate } from '@/lib/contracts'
 import { createServer, deleteServer, testConnection, updateServer } from '../api/servers.api'
 import { serverRebindErrorMessage } from '../server-rebind'
+import { notifyMutationError } from '@/features/auth'
 
 export function useCreateServer() {
   const queryClient = useQueryClient()
@@ -15,7 +16,7 @@ export function useCreateServer() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
       toast.success('Servidor registrado', server.name)
     },
-    onError: (error) => toast.error('No se pudo registrar el servidor', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo registrar el servidor'),
   })
 }
 
@@ -31,7 +32,9 @@ export function useUpdateServer(id: number) {
     },
     onError: (error) => {
       const apiError = toApiError(error)
-      toast.error(
+      notifyMutationError(
+        toast,
+        error,
         'No se pudo actualizar el servidor',
         serverRebindErrorMessage(apiError) ?? apiError.message,
       )
@@ -48,7 +51,7 @@ export function useDeleteServer() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
       toast.success('Servidor eliminado del inventario')
     },
-    onError: (error) => toast.error('No se pudo eliminar el servidor', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo eliminar el servidor'),
   })
 }
 
@@ -65,6 +68,6 @@ export function useTestConnection(id: number) {
         info.ok ? `${info.dialect} ${info.server_version ?? ''}`.trim() : undefined,
       )
     },
-    onError: (error) => toast.error('No se pudo conectar al servidor', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo conectar al servidor'),
   })
 }

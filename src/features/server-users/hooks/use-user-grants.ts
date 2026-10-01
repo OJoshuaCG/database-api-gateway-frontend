@@ -22,6 +22,7 @@ import {
   listUserGrants,
   revokePrivileges,
 } from '../api/server-users.api'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * Permisos efectivos del usuario **adoptado** (introspección del motor) 🔌. Para una identidad
@@ -115,7 +116,12 @@ export function useGrantPrivilegesToDatabases(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudieron otorgar los privilegios', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudieron otorgar los privilegios',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 
@@ -144,7 +150,12 @@ export function useRevokePrivilegesFromDatabases(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudieron revocar los privilegios', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudieron revocar los privilegios',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 
@@ -175,7 +186,12 @@ export function useApplyProfile(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudo aplicar el perfil', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo aplicar el perfil',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 
@@ -244,6 +260,11 @@ export function useApplyProfileToDatabases(id: number, serverId: number) {
       }
     },
     onError: (error) =>
-      toast.error('No se pudo aplicar el perfil', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo aplicar el perfil',
+        engineUserErrorDescription(error),
+      ),
   })
 }

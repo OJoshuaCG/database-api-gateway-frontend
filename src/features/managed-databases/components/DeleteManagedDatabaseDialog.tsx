@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ConfirmDialog, Switch } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES, type ManagedDatabaseOut } from '@/lib/contracts'
 import { useDeleteManagedDatabase } from '../hooks/use-managed-databases'
 
@@ -36,7 +36,23 @@ export function DeleteManagedDatabaseDialog({
   // `drop_remote=true` SUBE el requisito (v23 §4): quitarla del inventario pide
   // `databases.write`, pero el DROP DATABASE sobre el motor pide `databases.drop`. Se
   // deshabilita el control en vez de dejar que el 403 llegue después de re-tipear el nombre.
-  const dropGuard = useCapabilityGuard(CAPABILITIES.databasesDrop, 'eliminar bases del motor')
+  //
+  // Las dos variantes son de las cuatro rutas con capa 2 (`assert_scope_for_database` en el
+  // `DELETE`): el backend vuelve a mirar el rol EN ESTA base, con `databases.drop` si va
+  // `drop_remote` y `databases.write` si no. Por eso las dos guardas llevan el destino.
+  const target = {
+    serverId: database.server_id,
+    environmentId: database.environment_id ?? null,
+  }
+  const dropGuard = useCapabilityGuard(CAPABILITIES.databasesDrop, 'eliminar bases del motor', {
+    scope: target,
+  })
+  const removeGuard = useCapabilityGuard(
+    CAPABILITIES.databasesWrite,
+    'quitar esta base del inventario',
+    { scope: target },
+  )
+  const activeGuard = dropRemote ? dropGuard : removeGuard
   const deleteDatabase = useDeleteManagedDatabase()
 
   return (
@@ -63,7 +79,11 @@ export function DeleteManagedDatabaseDialog({
       confirmWord={dropRemote ? database.name : undefined}
       confirmLabel={dropRemote ? 'Eliminar del motor 🔌' : 'Quitar del inventario'}
       isLoading={deleteDatabase.isPending}
+      confirmDisabled={!activeGuard.allowed}
+      // El motivo del DROP va en el `hint` del switch, que ya está deshabilitado sin la capacidad.
+      confirmDescribedBy={dropRemote ? undefined : removeGuard.describedBy}
     >
+      {!dropRemote && <CapabilityHint guard={removeGuard} />}
       {allowEngineDrop && (
         <Switch
           checked={dropRemote}

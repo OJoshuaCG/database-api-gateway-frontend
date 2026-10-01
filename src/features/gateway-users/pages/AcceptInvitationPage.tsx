@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, Callout, Card, Input } from '@/components/ui'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { toApiError } from '@/lib/api/errors'
@@ -12,7 +12,7 @@ import {
   GATEWAY_PASSWORD_MIN,
 } from '@/lib/contracts'
 import { useAcceptGatewayUserInvite } from '../hooks/use-gateway-users'
-import { extractInviteToken } from '../invite-link'
+import { extractInviteToken, inviteTokenFromLocation } from '../invite-link'
 import { acceptInviteErrorMessage } from '../messages'
 
 const schema = z
@@ -41,11 +41,11 @@ type Values = z.infer<typeof schema>
  * que esa persona conoce su contraseña, así que ninguna acción auditada a su nombre es repudiable.
  *
  * El `user_id` viaja DENTRO del token firmado, así que la pantalla no necesita ningún otro dato.
- * El token llega por la URL (`?token=`) o pegado a mano — el gateway no tiene sustrato de
- * notificación, así que alguien se lo pasó por un canal humano.
+ * El token llega por la URL (`#token=`, o `?token=` en un enlace viejo) o pegado a mano — el
+ * gateway no tiene sustrato de notificación, así que alguien se lo pasó por un canal humano.
  */
 export function AcceptInvitationPage() {
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const accept = useAcceptGatewayUserInvite()
   const [formError, setFormError] = useState<string | null>(null)
@@ -53,17 +53,22 @@ export function AcceptInvitationPage() {
 
   /*
    * El token se lee UNA vez y queda solo en memoria. Es una credencial: en la URL se filtra al
-   * historial del navegador, a la barra (que se comparte en pantalla), a capturas y al `Referer`
-   * de cualquier recurso que la página pida. Por eso, apenas se lee, se quita de la dirección con
-   * un `replace` —que reemplaza la entrada del historial en vez de sumar otra— y el formulario lo
-   * conserva en su estado.
+   * historial del navegador, a la barra (que se comparte en pantalla) y a capturas. El enlace
+   * actual lo trae en el fragmento (`#token=`), que nunca sale del navegador; uno viejo, en la
+   * query, que ya pasó por el access log y se manda en el `Referer` de lo que la página pida.
+   *
+   * Por eso se quita de la dirección con un `replace` del router, que reemplaza la entrada del
+   * historial en vez de sumar otra. Va en `useEffect` y con el `pathname` explícito: React Router
+   * ignora un `navigate()` disparado antes de que termine el montaje, y un `history.replaceState`
+   * directo limpiaría la barra pero dejaría el token en el estado del router. El formulario lo conserva en su estado; si la persona recarga, lo pierde (de ahí la
+   * pista bajo el campo).
    */
-  const [tokenFromUrl] = useState(() => searchParams.get('token') ?? '')
-  const tokenInUrl = searchParams.has('token')
+  const [tokenFromUrl] = useState(() => inviteTokenFromLocation(location) ?? '')
+  const tokenInUrl = inviteTokenFromLocation(location) !== null
   useEffect(() => {
     if (!tokenInUrl) return
-    void navigate({ search: '' }, { replace: true })
-  }, [tokenInUrl, navigate])
+    void navigate(location.pathname, { replace: true })
+  }, [tokenInUrl, navigate, location.pathname])
 
   const {
     register,
@@ -137,7 +142,7 @@ export function AcceptInvitationPage() {
               spellCheck={false}
               hint={
                 tokenFromUrl
-                  ? 'Lo tomamos del enlace que abriste.'
+                  ? 'Lo tomamos del enlace que abriste. Si recargás, volvé a abrir el enlace.'
                   : 'Pegá el token o el enlace completo que te dio quien administra los accesos.'
               }
               error={errors.token?.message}

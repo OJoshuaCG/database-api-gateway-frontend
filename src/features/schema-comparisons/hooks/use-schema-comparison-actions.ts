@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import { downloadBlob } from '@/lib/utils'
 import type {
@@ -18,6 +17,7 @@ import {
   exportSchemaComparisonSql,
   type ExportSchemaComparisonSqlParams,
 } from '../api/schema-comparisons.api'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * Mutaciones "propiedad del asistente" (mismo patrón documentado en
@@ -95,6 +95,6 @@ export function useExportSchemaComparisonSql(comparisonId: number) {
       downloadBlob(blob, filename)
       toast.success('Descarga iniciada', filename)
     },
-    onError: (error) => toast.error('No se pudo exportar el .sql', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo exportar el .sql'),
   })
 }

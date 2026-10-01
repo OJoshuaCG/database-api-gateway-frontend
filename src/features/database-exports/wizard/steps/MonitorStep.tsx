@@ -92,6 +92,8 @@ function Counter({ label, value }: { label: string; value: string }) {
 /** Lo que se ve mientras el job corre. */
 function RunningView({ wizard }: { wizard: DatabaseExportWizard }) {
   const [cancelOpen, setCancelOpen] = useState(false)
+  // `POST /database-exports/{id}/cancel` → `exports.execute`, igual que lanzarla.
+  const cancelGuard = useCapabilityGuard(CAPABILITIES.exportsExecute, 'cancelar la exportación')
   const job = wizard.job.data
   const progress = job?.progress ?? null
   const degradations = progress?.degradations ?? []
@@ -105,9 +107,17 @@ function RunningView({ wizard }: { wizard: DatabaseExportWizard }) {
           {progress ? ` · ${EXPORT_PHASE_LABELS[progress.phase]}` : null}
         </span>
         {/* El freno está visible durante TODA la corrida, no solo en una fase concreta. */}
-        <Button variant="danger-soft" onClick={() => setCancelOpen(true)}>
-          Cancelar exportación
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            variant="danger-soft"
+            onClick={() => setCancelOpen(true)}
+            disabled={!cancelGuard.allowed}
+            aria-describedby={cancelGuard.describedBy}
+          >
+            Cancelar exportación
+          </Button>
+          <CapabilityHint guard={cancelGuard} className="max-w-xs text-right" />
+        </div>
       </div>
 
       <PhaseBar phase={job?.phase ?? progress?.phase ?? null} />

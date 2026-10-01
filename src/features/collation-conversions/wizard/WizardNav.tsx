@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button, ChevronLeftIcon, IconButton } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import type { CollationConversionWizard } from './use-collation-conversion-wizard'
 
 /**
@@ -14,6 +16,9 @@ import type { CollationConversionWizard } from './use-collation-conversion-wizar
  * estado de apertura del modal entre dos componentes sin necesidad real.
  */
 export function WizardNav({ wizard }: { wizard: CollationConversionWizard }) {
+  // Crear el plan (`POST /collation-conversions`) pide `collation.execute`: el job convierte el
+  // collation de una base real. Sin ella el CTA va deshabilitado con el motivo al lado.
+  const guard = useCapabilityGuard(CAPABILITIES.collationExecute, 'convertir el collation')
   let left: ReactNode = null
   let right: ReactNode = null
 
@@ -40,7 +45,8 @@ export function WizardNav({ wizard }: { wizard: CollationConversionWizard }) {
             })
           }
           isLoading={wizard.createPlan.isPending}
-          disabled={disabled}
+          disabled={disabled || !guard.allowed}
+          aria-describedby={guard.describedBy}
         >
           {wizard.createPlan.isPending ? 'Creando plan…' : 'Crear plan →'}
         </Button>
@@ -70,7 +76,12 @@ export function WizardNav({ wizard }: { wizard: CollationConversionWizard }) {
   return (
     <div className="sticky bottom-0 z-10 mt-auto flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-elevated">
       {left ?? <span aria-hidden />}
-      <div className="flex flex-wrap justify-end gap-2">{right}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {wizard.step === 'plan' && (
+          <CapabilityHint guard={guard} className="max-w-xs text-right" />
+        )}
+        {right}
+      </div>
     </div>
   )
 }

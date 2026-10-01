@@ -1,6 +1,7 @@
 import { Badge, Button, ErrorState, Pagination, Spinner } from '@/components/ui'
 import { cn, isClipboardAvailable } from '@/lib/utils'
-import type { ClonePhase, CloneItemStatus } from '@/lib/contracts'
+import { CAPABILITIES, type ClonePhase, type CloneItemStatus } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { useCloneDiagnostics } from '../../hooks/use-clone-diagnostics'
 import type { DatabaseCloneWizard } from '../use-database-clone-wizard'
 
@@ -51,6 +52,8 @@ export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
   const { job, items } = wizard
   // Antes de los early returns: los hooks no pueden quedar detrás de un `return` condicional.
   const diagnostics = useCloneDiagnostics(job.data)
+  // `POST /database-clones/{id}/cancel` → `clones.execute`, igual que lanzarlo.
+  const cancelGuard = useCapabilityGuard(CAPABILITIES.clonesExecute, 'cancelar el clon')
 
   if (job.isLoading && !job.data) {
     return (
@@ -76,9 +79,18 @@ export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
             Clonando {data.source_database_name} → {data.target_database_name}
           </h2>
           {canCancel && (
-            <Button variant="outline" onClick={wizard.cancelClone} isLoading={wizard.cancel.isPending}>
-              Cancelar
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                variant="outline"
+                onClick={wizard.cancelClone}
+                isLoading={wizard.cancel.isPending}
+                disabled={!cancelGuard.allowed}
+                aria-describedby={cancelGuard.describedBy}
+              >
+                Cancelar
+              </Button>
+              <CapabilityHint guard={cancelGuard} className="max-w-xs text-right" />
+            </div>
           )}
         </div>
         <PhaseBar phase={data.phase} />

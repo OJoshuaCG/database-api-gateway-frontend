@@ -15,11 +15,11 @@ import {
   Spinner,
 } from '@/components/ui'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import { formatDateTime } from '@/lib/utils'
 import { listSessions, revokeOtherSessions } from '../api/auth.api'
 import { useSession } from '../hooks/use-session'
+import { notifyMutationError } from '../notify-mutation-error'
 
 /**
  * Sesiones vivas del propio usuario (api-reference-v23 §7.4).
@@ -51,7 +51,7 @@ export function SessionsPanel() {
       setConfirmOpen(false)
     },
     onError: (error) =>
-      toast.error('No se pudieron cerrar las demás sesiones', toApiError(error).message),
+      notifyMutationError(toast, error, 'No se pudieron cerrar las demás sesiones'),
   })
 
   const others = (sessions.data ?? []).filter((item) => !item.current).length

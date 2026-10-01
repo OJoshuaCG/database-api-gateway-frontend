@@ -14,6 +14,11 @@ export interface SwitchProps {
    * accesible para lectores de pantalla.
    */
   ariaLabel?: string
+  /**
+   * `id` de un texto que explica el control desde fuera (p. ej. el aviso de acceso de la pantalla
+   * cuando está deshabilitado). Se suma al `hint` propio en `aria-describedby`.
+   */
+  describedBy?: string
 }
 
 /** Interruptor accesible (role="switch") para flags booleanos como `provision`. */
@@ -25,6 +30,7 @@ export function Switch({
   disabled,
   id,
   ariaLabel,
+  describedBy,
 }: SwitchProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
@@ -38,7 +44,9 @@ export function Switch({
         id={fieldId}
         aria-checked={checked}
         aria-label={label ? undefined : ariaLabel}
-        aria-describedby={hint ? hintId : undefined}
+        aria-describedby={
+          [hint ? hintId : null, describedBy ?? null].filter(Boolean).join(' ') || undefined
+        }
         disabled={disabled}
         onClick={() => onCheckedChange(!checked)}
         className={cn(

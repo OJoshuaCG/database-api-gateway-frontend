@@ -1,10 +1,10 @@
 import { useMutation } from '@tanstack/react-query'
-import { toApiError } from '@/lib/api/errors'
 import type { CloneSummaryOut } from '@/lib/contracts'
 import { useToast } from '@/lib/toast/use-toast'
 import { downloadBlob, isClipboardAvailable, safeFilenamePart } from '@/lib/utils'
 import { fetchAllCloneItems } from '../api/database-clones.api'
 import { formatCloneDiagnosticsReport } from '../logic/diagnostics'
+import { notifyMutationError } from '@/features/auth'
 
 /** Cómo sale el diagnóstico: al portapapeles o a un archivo. */
 export type DiagnosticsDelivery = 'clipboard' | 'download'
@@ -52,6 +52,6 @@ export function useCloneDiagnostics(job: CloneSummaryOut | undefined) {
         delivery === 'clipboard' ? 'Diagnóstico copiado' : 'Diagnóstico descargado',
         'Incluye el reparto del tiempo por fase y todos los pasos. No lleva el texto de los errores del motor.',
       ),
-    onError: (error) => toast.error('No se pudo generar el diagnóstico', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo generar el diagnóstico'),
   })
 }

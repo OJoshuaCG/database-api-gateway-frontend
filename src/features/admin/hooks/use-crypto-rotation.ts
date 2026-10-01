@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import { rotateCrypto } from '../api/admin.api'
+import { notifyMutationError } from '@/features/auth'
 
 /** Rota la DEK y re-cifra todas las credenciales (§12). */
 export function useRotateCrypto() {
@@ -14,6 +14,6 @@ export function useRotateCrypto() {
         `${result.servers_reencrypted} servidor(es) y ${result.server_users_reencrypted} usuario(s) re-cifrados`,
       )
     },
-    onError: (error) => toast.error('No se pudo rotar la clave de cifrado', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo rotar la clave de cifrado'),
   })
 }

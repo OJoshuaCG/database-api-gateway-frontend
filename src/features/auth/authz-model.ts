@@ -366,6 +366,15 @@ export function summarizeLabels(labels: readonly string[], max = 3): string {
   return `${labels.slice(0, max).join(', ')} y ${labels.length - max} más`
 }
 
+/**
+ * «a», «a ni b», «a, b ni c»: la enumeración NEGATIVA de un aviso de acceso («Podés ver, pero no
+ * aplicar, revertir ni marcar versiones»). Vacío con una lista vacía.
+ */
+export function joinWithNi(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts.join('')
+  return `${parts.slice(0, -1).join(', ')} ni ${parts[parts.length - 1]}`
+}
+
 /** Nombre visible de cada módulo del catálogo. Uno desconocido se muestra con su clave. */
 export const MODULE_LABELS: Record<string, string> = {
   self: 'Cuenta propia',

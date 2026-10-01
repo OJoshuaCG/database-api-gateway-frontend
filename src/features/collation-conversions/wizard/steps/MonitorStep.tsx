@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { Badge, Button, ErrorState, Modal, Pagination, Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { CollationConversionItemOut, CollationJobPhase } from '@/lib/contracts'
+import {
+  CAPABILITIES,
+  type CollationConversionItemOut,
+  type CollationJobPhase,
+} from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import {
   isDropWithoutCreateFailure,
   isFailedGrantsSkip,
@@ -131,6 +136,8 @@ function ItemStatusCell({ item }: { item: CollationConversionItemOut }) {
 export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
   const { job, items, mode } = wizard
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  // `POST /collation-conversions/{id}/cancel` → `collation.execute`, igual que lanzarla.
+  const cancelGuard = useCapabilityGuard(CAPABILITIES.collationExecute, 'cancelar la conversión')
 
   if (job.isLoading && !job.data) {
     return (
@@ -195,9 +202,17 @@ export function MonitorStep({ wizard }: { wizard: CollationConversionWizard }) {
             Convirtiendo collation de {wizard.database}
           </h2>
           {canCancel && (
-            <Button variant="outline" onClick={() => setCancelModalOpen(true)}>
-              Cancelar conversión
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                variant="outline"
+                onClick={() => setCancelModalOpen(true)}
+                disabled={!cancelGuard.allowed}
+                aria-describedby={cancelGuard.describedBy}
+              >
+                Cancelar conversión
+              </Button>
+              <CapabilityHint guard={cancelGuard} className="max-w-xs text-right" />
+            </div>
           )}
         </div>
         <PhaseBar mode={mode} phase={data.phase} />

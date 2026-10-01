@@ -1,16 +1,16 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
-  Callout,
   DataTable,
   EmptyState,
   EnvironmentBadge,
   ErrorState,
   RefreshIcon,
 } from '@/components/ui'
-import type { ModelDatabaseStatus } from '@/lib/contracts'
+import { CAPABILITIES, type ModelDatabaseStatus } from '@/lib/contracts'
+import { CapabilityCallout, joinWithNi, useCapabilityGuard } from '@/features/auth'
 import { serverDatabasePath } from '@/lib/routes'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
@@ -63,6 +63,17 @@ export function ModelDatabasesStatusTable({
   const databases = useModelDatabases(modelId, true)
   const refresh = useRefreshModelDatabases(modelId)
   const updateModel = useUpdateDatabaseModel(modelId)
+  /*
+   * Lo que exige cada acción de esta tabla (`app/routes/v1/database_models.py` y
+   * `managed_databases.py`), todas por rol unión:
+   * - «Aplicar aquí 🔌» → `blueprints.apply`: la decide el padre, que no pasa `onApplyTo` y lo
+   *   explica en el aviso de su cabecera (también cubre «Aplicar…»);
+   * - «Releer del motor 🔌» (`POST /database-models/{id}/databases/refresh`) → `databases.write`;
+   * - «Declarar <collation>» (`PATCH /database-models/{id}`) → `blueprints.write`.
+   */
+  const refreshGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'releer las bases del motor')
+  const declareGuard = useCapabilityGuard(CAPABILITIES.blueprintsWrite, 'declarar el collation')
+  const accessNoticeId = useId()
 
   // Un blueprint sin collation declarado no puede avisar de un COLLATE forzado: la comparación
   // no tiene contra qué. Si sus BDs coinciden, ese valor ES el esquema de referencia de facto,
@@ -180,6 +191,8 @@ export function ModelDatabasesStatusTable({
           size="sm"
           className="ml-auto"
           isLoading={refresh.isPending}
+          disabled={!refreshGuard.allowed}
+          aria-describedby={refreshGuard.allowed ? undefined : accessNoticeId}
           onClick={() => refresh.mutate()}
         >
           <RefreshIcon /> Releer del motor 🔌
@@ -197,23 +210,30 @@ export function ModelDatabasesStatusTable({
             size="sm"
             className="ml-auto"
             isLoading={updateModel.isPending}
+            disabled={!declareGuard.allowed}
+            aria-describedby={declareGuard.allowed ? undefined : accessNoticeId}
             onClick={() => updateModel.mutate({ collation: adoptable })}
           >
             Declarar {adoptable}
           </Button>
         </div>
       )}
-      {/* Una acción repetida en cada fila que el usuario no puede usar no se pinta deshabilitada
-          N veces: se esconde y se explica una sola vez, acá. */}
-      {!onApplyTo && (
-        <Callout tone="info" title="Podés ver el estado, pero no aplicar versiones">
-          <p>
-            Con tu acceso podés ver en qué versión está cada base, pero no aplicarles versiones
-            (requiere <code className="font-mono">blueprints.apply</code>). Pedíselo a quien
-            administra los accesos.
-          </p>
-        </Callout>
-      )}
+      {/* Un solo aviso para los dos botones de la tabla, que lo referencian en vez de llevar
+          cada uno su motivo. «Aplicar aquí» (escondido de las filas) lo explica la cabecera. */}
+      <CapabilityCallout
+        id={accessNoticeId}
+        canDo="ver en qué versión está cada base"
+        cannotDo={joinWithNi(
+          [
+            !refreshGuard.allowed && 'releerlas del motor',
+            adoptable && !declareGuard.allowed && 'declarar su collation en el blueprint',
+          ].filter((part): part is string => Boolean(part)),
+        )}
+        missing={[
+          ...refreshGuard.missing,
+          ...(adoptable ? declareGuard.missing : []),
+        ]}
+      />
       <DataTable
         data={databases.data ?? []}
         columns={columns}

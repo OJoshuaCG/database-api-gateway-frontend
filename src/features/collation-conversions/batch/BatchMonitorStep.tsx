@@ -1,4 +1,5 @@
 import { Badge, Button, ErrorState, Spinner, type BadgeTone } from '@/components/ui'
+import { CapabilityHint, type CapabilityGuard } from '@/features/auth'
 import type {
   CollationBatchStatus,
   CollationBatchStatusOut,
@@ -40,6 +41,7 @@ export function BatchMonitorStep({
   error,
   isCanceling,
   onCancel,
+  cancelGuard,
   versionSlot,
 }: {
   data: CollationBatchStatusOut | undefined
@@ -47,6 +49,8 @@ export function BatchMonitorStep({
   error: unknown
   isCanceling: boolean
   onCancel: () => void
+  /** `collation.execute`, también para cancelar (`POST .../{batch_id}/cancel`). */
+  cancelGuard?: CapabilityGuard
   /** La tarjeta de versión de contabilidad; solo se pinta cuando el lote terminó bien. */
   versionSlot: React.ReactNode
 }) {
@@ -108,10 +112,16 @@ export function BatchMonitorStep({
 
         {canCancel && (
           <div>
-            <Button variant="outline" onClick={onCancel} disabled={isCanceling}>
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              disabled={isCanceling || (cancelGuard ? !cancelGuard.allowed : false)}
+              aria-describedby={cancelGuard?.describedBy}
+            >
               {isCanceling && <Spinner />}
               Cancelar lo que no arrancó
             </Button>
+            {cancelGuard && <CapabilityHint guard={cancelGuard} className="mt-1" />}
             <p className="mt-1 text-xs text-muted-foreground">
               Las bases en cola no llegan a tocar el motor. La que está convirtiendo termina su
               paso y corta en el próximo punto seguro: matar un <code>ALTER TABLE</code> a mitad

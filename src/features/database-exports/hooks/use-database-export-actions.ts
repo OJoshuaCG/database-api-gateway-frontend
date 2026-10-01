@@ -17,6 +17,7 @@ import {
   type ExportSpecPayload,
 } from '../api/database-exports.api'
 import { downloadErrorCopy } from '../messages'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * Mutaciones "propiedad del asistente" (mismo patrón que `database-clones` y
@@ -77,7 +78,7 @@ export function useCancelDatabaseExport(jobId: number) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseExports.detail(jobId) })
       toast.success('Cancelación solicitada', 'El worker cortará en el próximo punto seguro.')
     },
-    onError: (error) => toast.error('No se pudo cancelar', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo cancelar'),
   })
 }
 
@@ -123,7 +124,12 @@ export function useDownloadExportArtifact(jobId: number) {
       )
     },
     onError: (error) =>
-      toast.error('No se pudo descargar el artefacto', downloadErrorCopy(toApiError(error))),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo descargar el artefacto',
+        downloadErrorCopy(toApiError(error)),
+      ),
   })
 }
 
@@ -164,6 +170,6 @@ export function useCopyExportContent(jobId: number) {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo obtener el contenido', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo obtener el contenido'),
   })
 }

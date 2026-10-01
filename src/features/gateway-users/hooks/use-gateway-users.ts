@@ -19,6 +19,7 @@ import {
   updateGatewayUser,
 } from '../api/gateway-users.api'
 import { gatewayUserErrorMessage } from '../messages'
+import { notifyMutationError } from '@/features/auth'
 
 /** Título + detalle de un error, con el copy del módulo cuando lo reconoce. */
 function errorToast(title: string, error: unknown): [string, string] {
@@ -61,7 +62,8 @@ export function useCreateGatewayUser() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
     },
-    onError: (error) => toast.error(...errorToast('No se pudo crear el usuario', error)),
+    onError: (error) =>
+      notifyMutationError(toast, error, ...errorToast('No se pudo crear el usuario', error)),
   })
 }
 
@@ -80,7 +82,8 @@ export function useUpdateGatewayUser(id: number) {
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
       toast.success('Usuario actualizado', user.username)
     },
-    onError: (error) => toast.error(...errorToast('No se pudo actualizar el usuario', error)),
+    onError: (error) =>
+      notifyMutationError(toast, error, ...errorToast('No se pudo actualizar el usuario', error)),
   })
 }
 
@@ -99,7 +102,12 @@ export function useReplaceGatewayUserAccess(id: number) {
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
       toast.success('Accesos actualizados', `Se cerraron las sesiones de ${user.username}.`)
     },
-    onError: (error) => toast.error(...errorToast('No se pudieron actualizar los accesos', error)),
+    onError: (error) =>
+      notifyMutationError(
+        toast,
+        error,
+        ...errorToast('No se pudieron actualizar los accesos', error),
+      ),
   })
 }
 
@@ -124,7 +132,7 @@ export function useReissueGatewayUserInvite() {
     },
     onError: (error) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
-      toast.error(...errorToast('No se pudo reemitir la invitación', error))
+      notifyMutationError(toast, error, ...errorToast('No se pudo reemitir la invitación', error))
     },
   })
 }

@@ -16,6 +16,7 @@ import {
 import { formatDateTime } from '@/lib/utils'
 import { serverDatabasePath, serverUserPath } from '@/lib/routes'
 import {
+  CAPABILITIES,
   provisionStatusSchema,
   type ManagedDatabaseOut,
   type ProvisionStatus,
@@ -32,6 +33,7 @@ import {
   useEnvironmentOptions,
 } from '@/features/environments'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { useManagedDatabases } from '../hooks/use-managed-databases'
 import { useOwnerDirectory } from '../hooks/use-owner-directory'
 import { resolveDatabaseState } from '../database-actions'
@@ -84,6 +86,8 @@ const UNASSIGNED_ENVIRONMENT: EnvironmentFilterOption = {
 
 export function ManagedDatabasesPage() {
   const navigate = useNavigate()
+  // `POST /managed-databases` → `databases.write`, sin capa 2 (la base todavía no existe).
+  const createGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'crear bases de datos')
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [serverFilter, setServerFilter] = useState<ServerOut | null>(null)
@@ -268,7 +272,16 @@ export function ManagedDatabasesPage() {
               <CompareIcon />
               Comparar esquemas
             </Button>
-            <Button onClick={() => setCreateOpen(true)}>Crear base de datos</Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                onClick={() => setCreateOpen(true)}
+                disabled={!createGuard.allowed}
+                aria-describedby={createGuard.describedBy}
+              >
+                Crear base de datos
+              </Button>
+              <CapabilityHint guard={createGuard} className="max-w-xs text-right" />
+            </div>
           </>
         }
       />

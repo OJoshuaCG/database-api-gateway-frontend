@@ -15,6 +15,7 @@ import {
   unlinkProjectBlueprint,
   updateProject,
 } from '../api/projects.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function useProjects(params: QueryParams) {
   return useQuery({
@@ -112,7 +113,7 @@ export function useDeleteProject() {
         toast.success('Este proyecto ya no existía.')
         return
       }
-      toast.error('No se pudo eliminar el proyecto', apiError.message)
+      notifyMutationError(toast, error, 'No se pudo eliminar el proyecto', apiError.message)
     },
   })
 }
@@ -154,7 +155,12 @@ export function useUnlinkProjectBlueprint(projectId: number) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
         return
       }
-      toast.error('No se pudo quitar el blueprint del proyecto', apiError.message)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo quitar el blueprint del proyecto',
+        apiError.message,
+      )
     },
   })
 }

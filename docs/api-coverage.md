@@ -50,16 +50,18 @@ inicial, toda fila de auditoría atribuida a esa persona sería repudiable. La p
 un token de invitación que **viaja una sola vez** y que el gateway **no envía por ningún canal**
 (no hay SMTP, ni webhook, ni cola).
 
-Lo que se entrega es el **enlace completo**, `<origen del frontend>/invitacion?token=<token>`,
+Lo que se entrega es el **enlace completo**, `<origen del frontend>/invitacion#token=<token>`,
 armado con el origen de quien administra (`invite-link.ts`): con el token solo, quien lo recibe no
-sabe dónde usarlo. La pantalla de aceptación acepta en el campo tanto el token como el enlace
-entero pegado.
+sabe dónde usarlo. El token va en el **fragmento**, que el navegador nunca manda al servidor: así
+no queda en el access log de nginx ni en el `Referer` de los assets. Los enlaces viejos con
+`?token=` siguen valiendo, y la página quita los dos de la dirección antes de pintar. La pantalla
+de aceptación acepta en el campo tanto el token como el enlace entero pegado.
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | v23.1 §2 | `GET /gateway-users` | ✅ | `GatewayUsersPage` (`/gateway-users`, pestaña «Usuarios»). Único del módulo **paginado**; los demás usan el `success()` plano. La columna «Rol» muestra el rol base, las capacidades globales y cuántos permisos por alcance tiene cada persona |
 | v23.1 §2 | `POST /gateway-users` | ✅ | `GatewayUserFormModal` (alta) → entrega el enlace de invitación en `OneTimeSecretPanel`, detrás de una casilla explícita. Sin campos de contraseña, por diseño. El 409 `access.grant_ceiling_exceeded` (rol base por encima del de quien crea) se marca en el selector de rol con el `msg` del backend, que dice qué se excedió |
-| v23.1 §2.4 | `POST /gateway-users/invite/accept` | ✅ | `AcceptInvitationPage` (`/invitacion?token=…`) — **ruta pública**, fuera de `ProtectedRoute`: quien la usa todavía no puede iniciar sesión |
+| v23.1 §2.4 | `POST /gateway-users/invite/accept` | ✅ | `AcceptInvitationPage` (`/invitacion#token=…`) — **ruta pública**, fuera de `ProtectedRoute`: quien la usa todavía no puede iniciar sesión |
 | v23.1 §2 | `GET /gateway-users/{id}` | 🧩 | Existe en `api/`; el listado ya trae `GatewayUserOut` completo, así que ninguna pantalla necesita el detalle todavía |
 | v23.1 §2.5 | `PATCH /gateway-users/{id}` | ✅ | `GatewayUserFormModal` (edición). `username` va deshabilitado **con el motivo a la vista**: es la identidad que audita `audit_log`, guardada sin FK. Sobre la **propia cuenta** (se compara `id` con el de `/auth/me`) el rol y «Cuenta activa» van deshabilitados con el motivo a la vista: el backend responde 409 `access.self_modification_forbidden`. El 409 `access.grant_ceiling_exceeded` se muestra con el `msg` del backend |
 | v23.1 §2.6 | `PUT /gateway-users/{id}/access` | ✅ | `GatewayUserAccessModal` → «Accesos». ⚠️ **Reemplazo TOTAL**: el contrato exige los dos campos justamente para que un formulario no pueda mandar un delta y revocar la otra mitad con un 200. En la fila de la **propia cuenta** «Accesos» va deshabilitado con la nota «Tu propio acceso lo cambia otra persona…» (409 `access.self_modification_forbidden`); si el modal se abriera igual, queda en solo lectura. `access.grant_ceiling_exceeded` (otorgar un rol o una capacidad global que uno no tiene) llega como toast con el detalle del backend, pero la UI lo evita antes: los roles por alcance por encima del rol unión de quien edita no se ofrecen y las globales que no tiene van deshabilitadas con el motivo a la vista (solo se mide lo que se AGREGA, igual que el backend). La sección «Acceso efectivo al guardar» (`EffectiveAccessPanel`) calcula lo que va a quedar con el mismo criterio que `app/core/scope.py` y dice dónde se aplica hoy |

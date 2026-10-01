@@ -64,6 +64,9 @@ export function BlueprintCollationBatchPage() {
     [CAPABILITIES.collationExecute, CAPABILITY_ESCALATIONS.collationBlueprintVersion],
     'registrar el lote como versión del blueprint',
   )
+  // Planificar, ejecutar y cancelar el lote: `collation.execute` (`collation_batches.py`).
+  const executeGuard = useCapabilityGuard(CAPABILITIES.collationExecute, 'convertir el collation')
+  const cancelGuard = useCapabilityGuard(CAPABILITIES.collationExecute, 'cancelar el lote')
   const executeMutation = useExecuteCollationBatch(modelId, batchId)
   const cancelMutation = useCancelCollationBatch(modelId, batchId)
   const versionMutation = useCreateCollationBlueprintVersion(modelId, batchId)
@@ -158,6 +161,7 @@ export function BlueprintCollationBatchPage() {
           error={batch.error}
           isCanceling={cancelMutation.isPending}
           onCancel={() => cancelMutation.mutate()}
+          cancelGuard={cancelGuard}
           versionSlot={
             <BlueprintVersionCard
               alreadyCreatedId={batch.data?.batch.blueprint_version_id ?? null}
@@ -180,6 +184,7 @@ export function BlueprintCollationBatchPage() {
           executeError={executeMutation.error}
           onExecute={handleExecute}
           onReplan={resetToPlan}
+          guard={executeGuard}
         />
       )}
 
@@ -189,6 +194,7 @@ export function BlueprintCollationBatchPage() {
           isPlanning={planMutation.isPending}
           planError={planMutation.error}
           onPlan={handlePlan}
+          guard={executeGuard}
         />
       )}
     </div>

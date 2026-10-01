@@ -4,6 +4,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type { ServerUserFullCreate } from '@/lib/contracts'
 import { provisionServerUser } from '../api/server-users.api'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * Crea + aprovisiona el usuario + aplica `initial_grants` en una sola llamada 🔌 (§7).
@@ -44,6 +45,11 @@ export function useProvisionServerUser() {
       }
     },
     onError: (error) =>
-      toast.error('No se pudo aprovisionar el usuario', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo aprovisionar el usuario',
+        engineUserErrorDescription(error),
+      ),
   })
 }

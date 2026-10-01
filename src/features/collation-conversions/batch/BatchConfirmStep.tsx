@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Badge, Button, Input, Spinner, Switch } from '@/components/ui'
 import { ApiError } from '@/lib/api/errors'
 import type { CollationBatchExecuteIn, CollationBatchPlanOut } from '@/lib/contracts'
+import { CapabilityHint, type CapabilityGuard } from '@/features/auth'
 import {
   BATCH_ITEM_LABEL,
   BATCH_ITEM_TONE,
@@ -30,12 +31,15 @@ export function BatchConfirmStep({
   executeError,
   onExecute,
   onReplan,
+  guard,
 }: {
   plan: CollationBatchPlanOut
   isExecuting: boolean
   executeError: unknown
   onExecute: (body: CollationBatchExecuteIn) => void
   onReplan: () => void
+  /** `collation.execute` (`POST .../collation-conversions/{batch_id}/execute`). */
+  guard?: CapabilityGuard
 }) {
   const [slug, setSlug] = useState('')
   const [confirmations, setConfirmations] = useState<Record<string, string>>({})
@@ -202,7 +206,8 @@ export function BatchConfirmStep({
               force,
             })
           }
-          disabled={!canExecute}
+          disabled={!canExecute || (guard ? !guard.allowed : false)}
+          aria-describedby={guard?.describedBy}
         >
           {isExecuting && <Spinner />}
           Convertir {plan.databases.length} base{plan.databases.length === 1 ? '' : 's'} 🔌
@@ -210,6 +215,7 @@ export function BatchConfirmStep({
         <Button variant="ghost" onClick={onReplan} disabled={isExecuting}>
           Volver a planificar
         </Button>
+        {guard && <CapabilityHint guard={guard} className="basis-full" />}
       </div>
     </div>
   )

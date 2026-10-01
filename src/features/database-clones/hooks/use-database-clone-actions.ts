@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { CloneCreateIn, CloneExecuteIn, CloneSummaryOut } from '@/lib/contracts'
 import { cancelDatabaseClone, createDatabaseClone, executeDatabaseClone } from '../api/database-clones.api'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * Mutaciones "propiedad del asistente" (mismo patrón que schema-comparisons): el error NO se
@@ -44,6 +44,6 @@ export function useCancelDatabaseClone(jobId: number) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseClones.detail(jobId) })
       toast.success('Cancelación solicitada', 'El worker cortará en el próximo punto seguro.')
     },
-    onError: (error) => toast.error('No se pudo cancelar', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo cancelar'),
   })
 }

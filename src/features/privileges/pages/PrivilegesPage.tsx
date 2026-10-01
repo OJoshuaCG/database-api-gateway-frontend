@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
-  Callout,
   Combobox,
   DataTable,
   EmptyState,
@@ -10,7 +9,7 @@ import {
   PageHeader,
   Switch,
 } from '@/components/ui'
-import { useCapabilities } from '@/features/auth'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES, engineTypeSchema, type EngineType, type PrivilegeOut } from '@/lib/contracts'
 import { usePrivileges, useTogglePrivilege } from '../hooks/use-privileges'
 
@@ -36,7 +35,8 @@ export function PrivilegesPage() {
   // Marcar un privilegio como controlado es `catalogs.write` (de `security_officer`): es dato de
   // política, decide qué se puede otorgar. Sin ella el interruptor de cada fila se reemplaza por
   // el estado en texto y un único aviso sobre la tabla lo explica.
-  const canWrite = useCapabilities().can(CAPABILITIES.catalogsWrite)
+  const writeGuard = useCapabilityGuard(CAPABILITIES.catalogsWrite, 'cambiar el catálogo')
+  const canWrite = writeGuard.allowed
 
   const columns = useMemo<ColumnDef<PrivilegeOut>[]>(
     () => [
@@ -108,14 +108,11 @@ export function PrivilegesPage() {
         description="Catálogo de privilegios que la plataforma controla por motor. No toca ningún motor."
       />
 
-      {!canWrite && (
-        <Callout tone="info" title="Podés ver el catálogo, pero no cambiarlo">
-          <p>
-            Con tu acceso podés ver qué privilegios controla la plataforma, pero no marcarlos ni
-            desmarcarlos (requiere <code className="font-mono">catalogs.write</code>).
-          </p>
-        </Callout>
-      )}
+      <CapabilityCallout
+        canDo="ver qué privilegios controla la plataforma"
+        cannotDo="marcarlos ni desmarcarlos"
+        missing={writeGuard.missing}
+      />
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />

@@ -6,6 +6,7 @@ import type { QueryParams } from '@/lib/api/client'
 import { API_TOKEN_ERROR_CODES, type ApiTokenCreate } from '@/lib/contracts'
 import { createApiToken, listApiTokens, revokeApiToken } from '../api/api-tokens.api'
 import { apiTokenErrorMessage } from '../messages'
+import { notifyMutationError } from '@/features/auth'
 
 /** Título + detalle de un error, con el copy del módulo cuando lo reconoce. */
 function errorToast(title: string, error: unknown): [string, string] {
@@ -39,7 +40,8 @@ export function useCreateApiToken() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.apiTokens.all })
     },
-    onError: (error) => toast.error(...errorToast('No se pudo emitir el token', error)),
+    onError: (error) =>
+      notifyMutationError(toast, error, ...errorToast('No se pudo emitir el token', error)),
   })
 }
 
@@ -66,7 +68,7 @@ export function useRevokeApiToken() {
         toast.success('Este token ya estaba revocado', 'No fue esta acción la que cortó el acceso.')
         return
       }
-      toast.error(...errorToast('No se pudo revocar el token', error))
+      notifyMutationError(toast, error, ...errorToast('No se pudo revocar el token', error))
     },
   })
 }

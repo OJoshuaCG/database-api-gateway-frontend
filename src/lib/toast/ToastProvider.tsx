@@ -45,6 +45,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         variant: input.variant ?? 'info',
         title: input.title,
         description: input.description,
+        action: input.action,
       }
       setToasts((prev) => [...prev, toast])
       const duration = input.duration ?? DEFAULT_DURATION
@@ -97,6 +98,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <p className="text-sm font-semibold">{toast.title}</p>
               {toast.description && (
                 <p className="mt-0.5 text-sm text-muted-foreground">{toast.description}</p>
+              )}
+              {toast.action && (
+                <a
+                  href={toast.action.href}
+                  className="mt-1.5 inline-flex text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {toast.action.label}
+                </a>
               )}
             </div>
             <button

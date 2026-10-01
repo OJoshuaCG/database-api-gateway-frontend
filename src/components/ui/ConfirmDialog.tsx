@@ -14,6 +14,13 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   tone?: 'danger' | 'primary'
   isLoading?: boolean
+  /**
+   * Deshabilita la confirmación por algo que no es la palabra (p. ej. el acceso). El motivo va
+   * visible en `children` y el botón lo referencia con `confirmDescribedBy`.
+   */
+  confirmDisabled?: boolean
+  /** `id` del motivo visible de `confirmDisabled`, para el `aria-describedby` del botón. */
+  confirmDescribedBy?: string
   children?: ReactNode
 }
 
@@ -32,6 +39,8 @@ export function ConfirmDialog({
   confirmLabel = 'Confirmar',
   tone = 'danger',
   isLoading = false,
+  confirmDisabled = false,
+  confirmDescribedBy,
   children,
 }: ConfirmDialogProps) {
   const [typed, setTyped] = useState('')
@@ -54,7 +63,8 @@ export function ConfirmDialog({
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
-            disabled={!canConfirm}
+            disabled={!canConfirm || confirmDisabled}
+            aria-describedby={confirmDisabled ? confirmDescribedBy : undefined}
             isLoading={isLoading}
           >
             {confirmLabel}

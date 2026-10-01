@@ -22,6 +22,7 @@ import {
 } from '../api/db-migrations.api'
 import { getSelectResults, purgeSelectResults } from '../api/select-results.api'
 import { handleUncertainRun } from '../uncertain-run'
+import { notifyMutationError } from '@/features/auth'
 
 export function useMigrationStatus(dbId: number, enabled: boolean) {
   return useQuery({
@@ -102,7 +103,7 @@ export function useApplyMigrations(dbId: number) {
       ) {
         return
       }
-      toast.error('No se pudieron aplicar las migraciones', toApiError(error).message)
+      notifyMutationError(toast, error, 'No se pudieron aplicar las migraciones')
     },
   })
 }
@@ -144,7 +145,7 @@ export function useRollbackMigration(dbId: number) {
       ) {
         return
       }
-      toast.error('No se pudo revertir la migración', toApiError(error).message)
+      notifyMutationError(toast, error, 'No se pudo revertir la migración')
     },
   })
 }
@@ -172,7 +173,7 @@ export function useStampMigration(dbId: number) {
         })`,
       )
     },
-    onError: (error) => toast.error('No se pudo marcar la versión', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo marcar la versión'),
   })
 }
 
@@ -257,7 +258,7 @@ export function useReconcilePartial(dbId: number) {
       ) {
         return
       }
-      toast.error('No se pudo reconciliar', toApiError(error).message)
+      notifyMutationError(toast, error, 'No se pudo reconciliar')
     },
   })
 }
@@ -291,6 +292,6 @@ export function usePurgeSelectResults(dbId: number, version: string) {
       })
       toast.success('Resultados capturados eliminados')
     },
-    onError: (error) => toast.error('No se pudieron purgar los resultados', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudieron purgar los resultados'),
   })
 }

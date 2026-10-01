@@ -3,7 +3,6 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { invalidateDatabaseViews } from '@/features/managed-databases/invalidate'
 import { handleUncertainRun } from '@/features/managed-databases/uncertain-run'
 import { classifyItem } from '@/features/environments'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
 import type {
@@ -31,6 +30,7 @@ import {
   canRunMigrationSearch,
   type MigrationSearchFilters,
 } from '../migration-search'
+import { notifyMutationError } from '@/features/auth'
 
 export function useModelMigrations(modelId: number, params: QueryParams, enabled = true) {
   return useQuery({
@@ -133,7 +133,7 @@ export function useCreateModelMigration(modelId: number) {
       invalidateDatabaseViews(queryClient, null)
       toast.success('Migración creada', `${migration.version} · ${migration.name}`)
     },
-    onError: (error) => toast.error('No se pudo crear la migración', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo crear la migración'),
   })
 }
 
@@ -151,8 +151,7 @@ export function useUpdateModelMigration(modelId: number) {
       )
       toast.success('Migración actualizada', `${migration.version} · ${migration.name}`)
     },
-    onError: (error) =>
-      toast.error('No se pudo actualizar la migración', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo actualizar la migración'),
   })
 }
 
@@ -259,7 +258,7 @@ export function useApplyAllMigrations(modelId: number) {
       ) {
         return
       }
-      toast.error('No se pudo ejecutar la aplicación masiva', toApiError(error).message)
+      notifyMutationError(toast, error, 'No se pudo ejecutar la aplicación masiva')
     },
   })
 }

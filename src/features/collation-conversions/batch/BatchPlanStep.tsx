@@ -4,6 +4,7 @@ import { CharsetCollationSelector } from '@/features/charset-collation-options'
 import type { CharsetCollationValue } from '@/features/charset-collation-options'
 import { ApiError } from '@/lib/api/errors'
 import type { CollationBatchCreate } from '@/lib/contracts'
+import { CapabilityHint, type CapabilityGuard } from '@/features/auth'
 import { collationMessage } from '../messages'
 
 /**
@@ -25,11 +26,14 @@ export function BatchPlanStep({
   isPlanning,
   planError,
   onPlan,
+  guard,
 }: {
   modelSlug: string | null
   isPlanning: boolean
   planError: unknown
   onPlan: (body: CollationBatchCreate) => void
+  /** `collation.execute`: planificar ya es parte de convertir el collation. */
+  guard?: CapabilityGuard
 }) {
   const [target, setTarget] = useState<CharsetCollationValue | null | undefined>(undefined)
   const [includeDatabaseDefault, setIncludeDatabaseDefault] = useState(true)
@@ -126,11 +130,13 @@ export function BatchPlanStep({
               max_databases: maxParsed,
             })
           }
-          disabled={!canPlan}
+          disabled={!canPlan || (guard ? !guard.allowed : false)}
+          aria-describedby={guard?.describedBy}
         >
           {isPlanning && <Spinner />}
           Planificar el lote 🔌
         </Button>
+        {guard && <CapabilityHint guard={guard} />}
         {modelSlug && (
           <span className="text-sm text-muted-foreground">
             Blueprint <span className="font-mono">{modelSlug}</span>

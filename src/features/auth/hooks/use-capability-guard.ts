@@ -15,6 +15,12 @@ export interface CapabilityGuard {
   describedBy: string | undefined
   /** Las que faltan, en el orden pedido. */
   missing: Capability[]
+  /**
+   * Con destino: la capa 2 todavía no se pudo resolver (`pending`: falta el catálogo o los
+   * entornos; `failed`: no llegaron). Mientras tanto la guarda falla cerrado, y el motivo no es
+   * «no tenés» sino «no se sabe todavía». `null` cuando se resolvió o no hay destino.
+   */
+  unresolved: 'pending' | 'failed' | null
 }
 
 export interface CapabilityGuardOptions {
@@ -27,6 +33,12 @@ export interface CapabilityGuardOptions {
   scope?: AccessTarget
 }
 
+/** «Etiqueta del catálogo», id — o solo el id si el catálogo no la trae. */
+export function capabilityName(id: string, catalog?: readonly CapabilityDescriptor[]): string {
+  const label = catalog?.find((row) => row.id === id)?.label
+  return label ? `«${label}», ${id}` : id
+}
+
 /**
  * Motivo visible de un control deshabilitado por capacidad. Nombra la capacidad que falta: el 403
  * la oculta para no dar un mapa de la superficie, pero `/auth/me` ya le publica al usuario sus
@@ -37,12 +49,7 @@ export function capabilityHint(
   missing: readonly string[],
   catalog?: readonly CapabilityDescriptor[],
 ): string {
-  const named = missing
-    .map((id) => {
-      const label = catalog?.find((row) => row.id === id)?.label
-      return label ? `«${label}», ${id}` : id
-    })
-    .join(' y ')
+  const named = missing.map((id) => capabilityName(id, catalog)).join(' y ')
   return `Tu acceso no permite ${action} (requiere ${named}). Pedíselo a quien administra los accesos.`
 }
 
@@ -63,43 +70,81 @@ export function useCapabilityGuard(
   action: string,
   options: CapabilityGuardOptions = {},
 ): CapabilityGuard {
-  const { can, known, baseRole, role, scopeRoles, globalCapabilities } = useCapabilities()
+  const { can, known, baseRole, role, scopeRoles, globalCapabilities, catalogVersion } =
+    useCapabilities()
   const catalog = useCapabilityCatalog()
   const hintId = useId()
-  const scoped = options.scope !== undefined && known && scopeRoles.length > 0
+  /*
+   * La capa 2 se resuelve solo con un backend que tiene el modelo de capacidades (publica
+   * `catalog_version`) y una sesión con permisos por alcance: sin permisos, el rol del destino es
+   * el base, que ya es el de la capa 1.
+   */
+  const scoped =
+    options.scope !== undefined && known && catalogVersion !== null && scopeRoles.length > 0
   // Los entornos solo hacen falta para resolver «sin clasificar = el más protegido».
-  const environments = useEnvironmentOptions(scoped)
+  const needsEnvironments = scoped && options.scope?.environmentId === null
+  const environments = useEnvironmentOptions(needsEnvironments)
 
   const list: readonly Capability[] = typeof required === 'string' ? [required] : required
-  let atScope: Set<string> | null = null
   const base = baseRole ?? role
-  if (scoped && options.scope && catalog.data && base) {
-    atScope = new Set(
-      capabilitiesAt(
-        {
-          catalog: catalog.data,
-          baseRole: base,
-          globalCapabilities,
-          grants: scopeRoles.map((grant) => ({
-            scopeType: grant.scope_type,
-            scopeId: grant.scope_id,
-            role: grant.role,
-          })),
-        },
-        options.scope,
-        environments.data ?? [],
-      ),
-    )
+  let atScope: Set<string> | null = null
+  /*
+   * Con destino, la capa 2 falla CERRADO: si falta el catálogo, el rol o —para una base sin
+   * clasificar— los entornos, no se sabe qué rige ahí y la pista no puede prometer un permiso que
+   * el servidor quizá niegue en una operación que toca el motor. Solo el backend viejo (sin
+   * `catalog_version`) falla abierto, y eso ya lo resolvió `scoped`.
+   */
+  let unresolved: 'pending' | 'failed' | null = null
+  if (scoped && options.scope) {
+    if (!catalog.data || !base) {
+      unresolved = catalog.isError || !base ? 'failed' : 'pending'
+    } else if (needsEnvironments && !environments.data) {
+      unresolved = environments.isError ? 'failed' : 'pending'
+    } else {
+      atScope = new Set(
+        capabilitiesAt(
+          {
+            catalog: catalog.data,
+            baseRole: base,
+            globalCapabilities,
+            grants: scopeRoles.map((grant) => ({
+              scopeType: grant.scope_type,
+              scopeId: grant.scope_id,
+              role: grant.role,
+            })),
+          },
+          options.scope,
+          environments.data ?? [],
+        ),
+      )
+    }
   }
   const missing = list.filter(
-    (capability) => !can(capability) || (atScope && !atScope.has(capability)),
+    (capability) =>
+      !can(capability) || unresolved !== null || (atScope !== null && !atScope.has(capability)),
   )
   const allowed = missing.length === 0
+  let hint: string | undefined
+  if (!allowed) {
+    const layer1Missing = list.filter((capability) => !can(capability))
+    hint =
+      unresolved !== null && layer1Missing.length === 0
+        ? unresolvedHint(action, unresolved)
+        : capabilityHint(action, missing, catalog.data)
+  }
   return {
     allowed,
-    hint: allowed ? undefined : capabilityHint(action, missing, catalog.data),
+    hint,
     hintId,
     describedBy: allowed ? undefined : hintId,
     missing,
+    unresolved: allowed ? null : unresolved,
   }
+}
+
+/** Motivo mientras la capa 2 no se puede resolver: no es «no tenés», es «todavía no sé». */
+function unresolvedHint(action: string, state: 'pending' | 'failed'): string {
+  return state === 'pending'
+    ? `Comprobando si tu acceso permite ${action} en este destino…`
+    : `No se pudo comprobar si tu acceso permite ${action} en este destino. Recargá la página para volver a intentarlo.`
 }

@@ -88,12 +88,23 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
    - acción única en contexto → `useCapabilityGuard(cap, 'acción en infinitivo')`, botón
      `disabled` + `aria-describedby={guard.describedBy}` y `<CapabilityHint guard={guard} />` al
      lado (el motivo nunca va en un `title`);
-   - acción repetida en filas → se esconde de las filas y un único `Callout` sobre la tabla lo
-     explica;
+   - **varias acciones bloqueadas en la misma pantalla** → **un** `CapabilityCallout` arriba
+     («Podés X, pero no Y») en vez de un `CapabilityHint` por botón; cada control deshabilitado
+     apunta a su `id` con `aria-describedby`, y los campos de opciones de esa acción (switches,
+     selects, inputs) también van deshabilitados. Un diálogo que se abre encima lleva su propio
+     `CapabilityHint` (lo de atrás queda inerte);
+   - acción repetida en filas → se esconde de las filas y el mismo `CapabilityCallout` sobre la
+     tabla lo explica;
    - módulo entero que no sirve sin la capacidad → `capability` en su entrada del `Sidebar`;
    - el 403 `access.forbidden` se trata igual: `isAccessForbidden(error)` → `ForbiddenState`
-     (página) o `forbiddenCopy()` (mensaje), **sin «Reintentar»**. Solo pasá `scope` a la guarda
-     en las rutas donde el backend aplica la capa 2 (`assert_scope`).
+     (página) o `forbiddenCopy()` (mensaje), **sin «Reintentar»**. En el `onError` de una mutación
+     no se escribe a mano: `notifyMutationError(toast, error, 'No se pudo …', descripción?)`
+     muestra el copy compartido con el enlace «Ver mi acceso» ante un 403 de acceso y el título
+     del hook ante cualquier otro error;
+   - solo pasá `scope` a la guarda en las rutas donde el backend aplica la capa 2
+     (`assert_scope`). Con `scope` la guarda falla **cerrado** mientras no puede resolver el
+     destino (catálogo o entornos sin cargar o caídos) y lo dice en `guard.unresolved`; solo un
+     backend sin `catalog_version` falla abierto.
 
 7. **Test** — añade al menos un test del hook con MSW (mira
    `features/servers/hooks/use-servers.test.tsx` como plantilla).

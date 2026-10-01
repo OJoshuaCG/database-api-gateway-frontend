@@ -579,10 +579,10 @@ export class ApiError extends Error {
 }
 
 const FALLBACK_BY_STATUS: Record<number, string> = {
-  0: 'No se pudo conectar con la API. Revisa tu conexión o la configuración de CORS.',
+  0: 'No se pudo conectar con la API. Revisá tu conexión o la configuración de CORS.',
   400: 'La petición es inválida.',
   401: 'Tu sesión no es válida o ha expirado.',
-  403: 'No tienes permisos para esta operación.',
+  403: 'No tenés permisos para esta operación.',
   404: 'El recurso solicitado no existe.',
   409: 'Conflicto: el recurso ya existe o tiene dependencias.',
   422: 'Hay datos inválidos en el formulario.',

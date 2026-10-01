@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
 import { listPrivileges, togglePrivilege } from '../api/privileges.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function usePrivileges(params: QueryParams) {
   return useQuery({
@@ -25,7 +25,6 @@ export function useTogglePrivilege() {
         `${privilege.engine} · ${privilege.name}`,
       )
     },
-    onError: (error) =>
-      toast.error('No se pudo actualizar el privilegio', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo actualizar el privilegio'),
   })
 }

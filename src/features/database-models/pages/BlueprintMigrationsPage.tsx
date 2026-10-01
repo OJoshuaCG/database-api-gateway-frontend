@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Badge,
@@ -13,7 +13,7 @@ import {
   Spinner,
   TabButton,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityCallout, joinWithNi, useCapabilityGuard } from '@/features/auth'
 import { BlueprintProjectsSection } from '@/features/projects'
 import {
   CAPABILITIES,
@@ -151,6 +151,12 @@ export function BlueprintMigrationsPage() {
   // El apply masivo es `blueprints.apply` (solo `owner`): sin ella, «Aplicar…» va deshabilitado
   // con el motivo y la tabla de estado esconde «Aplicar aquí» de cada fila.
   const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones')
+  // Crear una versión, editar y eliminar el blueprint: `blueprints.write`
+  // (`model_migrations.py` / `database_models.py`), por rol unión.
+  const writeGuard = useCapabilityGuard(CAPABILITIES.blueprintsWrite, 'editar el blueprint')
+  const accessNoticeId = useId()
+  const describedByAccess = (guard: { allowed: boolean }) =>
+    guard.allowed ? undefined : accessNoticeId
   /**
    * El catálogo se pide **descendente** (api-reference-v22 §2): así la PUNTA viene en la página 1
    * de la API y la pantalla abre sobre las versiones recientes, que es con las que se trabaja.
@@ -337,7 +343,7 @@ export function BlueprintMigrationsPage() {
               <Button
                 variant="outline"
                 disabled={!applyGuard.allowed}
-                aria-describedby={applyGuard.describedBy}
+                aria-describedby={describedByAccess(applyGuard)}
                 onClick={() => {
                   setApplyTargets([])
                   setApplyAllOpen(true)
@@ -345,7 +351,13 @@ export function BlueprintMigrationsPage() {
               >
                 Aplicar… 🔌
               </Button>
-              <Button onClick={() => void navigate(newVersionPath)}>Nueva versión</Button>
+              <Button
+                onClick={() => void navigate(newVersionPath)}
+                disabled={!writeGuard.allowed}
+                aria-describedby={describedByAccess(writeGuard)}
+              >
+                Nueva versión
+              </Button>
               {/* Misma ruta que el botón «Collation» de la fila del catálogo: el lote lo define
                   el blueprint, así que su entrada natural es esta página. */}
               <Button
@@ -354,10 +366,20 @@ export function BlueprintMigrationsPage() {
               >
                 Lotes de collation
               </Button>
-              <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditOpen(true)}
+                disabled={!writeGuard.allowed}
+                aria-describedby={describedByAccess(writeGuard)}
+              >
                 Editar
               </Button>
-              <Button variant="danger-soft" onClick={() => setDeleteOpen(true)}>
+              <Button
+                variant="danger-soft"
+                onClick={() => setDeleteOpen(true)}
+                disabled={!writeGuard.allowed}
+                aria-describedby={describedByAccess(writeGuard)}
+              >
                 Eliminar
               </Button>
             </>
@@ -372,7 +394,18 @@ export function BlueprintMigrationsPage() {
             {model.data.is_active ? 'Activo' : 'Inactivo'}
           </Badge>
         </div>
-        <CapabilityHint guard={applyGuard} />
+        <CapabilityCallout
+          id={accessNoticeId}
+          className="mt-2"
+          canDo="ver las versiones y su estado en las bases"
+          cannotDo={joinWithNi(
+            [
+              !applyGuard.allowed && 'aplicarlas',
+              !writeGuard.allowed && 'crear versiones ni editar o eliminar el blueprint',
+            ].filter((part): part is string => Boolean(part)),
+          )}
+          missing={[...applyGuard.missing, ...writeGuard.missing]}
+        />
       </div>
 
       {/* A qué proyectos pertenece este blueprint (api-reference-v16 §3.9). Va con la cabecera y

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Badge, Button, CodeBlock, ConfirmDialog, ErrorState, Spinner, Switch } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import type { CollationConversionStepOut } from '@/lib/contracts'
+import { CAPABILITIES, type CollationConversionStepOut } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { ErrorRecoveryPanel } from '../ErrorRecoveryPanel'
 import { classifyConversionError, CONVERSION_ACTION_HINTS, type ConversionErrorAction } from '../messages'
 import type { CollationConversionWizard } from '../use-collation-conversion-wizard'
@@ -33,6 +34,8 @@ function objectTypeLabel(objectType: string): string {
 export function PreviewStep({ wizard }: { wizard: CollationConversionWizard }) {
   const { preview } = wizard
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // `POST /collation-conversions/{id}/execute` → `collation.execute`.
+  const guard = useCapabilityGuard(CAPABILITIES.collationExecute, 'ejecutar la conversión')
 
   if (preview.isLoading && !preview.data) {
     return (
@@ -134,9 +137,17 @@ export function PreviewStep({ wizard }: { wizard: CollationConversionWizard }) {
         <Button variant="ghost" onClick={() => wizard.goToStep('inventory')}>
           ← Volver a la selección
         </Button>
-        <Button variant="danger" onClick={() => setConfirmOpen(true)}>
-          Ejecutar conversión 🔌
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <CapabilityHint guard={guard} className="max-w-xs text-right" />
+          <Button
+            variant="danger"
+            onClick={() => setConfirmOpen(true)}
+            disabled={!guard.allowed}
+            aria-describedby={guard.describedBy}
+          >
+            Ejecutar conversión 🔌
+          </Button>
+        </div>
       </div>
 
       <ConfirmDialog

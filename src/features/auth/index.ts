@@ -11,11 +11,13 @@ export {
 } from './hooks/use-capabilities'
 export {
   capabilityHint,
+  capabilityName,
   useCapabilityGuard,
   type CapabilityGuard,
   type CapabilityGuardOptions,
 } from './hooks/use-capability-guard'
 export { CapabilityHint } from './components/CapabilityHint'
+export { ASK_FOR_ACCESS, CapabilityCallout } from './components/CapabilityCallout'
 export { ForbiddenState } from './components/ForbiddenState'
 export {
   MY_ACCESS_PATH,
@@ -27,6 +29,7 @@ export {
   type ForbiddenCopy,
   type SessionEndReason,
 } from './messages'
+export { notifyMutationError } from './notify-mutation-error'
 export { useLogin } from './hooks/use-login'
 export { useLogout } from './hooks/use-logout'
 export * from './authz-model'

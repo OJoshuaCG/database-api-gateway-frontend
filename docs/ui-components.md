@@ -286,6 +286,21 @@ fila despliega sus capacidades con «Ver capacidades». Props: `baseRole`, `glob
 **Lleva siempre la nota de dónde se aplica hoy el recorte por alcance** (`SCOPE_ENFORCEMENT_NOTE`):
 solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo demás rige el rol unión.
 
+### `CapabilityCallout`
+**El** aviso de acceso de una pantalla: uno solo, arriba, en lugar de un motivo repetido junto a
+cada control deshabilitado. Título «Podés {canDo}, pero no {cannotDo}»; el cuerpo nombra lo que
+falta con la etiqueta del catálogo (`«label», id`, sin catálogo solo el id) y termina siempre en
+«Pedíselo a quien administra los accesos.» (`ASK_FOR_ACCESS`). Props: `canDo`, `cannotDo` (en
+infinitivo y sin «no»; para enumerar, `joinWithNi` de `authz-model.ts`), `missing` (los
+`guard.missing` de una o varias guardas; se deduplican), `unresolved?` (`guard.unresolved`: con
+destino y la capa 2 todavía sin resolver dice «Comprobando…» / «No se pudo comprobar…» en vez de
+afirmar que falta algo), `id?`, `className?`, `children?` (contexto propio, después del motivo).
+No pinta nada si `missing` está vacío. Cada control deshabilitado lo referencia con
+`aria-describedby={id}` (en `Switch`, `describedBy`; en `ConfirmDialog`, `confirmDisabled` +
+`confirmDescribedBy`). Lo usan la pestaña de migraciones de una base, la cabecera del blueprint, su
+tabla de estado, Servidores, Perfiles de permisos, Privilegios, Charset/collation, la consola SQL y
+el paso de datos-semilla.
+
 ### `CapabilityHint` y `ForbiddenState`
 `CapabilityHint` es el motivo **visible** de un control deshabilitado por `useCapabilityGuard`
 (`guard`, `className?`): pinta `guard.hint` con el `id` que el control referencia por

@@ -20,6 +20,11 @@ export interface Capabilities {
   canAll: (...capabilities: Capability[]) => boolean
   /** ¿El backend publicó capacidades? `false` = estamos operando sin la pista. */
   known: boolean
+  /**
+   * `catalog_version` de `/auth/me`, o `null` con un backend anterior al modelo de capacidades.
+   * Es lo que separa «no sé» (falla abierto) de «no tiene» (falla cerrado).
+   */
+  catalogVersion: string | null
   /** Rol efectivo (la UNIÓN: el más alto sobre todos los alcances), o `null` si no se publica. */
   role: string | null
   /**
@@ -86,6 +91,7 @@ export function useCapabilities(): Capabilities {
     can,
     canAll,
     known,
+    catalogVersion: admin?.catalog_version ?? null,
     role,
     baseRole: admin?.base_role ?? role,
     scopeRoles: admin?.scope_roles ?? EMPTY_SCOPE_ROLES,

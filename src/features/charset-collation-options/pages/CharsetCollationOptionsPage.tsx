@@ -1,9 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
-  Callout,
   Combobox,
   DataTable,
   EmptyState,
@@ -11,7 +10,7 @@ import {
   PageHeader,
   Switch,
 } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
 import { CAPABILITIES, type CharsetCollationOptionOut, type EngineFamily } from '@/lib/contracts'
 import {
@@ -58,6 +57,9 @@ export function CharsetCollationOptionsPage() {
     'modificar el catálogo de charsets y collations',
   )
   const canWrite = writeGuard.allowed
+  // Cada control deshabilitado por acceso apunta al aviso único de la pantalla.
+  const accessNoticeId = useId()
+  const accessDescribedBy = canWrite ? undefined : accessNoticeId
 
   const filtered = useMemo(() => {
     let list = data ?? []
@@ -136,6 +138,7 @@ export function CharsetCollationOptionsPage() {
           <Switch
             checked={row.original.enabled}
             disabled={!canWrite || update.isPending}
+            describedBy={accessDescribedBy}
             onCheckedChange={(checked) => handleToggleEnabled(row.original, checked)}
             ariaLabel={`Habilitar «${formatOptionLabel(row.original)}» para creación de bases de datos`}
           />
@@ -162,6 +165,7 @@ export function CharsetCollationOptionsPage() {
               variant="ghost"
               size="sm"
               disabled={!canWrite || update.isPending}
+              aria-describedby={accessDescribedBy}
               onClick={() => update.mutate({ id: row.original.id, body: { is_default: true } })}
             >
               Marcar sugerida
@@ -170,7 +174,7 @@ export function CharsetCollationOptionsPage() {
         },
       },
     ],
-    [update, handleToggleEnabled, canWrite],
+    [update, handleToggleEnabled, canWrite, accessDescribedBy],
   )
 
   return (
@@ -179,17 +183,22 @@ export function CharsetCollationOptionsPage() {
         title="Charsets y collations"
         description="Define qué combinaciones de charset/collation se pueden elegir al crear una base de datos nueva. No afecta a las bases ya creadas."
         actions={
-          <Button disabled={!canWrite} onClick={() => setAddOpen(true)}>
+          <Button
+            disabled={!canWrite}
+            aria-describedby={accessDescribedBy}
+            onClick={() => setAddOpen(true)}
+          >
             Agregar combinación
           </Button>
         }
       />
 
-      {!canWrite && (
-        <Callout tone="info" title="Solo lectura">
-          <p>{writeGuard.hint}</p>
-        </Callout>
-      )}
+      <CapabilityCallout
+        id={accessNoticeId}
+        canDo="ver el catálogo"
+        cannotDo="agregar, habilitar ni sugerir combinaciones"
+        missing={writeGuard.missing}
+      />
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />

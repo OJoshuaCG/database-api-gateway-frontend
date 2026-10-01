@@ -40,11 +40,14 @@ interface CalloutProps {
   /** Acción de recuperación, cuando el aviso tiene una salida concreta que ofrecer. */
   action?: ReactNode
   className?: string
+  /** Para que un control lo referencie con `aria-describedby` (el aviso explica por qué está deshabilitado). */
+  id?: string
 }
 
-export function Callout({ tone, title, children, action, className }: CalloutProps) {
+export function Callout({ tone, title, children, action, className, id }: CalloutProps) {
   return (
     <div
+      id={id}
       // `role="alert"` solo en lo que exige atención inmediata: un `info` permanente anunciado como
       // alerta convierte al lector de pantalla en ruido de fondo y se deja de escuchar.
       role={tone === 'danger' || tone === 'warning' ? 'alert' : undefined}

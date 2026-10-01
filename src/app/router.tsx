@@ -107,7 +107,8 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // PÚBLICA, hermana de `/login` y fuera de `ProtectedRoute` a propósito: quien acepta una
   // invitación todavía no puede iniciar sesión, así que detrás de la guarda no podría llegar
-  // nunca. El token viaja en `?token=` (el `user_id` va firmado dentro) o se pega a mano.
+  // nunca. El token viaja en el fragmento `#token=` (el `user_id` va firmado dentro; `?token=`
+  // sigue valiendo para los enlaces ya entregados) o se pega a mano.
   { path: '/invitacion', element: <AcceptInvitationPage /> },
   {
     element: <ProtectedRoute />,

@@ -1,6 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { DatabaseModelCreate, DatabaseModelUpdate, RenameSlugResult } from '@/lib/contracts'
 import type { QueryParams } from '@/lib/api/client'
@@ -19,6 +18,7 @@ import {
   renameSlug,
   updateDatabaseModel,
 } from '../api/database-models.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function useDatabaseModels(params: QueryParams) {
   return useQuery({
@@ -67,7 +67,7 @@ export function useRefreshModelDatabases(id: number) {
       queryClient.setQueryData(queryKeys.databaseModels.databases(id), data)
       toast.success('Estado actualizado', `${data.length} BD(s) releídas del motor`)
     },
-    onError: (error) => toast.error('No se pudo releer el estado', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo releer el estado'),
   })
 }
 
@@ -80,7 +80,7 @@ export function useCreateDatabaseModel() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
       toast.success('Blueprint creado', model.name)
     },
-    onError: (error) => toast.error('No se pudo crear el blueprint', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo crear el blueprint'),
   })
 }
 
@@ -111,8 +111,7 @@ export function useUpdateDatabaseModel(id: number) {
       })
       toast.success('Blueprint actualizado', model.name)
     },
-    onError: (error) =>
-      toast.error('No se pudo actualizar el blueprint', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo actualizar el blueprint'),
   })
 }
 
@@ -125,7 +124,7 @@ export function useDeleteDatabaseModel() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
       toast.success('Blueprint eliminado')
     },
-    onError: (error) => toast.error('No se pudo eliminar el blueprint', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo eliminar el blueprint'),
   })
 }
 

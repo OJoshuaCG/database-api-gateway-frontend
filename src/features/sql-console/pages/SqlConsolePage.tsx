@@ -4,7 +4,6 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
-  Callout,
   Card,
   CardContent,
   Combobox,
@@ -20,7 +19,7 @@ import {
   HistoryIcon,
   PlayIcon,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard, type CapabilityGuard } from '@/features/auth'
+import { CapabilityCallout, useCapabilityGuard, type CapabilityGuard } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerDatabases } from '@/features/servers/hooks/use-introspection'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
@@ -294,14 +293,13 @@ function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSq
 
   return (
     <div className="space-y-6">
-      {!executeGuard.allowed && (
-        <Callout tone="info" title="Podés ver el historial, pero no ejecutar SQL">
-          <p>
-            Con tu acceso podés ver el historial de consultas, pero no ejecutar SQL. Pedíselo a
-            quien administra los accesos.
-          </p>
-        </Callout>
-      )}
+      {/* El aviso único de la pantalla: los dos botones de abajo lo referencian por su id. */}
+      <CapabilityCallout
+        id={executeGuard.hintId}
+        canDo="ver el historial de consultas"
+        cannotDo="analizar ni ejecutar SQL"
+        missing={executeGuard.missing}
+      />
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div className="max-w-md">
@@ -450,7 +448,6 @@ function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSq
             >
               Solo analizar
             </Button>
-            <CapabilityHint guard={executeGuard} className="basis-full" />
             {sqlConsole.isAnalyzing && (
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Spinner className="h-4 w-4" /> Clasificando la consulta…

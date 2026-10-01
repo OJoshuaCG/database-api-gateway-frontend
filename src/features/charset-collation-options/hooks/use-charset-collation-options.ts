@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
-import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type {
   CharsetCollationOptionCreate,
@@ -12,6 +11,7 @@ import {
   listCharsetCollationOptions,
   updateCharsetCollationOption,
 } from '../api/charset-collation-options.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function useCharsetCollationOptions(params?: {
   engine_family?: EngineFamily
@@ -33,7 +33,7 @@ export function useCreateCharsetCollationOption() {
       toast.success('Combinación agregada al catálogo.')
     },
     onError: (error) =>
-      toast.error('No se pudo agregar la combinación', toApiError(error).message),
+      notifyMutationError(toast, error, 'No se pudo agregar la combinación'),
   })
 }
 
@@ -48,6 +48,6 @@ export function useUpdateCharsetCollationOption() {
       toast.success('Catálogo actualizado.')
     },
     onError: (error) =>
-      toast.error('No se pudo actualizar el catálogo', toApiError(error).message),
+      notifyMutationError(toast, error, 'No se pudo actualizar el catálogo'),
   })
 }

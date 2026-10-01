@@ -21,6 +21,7 @@ import {
   reassignOwner,
   updateManagedDatabase,
 } from '../api/managed-databases.api'
+import { notifyMutationError } from '@/features/auth'
 
 export function useManagedDatabases(params: QueryParams) {
   return useQuery({
@@ -89,7 +90,7 @@ export function useCreateManagedDatabase() {
         )
       }
     },
-    onError: (error) => toast.error('No se pudo crear la base de datos', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo crear la base de datos'),
   })
 }
 
@@ -125,7 +126,12 @@ export function useProvisionManagedDatabase() {
     },
     onError: (error) => {
       const apiError = toApiError(error)
-      toast.error(MESSAGES_BY_CODE[apiError.code ?? ''] ?? 'No se pudo aprovisionar', apiError.message)
+      notifyMutationError(
+        toast,
+        error,
+        MESSAGES_BY_CODE[apiError.code ?? ''] ?? 'No se pudo aprovisionar',
+        apiError.message,
+      )
     },
   })
 }
@@ -151,7 +157,7 @@ export function useUpdateManagedDatabase(id: number) {
       toast.success('Base de datos actualizada', db.name)
     },
     onError: (error) =>
-      toast.error('No se pudo actualizar la base de datos', toApiError(error).message),
+      notifyMutationError(toast, error, 'No se pudo actualizar la base de datos'),
   })
 }
 
@@ -185,7 +191,7 @@ export function useDeleteManagedDatabase() {
           : 'Base quitada del inventario (sigue en el motor)',
       )
     },
-    onError: (error) => toast.error('No se pudo quitar del inventario', toApiError(error).message),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo quitar del inventario'),
   })
 }
 
@@ -200,6 +206,6 @@ export function useReassignOwner(id: number) {
       toast.success('Propietario reasignado', db.name)
     },
     onError: (error) =>
-      toast.error('No se pudo reasignar el propietario', toApiError(error).message),
+      notifyMutationError(toast, error, 'No se pudo reasignar el propietario'),
   })
 }

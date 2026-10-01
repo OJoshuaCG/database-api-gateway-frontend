@@ -13,7 +13,8 @@ import {
   Spinner,
 } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { ServerOut, ServerUserOut } from '@/lib/contracts'
+import { CAPABILITIES, type ServerOut, type ServerUserOut } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { serverDatabasePath, serverUserPath } from '@/lib/routes'
 import { ProvisionStatusBadge } from '@/features/managed-databases/components/ProvisionStatusBadge'
 import {
@@ -57,6 +58,8 @@ export function ServerDatabasesPanel({
   server: ServerOut
   onGoToReconcile?: () => void
 }) {
+  // `POST /servers/{id}/databases` → `databases.write` (rol unión: esa ruta no tiene capa 2).
+  const createGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'crear bases de datos')
   const serverId = server.id
   const navigate = useNavigate()
   const { rows, physical, inventory, inventoryTruncated, refetch } = useServerDatabases(serverId)
@@ -203,7 +206,13 @@ export function ServerDatabasesPanel({
             : `${visibleRows.length} de ${rows.length} base(s) de datos`}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setCreateOpen(true)}>Nueva base de datos 🔌</Button>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            disabled={!createGuard.allowed}
+            aria-describedby={createGuard.describedBy}
+          >
+            Nueva base de datos 🔌
+          </Button>
           <IconButton
             label="Actualizar"
             icon={<RefreshIcon />}
@@ -218,6 +227,7 @@ export function ServerDatabasesPanel({
             </Button>
           )}
         </div>
+        <CapabilityHint guard={createGuard} className="basis-full text-right" />
       </div>
 
       {/* Aviso de contexto permanente: esta vista NO es el inventario. */}

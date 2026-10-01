@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
-  Callout,
   Combobox,
   ConfirmDialog,
   DataTable,
@@ -14,7 +13,7 @@ import {
   PencilIcon,
   TrashIcon,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { formatDateTime } from '@/lib/utils'
 import { CAPABILITIES, type EngineType, type PermissionProfileOut } from '@/lib/contracts'
 import { usePermissionProfiles, useDeletePermissionProfile } from '../hooks/use-permission-profiles'
@@ -46,6 +45,7 @@ export function PermissionProfilesPage() {
   // esconden editar/eliminar, con un único aviso sobre la tabla.
   const writeGuard = useCapabilityGuard(CAPABILITIES.catalogsWrite, 'crear perfiles de permisos')
   const canWrite = writeGuard.allowed
+  const accessNoticeId = useId()
 
   const columns = useMemo<ColumnDef<PermissionProfileOut>[]>(
     () => [
@@ -126,7 +126,7 @@ export function PermissionProfilesPage() {
           <div className="flex flex-col items-end gap-1">
             <Button
               disabled={!canWrite}
-              aria-describedby={writeGuard.describedBy}
+              aria-describedby={canWrite ? undefined : accessNoticeId}
               onClick={() => {
                 setEditing(undefined)
                 setFormOpen(true)
@@ -134,16 +134,16 @@ export function PermissionProfilesPage() {
             >
               Crear perfil
             </Button>
-            <CapabilityHint guard={writeGuard} className="max-w-xs text-right" />
           </div>
         }
       />
 
-      {!canWrite && (
-        <Callout tone="info" title="Podés ver los perfiles, pero no cambiarlos">
-          <p>Con tu acceso podés ver y usar estos perfiles, pero no editarlos ni eliminarlos.</p>
-        </Callout>
-      )}
+      <CapabilityCallout
+        id={accessNoticeId}
+        canDo="ver y usar los perfiles"
+        cannotDo="crearlos, editarlos ni eliminarlos"
+        missing={writeGuard.missing}
+      />
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />

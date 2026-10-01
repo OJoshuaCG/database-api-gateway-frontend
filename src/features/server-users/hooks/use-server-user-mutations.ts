@@ -4,6 +4,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import type { ServerUserCreate, ServerUserUpdate } from '@/lib/contracts'
 import { createServerUser, deleteServerUser, updateServerUser } from '../api/server-users.api'
+import { notifyMutationError } from '@/features/auth'
 
 /**
  * El inventario no es la única vista de un usuario: la tabla del servidor y la ficha leen la
@@ -33,7 +34,12 @@ export function useCreateServerUser() {
       )
     },
     onError: (error) =>
-      toast.error('No se pudo crear el usuario', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo crear el usuario',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 
@@ -50,7 +56,12 @@ export function useUpdateServerUser(id: number) {
       toast.success('Usuario actualizado', user.username)
     },
     onError: (error) =>
-      toast.error('No se pudo actualizar el usuario', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo actualizar el usuario',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 
@@ -87,6 +98,11 @@ export function useDeleteServerUser() {
       )
     },
     onError: (error) =>
-      toast.error('No se pudo eliminar el usuario', engineUserErrorDescription(error)),
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo eliminar el usuario',
+        engineUserErrorDescription(error),
+      ),
   })
 }

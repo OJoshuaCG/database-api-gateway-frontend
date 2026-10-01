@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
   Button,
-  Callout,
   DataTable,
   EmptyState,
   ErrorState,
@@ -14,7 +13,7 @@ import {
   PencilIcon,
   TrashIcon,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { formatDateTime } from '@/lib/utils'
 import { CAPABILITIES, type ServerOut } from '@/lib/contracts'
 import { useServers } from '../hooks/use-servers'
@@ -47,6 +46,9 @@ export function ServersPage() {
    */
   const adminGuard = useCapabilityGuard(CAPABILITIES.serversAdmin, 'registrar servidores')
   const canAdmin = adminGuard.allowed
+  // UN aviso para la pantalla: el botón de la cabecera lo referencia y las acciones de fila (que
+  // se esconden) quedan explicadas ahí.
+  const accessNoticeId = useId()
 
   const columns = useMemo<ColumnDef<ServerOut>[]>(
     () => [
@@ -136,7 +138,7 @@ export function ServersPage() {
           <div className="flex flex-col items-end gap-1">
             <Button
               disabled={!canAdmin}
-              aria-describedby={adminGuard.describedBy}
+              aria-describedby={canAdmin ? undefined : accessNoticeId}
               onClick={() => {
                 setEditing(undefined)
                 setFormOpen(true)
@@ -144,18 +146,16 @@ export function ServersPage() {
             >
               Registrar servidor
             </Button>
-            <CapabilityHint guard={adminGuard} className="max-w-xs text-right" />
           </div>
         }
       />
 
-      {!canAdmin && (
-        <Callout tone="info" title="Podés ver los servidores, pero no cambiarlos">
-          <p>
-            Con tu acceso podés ver y probar estos servidores, pero no editarlos ni darlos de baja.
-          </p>
-        </Callout>
-      )}
+      <CapabilityCallout
+        id={accessNoticeId}
+        canDo="ver y probar los servidores"
+        cannotDo="registrarlos, editarlos ni darlos de baja"
+        missing={adminGuard.missing}
+      />
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
