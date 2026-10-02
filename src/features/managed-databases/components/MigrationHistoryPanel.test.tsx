@@ -143,8 +143,10 @@ describe('MigrationHistoryPanel', () => {
     mockHistory([])
     renderWithProviders(<MigrationHistoryPanel dbId={DB_ID} />)
 
+    // `DataTable` pinta el estado vacío en la vista de tabla (`md+`) y en la de tarjetas (`< md`);
+    // el CSS oculta una de las dos, pero en jsdom están ambas.
     expect(
-      await screen.findByText('Esta base no tiene historial de migraciones.'),
-    ).toBeInTheDocument()
+      (await screen.findAllByText('Esta base no tiene historial de migraciones.')).length,
+    ).toBeGreaterThan(0)
   })
 })

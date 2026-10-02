@@ -41,7 +41,7 @@ describe('apiTokenErrorMessage', () => {
 
   it('aclara que revocar de nuevo no fue lo que cortó el acceso', () => {
     expect(apiTokenErrorMessage(error(409, API_TOKEN_ERROR_CODES.alreadyRevoked))).toContain(
-      'No fue esta acción',
+      'no fue esta acción la que cortó el acceso',
     )
   })
 

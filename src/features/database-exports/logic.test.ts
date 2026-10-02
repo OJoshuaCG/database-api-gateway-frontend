@@ -495,7 +495,12 @@ describe('normalizeSpecForConstraints', () => {
     })
     const spec = writeSpecValue(makeSpec({ format: 'csv' }), 'structure.entity_ddl', 'CREATE')
     const normalized = normalizeSpecForConstraints(spec, trap, evaluateExportMatrix(spec, trap))
-    expect(normalized.structure.entity_ddl).toBe('NONE')
+    // Lo que importa es que NO escala: el único admitido es `DROP_CREATE` y no se toma.
+    expect(normalized.structure.entity_ddl).not.toBe('DROP_CREATE')
+    // Y que se apaga. Esta opción no publica `NONE` entre sus `values`, así que el neutro es el
+    // del tipo (`neutralValueFor`: cadena vacía), no un `NONE` que el servidor no ofreció.
+    expect(isNeutralValue(normalized.structure.entity_ddl)).toBe(true)
+    expect(normalized.structure.entity_ddl).toBe('')
   })
 
   it('no toca un valor concreto que no está vetado', () => {

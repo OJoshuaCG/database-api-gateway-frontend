@@ -36,8 +36,9 @@ const secondary = {
   updated_at: '2026-01-01T00:00:00Z',
 }
 
+/** El backend responde con el sobre `{ data: [...] }` (`ApiResponse[list[...]]`), no con el array pelado. */
 function mockCatalog(options: unknown[]) {
-  server.use(http.get(CATALOG_URL, () => HttpResponse.json(options)))
+  server.use(http.get(CATALOG_URL, () => HttpResponse.json({ data: options })))
 }
 
 function mockCatalogError() {
@@ -49,7 +50,7 @@ describe('CharsetCollationSelector', () => {
     renderWithProviders(
       <CharsetCollationSelector engineFamily={null} value={undefined} onChange={vi.fn()} />,
     )
-    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByRole('combobox')).toBeDisabled()
     expect(screen.getByText('Elegí primero un servidor.')).toBeInTheDocument()
   })
 
@@ -104,7 +105,7 @@ describe('CharsetCollationSelector', () => {
     renderWithProviders(
       <CharsetCollationSelector engineFamily="mysql" value={null} onChange={vi.fn()} />,
     )
-    expect(screen.getByRole('textbox')).toHaveValue('Usar el valor por defecto del motor')
+    expect(screen.getByRole('combobox')).toHaveValue('Usar el valor por defecto del motor')
   })
 
   it('lista las combinaciones del catálogo y marca la sugerida', async () => {
@@ -127,7 +128,7 @@ describe('CharsetCollationSelector', () => {
         onChange={vi.fn()}
       />,
     )
-    expect(screen.getByRole('textbox')).toHaveValue('')
+    expect(screen.getByRole('combobox')).toHaveValue('')
   })
 
   it('sin combinaciones habilitadas avisa pero no deshabilita el selector', async () => {
@@ -140,7 +141,7 @@ describe('CharsetCollationSelector', () => {
         'No hay combinaciones habilitadas para este motor. La base se creará con el valor por defecto del servidor.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('textbox')).toBeEnabled()
+    expect(screen.getByRole('combobox')).toBeEnabled()
   })
 
   it('en error de carga solo ofrece el valor por defecto del motor, sin bloquear el formulario', async () => {
@@ -149,7 +150,7 @@ describe('CharsetCollationSelector', () => {
     renderWithProviders(
       <CharsetCollationSelector engineFamily="mysql" value={null} onChange={vi.fn()} />,
     )
-    await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Abrir lista' }))
     expect(screen.getByText('Usar el valor por defecto del motor')).toBeInTheDocument()
     expect(screen.queryByText('utf8mb4 · utf8mb4_unicode_ci ⭐ sugerida')).not.toBeInTheDocument()

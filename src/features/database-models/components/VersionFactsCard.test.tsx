@@ -194,7 +194,7 @@ describe('VersionFactsCard', () => {
 
   it('muestra la fecha de edición cuando de verdad se editó', async () => {
     mount({ detailOverrides: { updated_at: '2026-08-20T12:30:00Z' } })
-    expect(await screen.findByText(/20 ago 2026/)).toBeInTheDocument()
+    expect(await screen.findByText(EDITED_AT)).toBeInTheDocument()
   })
 
   it('sin el conteo del backend cuenta PENDIENTES, y nunca deriva un «aplicada en N»', async () => {

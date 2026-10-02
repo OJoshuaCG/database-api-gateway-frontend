@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/utils'
 import { VersionAlertsBar } from './VersionAlertsBar'
@@ -15,7 +15,9 @@ const alerts = (overrides: Partial<VersionAlerts> = {}): VersionAlerts => ({
 
 describe('VersionAlertsBar', () => {
   it('no se renderiza si no hay nada que avisar', () => {
-    const { container } = renderWithProviders(
+    // `render` pelado y no `renderWithProviders`: el envoltorio monta el visor de toasts, que no es
+    // de este componente y dejaría el contenedor siempre con algo adentro.
+    const { container } = render(
       <VersionAlertsBar alerts={alerts()} selectedVersion={null} onSelect={vi.fn()} />,
     )
     // Un «0 sin revisar» no es información: ocuparía la primera pantalla para decir que todo está

@@ -14,6 +14,19 @@ function wrapperWith(client: QueryClient) {
   }
 }
 
+/**
+ * `createTestQueryClient` usa `gcTime: 0`: una entrada sembrada con `setQueryData` y sin
+ * observadores se recolecta en el siguiente tick, y `getQueryState` devolvería `undefined` antes de
+ * que la mutación llegue a invalidarla. Estos tests miran el estado de esas entradas, así que
+ * necesitan que sobrevivan.
+ */
+function clientThatKeepsSeeds(): QueryClient {
+  const client = createTestQueryClient()
+  const defaults = client.getDefaultOptions()
+  client.setDefaultOptions({ ...defaults, queries: { ...defaults.queries, gcTime: Infinity } })
+  return client
+}
+
 const PATCH_URL = 'http://localhost/api/v1/database-models/3'
 const LIST_PARAMS = { page: 1, size: 20 }
 
@@ -52,7 +65,7 @@ describe('useUpdateDatabaseModel', () => {
   it('invalida el inventario de blueprints Y las listas de blueprints por proyecto', async () => {
     server.use(http.patch(PATCH_URL, () => HttpResponse.json({ data: modelFixture })))
 
-    const client = createTestQueryClient()
+    const client = clientThatKeepsSeeds()
     client.setQueryData(queryKeys.databaseModels.list(LIST_PARAMS), null)
     client.setQueryData(queryKeys.projects.blueprints(7), null)
 
@@ -79,7 +92,7 @@ describe('useUpdateDatabaseModel', () => {
   it('no toca la vista inversa `projects.ofBlueprint`', async () => {
     server.use(http.patch(PATCH_URL, () => HttpResponse.json({ data: modelFixture })))
 
-    const client = createTestQueryClient()
+    const client = clientThatKeepsSeeds()
     client.setQueryData(queryKeys.projects.ofBlueprint(3), null)
 
     const { result } = renderHook(() => useUpdateDatabaseModel(3), {

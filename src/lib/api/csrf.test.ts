@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { readCsrfToken } from './csrf'
 
-/** Borra todas las cookies del documento entre pruebas. */
+/**
+ * Borra todas las cookies del documento entre pruebas.
+ *
+ * Una `__Host-` solo se puede sobrescribir —y por lo tanto borrar— con `Secure`: sin ese atributo
+ * el navegador (y jsdom, que sigue la misma regla) descarta la escritura y la cookie sobrevive al
+ * test siguiente.
+ */
 function clearCookies() {
   for (const part of document.cookie.split(';')) {
     const name = part.split('=')[0]?.trim()
-    if (name) document.cookie = `${name}=; Max-Age=0; path=/`
+    if (!name) continue
+    const secure = name.startsWith('__Host-') ? '; Secure' : ''
+    document.cookie = `${name}=; Max-Age=0; path=/${secure}`
   }
 }
 
@@ -22,9 +30,12 @@ describe('readCsrfToken', () => {
   })
 
   it('prefiere `__Host-` sobre la pelada cuando están las dos', () => {
-    // El prefijo `__Host-` exige Secure, así que es la que el navegador ató al origen seguro.
+    // El prefijo `__Host-` exige Secure, así que es la que el navegador ató al origen seguro. Sin
+    // `Secure` el navegador rechaza la cookie entera: el test tiene que plantarla como la emite
+    // el backend (`app/core/csrf.py::cookie_name()` con TLS), no con una forma imposible.
     document.cookie = 'gw_csrf=sin-prefijo; path=/'
-    document.cookie = '__Host-gw_csrf=con-prefijo; path=/'
+    document.cookie = '__Host-gw_csrf=con-prefijo; path=/; Secure'
+    expect(document.cookie).toContain('__Host-gw_csrf=con-prefijo')
     expect(readCsrfToken()).toBe('con-prefijo')
   })
 

@@ -350,7 +350,10 @@ describe('MigrationDeletePlanDialog', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('app_prod')).toBeInTheDocument()
     expect(screen.getByText('BD #9')).toBeInTheDocument()
-    expect(screen.getByText(/stamp manual/)).toBeInTheDocument()
+    // «stamp manual» sale dos veces a propósito (en la explicación y junto a la lista de bases):
+    // se apunta a la indicación de la lista, que es la que acompaña a cada base torcida.
+    expect(screen.getByText('stamp manual')).toBeInTheDocument()
+    expect(screen.getByText(/Hay que corregirlas con un stamp manual ANTES/)).toBeInTheDocument()
     // `compensated` ausente significa que quedaron punteros torcidos. Un botón de reintento al
     // lado invita a saltarse el arreglo manual, y el reintento recalcularía el plan sobre
     // punteros que el backend ya no cree que estén donde están.

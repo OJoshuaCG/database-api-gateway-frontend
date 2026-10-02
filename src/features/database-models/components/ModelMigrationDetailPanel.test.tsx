@@ -73,8 +73,13 @@ describe('ModelMigrationDetailPanel', () => {
     const user = userEvent.setup()
     mount({ sql_frozen: true, block_reason: 'applied', deletable: false })
     await user.click(await screen.findByRole('button', { name: 'Editar' }))
-    // El aviso de fix-forward aparece sin haber intentado guardar nada.
-    expect(screen.getByText(/aplicó con éxito/)).toBeInTheDocument()
+    // El aviso de fix-forward aparece sin haber intentado guardar nada. Desde 960ac68 el aviso ya
+    // no dice «aplicó con éxito»: nombra el freeze, ofrece la versión correctiva como camino normal
+    // y aclara que el `down_sql` sigue editable.
+    expect(
+      screen.getByText(/El camino normal para corregir es crear una versión nueva/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Crear versión correctiva' })).toBeInTheDocument()
   })
 
   it('el SQL traducido nace cerrado y solo se monta al desplegarlo', async () => {
