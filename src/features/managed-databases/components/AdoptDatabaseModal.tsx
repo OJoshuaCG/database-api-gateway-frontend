@@ -92,7 +92,7 @@ export function AdoptDatabaseModal({
 
   const submit = () => {
     if (!owner) {
-      setError('Selecciona un propietario.')
+      setError('Seleccioná un propietario.')
       return
     }
     setError(null)
@@ -114,11 +114,11 @@ export function AdoptDatabaseModal({
           // Matiz por código sobre el detail.msg del backend (el hook además muestra el toast).
           const hint =
             apiError.status === 422
-              ? ' La base de datos NO quedó registrada: corrige y reintenta.'
+              ? ' La base de datos NO quedó registrada: corregí y reintentá.'
               : apiError.status === 409
-                ? ' Esta BD ya está adoptada; búscala en la lista de bases de datos.'
+                ? ' Esta BD ya está adoptada; buscala en la lista de bases de datos.'
                 : apiError.status === 404
-                  ? ' Revisa que el nombre coincida exactamente con la BD del motor.'
+                  ? ' Revisá que el nombre coincida exactamente con la BD del motor.'
                   : ''
           setSubmitError(apiError.message + hint)
         },
@@ -143,13 +143,13 @@ export function AdoptDatabaseModal({
           itemToString={(u) => (u.host ? `${u.username}@${u.host}` : u.username)}
           itemToKey={(u) => u.id}
           label="Propietario"
-          placeholder="Elige un ServerUser de este servidor"
+          placeholder="Elegí un ServerUser de este servidor"
           isLoading={owners.isLoading}
           error={error ?? undefined}
           required
         />
         <p className="text-xs text-muted-foreground">
-          ¿No aparece el propietario? Adóptalo primero desde la pestaña Usuarios.
+          ¿No aparece el propietario? Adoptalo primero desde la pestaña Usuarios.
         </p>
         <p className="text-xs text-muted-foreground">
           Sin un entorno explícito, la base adoptada va al entorno activo más protegido. Cambiarlo
@@ -188,7 +188,7 @@ export function AdoptDatabaseModal({
             {version.version && (
               <p className="rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs text-foreground">
                 Se marcará (stamp) la versión <code>{version.version}</code> en el motor{' '}
-                <strong>sin ejecutar SQL</strong>. Úsalo solo si el esquema de la BD ya coincide con
+                <strong>sin ejecutar SQL</strong>. Usalo solo si el esquema de la BD ya coincide con
                 esa versión.
               </p>
             )}

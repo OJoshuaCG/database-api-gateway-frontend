@@ -243,7 +243,7 @@ export function ModelDatabasesStatusTable({
         emptyState={
           <EmptyState
             title="Ninguna BD replica este blueprint"
-            description="Asocia una base de datos gestionada al blueprint para poder aplicarle sus versiones."
+            description="Asociá una base de datos gestionada al blueprint para poder aplicarle sus versiones."
           />
         }
       />

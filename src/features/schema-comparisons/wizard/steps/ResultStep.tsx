@@ -39,7 +39,7 @@ export function ResultStep({ wizard }: { wizard: SchemaComparisonWizard }) {
               ⚠ Pendiente de revisión
             </Badge>
             <p className="text-sm text-foreground">
-              La versión nace sin aprobar. Debes revisar el SQL y aprobarla (gate R1) antes de poder
+              La versión nace sin aprobar. Debés revisar el SQL y aprobarla (gate R1) antes de poder
               aplicarla a cualquier BD.
             </p>
             <Button
@@ -93,8 +93,8 @@ export function ResultStep({ wizard }: { wizard: SchemaComparisonWizard }) {
       </div>
       {data.failed && (
         <p className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-foreground">
-          🔴 Se detuvo en el primer fallo. Las sentencias posteriores no se ejecutaron. Corrige e
-          inténtalo de nuevo (quizá recalculando la comparación si el target quedó en estado
+          🔴 Se detuvo en el primer fallo. Las sentencias posteriores no se ejecutaron. Corregí e
+          intentalo de nuevo (quizá recalculando la comparación si el target quedó en estado
           parcial).
         </p>
       )}

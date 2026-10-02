@@ -111,7 +111,7 @@ export function MigrationEditOverrideDialog({
           setError({
             text:
               apiError.status === 429
-                ? 'Demasiadas previsualizaciones seguidas; espera un momento.'
+                ? 'Demasiadas previsualizaciones seguidas; esperá un momento.'
                 : apiError.message,
             repreview: false,
           })
@@ -148,14 +148,14 @@ export function MigrationEditOverrideDialog({
           // con el mismo token: el usuario tiene que volver a ver a quién deja divergente.
           if (apiError.status === 410) {
             setError({
-              text: 'La confirmación caducó (vale unos dos minutos). Vuelve a previsualizar; tu SQL se conservó.',
+              text: 'La confirmación caducó (vale unos dos minutos). Volvé a previsualizar; tu SQL se conservó.',
               repreview: true,
             })
             return
           }
           if (apiError.status === 422 && apiError.code === undefined) {
             setError({
-              text: 'El SQL cambió después de la previsualización. Vuelve a previsualizar para confirmar sobre el texto actual.',
+              text: 'El SQL cambió después de la previsualización. Volvé a previsualizar para confirmar sobre el texto actual.',
               repreview: true,
             })
             return
@@ -163,7 +163,7 @@ export function MigrationEditOverrideDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.sqlFrozen) {
             setAcknowledged(false)
             setError({
-              text: 'Las bases bloqueantes cambiaron desde la previsualización. Revísalas de nuevo antes de confirmar.',
+              text: 'Las bases bloqueantes cambiaron desde la previsualización. Revisalas de nuevo antes de confirmar.',
               repreview: true,
             })
             return
@@ -375,7 +375,7 @@ export function MigrationEditOverrideDialog({
                 rellenarlo lo convertiría en un campo decorativo y dejaría la puerta abierta a
                 editar la versión equivocada desde una pestaña vieja. */}
             <Input
-              label="Escribe el número de versión para confirmar que es la que quieres editar"
+              label="Escribí el número de versión para confirmar que es la que querés editar"
               hint={`Versión a editar: ${version}`}
               value={versionInput}
               error={

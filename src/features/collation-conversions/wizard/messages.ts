@@ -111,15 +111,15 @@ export const CONVERSION_ACTION_LABELS: Record<ConversionErrorAction, string | nu
 
 /** Texto de apoyo (bajo el mensaje del backend) para las acciones que lo necesitan. */
 export const CONVERSION_ACTION_HINTS: Partial<Record<ConversionErrorAction, string>> = {
-  replan: 'El plan ya no es válido (expiró o ya cambió de estado). Crea un plan nuevo para continuar.',
+  replan: 'El plan ya no es válido (expiró o ya cambió de estado). Creá un plan nuevo para continuar.',
   forceStaleInventory:
     'El inventario de la base de datos cambió desde que se creó el plan; recomputa la vista previa.',
   forceQuarantine:
-    'La base de datos está en cuarentena. Solo si ya la inspeccionaste, reintenta forzando la operación.',
+    'La base de datos está en cuarentena. Solo si ya la inspeccionaste, reintentá forzando la operación.',
   forceStaleAtExecute:
-    'El inventario cambió desde la última vista previa. Solo si ya revisaste el impacto, reintenta forzando la operación.',
+    'El inventario cambió desde la última vista previa. Solo si ya revisaste el impacto, reintentá forzando la operación.',
   recomputeToken: 'El plan cambió desde la última vista previa; se recomputará automáticamente el token.',
-  reviewSelection: 'No hay ningún paso pendiente con la selección actual: marca al menos una tabla u objeto.',
-  previewFirst: 'Genera la vista previa del plan antes de poder ejecutarlo.',
+  reviewSelection: 'No hay ningún paso pendiente con la selección actual: marcá al menos una tabla u objeto.',
+  previewFirst: 'Generá la vista previa del plan antes de poder ejecutarlo.',
   rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

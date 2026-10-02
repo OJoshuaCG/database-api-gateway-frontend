@@ -35,7 +35,7 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Confirmar clonación</h2>
         <p className="text-sm text-muted-foreground">
-          Revisa exactamente qué se hará antes de encolar la clonación.
+          Revisá exactamente qué se hará antes de encolar la clonación.
         </p>
       </div>
 
@@ -160,7 +160,7 @@ export function PreviewStep({ wizard }: { wizard: DatabaseCloneWizard }) {
       )}
 
       <Input
-        label={`Escribe «${targetName}» para confirmar`}
+        label={`Escribí «${targetName}» para confirmar`}
         value={wizard.confirmTargetName}
         onChange={(e) => wizard.setConfirmTargetName(e.target.value)}
         autoComplete="off"

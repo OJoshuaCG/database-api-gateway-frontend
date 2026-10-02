@@ -113,7 +113,7 @@ export type CloneInventoryOut = z.infer<typeof cloneInventoryOutSchema>
 
 /** Body de `POST .../resolve-selection`. */
 export const cloneResolveSelectionInSchema = z.object({
-  selection: z.array(cloneObjectRefSchema).min(1, 'Selecciona al menos un objeto'),
+  selection: z.array(cloneObjectRefSchema).min(1, 'Seleccioná al menos un objeto'),
 })
 export type CloneResolveSelectionIn = z.infer<typeof cloneResolveSelectionInSchema>
 

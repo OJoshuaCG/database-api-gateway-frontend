@@ -171,8 +171,8 @@ export function ItemSelectionPanel({
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
           El diff es muy grande: se cargaron los primeros {items.length} ítems para seleccionar.{' '}
           {supportsBulkModes
-            ? 'Si necesitas cubrir el resto, usa un modo masivo (todo / todo excepto destructivo) en vez de la selección personalizada.'
-            : 'Esta versión del blueprint solo incluirá los ítems cargados aquí; si necesitas cubrir el resto, adóptalo en varias versiones sucesivas.'}
+            ? 'Si necesitás cubrir el resto, usá un modo masivo (todo / todo excepto destructivo) en vez de la selección personalizada.'
+            : 'Esta versión del blueprint solo incluirá los ítems cargados aquí; si necesitás cubrir el resto, adoptalo en varias versiones sucesivas.'}
         </p>
       )}
 
@@ -180,7 +180,7 @@ export function ItemSelectionPanel({
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
           ⚠ Seleccionaste rutinas/triggers de MySQL/MariaDB. Adoptarlas como versión de blueprint
           puede fallar al aplicarse (el separador de sentencias corta mal el <code>BEGIN…END</code>
-          ). Considera ejecutarlas directo (Opción B) o edita el SQL de la versión antes de
+          ). Considerá ejecutarlas directo (Opción B) o editá el SQL de la versión antes de
           aplicarla.
         </p>
       )}
@@ -281,8 +281,8 @@ export function ItemSelectionPanel({
                   )}
                   {requiresReview && !isReviewed && (
                     <p className="pl-7 text-xs text-muted-foreground">
-                      Objeto procedural: márcalo como revisado (revisa el SQL con «Ver SQL» si lo
-                      necesitas) para poder seleccionarlo.
+                      Objeto procedural: marcalo como revisado (revisá el SQL con «Ver SQL» si lo
+                      necesitás) para poder seleccionarlo.
                     </p>
                   )}
                   {checkboxDisabled && !(requiresReview && !isReviewed) && (

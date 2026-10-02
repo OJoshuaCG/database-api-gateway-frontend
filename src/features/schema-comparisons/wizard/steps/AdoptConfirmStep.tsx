@@ -31,7 +31,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
 
   const handleCopyTargetName = async () => {
     if (!isClipboardAvailable()) {
-      toast.error('El portapapeles no está disponible', 'Escribe el nombre a mano.')
+      toast.error('El portapapeles no está disponible', 'Escribí el nombre a mano.')
       return
     }
     try {
@@ -78,7 +78,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
       {proceduralRisk && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
           ⚠ Adoptar rutinas/triggers MySQL/MariaDB con cuerpo <code>BEGIN…END</code> puede fallar al
-          aplicarse (limitación conocida v1). Considera la Opción B para esos objetos.
+          aplicarse (limitación conocida v1). Considerá la Opción B para esos objetos.
         </p>
       )}
 
@@ -101,7 +101,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
 
       <RadioCardGroup<AdoptMode>
         title="Qué hacer con la versión"
-        description="Elige una: solo crear la versión, o crearla y aplicarla al target en el mismo paso."
+        description="Elegí una: solo crear la versión, o crearla y aplicarla al target en el mismo paso."
         options={adoptModeOptions}
         value={wizard.adoptExecuteImmediately ? 'apply_now' : 'only_generate'}
         onChange={(mode) => wizard.setAdoptExecuteImmediately(mode === 'apply_now')}
@@ -120,7 +120,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
               Confirmar la aplicación sobre el target 🔌
             </p>
             <p className="text-xs text-muted-foreground">
-              Se va a ejecutar DDL sobre una base de datos real y no hay vuelta atrás. Escribe el
+              Se va a ejecutar DDL sobre una base de datos real y no hay vuelta atrás. Escribí el
               nombre exacto del target para habilitar el botón — mismo patrón que un DROP DATABASE.
             </p>
           </div>
@@ -140,7 +140,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
           </div>
 
           <Input
-            label={`Escribe «${targetName}» para confirmar`}
+            label={`Escribí «${targetName}» para confirmar`}
             className="font-mono"
             value={typed}
             onChange={(e) => wizard.setAdoptConfirmTargetName(e.target.value)}
@@ -163,7 +163,7 @@ export function AdoptConfirmStep({ wizard }: { wizard: SchemaComparisonWizard })
       {wizard.pendingReviewIds.length > 0 && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
           {wizard.pendingReviewIds.length} ítem(s) seleccionado(s) requieren revisión individual:
-          vuelve al paso anterior y abre su SQL completo antes de continuar.
+          volvé al paso anterior y abrí su SQL completo antes de continuar.
         </p>
       )}
 

@@ -108,7 +108,7 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
             Esta base de datos no tiene objetos
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            No hay estructura que capturar. Elige otro origen.
+            No hay estructura que capturar. Elegí otro origen.
           </p>
           <div className="mt-4 flex justify-center">
             <Button variant="outline" onClick={wizard.back}>
@@ -175,7 +175,7 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
           {dump.has_non_portable && (
             <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-foreground">
               Incluye procedimientos/triggers/eventos: el blueprint quedará atado al motor{' '}
-              <strong>{dump.source_engine}</strong> y no podrá aplicarse a otro motor. Puedes
+              <strong>{dump.source_engine}</strong> y no podrá aplicarse a otro motor. Podés
               excluirlos en el siguiente paso.
             </p>
           )}

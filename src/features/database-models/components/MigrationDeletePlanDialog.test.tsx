@@ -108,7 +108,7 @@ function expiresIn(ms: number): string {
 /** Cumple las dos condiciones que el usuario controla: reconocer y reescribir la versión. */
 async function confirmar(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('checkbox'))
-  await user.type(screen.getByLabelText(/Escribe el número de versión/), '0007')
+  await user.type(screen.getByLabelText(/Escribí el número de versión/), '0007')
 }
 
 describe('MigrationDeletePlanDialog', () => {
@@ -152,7 +152,7 @@ describe('MigrationDeletePlanDialog', () => {
     const borrar = screen.getByRole('button', { name: 'Eliminar la versión 0007' })
     expect(borrar).toBeDisabled()
 
-    await user.type(screen.getByLabelText(/Escribe el número de versión/), '0007')
+    await user.type(screen.getByLabelText(/Escribí el número de versión/), '0007')
     expect(borrar).toBeEnabled()
 
     await user.click(borrar)
@@ -189,11 +189,11 @@ describe('MigrationDeletePlanDialog', () => {
 
     // (c) Solo la versión reescrita, y encima mal escrita.
     await user.click(screen.getByRole('checkbox'))
-    await user.type(screen.getByLabelText(/Escribe el número de versión/), '0008')
+    await user.type(screen.getByLabelText(/Escribí el número de versión/), '0008')
     expect(borrar).toBeDisabled()
 
     // Las dos juntas, con el token vivo: recién ahí.
-    await user.clear(screen.getByLabelText(/Escribe el número de versión/))
+    await user.clear(screen.getByLabelText(/Escribí el número de versión/))
     await confirmar(user)
     expect(borrar).toBeEnabled()
   })

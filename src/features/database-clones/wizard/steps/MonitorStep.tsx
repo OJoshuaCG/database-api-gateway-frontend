@@ -146,7 +146,7 @@ export function MonitorStep({ wizard }: { wizard: DatabaseCloneWizard }) {
       {data.status === 'canceled' && (
         <div className="flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/5 p-4">
           <p className="text-sm font-semibold text-foreground">⏹ Cancelado</p>
-          <p className="text-xs text-muted-foreground">Revisa los pasos ya aplicados abajo.</p>
+          <p className="text-xs text-muted-foreground">Revisá los pasos ya aplicados abajo.</p>
           <Button variant="outline" className="self-start" onClick={wizard.reset}>
             Nuevo clon
           </Button>

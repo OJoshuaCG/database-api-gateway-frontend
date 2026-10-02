@@ -37,7 +37,7 @@ function renderEdit(onSubmit = vi.fn()) {
 describe('ServerForm — re-apuntar el servidor exige la contraseña', () => {
   it('sin cambios de destino la contraseña sigue siendo opcional', async () => {
     const onSubmit = renderEdit()
-    expect(screen.getByText('Déjalo en blanco para no cambiarla.')).toBeInTheDocument()
+    expect(screen.getByText('Dejalo en blanco para no cambiarla.')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
     expect(onSubmit).toHaveBeenCalledTimes(1)

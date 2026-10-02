@@ -74,7 +74,7 @@ export function SelectionStep({ wizard }: { wizard: DatabaseCloneWizard }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-foreground">Selecciona qué clonar</h2>
+        <h2 className="text-lg font-semibold text-foreground">Seleccioná qué clonar</h2>
         <p className="text-sm text-muted-foreground">
           Los objetos con FK/trigger necesarios se agregan solos; las sugerencias se resaltan pero
           no se marcan automáticamente.
@@ -160,7 +160,7 @@ function ManualSelection({
       {groups.length === 0 ? (
         <EmptyState
           title="Sin objetos de ese tipo"
-          description="Quita el filtro para ver el resto del inventario."
+          description="Quitá el filtro para ver el resto del inventario."
         />
       ) : (
         <div className="flex flex-col gap-4">

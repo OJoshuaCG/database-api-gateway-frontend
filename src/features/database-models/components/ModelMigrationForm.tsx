@@ -231,7 +231,7 @@ export function ModelMigrationForm({
           placeholder={mode === 'create' ? 'auto (siguiente secuencial)' : undefined}
           hint={
             mode === 'create'
-              ? 'Déjalo vacío para autoasignar la siguiente (recomendado), o fíjala a mano.'
+              ? 'Dejalo vacío para autoasignar la siguiente (recomendado), o fijala a mano.'
               : 'Inmutable.'
           }
           error={errors.version?.message}
@@ -336,7 +336,7 @@ export function ModelMigrationForm({
         hint={
           upSqlReadOnly
             ? 'Confirmar el rollback después de aplicar la versión es un flujo soportado: este campo no está congelado.'
-            : 'Sin él, el rollback responde 409. Revisa el sugerido y confírmalo aquí.'
+            : 'Sin él, el rollback responde 409. Revisá el sugerido y confirmalo aquí.'
         }
         error={errors.down_sql?.message}
       />

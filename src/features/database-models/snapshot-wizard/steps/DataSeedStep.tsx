@@ -71,7 +71,7 @@ export function DataSeedStep({ wizard }: { wizard: SnapshotWizard }) {
       ) : candidates.length === 0 ? (
         <p className="rounded-lg border border-border bg-surface-muted p-4 text-sm text-muted-foreground">
           No hay tablas elegibles para datos-semilla (ninguna con estructura incluida y clave
-          primaria). Puedes continuar sin datos.
+          primaria). Podés continuar sin datos.
         </p>
       ) : (
         <>

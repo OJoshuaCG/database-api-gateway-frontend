@@ -1344,12 +1344,12 @@ export function ManagedDatabaseMigrationsContent({
                             </div>
                           ) : hasPartial ? (
                             <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
-                              El apply falló y dejó una <strong>aplicación parcial</strong>: revisa
+                              El apply falló y dejó una <strong>aplicación parcial</strong>: revisá
                               el aviso de arriba para reconciliarla o retomar del checkpoint.
                             </p>
                           ) : (
                             <p className="rounded-lg bg-surface-muted p-2 text-xs text-muted-foreground">
-                              El apply falló sin dejar una aplicación parcial registrada; corrige la
+                              El apply falló sin dejar una aplicación parcial registrada; corregí la
                               migración y reintentá.
                             </p>
                           ))}
@@ -1385,7 +1385,7 @@ export function ManagedDatabaseMigrationsContent({
                             /* Sin vía automática, mandar a «Reconciliar» era un lazo cerrado: la
                                acción no existe para esta parcial. Se nombra la salida real. */
                             <p className="text-muted-foreground">
-                              Esta parcial no tiene reconciliación automática (mira el motivo en el
+                              Esta parcial no tiene reconciliación automática (mirá el motivo en el
                               aviso de arriba). Para desbloquear el rollback: reintentá el apply
                               para completarla, o arreglá el esquema a mano y declará la versión con{' '}
                               <strong>stamp force</strong>.
@@ -1617,7 +1617,7 @@ export function ManagedDatabaseMigrationsContent({
               <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
                 La versión <strong>{stampVersion.trim()}</strong> no figura en el catálogo de este
                 blueprint. El backend exige que el destino exista, así que va a rechazarla. Revisá
-                el número, o créala en el blueprint antes de marcarla.
+                el número, o creala en el blueprint antes de marcarla.
               </p>
             )}
           <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">

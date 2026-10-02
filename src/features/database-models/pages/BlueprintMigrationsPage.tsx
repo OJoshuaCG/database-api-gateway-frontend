@@ -528,7 +528,7 @@ export function BlueprintMigrationsPage() {
                 ) : (
                   <EmptyState
                     title="Sin migraciones"
-                    description="Crea la primera migración (delta SQL) de este blueprint."
+                    description="Creá la primera migración (delta SQL) de este blueprint."
                   />
                 )}
               </CardContent>
@@ -650,15 +650,15 @@ export function BlueprintMigrationsPage() {
 function deletePlanErrorText(apiError: ApiError): string {
   switch (apiError.code) {
     case MIGRATION_ERROR_CODES.versionInUse:
-      return 'Alguna base de datos está exactamente en esta versión, así que borrarla dejaría su puntero apuntando a algo que no existe. Muévela con un apply o un rollback y vuelve a intentarlo.'
+      return 'Alguna base de datos está exactamente en esta versión, así que borrarla dejaría su puntero apuntando a algo que no existe. Movela con un apply o un rollback y volvé a intentarlo.'
     case MIGRATION_ERROR_CODES.unreadableDatabases:
-      return 'No se pudo leer la versión de alguna base de datos, y el gateway prefiere negarse a suponer dónde está. Es un problema de acceso a esa base —motor caído, base sin aprovisionar o credenciales rotas—, no del blueprint. Arregla la conexión y vuelve a intentarlo.'
+      return 'No se pudo leer la versión de alguna base de datos, y el gateway prefiere negarse a suponer dónde está. Es un problema de acceso a esa base —motor caído, base sin aprovisionar o credenciales rotas—, no del blueprint. Arreglá la conexión y volvé a intentarlo.'
     case MIGRATION_ERROR_CODES.affectedPartialApplication:
-      return 'Hay una base con una aplicación a medio camino que este borrado afectaría. Reconcilia esa aplicación parcial o termina el apply antes de eliminar la versión.'
+      return 'Hay una base con una aplicación a medio camino que este borrado afectaría. Reconciliá esa aplicación parcial o terminá el apply antes de eliminar la versión.'
     case MIGRATION_ERROR_CODES.renumberPlanStale:
-      return 'El plan quedó viejo: alguna base se movió entre la comprobación y ahora. No es un fallo tuyo y no hay nada que arreglar — vuelve a pedir el plan y confirma sobre el estado de ahora.'
+      return 'El plan quedó viejo: alguna base se movió entre la comprobación y ahora. No es un fallo tuyo y no hay nada que arreglar — volvé a pedir el plan y confirmá sobre el estado de ahora.'
     case MIGRATION_ERROR_CODES.renumberTargetMissing:
-      return 'Al renumerar, alguna base quedaría apuntando a una versión que no figura en su historial. Revisa el historial de esas bases —lo habitual es que les falte aplicar migraciones— antes de volver a intentarlo.'
+      return 'Al renumerar, alguna base quedaría apuntando a una versión que no figura en su historial. Revisá el historial de esas bases —lo habitual es que les falte aplicar migraciones— antes de volver a intentarlo.'
     default:
       return apiError.message
   }

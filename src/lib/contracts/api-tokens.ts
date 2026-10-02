@@ -72,7 +72,7 @@ export const apiTokenCreateSchema = z.object({
     .string()
     .min(API_TOKEN_NAME_MIN, `Mínimo ${API_TOKEN_NAME_MIN} caracteres`)
     .max(API_TOKEN_NAME_MAX, `Máximo ${API_TOKEN_NAME_MAX} caracteres`),
-  project_id: z.number().int().min(1, 'Selecciona un proyecto'),
+  project_id: z.number().int().min(1, 'Seleccioná un proyecto'),
   scopes: z.array(z.string()).optional(),
   expires_in_days: z
     .number()

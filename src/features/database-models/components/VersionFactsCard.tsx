@@ -68,11 +68,11 @@ const DELETE_BLOCK_HINT: Record<
 > = {
   none: () => undefined,
   in_use: () =>
-    'Alguna base de datos está exactamente en esta versión. Muévela con un apply o un rollback antes de eliminarla.',
+    'Alguna base de datos está exactamente en esta versión. Movela con un apply o un rollback antes de eliminarla.',
   applied: () =>
-    'Alguna base de datos está hoy en esta versión o en una posterior. Crea una migración compensatoria.',
+    'Alguna base de datos está hoy en esta versión o en una posterior. Creá una migración compensatoria.',
   partial: () =>
-    'Tiene una aplicación parcial sin resolver: reconcilia esa BD o completa el apply antes de eliminarla.',
+    'Tiene una aplicación parcial sin resolver: reconciliá esa BD o completá el apply antes de eliminarla.',
   not_tip: (latestVersion) =>
     latestVersion
       ? `Solo se puede eliminar la última versión (${latestVersion}).`
@@ -560,7 +560,7 @@ function AdoptionRow({
           </Badge>
         )}
         {blockReason === 'partial' && (
-          <Badge tone="warning" title="Reconcilia esa BD o completa el apply.">
+          <Badge tone="warning" title="Reconciliá esa BD o completá el apply.">
             aplicación parcial sin resolver
           </Badge>
         )}

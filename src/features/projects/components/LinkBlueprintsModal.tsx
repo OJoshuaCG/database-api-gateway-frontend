@@ -110,7 +110,7 @@ export function LinkBlueprintsModal({
           setSelected((prev) => prev.filter((id) => !missing.includes(id)))
           setBanner({
             tone: 'error',
-            text: `No se vinculó ninguno. ${missing.length} blueprint(s) de la selección ya no existen y están marcados abajo. Quítalos y vuelve a intentar.`,
+            text: `No se vinculó ninguno. ${missing.length} blueprint(s) de la selección ya no existen y están marcados abajo. Quitalos y volvé a intentar.`,
             retry: 'valid',
           })
           return
@@ -120,7 +120,7 @@ export function LinkBlueprintsModal({
           // mantiene intacta y el CTA es reintentar, no corregir nada.
           setBanner({
             tone: 'warning',
-            text: 'Otra operación vinculó blueprints al mismo tiempo. Vuelve a intentarlo: la operación es segura de repetir.',
+            text: 'Otra operación vinculó blueprints al mismo tiempo. Volvé a intentarlo: la operación es segura de repetir.',
             retry: 'same',
           })
           return

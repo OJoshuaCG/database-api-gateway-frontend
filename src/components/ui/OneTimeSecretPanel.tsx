@@ -53,7 +53,7 @@ export function OneTimeSecretPanel({
       await navigator.clipboard.writeText(secret)
       toast.success(`${secretLabel} copiado al portapapeles`)
     } catch {
-      toast.error('No se pudo copiar al portapapeles', 'Selecciónalo y cópialo a mano.')
+      toast.error('No se pudo copiar al portapapeles', 'Seleccionalo y copialo a mano.')
     }
   }
 
@@ -85,7 +85,7 @@ export function OneTimeSecretPanel({
         </div>
         {!clipboardReady && (
           <p className="text-xs text-muted-foreground">
-            El portapapeles no está disponible en este navegador: selecciónalo y cópialo a mano.
+            El portapapeles no está disponible en este navegador: seleccionalo y copialo a mano.
           </p>
         )}
       </div>

@@ -92,7 +92,7 @@ export const managedDatabaseCreateSchema = z.object({
     .min(1, 'Requerido')
     .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
   server_id: z.number().int().min(1),
-  owner_id: z.number().int().min(1, 'Selecciona un propietario'),
+  owner_id: z.number().int().min(1, 'Seleccioná un propietario'),
   model_id: z.number().int().min(1).nullable().optional(),
   /**
    * `model_version` ya NO va en el alta: el backend la rechaza con 422
@@ -113,7 +113,7 @@ export const managedDatabaseCreateSchema = z.object({
     .nullable()
     .optional(),
   /** Requerido en el alta a propósito: ver el comentario de `ManagedDatabaseUpdate`. */
-  environment_id: z.number().int().min(1, 'Selecciona un entorno'),
+  environment_id: z.number().int().min(1, 'Seleccioná un entorno'),
   charset: charsetField,
   collation: charsetField,
   notes: z.string().nullable().optional(),
@@ -144,7 +144,7 @@ export type ManagedDatabaseUpdate = z.infer<typeof managedDatabaseUpdateSchema>
 
 /** `ReassignOwnerIn` — nuevo propietario (mismo servidor) (§9). */
 export const reassignOwnerInSchema = z.object({
-  owner_id: z.number().int().min(1, 'Selecciona un propietario'),
+  owner_id: z.number().int().min(1, 'Seleccioná un propietario'),
 })
 export type ReassignOwnerIn = z.infer<typeof reassignOwnerInSchema>
 
@@ -165,7 +165,7 @@ export const adoptDatabaseInSchema = z
       .min(1, 'Requerido')
       .regex(IDENTIFIER_PATTERN, 'Letra/_ inicial, hasta 63 caracteres alfanuméricos o _'),
     server_id: z.number().int().min(1),
-    owner_id: z.number().int().min(1, 'Selecciona un propietario'),
+    owner_id: z.number().int().min(1, 'Seleccioná un propietario'),
     model_id: z.number().int().min(1).nullable().optional(),
     model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
     /** Entorno del destino adoptado. Si se omite, el backend usa el entorno ACTIVO más protegido. */

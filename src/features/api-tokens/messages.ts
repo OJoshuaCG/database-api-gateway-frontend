@@ -28,10 +28,10 @@ export function apiTokenErrorMessage(error: ApiError): string | null {
       // «elige del techo» cuando el problema es un nombre inventado manda a buscar donde no está.
       return allowed?.length
         ? `Alguno de los permisos queda fuera del techo de agente. Admitidos: ${allowed.join(', ')}.`
-        : 'Hay un permiso que no corresponde a ninguna capacidad conocida. Revisa la selección.'
+        : 'Hay un permiso que no corresponde a ninguna capacidad conocida. Revisá la selección.'
     }
     case API_TOKEN_ERROR_CODES.notFound:
-      return 'Este token ya no existe. Refresca el listado.'
+      return 'Este token ya no existe. Refrescá el listado.'
     case API_TOKEN_ERROR_CODES.alreadyRevoked:
       return 'Este token ya estaba revocado: no fue esta acción la que cortó el acceso.'
     default:

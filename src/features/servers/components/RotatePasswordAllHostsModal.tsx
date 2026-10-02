@@ -76,7 +76,7 @@ export function RotatePasswordAllHostsModal({
           {failed.length > 0 ? (
             <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
               {failed.length} de {result.total_hosts} host(s) fallaron y{' '}
-              <strong>conservan la contraseña anterior</strong> en el motor. Reintenta o rota esas
+              <strong>conservan la contraseña anterior</strong> en el motor. Reintentá o rotá esas
               identidades individualmente.
             </p>
           ) : (
@@ -132,7 +132,7 @@ export function RotatePasswordAllHostsModal({
           <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
             Cambia la contraseña <strong>real</strong> en el motor: las aplicaciones que sigan
             usando la anterior perderán acceso. Para guardar una contraseña ya vigente sin
-            cambiarla, usa «Definir contraseña conocida».
+            cambiarla, usá «Definir contraseña conocida».
           </p>
           <Input
             label="Nueva contraseña"
@@ -143,7 +143,7 @@ export function RotatePasswordAllHostsModal({
             {...register('new_password')}
           />
           <Input
-            label={`Escribe «${username}» para confirmar`}
+            label={`Escribí «${username}» para confirmar`}
             autoComplete="off"
             required
             error={errors.confirm_username?.message}

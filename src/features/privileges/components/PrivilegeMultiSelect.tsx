@@ -40,7 +40,7 @@ export function PrivilegeMultiSelect({
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-foreground">{label}</span>
         <p className="text-xs text-muted-foreground">
-          Selecciona un motor para listar los privilegios disponibles.
+          Seleccioná un motor para listar los privilegios disponibles.
         </p>
       </div>
     )

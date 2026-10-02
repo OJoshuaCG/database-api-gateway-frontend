@@ -9,12 +9,12 @@ const SOURCE_MODES: { value: SourceMode; label: string; hint: string }[] = [
   {
     value: 'inventory',
     label: 'Del inventario',
-    hint: 'Elige una BD ya registrada en el gateway (cualquier servidor).',
+    hint: 'Elegí una BD ya registrada en el gateway (cualquier servidor).',
   },
   {
     value: 'server',
     label: 'Por servidor (BD cruda)',
-    hint: 'Elige un servidor y cualquiera de sus BDs en vivo, esté o no adoptada.',
+    hint: 'Elegí un servidor y cualquiera de sus BDs en vivo, esté o no adoptada.',
   },
 ]
 
@@ -120,7 +120,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
               </span>
             )}
             label="Servidor de origen"
-            placeholder="Selecciona un servidor"
+            placeholder="Seleccioná un servidor"
             isLoading={wizard.serverOptions.isLoading}
             clearable
             required
@@ -149,7 +149,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
                 </span>
               )}
               label="Base de datos de origen"
-              placeholder="Selecciona una base de datos"
+              placeholder="Seleccioná una base de datos"
               isLoading={wizard.sourceOptionsLoading}
               clearable
               required
@@ -173,7 +173,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
             </span>
           )}
           label="Servidor destino"
-          placeholder="Selecciona un servidor"
+          placeholder="Seleccioná un servidor"
           isLoading={wizard.serverOptions.isLoading}
           clearable
           required
@@ -203,7 +203,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
             required
           />
         ) : plan.targetServerId == null ? (
-          <p className="text-xs text-muted-foreground">Elige primero el servidor destino.</p>
+          <p className="text-xs text-muted-foreground">Elegí primero el servidor destino.</p>
         ) : wizard.targetExistingError ? (
           <ErrorState error={wizard.targetExistingError} title="No se pudieron cargar las bases de datos" />
         ) : !wizard.targetExistingLoading && wizard.targetExistingOptions.length === 0 ? (
@@ -222,7 +222,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
               </span>
             )}
             label="Base de datos destino existente"
-            placeholder="Selecciona una base de datos"
+            placeholder="Seleccioná una base de datos"
             isLoading={wizard.targetExistingLoading}
             clearable
             required
@@ -287,7 +287,7 @@ export function PlanStep({ wizard }: { wizard: DatabaseCloneWizard }) {
                 itemToString={(owner) => owner.username}
                 itemToKey={(owner) => owner.id}
                 label="Propietario del destino"
-                placeholder="Selecciona un usuario del servidor destino"
+                placeholder="Seleccioná un usuario del servidor destino"
                 isLoading={wizard.ownerOptions.isLoading}
                 required
               />

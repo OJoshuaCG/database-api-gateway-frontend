@@ -48,7 +48,7 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
 
       <RadioCardGroup<ExecuteMode>
         title="Modo de ejecución"
-        description={`Elige qué parte del diff se ejecutará sobre ${targetName}.`}
+        description={`Elegí qué parte del diff se ejecutará sobre ${targetName}.`}
         options={MODE_OPTIONS}
         value={wizard.executeMode}
         onChange={wizard.setExecuteMode}
@@ -111,14 +111,14 @@ export function ExecuteSelectStep({ wizard }: { wizard: SchemaComparisonWizard }
                   ))}
                 </ul>
                 <p className="text-xs text-muted-foreground">
-                  Si los necesitas, usa el modo personalizado y selecciónalos explícitamente.
+                  Si los necesitás, usá el modo personalizado y seleccionalos explícitamente.
                 </p>
               </div>
             )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Elige un modo (y al menos un ítem, en personalizado) para ver la vista previa.
+            Elegí un modo (y al menos un ítem, en personalizado) para ver la vista previa.
           </p>
         )}
       </div>

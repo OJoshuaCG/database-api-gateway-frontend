@@ -288,7 +288,7 @@ export function DatabaseModelForm({
               value={field.value}
               onChange={field.onChange}
               label="Charset / collation de referencia"
-              hint="Opcional. Si lo declaras, el validador avisa cuando una migración fuerza un COLLATE distinto y podrás detectar BDs desviadas. Semántica MySQL/MariaDB."
+              hint="Opcional. Si lo declarás, el validador avisa cuando una migración fuerza un COLLATE distinto y podrás detectar BDs desviadas. Semántica MySQL/MariaDB."
             />
           )}
         />

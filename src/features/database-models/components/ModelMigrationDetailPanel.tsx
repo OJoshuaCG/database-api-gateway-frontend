@@ -153,8 +153,8 @@ export function ModelMigrationDetailPanel({
       <Card>
         <CardContent>
           <EmptyState
-            title="Selecciona una versión"
-            description="Elige una migración en el desplegable de arriba para ver su SQL y editarla."
+            title="Seleccioná una versión"
+            description="Elegí una migración en el desplegable de arriba para ver su SQL y editarla."
           />
         </CardContent>
       </Card>
@@ -265,7 +265,7 @@ export function ModelMigrationDetailPanel({
           const apiError = toApiError(err)
           setPreviewError(
             apiError.status === 429
-              ? 'Demasiadas previsualizaciones seguidas; espera un momento.'
+              ? 'Demasiadas previsualizaciones seguidas; esperá un momento.'
               : apiError.message,
           )
         },

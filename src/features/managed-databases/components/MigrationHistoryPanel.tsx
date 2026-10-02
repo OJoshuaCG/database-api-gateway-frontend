@@ -289,7 +289,7 @@ function MigrationHistoryDetailModal({
       await navigator.clipboard.writeText(entry.request_id)
       toast.success('ID de solicitud copiado al portapapeles')
     } catch {
-      toast.error('No se pudo copiar al portapapeles', 'Selecciónalo y cópialo a mano.')
+      toast.error('No se pudo copiar al portapapeles', 'Seleccionalo y copialo a mano.')
     }
   }
 
@@ -378,7 +378,7 @@ function MigrationHistoryDetailModal({
             // El portapapeles solo existe en contexto seguro, y este gateway también se sirve por
             // HTTP plano: sin el aviso, el botón deshabilitado no explica nada.
             <span className="text-xs text-muted-foreground">
-              El portapapeles no está disponible sobre HTTP plano: selecciónalo y cópialo a mano.
+              El portapapeles no está disponible sobre HTTP plano: seleccionalo y copialo a mano.
             </span>
           )}
         </div>

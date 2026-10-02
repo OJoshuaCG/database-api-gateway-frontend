@@ -100,7 +100,7 @@ export function VersionNavigator({
                 itemToString={(m) => `${m.version} · ${m.name}`}
                 itemToKey={(m) => m.id}
                 label="Versión"
-                placeholder="Selecciona una versión…"
+                placeholder="Seleccioná una versión…"
                 renderItem={(m) => (
                   <div className="flex w-full items-center gap-2">
                     <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">

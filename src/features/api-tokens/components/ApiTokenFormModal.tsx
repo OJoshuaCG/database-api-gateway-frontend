@@ -116,7 +116,7 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
           maxLength={API_TOKEN_NAME_MAX}
           value={name}
           onChange={(event) => setName(event.target.value)}
-          hint="Describe la máquina o el repositorio destino: es lo que vas a leer cuando toque revocarlo."
+          hint="Describí la máquina o el repositorio destino: es lo que vas a leer cuando toque revocarlo."
           error={nameTooShort ? `Mínimo ${API_TOKEN_NAME_MIN} caracteres` : undefined}
         />
 

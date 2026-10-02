@@ -32,7 +32,7 @@ export function ResultStep({ wizard, result }: { wizard: SnapshotWizard; result:
       </div>
 
       <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-foreground">
-        Todas las versiones nacen <strong>sin aprobar</strong>. Debes revisar el SQL y aprobar cada
+        Todas las versiones nacen <strong>sin aprobar</strong>. Debés revisar el SQL y aprobar cada
         una antes de poder aplicarlas.
       </div>
 

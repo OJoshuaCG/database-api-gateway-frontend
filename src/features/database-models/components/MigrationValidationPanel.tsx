@@ -77,7 +77,7 @@ export function MigrationValidationPanel({
               }}
               itemToString={(db) => db.name}
               itemToKey={(db) => db.id}
-              placeholder="Elige una BD para comprobar…"
+              placeholder="Elegí una BD para comprobar…"
               clearable
               disabled={validate.isPending || upSql.trim().length === 0}
             />
@@ -124,7 +124,7 @@ function ValidationResult({
         {clean ? (
           <Badge tone="success">Sin problemas</Badge>
         ) : (
-          <Badge tone="error">Revisa los avisos</Badge>
+          <Badge tone="error">Revisá los avisos</Badge>
         )}
         {result.has_seed && <Badge tone="info">🌱 siembra datos</Badge>}
         {result.destructive_statements.length > 0 && (
@@ -191,7 +191,7 @@ function ValidationResult({
             ))}
           </ul>
           <p className="mt-1">
-            Aplicar a una BD PostgreSQL daría 422. Define un <code>up_sql_postgresql</code>{' '}
+            Aplicar a una BD PostgreSQL daría 422. Definí un <code>up_sql_postgresql</code>{' '}
             explícito.
           </p>
         </div>

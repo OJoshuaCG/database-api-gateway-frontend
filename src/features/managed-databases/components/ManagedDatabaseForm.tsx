@@ -64,9 +64,9 @@ function buildSchema(mode: 'create' | 'edit') {
         ? z.string().min(1, 'Requerido').regex(IDENTIFIER_PATTERN, 'Identificador inválido')
         : z.string(),
     server_id:
-      mode === 'create' ? z.number().int().min(1, 'Selecciona un servidor') : z.number().int(),
+      mode === 'create' ? z.number().int().min(1, 'Seleccioná un servidor') : z.number().int(),
     owner_id:
-      mode === 'create' ? z.number().int().min(1, 'Selecciona un propietario') : z.number().int(),
+      mode === 'create' ? z.number().int().min(1, 'Seleccioná un propietario') : z.number().int(),
     model_id: z.number().int().min(1).nullable(),
     initialState: z.enum(['vacia', 'ultima', 'version']),
     targetVersion: z.string(),
@@ -76,7 +76,7 @@ function buildSchema(mode: 'create' | 'edit') {
     // "nadie notó que se fue por default". En `edit` es nullable porque `null` desclasifica.
     environment_id:
       mode === 'create'
-        ? z.number().int().min(1, 'Selecciona un entorno')
+        ? z.number().int().min(1, 'Seleccioná un entorno')
         : z.number().int().min(1).nullable(),
     // Sin validación propia: el selector solo produce valores válidos del catálogo, y en modo
     // `edit` ni se muestra ni se envía.
@@ -255,7 +255,7 @@ export function ManagedDatabaseForm({
                   disabled={!selectedServerId}
                   isLoading={owners.isFetching}
                   placeholder={
-                    selectedServerId ? 'Selecciona un propietario' : 'Elige un servidor primero'
+                    selectedServerId ? 'Seleccioná un propietario' : 'Elegí un servidor primero'
                   }
                   error={fieldState.error?.message}
                 />
@@ -270,7 +270,7 @@ export function ManagedDatabaseForm({
             <p className="text-muted-foreground">{readonlyIdentity.serverName}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
-            Nombre, servidor y propietario no se editan aquí (usa «Reasignar propietario»).
+            Nombre, servidor y propietario no se editan aquí (usá «Reasignar propietario»).
           </p>
         </div>
       )}
@@ -313,7 +313,7 @@ export function ManagedDatabaseForm({
             label="Entorno"
             required={mode === 'create'}
             isLoading={environments.isLoading}
-            placeholder="Selecciona un entorno"
+            placeholder="Seleccioná un entorno"
             disabled={reclassifyBlocked}
             hint={
               mode === 'create'

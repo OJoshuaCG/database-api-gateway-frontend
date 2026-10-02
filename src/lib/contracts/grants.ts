@@ -40,7 +40,7 @@ export type GrantInfo = z.infer<typeof grantInfoSchema>
 export const grantRequestSchema = z.object({
   level: grantLevelSchema,
   object_ref: objectRefSchema,
-  privileges: z.array(z.string()).min(1, 'Selecciona al menos un privilegio'),
+  privileges: z.array(z.string()).min(1, 'Seleccioná al menos un privilegio'),
   with_grant_option: z.boolean().optional(),
 })
 export type GrantRequest = z.infer<typeof grantRequestSchema>
@@ -58,7 +58,7 @@ export type GrantResult = z.infer<typeof grantResultSchema>
 export const revokeRequestSchema = z.object({
   level: grantLevelSchema,
   object_ref: objectRefSchema,
-  privileges: z.array(z.string()).min(1, 'Selecciona al menos un privilegio'),
+  privileges: z.array(z.string()).min(1, 'Seleccioná al menos un privilegio'),
   cascade: z.boolean().optional(),
 })
 export type RevokeRequest = z.infer<typeof revokeRequestSchema>
@@ -67,7 +67,7 @@ export type RevokeRequest = z.infer<typeof revokeRequestSchema>
 export const grantableRequestSchema = z.object({
   level: grantLevelSchema,
   object_ref: objectRefSchema,
-  privileges: z.array(z.string()).min(1, 'Selecciona al menos un privilegio'),
+  privileges: z.array(z.string()).min(1, 'Seleccioná al menos un privilegio'),
 })
 export type GrantableRequest = z.infer<typeof grantableRequestSchema>
 
@@ -155,7 +155,7 @@ export type IdentityGrants = z.infer<typeof identityGrantsSchema>
  * mismo esquema relativo en cada base.
  */
 export const applyProfileBulkRequestSchema = z.object({
-  databases: z.array(z.string()).min(1, 'Selecciona al menos una base de datos').max(100),
+  databases: z.array(z.string()).min(1, 'Seleccioná al menos una base de datos').max(100),
   object_mappings: z.array(objectMappingSchema),
 })
 export type ApplyProfileBulkRequest = z.infer<typeof applyProfileBulkRequestSchema>

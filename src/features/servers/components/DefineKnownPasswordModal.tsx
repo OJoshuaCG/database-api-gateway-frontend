@@ -94,7 +94,7 @@ export function DefineKnownPasswordModal({
   const warningBox = (
     <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
       El gateway <strong>no verifica</strong> que esta contraseña sea la vigente en el motor: solo
-      la cifra y la guarda, sin ejecutar <code>ALTER USER</code>. Si te equivocas, «Revelar
+      la cifra y la guarda, sin ejecutar <code>ALTER USER</code>. Si te equivocás, «Revelar
       contraseña» devolverá después un valor incorrecto sin que nadie lo detecte.
     </p>
   )
@@ -104,7 +104,7 @@ export function DefineKnownPasswordModal({
       open
       onClose={onClose}
       title="Definir contraseña conocida"
-      description={`Guarda cifrada la contraseña actual de «${username}» sin tocar el motor. Para cambiarla de verdad, usa «Rotar contraseña».`}
+      description={`Guarda cifrada la contraseña actual de «${username}» sin tocar el motor. Para cambiarla de verdad, usá «Rotar contraseña».`}
       size="md"
     >
       {result ? (
@@ -140,8 +140,8 @@ export function DefineKnownPasswordModal({
             <>
               <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
                 {conflicts.length} identidad(es) ya tenían una contraseña guardada y no se tocaron.
-                Sobrescribirlas reemplaza el valor guardado (el motor no se toca); hazlo solo si
-                confirmas que esta es la contraseña correcta.
+                Sobrescribirlas reemplaza el valor guardado (el motor no se toca); hacelo solo si
+                confirmás que esta es la contraseña correcta.
               </p>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={onClose} disabled={define.isPending}>
@@ -203,7 +203,7 @@ export function DefineKnownPasswordModal({
               label="Host"
               hint="«%» es un host real (literal), no un atajo de «todos los hosts»."
               required
-              error={!host && hostSubmitAttempted ? 'Selecciona un host' : undefined}
+              error={!host && hostSubmitAttempted ? 'Seleccioná un host' : undefined}
             />
           )}
           <Input

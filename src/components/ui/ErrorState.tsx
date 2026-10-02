@@ -32,7 +32,7 @@ export function ErrorState({
         <p className="max-w-md text-sm text-muted-foreground">{message ?? apiError.message}</p>
         {apiError.isEngineError && (
           <p className="max-w-md text-xs text-muted-foreground">
-            El servidor de base de datos destino no respondió. Verifica su disponibilidad y la
+            El servidor de base de datos destino no respondió. Verificá su disponibilidad y la
             conectividad de red.
           </p>
         )}

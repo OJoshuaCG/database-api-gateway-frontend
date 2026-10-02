@@ -85,13 +85,13 @@ export const ACTION_HINTS: Partial<Record<ComparisonErrorAction, string>> = {
   // El detalle por campo de este 422 viaja en `context`, que solo existe en desarrollo, así que
   // el copy lo pone la UI y no la respuesta.
   fixConfirmName:
-    'El nombre escrito no coincide con el de la base de datos target. Cópialo del recuadro y vuelve a escribirlo, respetando mayúsculas y minúsculas.',
-  recalculate: 'El estado de origen/target cambió; vuelve a calcular la comparación para continuar.',
-  switchToAdopt: 'El target tiene un blueprint asignado: adopta el diff como una nueva versión en vez de ejecutarlo directo.',
-  switchToExecute: 'El target no tiene blueprint: ejecuta el diff directamente en vez de adoptarlo como versión.',
-  forceQuarantine: 'El target está en cuarentena. Solo si ya lo inspeccionaste, reintenta forzando la operación.',
+    'El nombre escrito no coincide con el de la base de datos target. Copialo del recuadro y volvé a escribirlo, respetando mayúsculas y minúsculas.',
+  recalculate: 'El estado de origen/target cambió; volvé a calcular la comparación para continuar.',
+  switchToAdopt: 'El target tiene un blueprint asignado: adoptá el diff como una nueva versión en vez de ejecutarlo directo.',
+  switchToExecute: 'El target no tiene blueprint: ejecutá el diff directamente en vez de adoptarlo como versión.',
+  forceQuarantine: 'El target está en cuarentena. Solo si ya lo inspeccionaste, reintentá forzando la operación.',
   recomputeToken: 'El conjunto de sentencias a ejecutar cambió desde la última vista previa; se recomputará automáticamente.',
   resolveDependencies:
-    'Tu selección depende de sentencias que no incluiste. Se agregarán las sugeridas por el backend a la selección; revisa y vuelve a confirmar.',
+    'Tu selección depende de sentencias que no incluiste. Se agregarán las sugeridas por el backend a la selección; revisá y volvé a confirmar.',
   rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

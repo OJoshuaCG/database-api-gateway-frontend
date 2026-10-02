@@ -98,7 +98,7 @@ export type ProjectUpdate = z.infer<typeof projectUpdateSchema>
 
 /** `ProjectBlueprintsIn` (§3.7) — cuerpo de la vinculación. Al menos un id. */
 export const projectBlueprintsInSchema = z.object({
-  model_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un blueprint'),
+  model_ids: z.array(z.number().int()).min(1, 'Seleccioná al menos un blueprint'),
 })
 export type ProjectBlueprintsIn = z.infer<typeof projectBlueprintsInSchema>
 

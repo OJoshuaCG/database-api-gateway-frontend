@@ -155,7 +155,7 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
       {data.users.length === 0 ? (
         <EmptyState
           title="No hay usuarios"
-          description="Crea un usuario del motor para empezar a gestionarlo."
+          description="Creá un usuario del motor para empezar a gestionarlo."
         />
       ) : (
         <div className="overflow-x-auto rounded-card border border-border">

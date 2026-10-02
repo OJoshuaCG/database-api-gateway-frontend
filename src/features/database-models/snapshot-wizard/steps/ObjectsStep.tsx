@@ -48,7 +48,7 @@ export function ObjectsStep({ wizard }: { wizard: SnapshotWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Selección de objetos</h2>
         <p className="text-sm text-muted-foreground">
-          Elige qué objetos entran al blueprint. Por defecto entran todos.
+          Elegí qué objetos entran al blueprint. Por defecto entran todos.
         </p>
       </div>
 
@@ -153,7 +153,7 @@ export function ObjectsStep({ wizard }: { wizard: SnapshotWizard }) {
 
       {!canContinue && (
         <p className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-error">
-          La selección excluye todo. Ajusta los filtros para incluir al menos un objeto.
+          La selección excluye todo. Ajustá los filtros para incluir al menos un objeto.
         </p>
       )}
     </div>

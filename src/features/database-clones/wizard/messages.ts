@@ -80,12 +80,12 @@ export const CLONE_ACTION_LABELS: Record<CloneErrorAction, string | null> = {
 
 /** Texto de apoyo (bajo el mensaje del backend) para las acciones que lo necesitan. */
 export const CLONE_ACTION_HINTS: Partial<Record<CloneErrorAction, string>> = {
-  replan: 'El plan ya no es válido (expiró, ya se ejecutó, o el origen cambió). Crea un plan nuevo para continuar.',
+  replan: 'El plan ya no es válido (expiró, ya se ejecutó, o el origen cambió). Creá un plan nuevo para continuar.',
   forceQuarantine:
-    'El destino está en cuarentena. Solo si ya lo inspeccionaste, reintenta forzando la operación.',
+    'El destino está en cuarentena. Solo si ya lo inspeccionaste, reintentá forzando la operación.',
   recomputeToken:
     'El plan cambió desde la última vista previa; se recomputará automáticamente el token.',
-  switchToExistingTarget: "La BD destino ya existe: cambia el modo a 'existing' para usarla.",
-  switchToNewTarget: "La BD destino no existe: cambia el modo a 'new' para crearla.",
+  switchToExistingTarget: "La BD destino ya existe: cambiá el modo a 'existing' para usarla.",
+  switchToNewTarget: "La BD destino no existe: cambiá el modo a 'new' para crearla.",
   rateLimited: 'Se alcanzó el límite de solicitudes. Esperá unos segundos y volvé a intentarlo.',
 }

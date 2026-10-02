@@ -35,7 +35,7 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Resumen y confirmación</h2>
         <p className="text-sm text-muted-foreground">
-          Revisa la identidad y lo que se creará. Ninguna versión se aplica hasta revisarla y
+          Revisá la identidad y lo que se creará. Ninguna versión se aplica hasta revisarla y
           aprobarla.
         </p>
       </div>
@@ -140,7 +140,7 @@ export function SummaryStep({ wizard }: { wizard: SnapshotWizard }) {
           </p>
           {is429 && (
             <p className="text-sm text-muted-foreground">
-              Límite de 10/min excedido. Espera un momento e inténtalo de nuevo.
+              Límite de 10/min excedido. Esperá un momento e intentalo de nuevo.
             </p>
           )}
           {is422 && violations.length > 0 && (

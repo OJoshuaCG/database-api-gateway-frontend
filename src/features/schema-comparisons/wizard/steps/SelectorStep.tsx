@@ -79,7 +79,7 @@ function DatabasePicker({
         </span>
       )}
       label="Base de datos"
-      placeholder="Selecciona una base de datos"
+      placeholder="Seleccioná una base de datos"
       isLoading={isLoading}
       clearable
       required
@@ -157,7 +157,7 @@ function ServerScopedPanel({
           </span>
         )}
         label="Servidor"
-        placeholder="Selecciona un servidor"
+        placeholder="Seleccioná un servidor"
         isLoading={serversLoading}
         clearable
         required
@@ -207,14 +207,14 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
           Solo estructura, nunca datos. Solo el mismo motor (se permite MySQL↔MariaDB).
         </p>
         <p className="text-sm text-muted-foreground">
-          Completa los bloques numerados en orden: hay que elegir{' '}
+          Completá los bloques numerados en orden: hay que elegir{' '}
           <strong className="font-semibold text-foreground">una opción en cada bloque</strong>.
         </p>
       </div>
 
       <RadioCardGroup<SelectionMode>
-        title="1. Cómo eliges las bases de datos"
-        description="Elige una de estas dos formas de localizar las BDs que vas a comparar."
+        title="1. Cómo elegís las bases de datos"
+        description="Elegí una de estas dos formas de localizar las BDs que vas a comparar."
         options={SELECTION_MODES}
         value={wizard.selectionMode}
         onChange={wizard.setSelectionMode}
@@ -223,7 +223,7 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
       {isFamilyMode && (
         <RadioCardGroup<EngineFamily>
           title="2. Motor de las dos bases de datos"
-          description="Ambas BDs tienen que ser del mismo motor. Elige de qué motor son."
+          description="Ambas BDs tienen que ser del mismo motor. Elegí de qué motor son."
           options={ENGINE_FAMILY_OPTIONS}
           value={wizard.family}
           onChange={wizard.setFamily}
@@ -236,7 +236,7 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
             {databasesGroupNumber}. Las dos bases de datos a comparar
           </p>
           <p className="text-sm text-muted-foreground">
-            Elige una en cada lado: SOURCE es la referencia (estado deseado) y TARGET es la que se
+            Elegí una en cada lado: SOURCE es la referencia (estado deseado) y TARGET es la que se
             modificaría.
           </p>
         </div>
@@ -244,7 +244,7 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
         {isFamilyMode ? (
           wizard.family == null ? (
             <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-              Elige primero el motor en el bloque 2 para ver las bases de datos disponibles.
+              Elegí primero el motor en el bloque 2 para ver las bases de datos disponibles.
             </p>
           ) : wizard.sourceOptionsError ? (
             <ErrorState
@@ -324,7 +324,7 @@ export function SelectorStep({ wizard }: { wizard: SchemaComparisonWizard }) {
       {wizard.crossFlavorWarning && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-foreground">
           ⚠ Comparación entre familias (MySQL↔MariaDB): habrá ruido esperable (JSON/collations/
-          secuencias). Revisa con cuidado.
+          secuencias). Revisá con cuidado.
         </p>
       )}
 

@@ -12,7 +12,7 @@ interface RevealEngineUserPasswordModalProps {
 }
 
 const STATUS_HINT: Record<number, string> = {
-  404: 'Este usuario no está en el inventario del gateway. Adóptalo o gestiónalo primero.',
+  404: 'Este usuario no está en el inventario del gateway. Adoptalo o gestionalo primero.',
   409: 'Solo se puede rotar la contraseña, no revelarla: el gateway nunca la fijó.',
 }
 

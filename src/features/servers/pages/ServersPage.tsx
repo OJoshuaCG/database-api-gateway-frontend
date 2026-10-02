@@ -171,7 +171,7 @@ export function ServersPage() {
             emptyState={
               <EmptyState
                 title="Aún no hay servidores"
-                description="Registra tu primer servidor destino para empezar a gestionarlo."
+                description="Registrá tu primer servidor destino para empezar a gestionarlo."
                 action={
                   canAdmin ? (
                     <Button

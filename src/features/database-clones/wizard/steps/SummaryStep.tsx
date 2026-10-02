@@ -47,7 +47,7 @@ export function SummaryStep({ wizard }: { wizard: DatabaseCloneWizard }) {
 
       {job.expired ? (
         <p className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-foreground">
-          Este plan expiró. Crea uno nuevo para continuar.
+          Este plan expiró. Creá uno nuevo para continuar.
         </p>
       ) : job.status === 'pending' ? (
         <div className="flex flex-wrap gap-2">

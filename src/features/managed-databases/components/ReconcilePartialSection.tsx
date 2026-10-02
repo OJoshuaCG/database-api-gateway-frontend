@@ -166,7 +166,7 @@ export function ReconcilePartialSection({
                   <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
                     <p className="text-foreground">
                       Aviso: estos reversos <strong>sí se ejecutan</strong>, pero no son
-                      demostrablemente seguros (revísalos antes de continuar):
+                      demostrablemente seguros (revisalos antes de continuar):
                     </p>
                     <CodeBlock
                       code={plan.unconfirmed_reverses.join('\n')}
@@ -215,7 +215,7 @@ export function ReconcilePartialSection({
 
                 <div className="flex flex-col gap-3 rounded-lg border border-error/30 p-3">
                   <Input
-                    label={`Escribe «${entry.version}» para confirmar`}
+                    label={`Escribí «${entry.version}» para confirmar`}
                     hint="Doble confirmación: la versión de la aplicación parcial (confirm_version)."
                     value={confirmTyped}
                     onChange={(event) => setConfirmTyped(event.target.value)}
@@ -233,7 +233,7 @@ export function ReconcilePartialSection({
                   )}
                   {cooldown && (
                     <p className="rounded-lg border border-error/40 bg-error/5 p-2 text-xs text-error">
-                      Has alcanzado el límite de 10/min. Espera unos segundos e inténtalo de nuevo.
+                      Alcanzaste el límite de 10/min. Esperá unos segundos e intentalo de nuevo.
                     </p>
                   )}
                 </div>
@@ -286,12 +286,12 @@ function ReconcileResultView({ result }: { result: ReconcilePartialResult }) {
 
       {result.fully_reconciled ? (
         <p className="rounded-lg border border-success/40 bg-success/5 p-2 text-xs text-foreground">
-          La base volvió a la versión anterior sin intervención adicional. Corrige la migración{' '}
-          {result.version} en el blueprint y reintenta el apply.
+          La base volvió a la versión anterior sin intervención adicional. Corregí la migración{' '}
+          {result.version} en el blueprint y reintentá el apply.
         </p>
       ) : (
         <p className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-foreground">
-          La reconciliación no fue completa: revisa el estado de la BD y las sentencias restantes
+          La reconciliación no fue completa: revisá el estado de la BD y las sentencias restantes
           antes de reintentar el apply.
         </p>
       )}
@@ -306,7 +306,7 @@ function ReconcileResultView({ result }: { result: ReconcilePartialResult }) {
       {result.unconfirmed_reverses.length > 0 && (
         <div className="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
           <p className="text-foreground">
-            Se ejecutaron reversos no demostrablemente seguros (verifica el resultado):
+            Se ejecutaron reversos no demostrablemente seguros (verificá el resultado):
           </p>
           <CodeBlock code={result.unconfirmed_reverses.join('\n')} maxHeightClass="max-h-48" />
         </div>

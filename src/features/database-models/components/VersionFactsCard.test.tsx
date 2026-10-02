@@ -292,7 +292,7 @@ describe('VersionFactsCard', () => {
     // en la insignia de la fila de adopción, y un match parcial encuentra las dos.
     expect(
       screen.getByText(
-        'Tiene una aplicación parcial sin resolver: reconcilia esa BD o completa el apply antes de eliminarla.',
+        'Tiene una aplicación parcial sin resolver: reconciliá esa BD o completá el apply antes de eliminarla.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByText('aplicación parcial sin resolver')).toBeInTheDocument()
@@ -305,7 +305,7 @@ describe('VersionFactsCard', () => {
     expect(await screen.findByRole('button', { name: 'Eliminar la versión 0007' })).toBeDisabled()
     expect(
       screen.getByText(
-        'Alguna base de datos está exactamente en esta versión. Muévela con un apply o un rollback antes de eliminarla.',
+        'Alguna base de datos está exactamente en esta versión. Movela con un apply o un rollback antes de eliminarla.',
       ),
     ).toBeInTheDocument()
     // Y la insignia, que comparte con el legado `applied` porque describen el mismo hecho.

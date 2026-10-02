@@ -23,7 +23,7 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Origen del snapshot</h2>
         <p className="text-sm text-muted-foreground">
-          Elige de qué servidor y base de datos se tomará la estructura. El gateway leerá el motor
+          Elegí de qué servidor y base de datos se tomará la estructura. El gateway leerá el motor
           en vivo (solo lectura); puede tardar en BDs grandes. Las bases{' '}
           <strong>sin gestionar</strong> son las candidatas naturales a convertir en blueprint.
         </p>
@@ -43,7 +43,7 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
             itemToString={(s) => s.name}
             itemToKey={(s) => s.id}
             label="Servidor destino"
-            placeholder="Selecciona el servidor de origen"
+            placeholder="Seleccioná el servidor de origen"
             isLoading={wizard.servers.isLoading}
             required
           />
@@ -73,7 +73,7 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
                 </span>
               )}
               label="Base de datos"
-              placeholder={wizard.serverId ? 'Selecciona la BD' : 'Elige un servidor primero'}
+              placeholder={wizard.serverId ? 'Seleccioná la BD' : 'Elegí un servidor primero'}
               isLoading={reconcile.isLoading}
               disabled={!wizard.serverId}
               required
@@ -82,7 +82,7 @@ export function OriginStep({ wizard }: { wizard: SnapshotWizard }) {
 
           {selectedDb && selectedDb.state === 'managed' && (
             <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-foreground">
-              «{selectedDb.name}» ya está gestionada por el gateway. Puedes fotografiarla igualmente
+              «{selectedDb.name}» ya está gestionada por el gateway. Podés fotografiarla igualmente
               para derivar un blueprint, pero no es el caso habitual.
             </p>
           )}

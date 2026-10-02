@@ -226,7 +226,7 @@ export function ServerForm({
             ? 'Se cifra; nunca se devuelve.'
             : pendingRebind.length > 0
               ? rebindMessage(pendingRebind)
-              : 'Déjalo en blanco para no cambiarla.'
+              : 'Dejalo en blanco para no cambiarla.'
         }
         error={errors.root_password?.message}
         {...register('root_password')}

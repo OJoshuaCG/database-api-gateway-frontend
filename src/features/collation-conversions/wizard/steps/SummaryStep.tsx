@@ -85,7 +85,7 @@ export function SummaryStep({ wizard }: { wizard: CollationConversionWizard }) {
       {expiredPending ? (
         <div className="flex flex-col gap-2">
           <p className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-foreground">
-            Este plan expiró antes de llegar a ejecutarse. Crea uno nuevo para continuar.
+            Este plan expiró antes de llegar a ejecutarse. Creá uno nuevo para continuar.
           </p>
           <Button className="self-start" onClick={() => wizard.goToStep('plan')}>
             Crear un plan nuevo

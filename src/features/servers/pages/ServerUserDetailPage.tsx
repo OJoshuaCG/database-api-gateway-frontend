@@ -384,7 +384,7 @@ function ServerUserDetailContent({
             // `adopt` busca la identidad en el motor—; la salida es recrearla, desde la cabecera.
             <EmptyState
               title="Esta identidad ya no existe en el motor"
-              description="Otorgar permisos y listar las bases propias necesitan que la identidad exista en el motor. Recréala desde la cabecera o quítala del inventario."
+              description="Otorgar permisos y listar las bases propias necesitan que la identidad exista en el motor. Recreala desde la cabecera o quitala del inventario."
             />
           ) : (
             <EmptyState

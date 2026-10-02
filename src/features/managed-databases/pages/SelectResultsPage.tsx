@@ -130,7 +130,7 @@ export function SelectResultsPage() {
       {data.missing_indexes.length > 0 && (
         <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 text-xs text-foreground">
           Hay sentencias en el SQL actual que todavía no se ejecutaron/capturaron (posiciones{' '}
-          <strong>{data.missing_indexes.join(', ')}</strong>): aplica de nuevo esta versión para
+          <strong>{data.missing_indexes.join(', ')}</strong>): aplicá de nuevo esta versión para
           verlas (§4.5).
         </div>
       )}
@@ -147,7 +147,7 @@ export function SelectResultsPage() {
               description={
                 data.capture_selects
                   ? 'Esta versión tiene la captura activada, pero no hay filas disponibles: se cumplió el TTL o alguien las purgó a mano (§4.6).'
-                  : 'Activa «Capturar resultados de SELECT» en el blueprint y vuelve a aplicar/revertir para generar una captura.'
+                  : 'Activá «Capturar resultados de SELECT» en el blueprint y volvé a aplicar/revertir para generar una captura.'
               }
             />
           </CardContent>

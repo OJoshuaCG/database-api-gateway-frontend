@@ -109,7 +109,7 @@ export function SqlField({
           open
           onClose={() => setExpanded(false)}
           title={label ?? 'SQL'}
-          description="Solo lectura. Para editar, cierra y vuelve al formulario."
+          description="Solo lectura. Para editar, cerrá y volvé al formulario."
           size="full"
         >
           <CodeBlock

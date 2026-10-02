@@ -27,7 +27,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Confirmar ejecución</h2>
         <p className="text-sm text-muted-foreground">
-          Escribe el nombre exacto de <strong>{targetName}</strong> para confirmar — mismo patrón
+          Escribí el nombre exacto de <strong>{targetName}</strong> para confirmar — mismo patrón
           que un DROP DATABASE.
         </p>
       </div>
@@ -37,7 +37,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
       )}
 
       <Input
-        label={`Escribe «${targetName}» para confirmar`}
+        label={`Escribí «${targetName}» para confirmar`}
         value={wizard.confirmTargetName}
         onChange={(e) => wizard.setConfirmTargetName(e.target.value)}
         autoComplete="off"
@@ -59,7 +59,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
           <span className="text-muted-foreground">⏳ Obteniendo token de confirmación…</span>
         ) : (
           <span className="text-error">
-            ✗ Vuelve al paso anterior y ajusta el modo/selección para obtener el token
+            ✗ Volvé al paso anterior y ajustá el modo/selección para obtener el token
           </span>
         )}
       </div>
@@ -83,7 +83,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Si los necesitas, usa el modo personalizado y selecciónalos explícitamente.
+            Si los necesitás, usá el modo personalizado y seleccionalos explícitamente.
           </p>
         </div>
       )}
@@ -107,7 +107,7 @@ export function ExecuteConfirmStep({ wizard }: { wizard: SchemaComparisonWizard 
       {wizard.pendingReviewIds.length > 0 && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground">
           {wizard.pendingReviewIds.length} ítem(s) seleccionado(s) requieren revisión individual:
-          vuelve al paso anterior y abre su SQL completo antes de continuar.
+          volvé al paso anterior y abrí su SQL completo antes de continuar.
         </p>
       )}
 

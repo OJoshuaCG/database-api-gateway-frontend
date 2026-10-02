@@ -139,7 +139,7 @@ export function ServerDatabaseDetailPage() {
             `«${database}» no aparece en el listado del motor ni en el inventario del gateway. ` +
             'Puede haberse eliminado desde otra pestaña o fuera del gateway.' +
             (inventory.isError || inventoryTruncated
-              ? ' (El inventario no se cargó completo: si estaba registrada, búscala en «Bases de datos».)'
+              ? ' (El inventario no se cargó completo: si estaba registrada, buscala en «Bases de datos».)'
               : '')
           }
           action={
@@ -270,7 +270,7 @@ export function ServerDatabaseDetailPage() {
             ) : (
               <EmptyState
                 title="Esta base de datos no está adoptada"
-                description="Las migraciones son una operación de inventario: adopta primero esta base para gestionar su blueprint y versiones."
+                description="Las migraciones son una operación de inventario: adoptá primero esta base para gestionar su blueprint y versiones."
                 action={
                   target.state === 'unmanaged' ? (
                     <Button
@@ -322,7 +322,7 @@ export function ServerDatabaseDetailPage() {
               <p>
                 «{database}» está registrada en el inventario pero nunca se creó en{' '}
                 {server.data.name}
-                {managed?.status === 'error' ? ' (el intento de crearla falló)' : ''}. Aprovisiónala
+                {managed?.status === 'error' ? ' (el intento de crearla falló)' : ''}. Aprovisionala
                 para ejecutar el CREATE DATABASE; hasta entonces no hay usuarios con permisos,
                 migraciones ni collation que mostrar.
               </p>
@@ -331,7 +331,7 @@ export function ServerDatabaseDetailPage() {
             <Callout tone="info" title="Archivada y fuera del motor">
               <p>
                 «{database}» está archivada en el inventario y no aparece en el listado de{' '}
-                {server.data.name}. Una base archivada no se recrea: puedes editar su registro o
+                {server.data.name}. Una base archivada no se recrea: podés editar su registro o
                 quitarla del inventario.
               </p>
             </Callout>
@@ -339,7 +339,7 @@ export function ServerDatabaseDetailPage() {
             <Callout tone="warning" title="Ya no aparece en el motor">
               <p>
                 El inventario registra «{database}» como existente, pero no está en el listado de{' '}
-                {server.data.name}: se eliminó por fuera del gateway o desde otra pestaña. Puedes
+                {server.data.name}: se eliminó por fuera del gateway o desde otra pestaña. Podés
                 recrearla vacía o quitarla del inventario.
               </p>
             </Callout>

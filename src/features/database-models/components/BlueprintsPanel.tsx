@@ -170,7 +170,7 @@ export function BlueprintsPanel() {
             emptyState={
               <EmptyState
                 title="No hay blueprint schemas"
-                description="Crea un blueprint para versionar la estructura de tus bases de datos."
+                description="Creá un blueprint para versionar la estructura de tus bases de datos."
               />
             }
           />

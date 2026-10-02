@@ -100,7 +100,7 @@ export function MigrationFreezePanel({
               Editar igual, asumiendo divergencia
             </span>
             <p className="text-xs text-muted-foreground">
-              Úsalo cuando el defecto está en el DDL de creación y una versión correctiva al final
+              Usalo cuando el defecto está en el DDL de creación y una versión correctiva al final
               obligaría a cada base nueva a crearse mal y convertirse después (caso típico: un
               COLLATE hardcodeado). Requiere una confirmación explícita y queda registrado de forma
               permanente.

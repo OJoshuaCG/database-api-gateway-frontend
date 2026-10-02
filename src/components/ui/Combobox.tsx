@@ -32,7 +32,7 @@ export function Combobox<T>({
   itemToKey,
   renderItem,
   label,
-  placeholder = 'Selecciona…',
+  placeholder = 'Seleccioná…',
   error,
   hint,
   disabled,

@@ -57,10 +57,10 @@ const schema = z.object({
     .array(
       z.object({
         level: grantLevelSchema,
-        privileges: z.array(z.string()).min(1, 'Selecciona al menos un privilegio'),
+        privileges: z.array(z.string()).min(1, 'Seleccioná al menos un privilegio'),
       }),
     )
-    .min(1, 'Añade al menos un item'),
+    .min(1, 'Añadí al menos un item'),
 })
 
 export function toCreate(values: PermissionProfileFormValues): PermissionProfileCreate {

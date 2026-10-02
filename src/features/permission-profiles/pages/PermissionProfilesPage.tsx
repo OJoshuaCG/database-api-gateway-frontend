@@ -172,7 +172,7 @@ export function PermissionProfilesPage() {
           emptyState={
             <EmptyState
               title="No hay perfiles de permisos"
-              description="Crea un perfil para aplicar conjuntos de privilegios de forma reutilizable."
+              description="Creá un perfil para aplicar conjuntos de privilegios de forma reutilizable."
             />
           }
         />

@@ -225,7 +225,7 @@ export function useChangeEngineUserPasswordAllHosts(serverId: number) {
           variant: 'warning',
           title: `Rotación parcial: ${failed} de ${result.total_hosts} host(s) fallaron`,
           description:
-            'Los hosts con error conservan la contraseña anterior en el motor. Revisa el detalle por host.',
+            'Los hosts con error conservan la contraseña anterior en el motor. Revisá el detalle por host.',
         })
       } else {
         toast.success(

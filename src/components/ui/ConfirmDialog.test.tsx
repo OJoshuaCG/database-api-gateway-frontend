@@ -22,7 +22,7 @@ describe('ConfirmDialog', () => {
     const confirmButton = screen.getByRole('button', { name: 'Eliminar' })
     expect(confirmButton).toBeDisabled()
 
-    const input = screen.getByLabelText(/escribe app_prod para confirmar/i)
+    const input = screen.getByLabelText(/escribí app_prod para confirmar/i)
     await user.type(input, 'app_prod')
 
     expect(confirmButton).toBeEnabled()

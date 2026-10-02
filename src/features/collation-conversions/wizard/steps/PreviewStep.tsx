@@ -86,7 +86,7 @@ export function PreviewStep({ wizard }: { wizard: CollationConversionWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Confirmar conversión de collation</h2>
         <p className="text-sm text-muted-foreground">
-          Revisa exactamente qué se hará antes de ejecutar la conversión.
+          Revisá exactamente qué se hará antes de ejecutar la conversión.
         </p>
       </div>
 

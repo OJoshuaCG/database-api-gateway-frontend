@@ -118,7 +118,7 @@ export function AdoptAllHostsModal({
             label="Contraseña conocida (opcional)"
             type="password"
             autoComplete="new-password"
-            hint="Si la indicas, se cifra y guarda en TODAS las identidades sin ejecutar ALTER USER — el motor no se toca y el gateway no verifica que sea la vigente."
+            hint="Si la indicás, se cifra y guarda en TODAS las identidades sin ejecutar ALTER USER — el motor no se toca y el gateway no verifica que sea la vigente."
             error={errors.known_password?.message}
             {...register('known_password')}
           />

@@ -29,25 +29,25 @@ export function describeViolation(violation: ManualLayoutViolation): string {
   const { reason } = violation
   switch (reason) {
     case 'mixed_schema_and_data':
-      return 'El bucket mezcla esquema y datos. Sepáralos en versiones distintas.'
+      return 'El bucket mezcla esquema y datos. Separalos en versiones distintas.'
     case 'empty_bucket':
-      return 'La versión está vacía. Añade objetos o elimínala.'
+      return 'La versión está vacía. Añadí objetos o eliminala.'
     case 'duplicate_assignment':
       return `El objeto está en dos versiones${
         violation.also_in_version ? ` (también en la v${violation.also_in_version})` : ''
-      }. Déjalo en una sola.`
+      }. Dejalo en una sola.`
     case 'unassigned_object':
-      return 'Objeto seleccionado sin asignar a ninguna versión. Asígnalo.'
+      return 'Objeto seleccionado sin asignar a ninguna versión. Asignalo.'
     case 'unknown_object':
-      return 'El objeto no existe en el snapshot. Quítalo.'
+      return 'El objeto no existe en el snapshot. Quitalo.'
     case 'unassigned_data_table':
-      return 'Tabla de datos sin asignar a un bucket de datos. Asígnala.'
+      return 'Tabla de datos sin asignar a un bucket de datos. Asignala.'
     case 'unknown_data_table':
-      return 'La tabla de datos no existe en el snapshot. Quítala.'
+      return 'La tabla de datos no existe en el snapshot. Quitala.'
     case 'dependency_in_later_version':
       return `Depende de ${violation.depends_on ? `«${violation.depends_on}»` : 'un objeto'}${
         violation.dependency_version ? ` (v${violation.dependency_version})` : ''
-      }, que está en una versión posterior. Muévelo después.`
+      }, que está en una versión posterior. Movelo después.`
     case 'prerequisite_after_a_table':
       return `Un prerrequisito quedó después de una tabla${
         violation.must_be_at_most ? ` (muévelo a la versión ≤ ${violation.must_be_at_most})` : ''
@@ -61,7 +61,7 @@ export function describeViolation(violation: ManualLayoutViolation): string {
         violation.first_data_version ? ` (después de la v${violation.first_data_version})` : ''
       }.`
     case 'data_table_structure_not_included':
-      return 'La estructura de esta tabla de datos no está incluida en la selección. Inclúyela.'
+      return 'La estructura de esta tabla de datos no está incluida en la selección. Incluila.'
     case 'data_before_table_structure':
       return `Los datos van antes que la estructura de su tabla${
         violation.table_structure_version ? ` (v${violation.table_structure_version})` : ''

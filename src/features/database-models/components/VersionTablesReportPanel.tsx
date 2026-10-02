@@ -504,8 +504,8 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
               >
                 <p>
                   De las bases que respondieron, toda la contabilidad está donde el gateway la
-                  busca. Las que no respondieron quedan indeterminadas: no cuentan como sanas.
-                  Vuelve a comprobar cuando sus motores estén disponibles.
+                  busca. Las que no respondieron quedan indeterminadas: no cuentan como sanas. Volvé
+                  a comprobar cuando sus motores estén disponibles.
                 </p>
               </Callout>
             ) : (
@@ -561,7 +561,7 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
               filtro ? (
                 <EmptyState
                   title="Ninguna base en ese estado"
-                  description="Quita el filtro para volver a ver el parque completo."
+                  description="Quitá el filtro para volver a ver el parque completo."
                   action={
                     <Button variant="ghost" size="sm" onClick={() => setFiltro(null)}>
                       Quitar el filtro

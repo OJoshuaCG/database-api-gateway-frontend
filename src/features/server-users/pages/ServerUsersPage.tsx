@@ -214,7 +214,7 @@ export function ServerUsersPage() {
             emptyState={
               <EmptyState
                 title="No hay usuarios"
-                description="Crea un usuario del motor para poder asignarle bases de datos."
+                description="Creá un usuario del motor para poder asignarle bases de datos."
               />
             }
           />

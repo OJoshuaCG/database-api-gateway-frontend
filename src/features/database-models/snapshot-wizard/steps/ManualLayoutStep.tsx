@@ -34,7 +34,7 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold text-foreground">Layout manual</h2>
           <p className="text-sm text-muted-foreground">
-            Asigna cada objeto a una versión. El orden de las versiones fija su número.
+            Asigná cada objeto a una versión. El orden de las versiones fija su número.
           </p>
         </div>
         <div className="flex gap-2">
@@ -110,7 +110,7 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
           </p>
           {wizard.manualBuckets.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Añade una versión para empezar a asignar objetos.
+              Añadí una versión para empezar a asignar objetos.
             </p>
           )}
           {wizard.manualBuckets.map((bucket, index) => (
@@ -179,7 +179,7 @@ export function ManualLayoutStep({ wizard }: { wizard: SnapshotWizard }) {
       {hasProblems ? (
         <div className="flex flex-col gap-2 rounded-lg border border-error/30 bg-error/5 p-3">
           <p className="text-sm font-semibold text-error">
-            Corrige {wizard.manualProblems.length} problema(s) antes de continuar
+            Corregí {wizard.manualProblems.length} problema(s) antes de continuar
           </p>
           <ul className="flex flex-col gap-1 text-sm text-foreground">
             {wizard.manualProblems.map((problem, index) => (

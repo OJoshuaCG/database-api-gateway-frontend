@@ -82,7 +82,7 @@ export function useCreateManagedDatabase() {
     onSuccess: (db, { provision }) => {
       invalidateDatabaseViews(queryClient, db.server_id)
       if (provision && db.status === 'error') {
-        toast.error('La BD quedó en estado «error»', db.notes ?? 'Revisa el detalle en el motor.')
+        toast.error('La BD quedó en estado «error»', db.notes ?? 'Revisá el detalle en el motor.')
       } else {
         toast.success(
           provision ? 'Base de datos creada y aprovisionada' : 'Base de datos registrada',

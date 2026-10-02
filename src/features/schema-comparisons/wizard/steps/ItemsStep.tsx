@@ -96,7 +96,7 @@ export function ItemsStep({ wizard }: { wizard: SchemaComparisonWizard }) {
       ) : items.isError && !items.data ? (
         <ErrorState error={items.error} onRetry={() => void items.refetch()} title="No se pudieron cargar los ítems" />
       ) : !items.data ? null : items.data.items.length === 0 ? (
-        <EmptyState title="Ningún ítem coincide" description="Ajusta los filtros para ver otros resultados." />
+        <EmptyState title="Ningún ítem coincide" description="Ajustá los filtros para ver otros resultados." />
       ) : (
         <>
           <div className="flex flex-col gap-3">

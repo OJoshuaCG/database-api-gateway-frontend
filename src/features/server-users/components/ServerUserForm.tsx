@@ -68,7 +68,7 @@ const DEFAULTS: ServerUserFormValues = {
 function buildSchema(mode: 'create' | 'edit') {
   const base = z.object({
     server_id:
-      mode === 'create' ? z.number().int().min(1, 'Selecciona un servidor') : z.number().int(),
+      mode === 'create' ? z.number().int().min(1, 'Seleccioná un servidor') : z.number().int(),
     username:
       mode === 'create'
         ? z.string().min(1, 'Requerido').regex(IDENTIFIER_PATTERN, 'Identificador inválido')
@@ -105,7 +105,7 @@ function buildSchema(mode: 'create' | 'edit') {
       ctx.addIssue({
         path: ['grant_privileges'],
         code: 'custom',
-        message: 'Selecciona al menos un privilegio (o desactiva los permisos iniciales).',
+        message: 'Seleccioná al menos un privilegio (o desactivá los permisos iniciales).',
       })
     }
   })
@@ -298,8 +298,8 @@ export function ServerUserForm({
         required={provision}
         hint={
           mode === 'edit'
-            ? 'Déjala en blanco para no cambiarla. Con aprovisionar, ejecuta ALTER USER.'
-            : 'Obligatoria si aprovisionas en el motor.'
+            ? 'Dejala en blanco para no cambiarla. Con aprovisionar, ejecuta ALTER USER.'
+            : 'Obligatoria si aprovisionás en el motor.'
         }
         error={errors.password?.message}
         {...register('password')}
@@ -316,7 +316,7 @@ export function ServerUserForm({
             hint={
               mode === 'create'
                 ? 'Ejecuta CREATE USER en el servidor destino.'
-                : 'Ejecuta ALTER USER si cambias la contraseña.'
+                : 'Ejecuta ALTER USER si cambiás la contraseña.'
             }
           />
         )}

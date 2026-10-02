@@ -46,7 +46,7 @@ export function IntrospectionExplorer({ serverId }: { serverId: number }) {
                 itemToString={(item) => item}
                 itemToKey={(item) => item}
                 label="Base de datos"
-                placeholder="Selecciona una base de datos"
+                placeholder="Seleccioná una base de datos"
                 clearable
               />
               <Combobox<string>
@@ -56,7 +56,7 @@ export function IntrospectionExplorer({ serverId }: { serverId: number }) {
                 itemToString={(item) => item}
                 itemToKey={(item) => item}
                 label="Tabla"
-                placeholder={database ? 'Selecciona una tabla' : 'Elige una base de datos primero'}
+                placeholder={database ? 'Seleccioná una tabla' : 'Elegí una base de datos primero'}
                 disabled={!database}
                 isLoading={tables.isFetching}
                 clearable

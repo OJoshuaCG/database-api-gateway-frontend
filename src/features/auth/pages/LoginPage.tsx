@@ -82,7 +82,7 @@ export function LoginPage() {
               </svg>
             </span>
             <h1 className="text-lg font-semibold text-foreground">Database API Gateway</h1>
-            <p className="text-sm text-muted-foreground">Inicia sesión como administrador</p>
+            <p className="text-sm text-muted-foreground">Iniciá sesión como administrador</p>
           </div>
 
           {/*

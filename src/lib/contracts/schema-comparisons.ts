@@ -176,7 +176,7 @@ export type PlanWarning = z.infer<typeof planWarningSchema>
  * adopt/execute): nunca usarlo como sustituto de refrescar la comparación.
  */
 export const resolveComparisonSelectionInSchema = z.object({
-  selected_item_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un ítem'),
+  selected_item_ids: z.array(z.number().int()).min(1, 'Seleccioná al menos un ítem'),
 })
 export type ResolveComparisonSelectionIn = z.infer<typeof resolveComparisonSelectionInSchema>
 
@@ -224,7 +224,7 @@ export type ResolveComparisonSelectionOut = z.infer<typeof resolveComparisonSele
  * usuario tiene el nombre del target delante.
  */
 export const adoptComparisonInSchema = z.object({
-  selected_item_ids: z.array(z.number().int()).min(1, 'Selecciona al menos un ítem'),
+  selected_item_ids: z.array(z.number().int()).min(1, 'Seleccioná al menos un ítem'),
   name: z.string().min(1, 'Requerido').max(200, 'Máximo 200 caracteres'),
   description: z.string().max(1000, 'Máximo 1000 caracteres').optional(),
   execute_immediately: z.boolean().optional().default(false),

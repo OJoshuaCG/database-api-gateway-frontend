@@ -76,13 +76,13 @@ export function ConfirmDialog({
         {children}
         {requiresTyping && (
           <Input
-            label={`Escribe «${confirmWord}» para confirmar`}
+            label={`Escribí «${confirmWord}» para confirmar`}
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
-            aria-label={`Escribe ${confirmWord} para confirmar`}
+            aria-label={`Escribí ${confirmWord} para confirmar`}
           />
         )}
       </div>

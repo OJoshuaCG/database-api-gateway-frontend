@@ -80,7 +80,7 @@ export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProp
 
           {data.has_non_portable && (
             <p className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-foreground">
-              Incluye procedimientos/triggers/eventos: si lo guardas como blueprint, quedará atado
+              Incluye procedimientos/triggers/eventos: si lo guardás como blueprint, quedará atado
               al motor <strong>{data.source_engine}</strong> y no podrá aplicarse a otro motor.
             </p>
           )}

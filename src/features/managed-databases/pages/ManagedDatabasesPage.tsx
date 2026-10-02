@@ -328,7 +328,7 @@ export function ManagedDatabasesPage() {
                   itemToString={(u) => u.username}
                   itemToKey={(u) => u.id}
                   label="Propietario"
-                  placeholder={serverFilter ? 'Todos' : 'Elige un servidor primero'}
+                  placeholder={serverFilter ? 'Todos' : 'Elegí un servidor primero'}
                   disabled={!serverFilter}
                   isLoading={Boolean(serverFilter) && owners.isLoading}
                   clearable
@@ -378,7 +378,7 @@ export function ManagedDatabasesPage() {
             emptyState={
               <EmptyState
                 title="No hay bases de datos"
-                description="Crea una base de datos y, opcionalmente, aprovisiónala en el motor."
+                description="Creá una base de datos y, opcionalmente, aprovisionala en el motor."
               />
             }
           />

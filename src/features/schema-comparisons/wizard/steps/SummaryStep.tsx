@@ -82,7 +82,7 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
       {data.expired ? (
         <div className="flex flex-col items-start gap-3 rounded-lg border border-error/30 bg-error/5 p-4">
           <p className="text-sm text-foreground">
-            La comparación expiró; vuelve a calcularla para obtener el estado actual del target.
+            La comparación expiró; volvé a calcularla para obtener el estado actual del target.
           </p>
           <IconButton
             label="Recalcular"
@@ -163,7 +163,7 @@ export function SummaryStep({ wizard }: { wizard: SchemaComparisonWizard }) {
                 </Button>
                 {!branchLoading && hasBlueprint && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Bloqueado: el target tiene blueprint; usa «Adoptar como versión».
+                    Bloqueado: el target tiene blueprint; usá «Adoptar como versión».
                   </p>
                 )}
               </div>

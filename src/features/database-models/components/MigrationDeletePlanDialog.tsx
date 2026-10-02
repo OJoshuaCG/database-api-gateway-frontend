@@ -207,7 +207,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.status === 410) {
             setError({
               title: 'La confirmación caducó',
-              text: 'La autorización vale unos dos minutos y la de este plan ya venció. Vuelve a comprobar el plan: puede haber cambiado.',
+              text: 'La autorización vale unos dos minutos y la de este plan ya venció. Volvé a comprobar el plan: puede haber cambiado.',
               replan: true,
               requestId,
             })
@@ -234,7 +234,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.versionInUse) {
             setError({
               title: 'Alguna base está exactamente en esta versión',
-              text: 'No es que la hayan aplicado alguna vez: es que su puntero apunta hoy a esta versión, y borrarla lo dejaría apuntando a algo que no existe. Muévelas primero con un apply (hacia adelante) o un rollback (hacia atrás) y vuelve a intentarlo.',
+              text: 'No es que la hayan aplicado alguna vez: es que su puntero apunta hoy a esta versión, y borrarla lo dejaría apuntando a algo que no existe. Movelas primero con un apply (hacia adelante) o un rollback (hacia atrás) y volvé a intentarlo.',
               replan: true,
               blocking: apiError.blockingDatabases,
               requestId,
@@ -244,7 +244,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.unreadableDatabases) {
             setError({
               title: 'No se pudo leer la versión de alguna base',
-              text: 'El gateway no puede afirmar dónde están, así que no borra: prefiere negarse a suponer. Es un problema de acceso a esas bases —motor caído, base sin aprovisionar, credenciales rotas—, no del blueprint ni de esta versión. Arregla la conexión y vuelve a comprobar.',
+              text: 'El gateway no puede afirmar dónde están, así que no borra: prefiere negarse a suponer. Es un problema de acceso a esas bases —motor caído, base sin aprovisionar, credenciales rotas—, no del blueprint ni de esta versión. Arreglá la conexión y volvé a comprobar.',
               replan: true,
               blocking: apiError.blockingDatabases,
               requestId,
@@ -254,7 +254,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.renumberConfirmationRequired) {
             setError({
               title: 'Falta la confirmación de este borrado',
-              text: 'El borrado necesita mover punteros en bases reales y llegó sin autorización vigente. Vuelve a comprobar el plan para obtener una nueva; estas son las bases en las que habría que escribir.',
+              text: 'El borrado necesita mover punteros en bases reales y llegó sin autorización vigente. Volvé a comprobar el plan para obtener una nueva; estas son las bases en las que habría que escribir.',
               replan: true,
               stampPlan: apiError.stampPlan,
               requestId,
@@ -284,7 +284,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.renumberTargetMissing) {
             setError({
               title: 'Alguna base quedaría en una versión inexistente',
-              text: 'Tras el renumerado, la migración en la que está parada esa base pasaría a llamarse de otra forma, pero ese nombre no figura en su historial: no hay a dónde mover el puntero. El blueprint NO se modificó. Revisa el historial de esas bases (les puede faltar aplicar migraciones) antes de reintentar.',
+              text: 'Tras el renumerado, la migración en la que está parada esa base pasaría a llamarse de otra forma, pero ese nombre no figura en su historial: no hay a dónde mover el puntero. El blueprint NO se modificó. Revisá el historial de esas bases (les puede faltar aplicar migraciones) antes de reintentar.',
               replan: true,
               unstampable: apiError.unstampableDatabases,
               requestId,
@@ -298,7 +298,7 @@ export function MigrationDeletePlanDialog({
               // son las filas que el propio plan ya listó. Si el plan tampoco las traía, se enlaza
               // a la pestaña de estado del blueprint, que es donde se ve qué base quedó a medias.
               // Inventar un id para poder pintar un enlace sería peor que ofrecer el listado.
-              text: 'Una base quedó a mitad de aplicar una versión y el borrado la dejaría con un checkpoint que ya no describe nada. Reconcilia esa aplicación parcial (o termina el apply) y vuelve a intentarlo.',
+              text: 'Una base quedó a mitad de aplicar una versión y el borrado la dejaría con un checkpoint que ya no describe nada. Reconciliá esa aplicación parcial (o terminá el apply) y volvé a intentarlo.',
               replan: true,
               partialApplications: plan.partial_applications,
               requestId,
@@ -428,7 +428,7 @@ export function MigrationDeletePlanDialog({
                   Bases paradas en esta versión, o que no se pudieron leer
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Mueve las que estén exactamente aquí con un apply o un rollback. Las que no se
+                  Mové las que estén exactamente aquí con un apply o un rollback. Las que no se
                   pudieron leer no son un permiso a forzar: el gateway no puede distinguir «ya no la
                   tiene» de «no pude comprobarlo», así que las cuenta como bloqueantes.
                 </p>
@@ -445,7 +445,7 @@ export function MigrationDeletePlanDialog({
                   Al borrar esta versión, las posteriores bajan un escalón y cambian de número. Las
                   bases de abajo están paradas en una migración cuyo número nuevo no figura en su
                   historial: se abriría un hueco en la numeración y su puntero no tendría a dónde
-                  ir. Revisa su historial —lo habitual es que les falte aplicar migraciones— antes
+                  ir. Revisá su historial —lo habitual es que les falte aplicar migraciones— antes
                   de volver a intentarlo.
                 </p>
                 <UnstampableList rows={plan.unstampable} />
@@ -459,7 +459,7 @@ export function MigrationDeletePlanDialog({
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Quedaron a mitad de aplicar una versión. Borrar ahora las dejaría con un
-                  checkpoint que ya no describe nada: reconcilia esa aplicación parcial o termina el
+                  checkpoint que ya no describe nada: reconciliá esa aplicación parcial o terminá el
                   apply antes de eliminar.
                 </p>
                 <PartialApplicationsList modelId={modelId} rows={plan.partial_applications} />
@@ -574,8 +574,8 @@ export function MigrationDeletePlanDialog({
                 }
               >
                 <p>
-                  Vale unos dos minutos. Vuelve a comprobar el plan: si mientras tanto alguna base
-                  se movió, la lista de escrituras va a ser otra y habrá que reconocerla de nuevo.
+                  Vale unos dos minutos. Volvé a comprobar el plan: si mientras tanto alguna base se
+                  movió, la lista de escrituras va a ser otra y habrá que reconocerla de nuevo.
                 </p>
               </Callout>
             )}
@@ -597,7 +597,7 @@ export function MigrationDeletePlanDialog({
               // no tenemos es el desglose. Decirlo es mejor que pintar dos listas vacías, que se
               // leerían como «no se renumeró nada y no se tocó ninguna base».
               <p className="text-sm text-muted-foreground">
-                El servidor no devolvió el detalle de lo ejecutado. Revisa el catálogo de versiones
+                El servidor no devolvió el detalle de lo ejecutado. Revisá el catálogo de versiones
                 para ver cómo quedó la numeración.
               </p>
             ) : (
@@ -634,7 +634,7 @@ export function MigrationDeletePlanDialog({
 /** Los `warnings[]` del plan, **sin resumir y en su orden**: son texto del contrato. */
 function WarningsCallout({ warnings }: { warnings: string[] }) {
   return (
-    <Callout tone="warning" title="Antes de continuar, lee esto">
+    <Callout tone="warning" title="Antes de continuar, leé esto">
       <ul className="flex list-disc flex-col gap-1 pl-5">
         {warnings.map((warning) => (
           <li key={warning}>{warning}</li>
@@ -851,7 +851,7 @@ function VersionConfirmInput({
 }) {
   return (
     <Input
-      label="Escribe el número de versión para confirmar que es la que quieres eliminar"
+      label="Escribí el número de versión para confirmar que es la que querés eliminar"
       hint={`Versión a eliminar: ${version}`}
       value={value}
       error={value !== '' && value !== version ? `Debe ser exactamente «${version}».` : undefined}

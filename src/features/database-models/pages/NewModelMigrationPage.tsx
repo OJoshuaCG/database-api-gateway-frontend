@@ -68,8 +68,8 @@ export function NewModelMigrationPage() {
           title={created ? `Versión ${created.version} creada` : 'Nueva versión'}
           description={
             created
-              ? 'Revisa la traducción por motor y confirma el rollback antes de aplicarla.'
-              : 'Define un delta SQL versionado para el blueprint. No toca ningún motor.'
+              ? 'Revisá la traducción por motor y confirmá el rollback antes de aplicarla.'
+              : 'Definí un delta SQL versionado para el blueprint. No toca ningún motor.'
           }
         />
       </div>

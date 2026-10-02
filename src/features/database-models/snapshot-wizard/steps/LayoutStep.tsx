@@ -28,7 +28,7 @@ export function LayoutStep({ wizard }: { wizard: SnapshotWizard }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">Estrategia de versionado</h2>
         <p className="text-sm text-muted-foreground">
-          Define cómo se reparten los objetos en versiones. Cada versión nace sin aprobar.
+          Definí cómo se reparten los objetos en versiones. Cada versión nace sin aprobar.
         </p>
       </div>
 

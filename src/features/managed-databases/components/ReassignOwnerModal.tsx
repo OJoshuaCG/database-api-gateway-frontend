@@ -53,7 +53,7 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
           label="Nuevo propietario"
           required
           isLoading={owners.isFetching}
-          placeholder="Selecciona un usuario del mismo servidor"
+          placeholder="Seleccioná un usuario del mismo servidor"
         />
         <Switch
           checked={provision}

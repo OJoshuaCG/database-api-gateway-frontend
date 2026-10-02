@@ -66,7 +66,7 @@ export function AdoptUserModal({
             Usuario adoptado. El gateway aún no conoce su contraseña (no podrá revelarla).
           </p>
           <p className="text-xs text-muted-foreground">
-            Si conoces la contraseña vigente, puedes dictársela al gateway ahora: se guarda cifrada
+            Si conocés la contraseña vigente, podés dictársela al gateway ahora: se guarda cifrada
             sin ejecutar nada en el motor.
           </p>
           <div className="flex justify-end gap-2 pt-2">

@@ -9,7 +9,7 @@ import { engineTypeSchema, grantLevelSchema } from './common'
 /** Item de entrada de un perfil. */
 export const permissionProfileItemInSchema = z.object({
   level: grantLevelSchema,
-  privileges: z.array(z.string()).min(1, 'Selecciona al menos un privilegio'),
+  privileges: z.array(z.string()).min(1, 'Seleccioná al menos un privilegio'),
 })
 export type PermissionProfileItemIn = z.infer<typeof permissionProfileItemInSchema>
 
@@ -39,7 +39,7 @@ export const permissionProfileCreateSchema = z.object({
   name: z.string().min(1, 'Requerido').max(100, 'Máximo 100 caracteres'),
   engine: engineTypeSchema,
   description: z.string().max(255, 'Máximo 255 caracteres').nullable().optional(),
-  items: z.array(permissionProfileItemInSchema).min(1, 'Añade al menos un item'),
+  items: z.array(permissionProfileItemInSchema).min(1, 'Añadí al menos un item'),
 })
 export type PermissionProfileCreate = z.infer<typeof permissionProfileCreateSchema>
 

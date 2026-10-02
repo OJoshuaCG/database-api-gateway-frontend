@@ -276,7 +276,7 @@ export function validateManualLayout(
     if (bucket.objectKeys.length === 0) {
       problems.push({
         reason: 'empty_bucket',
-        message: `La versión «${bucket.name || index + 1}» está vacía. Añade objetos o elimínala.`,
+        message: `La versión «${bucket.name || index + 1}» está vacía. Añadí objetos o eliminala.`,
         bucketIndex: index,
       })
     }
@@ -289,7 +289,7 @@ export function validateManualLayout(
       if (!selectedKeys.has(key)) {
         problems.push({
           reason: 'unknown_object',
-          message: `El objeto ${key} no está en la selección. Quítalo de la versión ${index + 1}.`,
+          message: `El objeto ${key} no está en la selección. Quitalo de la versión ${index + 1}.`,
           bucketIndex: index,
           objectKey: key,
         })
@@ -298,7 +298,7 @@ export function validateManualLayout(
       if (versionOf.has(key)) {
         problems.push({
           reason: 'duplicate_assignment',
-          message: `El objeto ${key} está en dos versiones (también en la v${versionOf.get(key)}). Déjalo en una sola.`,
+          message: `El objeto ${key} está en dos versiones (también en la v${versionOf.get(key)}). Dejalo en una sola.`,
           bucketIndex: index,
           objectKey: key,
         })
@@ -313,7 +313,7 @@ export function validateManualLayout(
     if (!versionOf.has(key)) {
       problems.push({
         reason: 'unassigned_object',
-        message: `«${key}» está seleccionado pero no asignado a ninguna versión. Asígnalo.`,
+        message: `«${key}» está seleccionado pero no asignado a ninguna versión. Asignalo.`,
         objectKey: key,
       })
     }
@@ -329,7 +329,7 @@ export function validateManualLayout(
         if (depVersion !== undefined && depVersion > index + 1) {
           problems.push({
             reason: 'dependency_in_later_version',
-            message: `«${stmt.name}» depende de «${dep}», que está en una versión posterior (v${depVersion}). Muévelo después.`,
+            message: `«${stmt.name}» depende de «${dep}», que está en una versión posterior (v${depVersion}). Movelo después.`,
             bucketIndex: index,
             objectKey: key,
           })

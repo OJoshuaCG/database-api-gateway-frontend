@@ -66,14 +66,14 @@ export function useApplyMigrations(dbId: number) {
             variant: 'warning',
             title: 'La migración falló y se deshizo automáticamente',
             description:
-              'La base volvió a la versión anterior sin intervención necesaria. Corrige la migración y reintenta.',
+              'La base volvió a la versión anterior sin intervención necesaria. Corregí la migración y reintentá.',
           })
           return
         }
         toast.error(
           'Migraciones aplicadas con errores',
           result.quarantined
-            ? 'La BD quedó en cuarentena; revísala y reintenta con «forzar».'
+            ? 'La BD quedó en cuarentena; revisala y reintentá con «forzar».'
             : undefined,
         )
       } else if (result.no_op || result.applied_count === 0) {
@@ -118,7 +118,7 @@ export function useRollbackMigration(dbId: number) {
       if (result.failed || result.quarantined) {
         toast.error(
           'Rollback con errores',
-          result.quarantined ? 'La BD quedó en cuarentena; revísala.' : undefined,
+          result.quarantined ? 'La BD quedó en cuarentena; revisala.' : undefined,
         )
       } else if (result.no_op || result.reverted_count === 0) {
         toast.push({
@@ -233,7 +233,7 @@ export function useReconcilePartial(dbId: number) {
       if (result.failed) {
         toast.error(
           'Reconciliación incompleta',
-          `Deshechas ${result.undone_count ?? 0} de ${result.statements_to_undo} sentencia(s); revisa el detalle.`,
+          `Deshechas ${result.undone_count ?? 0} de ${result.statements_to_undo} sentencia(s); revisá el detalle.`,
         )
       } else if (result.fully_reconciled) {
         toast.success(

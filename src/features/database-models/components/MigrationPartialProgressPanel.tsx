@@ -71,7 +71,7 @@ export function MigrationPartialProgressPanel({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Termina el apply sobre esas bases (la retoma sigue desde donde quedó) o limpia el
+        Terminá el apply sobre esas bases (la retoma sigue desde donde quedó) o limpiá el
         checkpoint con un stamp forzado. Mientras haya progreso a medias, el SQL de la versión{' '}
         {version} no se puede editar por ninguna vía.
       </p>

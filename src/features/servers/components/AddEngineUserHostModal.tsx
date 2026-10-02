@@ -38,7 +38,7 @@ const schema = z
       ctx.addIssue({
         code: 'custom',
         path: ['new_password'],
-        message: 'Requerido si no reutilizas la contraseña.',
+        message: 'Requerido si no reutilizás la contraseña.',
       })
     }
   })
@@ -118,7 +118,7 @@ export function AddEngineUserHostModal({
           label="Cuenta origen (host)"
           hint="La cuenta desde la que se clona la contraseña y, opcionalmente, los permisos."
           required
-          error={!sourceHost && sourceSubmitAttempted ? 'Selecciona una cuenta origen' : undefined}
+          error={!sourceHost && sourceSubmitAttempted ? 'Seleccioná una cuenta origen' : undefined}
         />
         <Input
           label="Nuevo host"
@@ -157,7 +157,7 @@ export function AddEngineUserHostModal({
               checked={field.value}
               onCheckedChange={field.onChange}
               label="Copiar permisos de la cuenta origen"
-              hint="Best-effort: un fallo no revierte la creación del host. Replica fielmente privilegios globales y WITH GRANT OPTION — evalúa el riesgo de sobre-aprovisionamiento."
+              hint="Best-effort: un fallo no revierte la creación del host. Replica fielmente privilegios globales y WITH GRANT OPTION — evaluá el riesgo de sobre-aprovisionamiento."
             />
           )}
         />
