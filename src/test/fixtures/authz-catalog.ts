@@ -401,19 +401,34 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
 
 /**
  * El catálogo ya parseado por el contrato, como lo ve la app. Las filas no traen `grantable`,
- * `sensitive` ni `implies` (este fixture es el de un backend anterior a las capacidades puntuales),
- * así que salen con los defaults seguros: nada otorgable, nada sensible, nada implícito.
+ * `sensitive`, `implies` ni `destructive` (este fixture es el de un backend anterior a las
+ * capacidades puntuales), así que salen con los defaults seguros: nada otorgable, nada sensible,
+ * nada implícito, nada destructivo.
  */
 export const CATALOG_FIXTURE: CapabilityDescriptor[] = CATALOG_RAW.map((row) =>
   capabilityDescriptorSchema.parse(row),
 )
 
 /**
+ * Las que `capability_catalog.py` marca `destructive=True`. No sale de una regla sobre los otros
+ * campos (`collation.execute` es irreversible y NO está), así que se copia tal cual del backend.
+ */
+export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
+  'databases.drop',
+  'engine_users.drop',
+  'blueprints.apply',
+  'schema_diff.execute',
+  'clones.execute',
+  'sql_console.execute',
+]
+
+/**
  * El mismo catálogo en la forma del backend con capacidades puntuales: `grantable`, `sensitive` e
  * `implies` calculados con las reglas de `capability_catalog.py` (`is_grantable`: todo menos el eje
  * global; `is_sensitive`: divulga o es de nivel `drop`; `IMPLIED_READ`: la lectura de nivel viewer
- * del mismo módulo para lo otorgable que muta o divulga). Los espejos de `authz-model` se prueban
- * contra esto, no contra el fixture viejo, donde nada es otorgable.
+ * del mismo módulo para lo otorgable que muta o divulga), y `destructive` según
+ * `DESTRUCTIVE_CAPABILITY_IDS`. Los espejos de `authz-model` se prueban contra esto, no contra el
+ * fixture viejo, donde nada es otorgable ni destructivo.
  */
 export const GRANTS_CATALOG_FIXTURE: CapabilityDescriptor[] = (() => {
   const viewerReads = new Map<string, string>()
@@ -435,6 +450,7 @@ export const GRANTS_CATALOG_FIXTURE: CapabilityDescriptor[] = (() => {
       grantable,
       sensitive: grantable && (row.discloses || row.level === 'drop'),
       implies: grantable && (row.mutates || row.discloses) && read ? [read] : [],
+      destructive: DESTRUCTIVE_CAPABILITY_IDS.includes(row.id),
     }
   })
 })()

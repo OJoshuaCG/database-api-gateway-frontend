@@ -44,11 +44,13 @@ describe('RolesCapabilitiesPanel', () => {
     renderWithProviders(<RolesCapabilitiesPanel />)
     await screen.findByText('Otorga 12 de 30')
     await userEvent.click(screen.getByLabelText('Solo destructivas'))
-    expect(screen.getByText('6 de 30 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('7 de 30 capacidades')).toBeInTheDocument()
     // El conteo también va en una región viva, para quien filtra sin ver la pantalla.
-    expect(screen.getByText('6 de 30 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByText('7 de 30 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
     expect(screen.queryByRole('heading', { name: 'Entornos' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()
+    // Un clon puede vaciar el destino (clean_mode), así que su ejecución también es destructiva.
+    expect(screen.getByRole('heading', { name: 'Clones' })).toBeInTheDocument()
   })
 
   it('la búsqueda filtra por id', async () => {

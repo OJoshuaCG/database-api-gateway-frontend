@@ -167,4 +167,29 @@ describe('compatibilidad con un backend anterior', () => {
     })
     expect(parsed).toMatchObject({ grantable: true, sensitive: true, implies: ['databases.read'] })
   })
+
+  it('sin la columna destructive (backend viejo) la fila sale como no destructiva', () => {
+    const parsed = capabilityDescriptorSchema.parse({
+      id: 'databases.drop',
+      module: 'databases',
+      level: 'drop',
+      label: 'Eliminar bases',
+      mutates: true,
+      discloses: false,
+    })
+    expect(parsed.destructive).toBe(false)
+  })
+
+  it('conserva destructive cuando el backend lo manda, y null cae al default', () => {
+    const base = {
+      id: 'databases.drop',
+      module: 'databases',
+      level: 'drop',
+      label: 'Eliminar bases',
+      mutates: true,
+      discloses: false,
+    }
+    expect(capabilityDescriptorSchema.parse({ ...base, destructive: true }).destructive).toBe(true)
+    expect(capabilityDescriptorSchema.parse({ ...base, destructive: null }).destructive).toBe(false)
+  })
 })

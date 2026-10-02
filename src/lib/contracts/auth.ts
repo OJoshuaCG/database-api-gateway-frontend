@@ -164,6 +164,15 @@ export const capabilityDescriptorSchema = z.object({
     .nullish()
     .transform((value) => value ?? []),
   /**
+   * Destruye o cambia de forma irreversible datos o estructura del tercero. NO es un tercer eje:
+   * es un subconjunto de `mutates` (en el backend, destructiva ⇒ solo `owner` y con step-up).
+   * Con default `false` para un backend viejo que no manda la columna. Todavía no lo lee la UI.
+   */
+  destructive: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  /**
    * Predicados de las capacidades puntuales. Con default seguro para un backend viejo: sin la
    * columna, nada es otorgable (no se ofrece), nada es sensible y no implica lecturas.
    */
@@ -270,18 +279,23 @@ export const CAPABILITIES = {
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES]
 
 /**
- * Las capacidades que **borran o cambian algo en un motor real y no se deshacen**. El catálogo no
- * publica esta marca —solo `mutates`, que también es `true` para editar el inventario—, así que
- * la lista vive acá, junto al vocabulario, y se revisa cuando el catálogo cambia.
+ * Las capacidades que **borran o cambian algo en un motor real y no se deshacen**. Dos borran
+ * (`*.drop`) y cinco ejecutan DDL, SQL o una copia sobre el motor —un clon puede vaciar el destino
+ * con `clean_mode`—. Lo que solo toca el inventario o la configuración del gateway queda fuera: eso
+ * es «modifica», no «destructiva».
  *
- * Dos borran (`*.drop`) y cuatro ejecutan DDL o SQL sobre el motor. Lo que solo toca el inventario
- * o la configuración del gateway queda fuera: eso es «modifica», no «destructiva».
+ * El catálogo ya publica `destructive`, pero esta lista lo SUPERA a propósito en
+ * `collation.execute`: reescribe tablas enteras y no se deshace, aunque el backend no la marca
+ * porque hoy la tiene operator (y su invariante prohíbe destructivas fuera de owner). Mostrarla
+ * como destructiva es lo honesto con quien la usa; si pasa a owner, esta lista puede derivarse del
+ * catálogo.
  */
 export const DESTRUCTIVE_CAPABILITIES = [
   CAPABILITIES.databasesDrop,
   CAPABILITIES.engineUsersDrop,
   CAPABILITIES.blueprintsApply,
   CAPABILITIES.schemaDiffExecute,
+  CAPABILITIES.clonesExecute,
   CAPABILITIES.collationExecute,
   CAPABILITIES.sqlConsoleExecute,
 ] as const satisfies readonly Capability[]
