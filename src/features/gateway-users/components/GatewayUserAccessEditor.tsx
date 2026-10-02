@@ -43,6 +43,7 @@ import {
 } from '@/lib/contracts'
 import { GATEWAY_USERS_PATH } from '@/lib/routes'
 import { GLOBAL_CEILING_HINT, roleCeilingHint, withinCeiling } from '../grant-ceiling'
+import { useEffectiveAccess } from '../hooks/use-capability-grants'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
 import { SELF_ACCESS_NOTE } from '../self-access'
 
@@ -125,6 +126,11 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   // Techo del ACTOR (quien edita), no de la persona editada: ver `grant-ceiling.ts`.
   const actor = useCapabilities()
   const actorGlobals = new Set(actor.globalCapabilities)
+  // `GET …/effective-access` es SOLO de `access_admin` (un `security_officer` recibiría un 403 seguro):
+  // sin esa global no se pide, y el panel cae al cálculo del navegador.
+  const canReadEffectiveAccess = actorGlobals.has('access_admin')
+  const effectiveAccess = useEffectiveAccess(user.id, canReadEffectiveAccess)
+  const effectiveHeading = canReadEffectiveAccess ? 'Acceso efectivo' : 'Acceso efectivo al guardar'
   const originalGlobals = new Set(user.global_capabilities)
   const originalGrants = new Set(user.scope_grants.map(grantKey))
 
@@ -395,13 +401,13 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                   La semántica que más sorprende, y por eso va escrita y no implícita: un permiso
                   de alcance ocupa el lugar del rol base dentro de ese alcance, no se suma. Pero NO
                   se promete más de lo que el servidor cumple: las lecturas y las capacidades
-                  globales no se recortan por alcance, y eso lo dice la sección «Acceso efectivo al guardar».
+                  globales no se recortan por alcance, y eso lo dice la sección «{effectiveHeading}».
                 */}
                 <p className="text-sm text-muted-foreground">
                   Dentro de su alcance, el permiso ocupa el lugar del rol base{' '}
                   <Badge tone="neutral">{user.gateway_role}</Badge> — no se suma a él. Si hay dos
-                  sobre el mismo destino rige el más restrictivo. En «Acceso efectivo al guardar» se
-                  ve qué queda y en qué operaciones se aplica.
+                  sobre el mismo destino rige el más restrictivo. En «{effectiveHeading}» se ve qué
+                  queda y en qué operaciones se aplica.
                 </p>
                 {scopeCeilingHint && !blocked && (
                   <p className="text-sm text-muted-foreground">{scopeCeilingHint}</p>
@@ -625,13 +631,15 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
           <section aria-labelledby={`${panelId}-efectivo`}>
             <CardHeader>
               <h2 id={`${panelId}-efectivo`} className="text-base font-semibold text-foreground">
-                Acceso efectivo al guardar
+                {effectiveHeading}
               </h2>
               <p className="text-sm text-muted-foreground">
-                Lo que va a poder hacer {user.username} con lo que quede en esta pantalla.
+                {canReadEffectiveAccess
+                  ? `Lo que puede hacer ${user.username} hoy, según el servidor. Si cambiás algo en esta pantalla, abajo ves cómo quedaría.`
+                  : `Lo que va a poder hacer ${user.username} con lo que quede en esta pantalla.`}
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-3">
               <EffectiveAccessPanel
                 mode="admin"
                 baseRole={user.gateway_role}
@@ -639,8 +647,25 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                 grants={effectiveGrants}
                 catalog={catalog}
                 isLoading={catalogQuery.isLoading}
+                serverAccess={
+                  canReadEffectiveAccess
+                    ? {
+                        data: effectiveAccess.data,
+                        isLoading: effectiveAccess.isLoading,
+                        isError: effectiveAccess.isError,
+                        onRetry: () => void effectiveAccess.refetch(),
+                      }
+                    : undefined
+                }
+                hasUnsavedChanges={dirty}
                 idPrefix={panelId}
               />
+              {!canReadEffectiveAccess && (
+                <p className="text-xs text-muted-foreground">
+                  Las capacidades puntuales no se incluyen acá: solo las ve quien administra los
+                  accesos.
+                </p>
+              )}
             </CardContent>
           </section>
         </Card>

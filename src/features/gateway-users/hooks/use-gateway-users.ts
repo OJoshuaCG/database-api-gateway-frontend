@@ -104,6 +104,8 @@ export function useReplaceGatewayUserAccess(id: number) {
     mutationFn: (body: GatewayUserAccessUpdate) => replaceGatewayUserAccess(id, body),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
+      // El acceso efectivo del servidor depende de roles y globales: quedó viejo con este reemplazo.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.effective(id) })
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
       toast.success('Accesos actualizados', `Se cerraron las sesiones de ${user.username}.`)
     },

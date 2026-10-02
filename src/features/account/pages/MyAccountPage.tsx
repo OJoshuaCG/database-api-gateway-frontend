@@ -7,6 +7,7 @@ import {
   useCapabilities,
   useCapabilityCatalog,
   useSession,
+  type CapabilityGrantInput,
   type EffectiveAccessGrant,
 } from '@/features/auth'
 import { useEnvironmentMap } from '@/features/environments'
@@ -96,6 +97,24 @@ function MyAccessPanel() {
     }
   })
 
+  // Las propias, vivas: las `active` ya suman, las `pending` el panel las nombra sin contarlas.
+  const capabilityGrants: CapabilityGrantInput[] = admin.capability_grants.map((grant) => {
+    const name =
+      grant.scope_name ??
+      (grant.scope_type === 'environment'
+        ? environments.byId.get(grant.scope_id)?.name
+        : servers.data?.find((server) => server.id === grant.scope_id)?.name)
+    const kind = grant.scope_type === 'environment' ? 'Entorno' : 'Servidor'
+    return {
+      capability: grant.capability,
+      scopeType: grant.scope_type,
+      scopeId: grant.scope_id,
+      status: grant.status,
+      grantId: grant.id,
+      targetLabel: name ?? `${kind} #${grant.scope_id}`,
+    }
+  })
+
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-base font-semibold text-foreground">Mi acceso</h2>
@@ -104,6 +123,7 @@ function MyAccessPanel() {
         baseRole={effectiveBase}
         globalCapabilities={globalCapabilities}
         grants={grants}
+        capabilityGrants={capabilityGrants}
         catalog={catalog.data}
         isLoading={catalog.isLoading || (admin.catalog_version != null && catalog.isPending)}
       />

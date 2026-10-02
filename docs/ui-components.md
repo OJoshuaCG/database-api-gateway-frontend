@@ -308,6 +308,17 @@ sin clasificar. **Lleva siempre la nota de dónde se aplica hoy el recorte por a
 (`SCOPE_ENFORCEMENT_NOTE`): solo en borrar bases, aprovisionar, aplicar y revertir versiones; en lo
 demás rige el rol unión.
 
+**Dos fuentes, que no se mezclan.** Con `serverAccess` (`{ data, isLoading, isError, onRetry? }`, el
+resultado de `useEffectiveAccess`; solo `access_admin` puede leerlo, así que quien llama no lo
+pide si no lo es) el panel muestra lo que rige HOY según el servidor, una fila por fuente
+(«Por rol», «Rol por alcance», «Global», «Puntual» con el nombre de su alcance; las lecturas
+implícitas de una puntual dicen de cuál vienen y una persona desactivada las muestra «Inactiva»).
+Con `hasUnsavedChanges` agrega debajo la «Vista previa: así quedaría al guardar», calculada en el
+navegador con `resolveEffectiveAccess` (espejo de `capability_resolution.py`) y rotulada como tal.
+Sin `serverAccess` (`self`, o quien no es `access_admin`) solo hay cálculo local, y
+`capabilityGrants` (`/auth/me.capability_grants`) alimenta las filas «Puntual»; las `pending` se
+nombran en una línea y no suman nada.
+
 ### `CapabilityCallout`
 **El** aviso de acceso de una pantalla: uno solo, arriba, en lugar de un motivo repetido junto a
 cada control deshabilitado. Título «Podés {canDo}, pero no {cannotDo}»; el cuerpo nombra lo que

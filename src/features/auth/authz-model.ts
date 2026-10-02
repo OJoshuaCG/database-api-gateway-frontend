@@ -1,4 +1,8 @@
-import { DESTRUCTIVE_CAPABILITIES, type CapabilityDescriptor } from '@/lib/contracts'
+import {
+  DESTRUCTIVE_CAPABILITIES,
+  type CapabilityDescriptor,
+  type EffectiveAccess as ServerEffectiveAccess,
+} from '@/lib/contracts'
 
 /**
  * Modelo de autorización del gateway, en funciones puras: qué otorga cada rol y qué acceso tiene
@@ -15,7 +19,10 @@ import { DESTRUCTIVE_CAPABILITIES, type CapabilityDescriptor } from '@/lib/contr
  * - si aplica alguno, rige el MÁS RESTRICTIVO de ellos (no se suma al rol base: lo reemplaza);
  * - si no aplica ninguno, rige el rol BASE — nunca el rol unión;
  * - una base sin entorno (o un destino desconocido) cuenta como el entorno MÁS PROTEGIDO;
- * - las capacidades globales (`access_admin`, `security_officer`) no se recortan por alcance.
+ * - las capacidades globales (`access_admin`, `security_officer`) no se recortan por alcance;
+ * - las capacidades PUNTUALES (`app/core/capability_resolution.py`) SUMAN al rol: en la capa 1
+ *   entran por unión (con su lectura implícita) y en la capa 2 solo valen en los destinos de su
+ *   alcance. Ver `expandGrant`, `grantMatches` y `explainAccess`.
  *
  * Y una diferencia que hay que decir siempre que se muestre esto: **el gateway aplica esa
  * restricción en toda operación sobre una base o un servidor concreto** (capa 2: las capacidades
@@ -269,6 +276,8 @@ export function effectiveRoleAt(
 export interface AccessInput extends RoleResolutionInput {
   catalog: readonly CapabilityDescriptor[]
   globalCapabilities: readonly string[]
+  /** Capacidades puntuales de la persona. Omitido = ninguna. */
+  capabilityGrants?: readonly CapabilityGrantInput[]
 }
 
 /** El rol unión de la capa 1: el máximo entre el base y todos los permisos por alcance. */
@@ -319,7 +328,14 @@ export function capabilitiesAt(
   target: AccessTarget,
   environments: readonly EnvironmentRank[],
 ): string[] {
-  return capabilitiesWithScopeRole(input, effectiveRoleAt(input, target, environments))
+  const fromRole = capabilitiesWithScopeRole(input, effectiveRoleAt(input, target, environments))
+  // Las puntuales SUMAN al rol del destino (`_permits`: rol ∪ globales ∪ puntuales en el punto).
+  const fromGrants = effectiveCapabilityGrants(input)
+    .filter((grant) => grantMatches(grant, target, environments))
+    .flatMap((grant) => expandGrant(grant.capability, input.catalog))
+  if (fromGrants.length === 0) return fromRole
+  const all = new Set([...fromRole, ...fromGrants])
+  return input.catalog.filter((row) => all.has(row.id)).map((row) => row.id)
 }
 
 /** Una fila del acceso efectivo de un permiso por alcance. */
@@ -350,6 +366,8 @@ export interface EffectiveAccess {
   globals: { id: string; capabilities: string[] }[]
   /** Capacidades de eje global: iguales en todos los alcances. */
   globalAxis: string[]
+  /** Capacidades puntuales activas (y las inertes, marcadas), con lo que traen implícito. */
+  capabilityGrants: CapabilityGrantAccess[]
 }
 
 /**
@@ -391,7 +409,307 @@ export function resolveEffectiveAccess(rawInput: AccessInput): EffectiveAccess {
       capabilities: globalCapabilityIds(input.catalog, id),
     })),
     globalAxis: globalAxisCapabilities(input),
+    capabilityGrants: knownCapabilityGrants(input).map((grant) => {
+      const capabilities = expandGrant(grant.capability, input.catalog)
+      return { grant, capabilities, implied: capabilities.filter((id) => id !== grant.capability) }
+    }),
   }
+}
+
+// ── Capacidades puntuales (espejo de `app/core/capability_resolution.py`) ──────
+
+/** Una capacidad puntual, con el vocabulario de `capability_grants` / `/auth/me`. */
+export interface CapabilityGrantInput {
+  capability: string
+  /** `environment` | `server`. Otro tipo se descarta, como en `parse_capability_grants`. */
+  scopeType: string
+  scopeId: number
+  /** Solo `active` concede algo: una `pending` no. Omitido = activa. */
+  status?: string
+  /** Id en el servidor, para atribuir la procedencia. */
+  grantId?: number | null
+  /** Nombre del destino ya resuelto por quien llama («Producción», «db-prod-01»). */
+  targetLabel?: string
+  /** Retenida pero sin efecto (persona desactivada): se lista, no cuenta. */
+  inert?: boolean
+}
+
+/** Lo que una capacidad puntual aporta: ella más las lecturas que trae implícitas. */
+export interface CapabilityGrantAccess {
+  grant: CapabilityGrantInput
+  capabilities: string[]
+  /** Solo las lecturas implícitas (sin la capacidad otorgada). */
+  implied: string[]
+}
+
+/**
+ * La capacidad más la lectura que trae implícita (`expand` del backend). Las lecturas salen de la
+ * columna `implies` del catálogo y no de una lista local; sin ella (backend anterior), solo la propia.
+ */
+export function expandGrant(
+  capability: string,
+  catalog: readonly CapabilityDescriptor[],
+): string[] {
+  const implied = catalog.find((row) => row.id === capability)?.implies ?? []
+  return [capability, ...implied.filter((id) => id !== capability)]
+}
+
+/**
+ * Lo que el backend carga de verdad (`parse_capability_grants`, fail-closed en el lector): solo las
+ * `active`, de una capacidad que el catálogo marca otorgable —una desconocida o global no acuña
+ * nada—, con alcance de entorno o servidor e id positivo. Las inertes se conservan, marcadas.
+ */
+export function knownCapabilityGrants(input: {
+  catalog: readonly CapabilityDescriptor[]
+  capabilityGrants?: readonly CapabilityGrantInput[]
+}): CapabilityGrantInput[] {
+  return (input.capabilityGrants ?? []).filter(
+    (grant) =>
+      (grant.status ?? 'active') === 'active' &&
+      (SCOPE_TYPES_KNOWN as readonly string[]).includes(grant.scopeType) &&
+      Number.isInteger(grant.scopeId) &&
+      grant.scopeId > 0 &&
+      input.catalog.some((row) => row.id === grant.capability && row.grantable),
+  )
+}
+
+/** Las que además tienen efecto: sin las inertes de una persona desactivada. */
+export function effectiveCapabilityGrants(input: {
+  catalog: readonly CapabilityDescriptor[]
+  capabilityGrants?: readonly CapabilityGrantInput[]
+}): CapabilityGrantInput[] {
+  return knownCapabilityGrants(input).filter((grant) => !grant.inert)
+}
+
+/**
+ * ¿La capacidad puntual vale en este destino? (`grants_allow`): por entorno si es el del destino
+ * (el más protegido si la base no está clasificada), por servidor si es el del destino. Un destino
+ * global —sin servidor ni entorno— no coincide con ninguna.
+ */
+export function grantMatches(
+  grant: CapabilityGrantInput,
+  target: AccessTarget,
+  environments: readonly EnvironmentRank[],
+): boolean {
+  if (target.serverId === null && target.environmentId === null) return false
+  const environmentId = target.environmentId ?? mostProtectedEnvironmentId(environments)
+  return (
+    (grant.scopeType === 'environment' &&
+      environmentId !== null &&
+      grant.scopeId === environmentId) ||
+    (grant.scopeType === 'server' && target.serverId !== null && grant.scopeId === target.serverId)
+  )
+}
+
+/**
+ * Capa 1: lo que la persona podría hacer en ALGÚN alcance. El rol unión, las globales y toda
+ * capacidad puntual con su lectura implícita (`layer1_capabilities`). En el orden del catálogo.
+ */
+export function layer1Capabilities(input: AccessInput): string[] {
+  const all = new Set([
+    ...roleCapabilityIds(input.catalog, unionRole(input)),
+    ...globalsGrant(input),
+    ...effectiveCapabilityGrants(input).flatMap((grant) =>
+      expandGrant(grant.capability, input.catalog),
+    ),
+  ])
+  return input.catalog.filter((row) => all.has(row.id)).map((row) => row.id)
+}
+
+// ── Procedencia (espejo de `explain`) ──────────────────────────────────────────
+
+/** De dónde sale una capacidad efectiva. Los mismos valores que `source` del servidor. */
+export const PROVENANCE_SOURCES = ['role', 'scoped_role', 'global', 'capability_grant'] as const
+
+/** Una capacidad efectiva y su fuente. Una capacidad con varias fuentes repite filas. */
+export interface ProvenanceEntry {
+  capability: string
+  /** Uno de `PROVENANCE_SOURCES`; un valor nuevo del backend se conserva como viene. */
+  source: string
+  scopeType: string | null
+  scopeId: number | null
+  grantId: number | null
+  /** Capacidad puntual que la trae implícita (lectura implícita). */
+  impliedBy: string | null
+  inert: boolean
+}
+
+const PROVENANCE_LABELS: Record<string, string> = {
+  role: 'Por rol',
+  scoped_role: 'Rol por alcance',
+  global: 'Global',
+  capability_grant: 'Puntual',
+}
+
+/** Etiqueta de la fuente: «Por rol», «Rol por alcance», «Global», «Puntual». */
+export function provenanceLabel(source: string): string {
+  return PROVENANCE_LABELS[source] ?? source
+}
+
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+/**
+ * La procedencia calculada en el navegador, fila por fila igual que `explain` del backend (mismo
+ * orden y mismas fuentes). Sirve para la VISTA PREVIA de lo que todavía no se guardó; lo que rige
+ * hoy lo dice el servidor (`provenanceFromServer`).
+ *
+ * Invariante (la prueba un test, como en el backend): las capacidades de las filas no inertes son
+ * exactamente `layer1Capabilities`.
+ */
+export function explainAccess(rawInput: AccessInput): ProvenanceEntry[] {
+  const input: AccessInput = {
+    ...rawInput,
+    baseRole: normalizeBaseRole(rawInput.baseRole),
+    grants: knownGrants(rawInput.grants),
+  }
+  const entry = (
+    capability: string,
+    source: string,
+    extra: Partial<ProvenanceEntry> = {},
+  ): ProvenanceEntry => ({
+    capability,
+    source,
+    scopeType: null,
+    scopeId: null,
+    grantId: null,
+    impliedBy: null,
+    inert: false,
+    ...extra,
+  })
+  const entries: ProvenanceEntry[] = []
+
+  for (const id of [...roleCapabilityIds(input.catalog, input.baseRole)].sort(byText)) {
+    entries.push(entry(id, 'role'))
+  }
+  const scoped = [...input.grants].sort(
+    (a, b) => byText(a.scopeType, b.scopeType) || a.scopeId - b.scopeId,
+  )
+  for (const grant of scoped) {
+    for (const id of [...roleCapabilityIds(input.catalog, grant.role)].sort(byText)) {
+      entries.push(entry(id, 'scoped_role', { scopeType: grant.scopeType, scopeId: grant.scopeId }))
+    }
+  }
+  for (const name of [...input.globalCapabilities].sort(byText)) {
+    for (const id of [...globalCapabilityIds(input.catalog, name)].sort(byText)) {
+      entries.push(entry(id, 'global'))
+    }
+  }
+  for (const grant of knownCapabilityGrants(input)) {
+    for (const id of [...expandGrant(grant.capability, input.catalog)].sort(byText)) {
+      entries.push(
+        entry(id, 'capability_grant', {
+          scopeType: grant.scopeType,
+          scopeId: grant.scopeId,
+          grantId: grant.grantId ?? null,
+          impliedBy: id === grant.capability ? null : grant.capability,
+          inert: grant.inert ?? false,
+        }),
+      )
+    }
+  }
+  return entries
+}
+
+/** `GET /gateway-users/{id}/effective-access` → filas de procedencia (camelCase, sin `null`s sueltos). */
+export function provenanceFromServer(access: ServerEffectiveAccess): ProvenanceEntry[] {
+  return access.capabilities.map((row) => ({
+    capability: row.capability,
+    source: row.source,
+    scopeType: row.scope_type ?? null,
+    scopeId: row.scope_id ?? null,
+    grantId: row.grant_id ?? null,
+    impliedBy: row.implied_by ?? null,
+    inert: row.inert,
+  }))
+}
+
+/**
+ * Las capacidades puntuales de la respuesta del servidor, para alimentar la vista previa: una por
+ * `grant_id`, sin las lecturas implícitas (esas las vuelve a derivar `expandGrant`).
+ */
+export function capabilityGrantsFromServer(access: ServerEffectiveAccess): CapabilityGrantInput[] {
+  return access.capabilities
+    .filter(
+      (row) => row.source === 'capability_grant' && row.grant_id != null && row.implied_by == null,
+    )
+    .map((row) => ({
+      capability: row.capability,
+      scopeType: row.scope_type ?? '',
+      scopeId: row.scope_id ?? 0,
+      status: 'active',
+      grantId: row.grant_id,
+      targetLabel: row.scope_name ?? undefined,
+      inert: row.inert,
+    }))
+}
+
+/** Las capacidades de UNA fuente (y un alcance o una puntual), listas para pintar una fila. */
+export interface ProvenanceGroup {
+  kind: string
+  key: string
+  scopeType: string | null
+  scopeId: number | null
+  grantId: number | null
+  /** La capacidad otorgada, solo en `capability_grant`. */
+  grantCapability: string | null
+  /** Ids en el orden del catálogo. */
+  capabilities: string[]
+  /** Capacidad → la puntual que la trae implícita. */
+  impliedBy: Record<string, string>
+  inert: boolean
+}
+
+/**
+ * Agrupa las filas por fuente: el rol base, cada rol por alcance, las globales y cada capacidad
+ * puntual (con sus lecturas implícitas dentro de la misma). Sirve igual para lo que dice el
+ * servidor y para la vista previa, que es lo que mantiene a las dos pantallas leyéndose igual.
+ */
+export function groupProvenance(
+  entries: readonly ProvenanceEntry[],
+  catalog: readonly CapabilityDescriptor[],
+): ProvenanceGroup[] {
+  const groups = new Map<string, ProvenanceGroup>()
+  for (const row of entries) {
+    const grantRoot = row.impliedBy ?? row.capability
+    const key =
+      row.source === 'role'
+        ? 'role'
+        : row.source === 'scoped_role'
+          ? `scoped:${row.scopeType}:${row.scopeId}`
+          : row.source === 'global'
+            ? 'global'
+            : `grant:${row.grantId ?? `${grantRoot}@${row.scopeType}:${row.scopeId}`}`
+    let group = groups.get(key)
+    if (!group) {
+      group = {
+        kind: row.source,
+        key,
+        scopeType: row.scopeType,
+        scopeId: row.scopeId,
+        grantId: row.grantId,
+        grantCapability: row.source === 'capability_grant' ? grantRoot : null,
+        capabilities: [],
+        impliedBy: {},
+        inert: row.inert,
+      }
+      groups.set(key, group)
+    }
+    if (!group.capabilities.includes(row.capability)) group.capabilities.push(row.capability)
+    if (row.impliedBy) group.impliedBy[row.capability] = row.impliedBy
+  }
+  const position = new Map(catalog.map((row, index) => [row.id, index]))
+  const rank = (kind: string) => {
+    const index = (PROVENANCE_SOURCES as readonly string[]).indexOf(kind)
+    return index < 0 ? PROVENANCE_SOURCES.length : index
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      capabilities: [...group.capabilities].sort(
+        (a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0),
+      ),
+    }))
+    .sort((a, b) => rank(a.kind) - rank(b.kind))
 }
 
 // ── Copy ───────────────────────────────────────────────────────────────────────

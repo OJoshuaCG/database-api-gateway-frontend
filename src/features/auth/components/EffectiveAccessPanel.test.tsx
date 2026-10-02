@@ -1,12 +1,22 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
-import { CATALOG_FIXTURE, environmentFixture, pageOf } from '@/test/fixtures/authz-catalog'
+import { effectiveAccessSchema } from '@/lib/contracts'
+import {
+  CATALOG_FIXTURE,
+  GRANTS_CATALOG_FIXTURE,
+  environmentFixture,
+  pageOf,
+} from '@/test/fixtures/authz-catalog'
 import { SCOPE_ENFORCEMENT_NOTE, effectiveAccessRowId } from '../authz-model'
-import { EffectiveAccessPanel, type EffectiveAccessGrant } from './EffectiveAccessPanel'
+import {
+  EffectiveAccessPanel,
+  type EffectiveAccessGrant,
+  type ServerAccessState,
+} from './EffectiveAccessPanel'
 
 // Con un permiso de entorno el panel pide los entornos para nombrar el más protegido.
 beforeEach(() => {
@@ -212,5 +222,230 @@ describe('EffectiveAccessPanel', () => {
     expect(
       screen.getByRole('button', { name: 'Ver capacidades de db-02 · owner' }),
     ).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
+/** Respuesta de `effective-access` (forma de `tests/test_effective_access.py` del backend). */
+function serverState(
+  overrides: Partial<Parameters<typeof effectiveAccessSchema.parse>[0]> = {},
+  state: Partial<ServerAccessState> = {},
+): ServerAccessState {
+  return {
+    data: effectiveAccessSchema.parse({
+      user_id: 7,
+      username: 'destino',
+      active: true,
+      base_role: 'viewer',
+      scope_roles: [
+        { scope_type: 'environment', scope_id: 3, scope_name: 'Producción', role: 'viewer' },
+      ],
+      global_capabilities: ['access_admin'],
+      capabilities: [
+        { capability: 'databases.read', source: 'role' },
+        {
+          capability: 'databases.read',
+          source: 'scoped_role',
+          scope_type: 'environment',
+          scope_id: 3,
+          scope_name: 'Producción',
+        },
+        { capability: 'gateway.admin', source: 'global' },
+        {
+          capability: 'blueprints.apply',
+          source: 'capability_grant',
+          scope_type: 'environment',
+          scope_id: 3,
+          scope_name: 'Producción',
+          grant_id: 5,
+        },
+        {
+          capability: 'blueprints.read',
+          source: 'capability_grant',
+          scope_type: 'environment',
+          scope_id: 3,
+          scope_name: 'Producción',
+          grant_id: 5,
+          implied_by: 'blueprints.apply',
+        },
+      ],
+      catalog_version: 'v1',
+      ...overrides,
+    }),
+    isLoading: false,
+    isError: false,
+    ...state,
+  }
+}
+
+describe('EffectiveAccessPanel — lo que rige hoy según el servidor', () => {
+  const baseProps = {
+    mode: 'admin' as const,
+    baseRole: 'viewer',
+    globalCapabilities: ['access_admin'],
+    grants: [
+      { scopeType: 'environment', scopeId: 3, role: 'viewer', targetLabel: 'Producción' },
+    ] satisfies EffectiveAccessGrant[],
+    catalog: GRANTS_CATALOG_FIXTURE,
+  }
+
+  it('una fila por fuente, rotulada: por rol, rol por alcance, global y puntual con su alcance', () => {
+    renderWithProviders(<EffectiveAccessPanel {...baseProps} serverAccess={serverState()} />)
+    expect(screen.getByText('Por rol')).toBeInTheDocument()
+    expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
+    expect(screen.getByText('Global')).toBeInTheDocument()
+    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('viewer · 1 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('Producción · viewer')).toBeInTheDocument()
+    expect(
+      screen.getByText('Aplicar y revertir versiones sobre bases reales · Producción'),
+    ).toBeInTheDocument()
+    // La lectura implícita se nombra en la fila, y no como una capacidad más que alguien le dio.
+    expect(screen.getByText(/Trae implícita la lectura: Ver blueprints y sus versiones/)).toBeInTheDocument()
+    // Sin cambios: ninguna vista previa ni título extra.
+    expect(screen.queryByText('Vista previa: así quedaría al guardar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rige hoy')).not.toBeInTheDocument()
+    // La nota honesta va como texto (no como un segundo aviso).
+    expect(screen.getByText(SCOPE_ENFORCEMENT_NOTE)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('al desplegar la puntual, la lectura implícita dice de cuál viene', async () => {
+    renderWithProviders(<EffectiveAccessPanel {...baseProps} serverAccess={serverState()} />)
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Ver capacidades de Aplicar y revertir versiones sobre bases reales · Producción',
+      }),
+    )
+    expect(
+      screen.getByText('lectura implícita de «Aplicar y revertir versiones sobre bases reales»'),
+    ).toBeInTheDocument()
+  })
+
+  it('una puntual de una persona desactivada sale «Inactiva» y sin efecto', () => {
+    const base = serverState()
+    const inert = serverState({
+      active: false,
+      capabilities: (base.data?.capabilities ?? []).map((row) =>
+        row.source === 'capability_grant' ? { ...row, inert: true } : row,
+      ),
+    })
+    renderWithProviders(<EffectiveAccessPanel {...baseProps} serverAccess={inert} />)
+    expect(screen.getByText('Inactiva')).toBeInTheDocument()
+    expect(screen.getByText('Sin efecto mientras la cuenta esté desactivada.')).toBeInTheDocument()
+    expect(screen.getByText(/La cuenta está desactivada/)).toBeInTheDocument()
+  })
+
+  it('con cambios sin guardar suma la vista previa rotulada y conserva lo del servidor', () => {
+    renderWithProviders(
+      <EffectiveAccessPanel {...baseProps} serverAccess={serverState()} hasUnsavedChanges />,
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Vista previa: así quedaría al guardar' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/todavía no rige/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Rige hoy' })).toBeInTheDocument()
+    // Lo del servidor sigue, y la vista previa trae la puntual que el servidor ya tiene.
+    expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Aplicar y revertir versiones sobre bases reales · Producción'),
+    ).toHaveLength(2)
+  })
+
+  it('sin cambios las filas de permiso llevan el id enlazable; con cambios, solo la vista previa', () => {
+    const { rerender } = renderWithProviders(
+      <EffectiveAccessPanel {...baseProps} idPrefix="acceso" serverAccess={serverState()} />,
+    )
+    const id = effectiveAccessRowId('acceso', 'environment', 3)
+    expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1)
+    rerender(
+      <EffectiveAccessPanel
+        {...baseProps}
+        idPrefix="acceso"
+        serverAccess={serverState()}
+        hasUnsavedChanges
+      />,
+    )
+    expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1)
+  })
+
+  it('cargando y con error lo dice, y el error ofrece «Reintentar»', async () => {
+    const onRetry = vi.fn()
+    const { rerender } = renderWithProviders(
+      <EffectiveAccessPanel
+        {...baseProps}
+        serverAccess={{ data: undefined, isLoading: true, isError: false }}
+      />,
+    )
+    expect(screen.getByText('Cargando el acceso efectivo…')).toBeInTheDocument()
+    rerender(
+      <EffectiveAccessPanel
+        {...baseProps}
+        serverAccess={{ data: undefined, isLoading: false, isError: true, onRetry }}
+      />,
+    )
+    expect(screen.getByText(/No se pudo leer el acceso efectivo/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+})
+
+describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntuales', () => {
+  it('una puntual activa suma una fila «Puntual» con su lectura implícita', () => {
+    renderWithProviders(
+      <EffectiveAccessPanel
+        mode="admin"
+        baseRole="viewer"
+        globalCapabilities={[]}
+        grants={[]}
+        capabilityGrants={[
+          {
+            capability: 'sql_console.execute',
+            scopeType: 'server',
+            scopeId: 9,
+            grantId: 4,
+            targetLabel: 'db-01',
+          },
+        ]}
+        catalog={GRANTS_CATALOG_FIXTURE}
+      />,
+    )
+    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('Ejecutar SQL ad-hoc contra un motor · db-01')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Trae implícita la lectura: Ver el historial de la consola SQL/),
+    ).toBeInTheDocument()
+  })
+
+  it('una pendiente no suma fila: en «Mi acceso» se nombra aparte, sin conceder nada', () => {
+    renderWithProviders(
+      <EffectiveAccessPanel
+        mode="self"
+        baseRole="viewer"
+        globalCapabilities={[]}
+        grants={[]}
+        capabilityGrants={[
+          { capability: 'exports.download', scopeType: 'environment', scopeId: 3, status: 'pending' },
+        ]}
+        catalog={GRANTS_CATALOG_FIXTURE}
+      />,
+    )
+    expect(screen.queryByText('Puntual')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Tenés 1 solicitud de capacidad puntual pendiente de aprobación/),
+    ).toHaveTextContent('No conceden nada hasta que otra persona las apruebe')
+  })
+
+  it('con un catálogo anterior (nada otorgable) no inventa filas puntuales', () => {
+    renderWithProviders(
+      <EffectiveAccessPanel
+        mode="admin"
+        baseRole="viewer"
+        globalCapabilities={[]}
+        grants={[]}
+        capabilityGrants={[{ capability: 'blueprints.apply', scopeType: 'environment', scopeId: 3 }]}
+        catalog={CATALOG_FIXTURE}
+      />,
+    )
+    expect(screen.queryByText('Puntual')).not.toBeInTheDocument()
   })
 })

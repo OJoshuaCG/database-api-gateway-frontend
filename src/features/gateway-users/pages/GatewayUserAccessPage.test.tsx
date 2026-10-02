@@ -7,8 +7,9 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { server } from '@/test/server'
 import { createTestQueryClient } from '@/test/utils'
 import {
-  CATALOG_FIXTURE,
+  GRANTS_CATALOG_FIXTURE,
   environmentFixture,
+  fixtureRoleCapabilities,
   meFixture,
   pageOf,
   serverFixture,
@@ -44,11 +45,59 @@ const target: GatewayUserOut = {
 /** Quien edita: operator con access_admin. No tiene security_officer ni llega a owner. */
 const ACTOR = meFixture({ role: 'operator', global_capabilities: ['access_admin'] })
 
+/**
+ * `GET /gateway-users/7/effective-access` coherente con `target`: viewer de base, owner en
+ * Producción y una capacidad puntual (`databases.write`) sobre db-prod-01 con su lectura implícita.
+ */
+const EFFECTIVE_FIXTURE = {
+  user_id: 7,
+  username: 'mlopez',
+  active: true,
+  base_role: 'viewer',
+  scope_roles: [
+    { scope_type: 'environment', scope_id: 3, scope_name: 'Producción', role: 'owner' },
+  ],
+  global_capabilities: [],
+  capabilities: [
+    ...fixtureRoleCapabilities('viewer').map((capability) => ({ capability, source: 'role' })),
+    ...fixtureRoleCapabilities('owner').map((capability) => ({
+      capability,
+      source: 'scoped_role',
+      scope_type: 'environment',
+      scope_id: 3,
+      scope_name: 'Producción',
+    })),
+    {
+      capability: 'databases.write',
+      source: 'capability_grant',
+      scope_type: 'server',
+      scope_id: 9,
+      scope_name: 'db-prod-01',
+      grant_id: 11,
+    },
+    {
+      capability: 'databases.read',
+      source: 'capability_grant',
+      scope_type: 'server',
+      scope_id: 9,
+      scope_name: 'db-prod-01',
+      grant_id: 11,
+      implied_by: 'databases.write',
+    },
+  ],
+  catalog_version: 'test-v1',
+}
+
 function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<string, unknown> = {}) {
   let detailRequests = 0
+  let effectiveRequests = 0
   server.use(
+    http.get(`${API}/gateway-users/7/effective-access`, () => {
+      effectiveRequests += 1
+      return HttpResponse.json({ data: EFFECTIVE_FIXTURE })
+    }),
     http.get(`${API}/auth/me`, () => HttpResponse.json({ data: me })),
-    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: CATALOG_FIXTURE })),
+    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: GRANTS_CATALOG_FIXTURE })),
     http.get(`${API}/gateway-users/7`, () => {
       detailRequests += 1
       return HttpResponse.json({ data: target })
@@ -71,7 +120,7 @@ function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<stri
     ),
     http.get(`${API}/servers`, () => HttpResponse.json(pageOf([serverFixture(9, 'db-prod-01')]))),
   )
-  return { detailRequests: () => detailRequests }
+  return { detailRequests: () => detailRequests, effectiveRequests: () => effectiveRequests }
 }
 
 /**
@@ -129,7 +178,7 @@ describe('GatewayUserAccessPage', () => {
       'Capacidades globales',
       'Permisos por entorno o servidor',
       'Capacidades puntuales',
-      'Acceso efectivo al guardar',
+      'Acceso efectivo',
     ])
     // El marcador de lo que viene es solo texto: ningún control que prometa algo.
     expect(
@@ -180,15 +229,61 @@ describe('GatewayUserAccessPage', () => {
     expect(screen.queryByRole('option', { name: 'owner' })).not.toBeInTheDocument()
   })
 
-  it('muestra el acceso efectivo al guardar, enlazado desde cada permiso', async () => {
+  it('muestra lo que rige hoy según el servidor, con su fuente, enlazado desde cada permiso', async () => {
     mockBackend()
     renderAt()
     expect((await screen.findAllByText('Producción · owner')).length).toBeGreaterThan(0)
-    // La diferencia se dice UNA vez, en el panel; la fila del permiso enlaza ahí.
-    expect(screen.getAllByText(/Suma 14:/)).toHaveLength(1)
+    // Sin cambios: solo el servidor, rotulado por fuente; ninguna vista previa.
+    expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
+    expect(screen.getByText('Por rol')).toBeInTheDocument()
+    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Ver capacidades de Crear y editar bases gestionadas · db-prod-01',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Vista previa: así quedaría al guardar')).not.toBeInTheDocument()
+    // El enlace del permiso apunta a su fila del servidor.
     const link = screen.getByRole('link', { name: 'Ver el efecto al guardar' })
     const anchor = (link.getAttribute('href') ?? '').slice(1)
     expect(document.getElementById(anchor)).toHaveTextContent('Producción · owner')
+  })
+
+  it('con cambios sin guardar agrega la vista previa rotulada, sin reemplazar lo del servidor', async () => {
+    mockBackend()
+    renderAt()
+    await screen.findByText('Rol por alcance')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Administración de accesos' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Vista previa: así quedaría al guardar' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Rige hoy' })).toBeInTheDocument()
+    // Lo del servidor sigue ahí, y la vista previa suma la global que se está marcando y arrastra
+    // la capacidad puntual del servidor.
+    expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
+    expect(screen.getByText('Capacidad global')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', {
+        name: 'Ver capacidades de Crear y editar bases gestionadas · db-prod-01',
+      }),
+    ).toHaveLength(2)
+    // El enlace apunta a UNA fila (la de la vista previa), no hay ids repetidos.
+    const link = screen.getByRole('link', { name: 'Ver el efecto al guardar' })
+    const anchor = (link.getAttribute('href') ?? '').slice(1)
+    expect(document.querySelectorAll(`[id="${anchor}"]`)).toHaveLength(1)
+    expect(document.getElementById(anchor)).toHaveTextContent('Producción · owner')
+  })
+
+  it('el acceso efectivo del servidor solo se pide a quien es access_admin', async () => {
+    const officer = meFixture({ role: 'operator', global_capabilities: ['security_officer'] })
+    const { effectiveRequests } = mockBackend(officer)
+    renderAt()
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Acceso efectivo al guardar' }),
+    ).toBeInTheDocument()
+    expect((await screen.findAllByText('Producción · owner')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Las capacidades puntuales no se incluyen acá/)).toBeInTheDocument()
+    expect(effectiveRequests()).toBe(0)
   })
 
   it('al cambiar el destino baja el rol al techo, guarda el estado COMPLETO y vuelve al listado', async () => {

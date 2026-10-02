@@ -408,6 +408,37 @@ export const CATALOG_FIXTURE: CapabilityDescriptor[] = CATALOG_RAW.map((row) =>
   capabilityDescriptorSchema.parse(row),
 )
 
+/**
+ * El mismo catálogo en la forma del backend con capacidades puntuales: `grantable`, `sensitive` e
+ * `implies` calculados con las reglas de `capability_catalog.py` (`is_grantable`: todo menos el eje
+ * global; `is_sensitive`: divulga o es de nivel `drop`; `IMPLIED_READ`: la lectura de nivel viewer
+ * del mismo módulo para lo otorgable que muta o divulga). Los espejos de `authz-model` se prueban
+ * contra esto, no contra el fixture viejo, donde nada es otorgable.
+ */
+export const GRANTS_CATALOG_FIXTURE: CapabilityDescriptor[] = (() => {
+  const viewerReads = new Map<string, string>()
+  for (const row of CATALOG_FIXTURE) {
+    if (
+      row.roles.includes('viewer') &&
+      row.scope_axis !== 'global' &&
+      !row.mutates &&
+      !row.discloses
+    ) {
+      viewerReads.set(row.module, row.id)
+    }
+  }
+  return CATALOG_FIXTURE.map((row) => {
+    const grantable = row.scope_axis !== 'global'
+    const read = viewerReads.get(row.module)
+    return {
+      ...row,
+      grantable,
+      sensitive: grantable && (row.discloses || row.level === 'drop'),
+      implies: grantable && (row.mutates || row.discloses) && read ? [read] : [],
+    }
+  })
+})()
+
 /** Capacidades de un rol según el fixture: lo que el backend mandaría en `/auth/me`. */
 export function fixtureRoleCapabilities(role: string): string[] {
   return CATALOG_FIXTURE.filter((row) => row.roles.includes(role)).map((row) => row.id)

@@ -1,20 +1,29 @@
 import { useId, useState, type ReactNode } from 'react'
 import { Badge, Button, Callout, TrashIcon, type BadgeTone } from '@/components/ui'
-import type { CapabilityDescriptor } from '@/lib/contracts'
+import type {
+  CapabilityDescriptor,
+  EffectiveAccess as ServerEffectiveAccess,
+} from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { useEnvironmentOptions } from '@/features/environments/hooks/use-environment-options'
 import {
   SCOPE_ENFORCEMENT_NOTE,
+  capabilityGrantsFromServer,
   effectiveAccessRowId,
   globalCapabilityLabel,
   groupByModule,
+  groupProvenance,
   isDestructive,
   lostEnforcementNote,
   mostProtectedEnvironmentId,
+  provenanceFromServer,
+  provenanceLabel,
   resolveEffectiveAccess,
   sortByRisk,
   summarizeLabels,
   type CapabilityDiff,
+  type CapabilityGrantInput,
+  type ProvenanceGroup,
 } from '../authz-model'
 import { CapabilityFlags } from './CapabilityFlags'
 
@@ -27,10 +36,38 @@ export interface EffectiveAccessGrant {
   targetLabel: string
 }
 
+/**
+ * Lo que el servidor dice que la persona puede hacer HOY (`GET /gateway-users/{id}/effective-access`),
+ * con la forma mínima de una consulta de TanStack Query: el panel no hace la llamada (la feature
+ * `auth` no puede importar los hooks de `gateway-users`), solo la pinta.
+ */
+export interface ServerAccessState {
+  data: ServerEffectiveAccess | undefined
+  isLoading: boolean
+  isError: boolean
+  onRetry?: () => void
+}
+
 interface EffectiveAccessPanelProps {
   baseRole: string
   globalCapabilities: readonly string[]
   grants: readonly EffectiveAccessGrant[]
+  /**
+   * Capacidades puntuales de la persona, para el cálculo del navegador (`self`: las de
+   * `/auth/me`). Con `serverAccess` no hace falta: salen de la respuesta del servidor.
+   */
+  capabilityGrants?: readonly CapabilityGrantInput[]
+  /**
+   * Lo que rige hoy, según el servidor, que es la AUTORIDAD: con esto el panel lo muestra con su
+   * procedencia. Sin esto el panel solo calcula en el navegador (`self`, o quien no es
+   * `access_admin` y no puede leer el acceso efectivo).
+   */
+  serverAccess?: ServerAccessState
+  /**
+   * Con `serverAccess`: el formulario tiene cambios sin guardar. Solo entonces se agrega, debajo,
+   * la «Vista previa: así quedaría al guardar», calculada en el navegador y rotulada como tal.
+   */
+  hasUnsavedChanges?: boolean
   /** `undefined` = el catálogo no está disponible: el panel lo dice y no calcula nada. */
   catalog: readonly CapabilityDescriptor[] | undefined
   isLoading?: boolean
@@ -51,30 +88,42 @@ const PROVENANCE: Record<string, { label: string; tone: BadgeTone }> = {
   server: { label: 'Permiso de servidor', tone: 'info' },
 }
 
+const scopeTypeName = (scopeType: string | null) =>
+  scopeType === 'environment' ? 'entorno' : scopeType === 'server' ? 'servidor' : (scopeType ?? '')
+
+/** «Entorno #3» cuando el nombre no llegó (el destino se borró, o la lista todavía no cargó). */
+const fallbackTargetName = (scopeType: string | null, scopeId: number | null) =>
+  `${scopeType === 'server' ? 'Servidor' : 'Entorno'} #${scopeId ?? '?'}`
+
 /**
  * Qué puede hacer una persona y DÓNDE: el rol base, cada permiso por alcance con lo que cambia
- * respecto del base, los cruces entre permisos y las capacidades globales.
+ * respecto del base, los cruces entre permisos, las capacidades puntuales y las globales.
  *
- * Todo sale de `resolveEffectiveAccess`, el espejo puro de `app/core/scope.py`. Lleva SIEMPRE la
- * nota de dónde se aplica el recorte por alcance: sin ella, el panel prometería una restricción
- * que las lecturas y las capacidades globales no tienen.
+ * Dos fuentes, y no se mezclan:
+ *
+ * - **`serverAccess`** es lo que rige HOY, tal como lo calcula el servidor, con la fuente de cada
+ *   capacidad (por rol, rol por alcance, global, puntual). Es la autoridad.
+ * - **El cálculo del navegador** (`resolveEffectiveAccess`, el espejo puro de
+ *   `app/core/scope.py` y `capability_resolution.py`) es lo único que puede decir cómo QUEDARÍA lo
+ *   que todavía no se guardó. Con `serverAccess` solo se muestra bajo «Vista previa: así quedaría
+ *   al guardar», cuando hay cambios; sin `serverAccess` es todo lo que hay.
+ *
+ * Lleva SIEMPRE la nota de dónde se aplica el recorte por alcance: sin ella, el panel prometería
+ * una restricción que las lecturas y las capacidades globales no tienen.
  */
 export function EffectiveAccessPanel({
   baseRole,
   globalCapabilities,
   grants,
+  capabilityGrants,
+  serverAccess,
+  hasUnsavedChanges = false,
   catalog,
   isLoading = false,
   mode,
   idPrefix,
 }: EffectiveAccessPanelProps) {
-  // Las filas se pliegan y despliegan por su DESTINO (`grant:<tipo>:<id>`), no por su posición:
-  // quitar un permiso de arriba no puede dejar desplegado el de abajo, que pasó a ocupar su índice.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  // Solo para nombrar el entorno al que caen las bases sin clasificar, y solo si importa.
-  const hasEnvironmentGrant = grants.some((grant) => grant.scopeType === 'environment')
-  const environments = useEnvironmentOptions(hasEnvironmentGrant)
-
+  const previewId = useId()
   if (!catalog) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -85,13 +134,80 @@ export function EffectiveAccessPanel({
     )
   }
 
-  const access = resolveEffectiveAccess({
-    catalog,
-    baseRole,
-    globalCapabilities,
-    grants,
-  })
-  const label = (ids: readonly string[]) => sortByRisk(ids, catalog).map((row) => row.label)
+  if (!serverAccess) {
+    return (
+      <MirrorAccess
+        baseRole={baseRole}
+        globalCapabilities={globalCapabilities}
+        grants={grants}
+        capabilityGrants={capabilityGrants ?? []}
+        catalog={catalog}
+        mode={mode}
+        idPrefix={idPrefix}
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-3">
+        {hasUnsavedChanges && (
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-sm font-semibold text-foreground">Rige hoy</h3>
+            <p className="text-xs text-muted-foreground">Según el servidor.</p>
+          </div>
+        )}
+        <ServerAccessView
+          state={serverAccess}
+          catalog={catalog}
+          idPrefix={hasUnsavedChanges ? undefined : idPrefix}
+        />
+      </section>
+
+      {hasUnsavedChanges && (
+        <section
+          aria-labelledby={`${previewId}-vista-previa`}
+          className="flex flex-col gap-3 border-t border-border pt-4"
+        >
+          <div className="flex flex-col gap-0.5">
+            <h3 id={`${previewId}-vista-previa`} className="text-sm font-semibold text-foreground">
+              Vista previa: así quedaría al guardar
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Calculada en este navegador con lo que hay en pantalla; todavía no rige.
+            </p>
+          </div>
+          <MirrorAccess
+            baseRole={baseRole}
+            globalCapabilities={globalCapabilities}
+            grants={grants}
+            capabilityGrants={
+              capabilityGrants ??
+              (serverAccess.data ? capabilityGrantsFromServer(serverAccess.data) : [])
+            }
+            catalog={catalog}
+            mode={mode}
+            idPrefix={idPrefix}
+          />
+        </section>
+      )}
+    </div>
+  )
+}
+
+interface ServerAccessViewProps {
+  state: ServerAccessState
+  catalog: readonly CapabilityDescriptor[]
+  idPrefix?: string
+}
+
+/**
+ * Lo que rige hoy según el servidor, una fila por FUENTE: el rol base, cada rol por alcance, las
+ * globales y cada capacidad puntual (con su alcance por nombre y sus lecturas implícitas). Todo
+ * viene de la respuesta: acá no se calcula nada, solo se agrupa y se rotula.
+ */
+function ServerAccessView({ state, catalog, idPrefix }: ServerAccessViewProps) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const toggle = (key: string) =>
     setExpanded((current) => {
       const next = new Set(current)
@@ -100,8 +216,192 @@ export function EffectiveAccessPanel({
       return next
     })
 
-  const scopeTypeName = (scopeType: string) =>
-    scopeType === 'environment' ? 'entorno' : scopeType === 'server' ? 'servidor' : scopeType
+  if (state.isLoading) {
+    return <p className="text-xs text-muted-foreground">Cargando el acceso efectivo…</p>
+  }
+  const access = state.data
+  if (state.isError || !access) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm text-muted-foreground">
+          No se pudo leer el acceso efectivo desde el servidor.
+        </p>
+        {state.onRetry && (
+          <Button type="button" variant="outline" size="sm" onClick={state.onRetry}>
+            Reintentar
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  const groups = groupProvenance(provenanceFromServer(access), catalog)
+  const label = (ids: readonly string[]) => sortByRisk(ids, catalog).map((row) => row.label)
+  // Nombres de destino: los de `scope_roles` y los de cada fila con alcance.
+  const names = new Map<string, string>()
+  for (const row of access.scope_roles) {
+    if (row.scope_name) names.set(`${row.scope_type}:${row.scope_id}`, row.scope_name)
+  }
+  for (const row of access.capabilities) {
+    if (row.scope_name && row.scope_type && row.scope_id != null) {
+      names.set(`${row.scope_type}:${row.scope_id}`, row.scope_name)
+    }
+  }
+  const targetName = (scopeType: string | null, scopeId: number | null) =>
+    names.get(`${scopeType}:${scopeId}`) ?? fallbackTargetName(scopeType, scopeId)
+  const labelOf = (id: string) => catalog.find((row) => row.id === id)?.label ?? id
+
+  const renderGroup = (group: ProvenanceGroup) => {
+    const badge = (tone: BadgeTone) => <Badge tone={tone}>{provenanceLabel(group.kind)}</Badge>
+    const common = {
+      rowKey: group.key,
+      expanded: expanded.has(group.key),
+      onToggle: () => toggle(group.key),
+      catalog,
+      capabilities: group.capabilities,
+    }
+    if (group.kind === 'role') {
+      return (
+        <AccessRow
+          key={group.key}
+          {...common}
+          badge={badge('neutral')}
+          title={`${access.base_role ?? 'sin rol'} · ${group.capabilities.length} capacidades`}
+          detail="En todo lo que no tenga un permiso propio."
+        />
+      )
+    }
+    if (group.kind === 'scoped_role') {
+      const scopeRole = access.scope_roles.find(
+        (row) => row.scope_type === group.scopeType && row.scope_id === group.scopeId,
+      )
+      return (
+        <AccessRow
+          key={group.key}
+          {...common}
+          id={
+            idPrefix && group.scopeType && group.scopeId != null
+              ? effectiveAccessRowId(idPrefix, group.scopeType, group.scopeId)
+              : undefined
+          }
+          badge={badge('info')}
+          title={`${targetName(group.scopeType, group.scopeId)} · ${scopeRole?.role ?? 'rol'}`}
+          detail={`Rige solo en este ${scopeTypeName(group.scopeType)}.`}
+        />
+      )
+    }
+    if (group.kind === 'global') {
+      return (
+        <AccessRow
+          key={group.key}
+          {...common}
+          badge={badge('primary')}
+          title={`${access.global_capabilities.map(globalCapabilityLabel).join(' y ')} · ${access.global_capabilities.join(', ')}`}
+          detail="En todo el gateway, sin importar el rol."
+        />
+      )
+    }
+    if (group.kind === 'capability_grant') {
+      const implied = group.capabilities.filter((id) => id in group.impliedBy)
+      return (
+        <AccessRow
+          key={group.key}
+          {...common}
+          badge={
+            <>
+              {badge('warning')}
+              {group.inert && <Badge tone="neutral">Inactiva</Badge>}
+            </>
+          }
+          title={`${labelOf(group.grantCapability ?? '')} · ${targetName(group.scopeType, group.scopeId)}`}
+          detail={
+            group.inert
+              ? 'Sin efecto mientras la cuenta esté desactivada.'
+              : `Solo en este ${scopeTypeName(group.scopeType)}${
+                  implied.length > 0
+                    ? `. Trae implícita la lectura: ${summarizeLabels(label(implied))}`
+                    : ''
+                }.`
+          }
+          notes={Object.fromEntries(
+            Object.entries(group.impliedBy).map(([id, by]) => [
+              id,
+              `lectura implícita de «${labelOf(by)}»`,
+            ]),
+          )}
+        />
+      )
+    }
+    return (
+      <AccessRow
+        key={group.key}
+        {...common}
+        badge={badge('neutral')}
+        title={`${group.capabilities.length} capacidades`}
+        detail="Fuente que esta versión no reconoce."
+      />
+    )
+  }
+
+  const hasInert = groups.some((group) => group.inert)
+  return (
+    <div className="flex flex-col gap-3">
+      {!access.active && hasInert && (
+        <p className="text-xs text-muted-foreground">
+          La cuenta está desactivada: sus capacidades puntuales se conservan, pero no tienen efecto.
+        </p>
+      )}
+      <ul className="flex flex-col gap-2">{groups.map(renderGroup)}</ul>
+      {access.scope_roles.length > 0 && (
+        <p className="text-xs text-muted-foreground">{SCOPE_ENFORCEMENT_NOTE}</p>
+      )}
+    </div>
+  )
+}
+
+interface MirrorAccessProps {
+  baseRole: string
+  globalCapabilities: readonly string[]
+  grants: readonly EffectiveAccessGrant[]
+  capabilityGrants: readonly CapabilityGrantInput[]
+  catalog: readonly CapabilityDescriptor[]
+  mode: 'admin' | 'self'
+  idPrefix?: string
+}
+
+/** El cálculo del navegador: rol base, permisos por alcance con su diferencia, cruces y globales. */
+function MirrorAccess({
+  baseRole,
+  globalCapabilities,
+  grants,
+  capabilityGrants,
+  catalog,
+  mode,
+  idPrefix,
+}: MirrorAccessProps) {
+  // Las filas se pliegan y despliegan por su DESTINO (`grant:<tipo>:<id>`), no por su posición:
+  // quitar un permiso de arriba no puede dejar desplegado el de abajo, que pasó a ocupar su índice.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  // Solo para nombrar el entorno al que caen las bases sin clasificar, y solo si importa.
+  const hasEnvironmentGrant = grants.some((grant) => grant.scopeType === 'environment')
+  const environments = useEnvironmentOptions(hasEnvironmentGrant)
+
+  const access = resolveEffectiveAccess({
+    catalog,
+    baseRole,
+    globalCapabilities,
+    grants,
+    capabilityGrants,
+  })
+  const label = (ids: readonly string[]) => sortByRisk(ids, catalog).map((row) => row.label)
+  const labelOf = (id: string) => catalog.find((row) => row.id === id)?.label ?? id
+  const toggle = (key: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   const fallbackId = mostProtectedEnvironmentId(environments.data ?? [])
   const fallbackName = environments.data?.find((env) => env.id === fallbackId)?.name ?? null
@@ -118,6 +418,8 @@ export function EffectiveAccessPanel({
     seenKeys.set(key, count + 1)
     return count === 0 ? key : `${key}#${count}`
   }
+  // Solicitudes que todavía no conceden nada: solo las trae `/auth/me` (`self`).
+  const pending = capabilityGrants.filter((grant) => grant.status === 'pending')
 
   return (
     <div className="flex flex-col gap-3">
@@ -192,6 +494,40 @@ export function EffectiveAccessPanel({
           )
         })}
 
+        {access.capabilityGrants.map(({ grant, capabilities, implied }) => {
+          const key = `puntual:${grant.grantId ?? `${grant.capability}@${grant.scopeType}:${grant.scopeId}`}`
+          const target = grant.targetLabel ?? fallbackTargetName(grant.scopeType, grant.scopeId)
+          return (
+            <AccessRow
+              key={key}
+              rowKey={key}
+              badge={
+                <>
+                  <Badge tone="warning">{provenanceLabel('capability_grant')}</Badge>
+                  {grant.inert && <Badge tone="neutral">Inactiva</Badge>}
+                </>
+              }
+              title={`${labelOf(grant.capability)} · ${target}`}
+              detail={
+                grant.inert
+                  ? 'Sin efecto mientras la cuenta esté desactivada.'
+                  : `Solo en este ${scopeTypeName(grant.scopeType)}${
+                      implied.length > 0
+                        ? `. Trae implícita la lectura: ${summarizeLabels(label(implied))}`
+                        : ''
+                    }.`
+              }
+              expanded={expanded.has(key)}
+              onToggle={() => toggle(key)}
+              catalog={catalog}
+              capabilities={capabilities}
+              notes={Object.fromEntries(
+                implied.map((id) => [id, `lectura implícita de «${labelOf(grant.capability)}»`]),
+              )}
+            />
+          )
+        })}
+
         {access.globals.map((global) => {
           const key = `global-${global.id}`
           return (
@@ -209,6 +545,16 @@ export function EffectiveAccessPanel({
           )
         })}
       </ul>
+
+      {mode === 'self' && pending.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {pending.length === 1
+            ? 'Tenés 1 solicitud de capacidad puntual pendiente de aprobación'
+            : `Tenés ${pending.length} solicitudes de capacidad puntual pendientes de aprobación`}
+          : {summarizeLabels(pending.map((grant) => labelOf(grant.capability)))}. No conceden nada
+          hasta que otra persona las apruebe.
+        </p>
+      )}
 
       {grants.length > 0 && access.globalAxis.length > 0 && (
         <p className="text-xs text-muted-foreground">
@@ -328,6 +674,8 @@ interface AccessRowProps {
   lost?: readonly string[]
   /** `id` del `<li>`, para que se pueda enlazar a la fila. */
   id?: string
+  /** Una nota corta por capacidad («lectura implícita de …»), junto a su etiqueta. */
+  notes?: Readonly<Record<string, string>>
 }
 
 function AccessRow({
@@ -341,6 +689,7 @@ function AccessRow({
   capabilities,
   lost = [],
   id,
+  notes,
 }: AccessRowProps) {
   const listId = `effective-access-${useId()}-${rowKey}`
   const rows = catalog.filter((row) => capabilities.includes(row.id))
@@ -381,7 +730,12 @@ function AccessRow({
         {expanded && (
           <>
             {groupByModule(rows).map((group) => (
-              <CapabilityGroup key={group.module} title={group.label} rows={group.rows} />
+              <CapabilityGroup
+                key={group.module}
+                title={group.label}
+                rows={group.rows}
+                notes={notes}
+              />
             ))}
             {lostRows.length > 0 && <CapabilityGroup title="Pierde" rows={lostRows} lost />}
           </>
@@ -395,10 +749,12 @@ function CapabilityGroup({
   title,
   rows,
   lost = false,
+  notes,
 }: {
   title: string
   rows: readonly CapabilityDescriptor[]
   lost?: boolean
+  notes?: Readonly<Record<string, string>>
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -413,6 +769,7 @@ function CapabilityGroup({
             <span className={cn('text-foreground', lost && 'line-through')}>{row.label}</span>
             <code className="font-mono text-[11px] text-muted-foreground">{row.id}</code>
             <CapabilityFlags capability={row} compact />
+            {notes?.[row.id] && <span className="text-muted-foreground">{notes[row.id]}</span>}
           </li>
         ))}
       </ul>

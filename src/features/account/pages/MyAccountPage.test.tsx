@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
 import {
-  CATALOG_FIXTURE,
+  GRANTS_CATALOG_FIXTURE,
   environmentFixture,
   meFixture,
   pageOf,
@@ -18,7 +18,7 @@ const API = 'http://localhost/api/v1'
 function mockBackend(me: Record<string, unknown>) {
   server.use(
     http.get(`${API}/auth/me`, () => HttpResponse.json({ data: me })),
-    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: CATALOG_FIXTURE })),
+    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: GRANTS_CATALOG_FIXTURE })),
     http.get(`${API}/environments`, () =>
       HttpResponse.json(pageOf([environmentFixture(3, 'Producción', 2)])),
     ),
@@ -55,6 +55,41 @@ describe('MyAccountPage — «Mi acceso»', () => {
     expect(screen.getByRole('link', { name: 'Ver qué otorga cada rol' })).toHaveAttribute(
       'href',
       '/gateway-users?tab=roles',
+    )
+  })
+
+  it('suma las capacidades puntuales propias y nombra las pendientes sin contarlas', async () => {
+    mockBackend({
+      ...meFixture({ role: 'viewer' }),
+      capability_grants: [
+        {
+          id: 4,
+          capability: 'databases.write',
+          scope_type: 'server',
+          scope_id: 9,
+          scope_name: 'db-prod-01',
+          status: 'active',
+        },
+        {
+          id: 5,
+          capability: 'exports.download',
+          scope_type: 'environment',
+          scope_id: 3,
+          scope_name: null,
+          status: 'pending',
+          expires_at: '2026-10-08T00:00:00Z',
+        },
+      ],
+    })
+    renderWithProviders(<MyAccountPage />, { route: '/mi-cuenta' })
+    expect(
+      await screen.findByText('Crear y editar bases gestionadas · db-prod-01'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    // La pendiente no es una fila de acceso: solo una línea que dice que todavía no concede nada.
+    expect(screen.queryByText(/Descargar los datos exportados en claro ·/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Tenés 1 solicitud de capacidad puntual pendiente/)).toHaveTextContent(
+      'Descargar los datos exportados en claro',
     )
   })
 })
