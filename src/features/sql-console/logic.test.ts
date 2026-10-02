@@ -126,6 +126,7 @@ function historyEntry(overrides: Partial<QueryHistoryOut> = {}): QueryHistoryOut
     run_as_username: 'app_rw',
     impersonated_role: null,
     sql_text: 'SELECT 1',
+    sql_masked: false,
     danger_level: 'read',
     statement_count: 1,
     status: 'success',

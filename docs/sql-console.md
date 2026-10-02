@@ -187,6 +187,15 @@ es *"Ejecutado como"*: responde "¿con qué usuario probamos esto?".
 Su estado `error` va en tono **neutro**, no rojo: ahí caen los rechazos por permisos. El
 estado `blocked` significa que la política lo rechazó y **nunca se tocó el motor**.
 
+**SQL enmascarado.** Cada fila trae `sql_masked`: `true` cuando quien lee no tiene
+`sql_console.execute` donde corrió esa fila. Entonces `sql_text` llega con cada literal como
+`?`, sin comentarios y reformateado (sqlglot): no es el lote que se ejecutó, así que
+«Cargar en el editor» queda **deshabilitado** en la fila y en el detalle, con la insignia
+«Valores ocultos» como motivo visible y la explicación escrita en el detalle. Un backend
+anterior al campo lo omite y el Zod lo toma como `false`. El `error_message` del historial
+viene **saneado para todo lector** (primera línea, valores como `'?'`): el texto nativo
+completo solo vuelve en la respuesta de `execute`, a quien la corrió.
+
 > ⚠️ **Discrepancia conocida del contrato.** §7 documenta la paginación del historial con la
 > clave `meta` (`meta.total`, `meta.page`, `meta.size`), mientras el resto de la API del
 > gateway usa `pagination` con seis campos. `listQueryHistory` acepta **las dos formas** y

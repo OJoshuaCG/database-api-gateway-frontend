@@ -277,6 +277,9 @@ function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSq
   }
 
   const handleLoadFromHistory = (entry: QueryHistoryOut) => {
+    // El panel ya no lo ofrece, pero un texto enmascarado (`?` en vez de cada literal) no es el
+    // lote que se corrió: cargarlo invitaría a ejecutar otra cosa. Se corta acá también.
+    if (entry.sql_masked) return
     sqlConsole.loadFromHistory(entry)
     onGoToConsole()
   }
@@ -285,7 +288,8 @@ function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSq
     return (
       <QueryHistoryPanel
         serverId={server.id}
-        // Cargar en el editor solo sirve si después se puede ejecutar.
+        // Cargar en el editor solo sirve si después se puede ejecutar. Las filas enmascaradas
+        // (sin permiso de ejecución donde corrieron) las deshabilita el panel fila por fila.
         onLoadInEditor={executeGuard.allowed ? handleLoadFromHistory : undefined}
         initialDatabase={sqlConsole.database}
       />

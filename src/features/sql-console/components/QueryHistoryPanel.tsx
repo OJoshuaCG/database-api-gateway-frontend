@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   Badge,
@@ -57,6 +57,16 @@ const MODE_TONE: Record<ConnectionMode, BadgeTone> = {
   impersonate: 'info',
   admin: 'error',
 }
+
+/**
+ * Por qué una fila trae el SQL enmascarado. Va escrito (no en un `title`) en el detalle, que es
+ * donde se lee el texto; en la fila queda la etiqueta corta junto al botón deshabilitado.
+ */
+const MASKED_SQL_NOTE =
+  'Los valores se ocultan porque no tenés permiso para ejecutar en esa base; el texto está reformateado y sin comentarios.'
+
+const MASKED_LOAD_REASON =
+  'No se puede cargar en el editor: los literales se reemplazaron por «?», así que no es el SQL que se ejecutó.'
 
 const MODE_HINT: Record<ConnectionMode, string> = Object.fromEntries(
   MODE_OPTIONS.map((option) => [option.mode, `${option.label} — ${option.hint}`]),
@@ -250,32 +260,50 @@ export function QueryHistoryPanel({
         header: '',
         enableSorting: false,
         enableHiding: false,
-        cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1.5">
-            <IconButton
-              label="Ver SQL"
-              icon={<EyeIcon />}
-              size="icon-sm"
-              onClick={() => setDetail(row.original)}
-            />
-            {onLoadInEditor && (
-              <Button
-                variant="ghost"
-                size="sm"
-                // Con `provided` la contraseña no existe en ninguna parte (tampoco en el backend):
-                // se avisa en el tooltip y el hook orquestador lo repite al cargar la consulta.
-                title={
-                  row.original.connection_mode === 'provided'
-                    ? 'Restaura el SQL, la base y el usuario. La contraseña no se guarda: vas a tener que escribirla otra vez.'
-                    : 'Restaura el SQL, la base y la identidad de esta ejecución en el editor.'
-                }
-                onClick={() => onLoadInEditor(row.original)}
-              >
-                Cargar en el editor
-              </Button>
-            )}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const entry = row.original
+          const maskedId = `query-history-masked-${entry.id}`
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {/* La etiqueta visible es el motivo del botón deshabilitado de al lado (un `title`
+                  no llega a teclado, lector de pantalla ni táctil). */}
+              {entry.sql_masked && (
+                <span id={maskedId}>
+                  <Badge tone="warning" title={`${MASKED_SQL_NOTE} ${MASKED_LOAD_REASON}`}>
+                    Valores ocultos
+                  </Badge>
+                </span>
+              )}
+              <IconButton
+                label="Ver SQL"
+                icon={<EyeIcon />}
+                size="icon-sm"
+                onClick={() => setDetail(entry)}
+              />
+              {onLoadInEditor && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  // Enmascarado = no es el lote real: cargarlo invitaría a ejecutar otra cosa.
+                  disabled={entry.sql_masked}
+                  aria-describedby={entry.sql_masked ? maskedId : undefined}
+                  // Con `provided` la contraseña no existe en ninguna parte (tampoco en el backend):
+                  // se avisa en el tooltip y el hook orquestador lo repite al cargar la consulta.
+                  title={
+                    entry.sql_masked
+                      ? MASKED_LOAD_REASON
+                      : entry.connection_mode === 'provided'
+                        ? 'Restaura el SQL, la base y el usuario. La contraseña no se guarda: vas a tener que escribirla otra vez.'
+                        : 'Restaura el SQL, la base y la identidad de esta ejecución en el editor.'
+                  }
+                  onClick={() => onLoadInEditor(entry)}
+                >
+                  Cargar en el editor
+                </Button>
+              )}
+            </div>
+          )
+        },
       },
     ],
     [onLoadInEditor],
@@ -401,8 +429,9 @@ interface QueryHistoryDetailModalProps {
   onLoadInEditor?: (entry: QueryHistoryOut) => void
 }
 
-/** Detalle de una fila: el SQL tal como quedó registrado, más el error nativo si lo hubo. */
+/** Detalle de una fila: el SQL tal como quedó registrado, más el error saneado si lo hubo. */
 function QueryHistoryDetailModal({ entry, onClose, onLoadInEditor }: QueryHistoryDetailModalProps) {
+  const noteId = useId()
   const status = historyStatusCopy(entry.status)
   const danger = dangerCopy(entry.danger_level)
   const hasError = Boolean(entry.error_code) || Boolean(entry.error_message)
@@ -420,7 +449,13 @@ function QueryHistoryDetailModal({ entry, onClose, onLoadInEditor }: QueryHistor
             Cerrar
           </Button>
           {onLoadInEditor && (
-            <Button onClick={() => onLoadInEditor(entry)}>Cargar en el editor</Button>
+            <Button
+              disabled={entry.sql_masked}
+              aria-describedby={entry.sql_masked ? noteId : undefined}
+              onClick={() => onLoadInEditor(entry)}
+            >
+              Cargar en el editor
+            </Button>
           )}
         </>
       }
@@ -466,20 +501,37 @@ function QueryHistoryDetailModal({ entry, onClose, onLoadInEditor }: QueryHistor
         </ul>
 
         {/* Se dice acá y no en la tabla: es al leer el SQL cuando importa saber que lo que se ve
-            puede no ser byte a byte lo que se envió. */}
-        <p className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground">
-          Este es el texto tal como quedó registrado: las contraseñas literales se guardan como{' '}
-          <code className="font-mono">&apos;***&apos;</code> y el lote está recortado a 16 KB, así
-          que puede no ser exactamente lo que se envió.
-        </p>
+            puede no ser byte a byte lo que se envió. Enmascarado, además, ni siquiera es el mismo
+            texto: el backend lo reescribió, y es ese el motivo del botón deshabilitado del pie. */}
+        {entry.sql_masked ? (
+          <p
+            id={noteId}
+            className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground"
+          >
+            {MASKED_SQL_NOTE}
+            {onLoadInEditor && <> {MASKED_LOAD_REASON}</>}
+          </p>
+        ) : (
+          <p className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted-foreground">
+            Este es el texto tal como quedó registrado: las contraseñas literales se guardan como{' '}
+            <code className="font-mono">&apos;***&apos;</code> y el lote está recortado a 16 KB, así
+            que puede no ser exactamente lo que se envió.
+          </p>
+        )}
 
-        <CodeBlock code={entry.sql_text} title="SQL registrado" maxHeightClass="max-h-96" />
+        <CodeBlock
+          code={entry.sql_text}
+          title={entry.sql_masked ? 'SQL registrado (valores ocultos)' : 'SQL registrado'}
+          maxHeightClass="max-h-96"
+        />
 
         {hasError && (
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">Respuesta del motor</p>
             {/* Sin rojo a propósito: acá caen los rechazos por permisos, que muchas veces son
-                justamente el resultado que se fue a buscar. */}
+                justamente el resultado que se fue a buscar. El mensaje NO es el texto nativo: el
+                backend lo sanea para todo lector (primera línea, valores como `'?'`); el
+                completo solo vuelve en la respuesta de la ejecución, a quien la corrió. */}
             <div className="rounded-lg border border-border bg-surface-muted p-3">
               {entry.error_code && (
                 <p className="font-mono text-xs text-muted-foreground">{entry.error_code}</p>

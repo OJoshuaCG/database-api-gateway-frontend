@@ -425,7 +425,7 @@ contrato v6.
 |---|---|---|
 | `POST /servers/{id}/query/preview` 🔌 | ✅ | Botón "Analizar y ejecutar" / "Solo analizar" → `ClassificationPanel`. Emite el `confirm_token` y estima el impacto. Nunca se dispara por pulsación: el rate limit es 30/min y el preview abre conexión al motor para los `COUNT`. |
 | `POST /servers/{id}/query/execute` 🔌 ⚠️ | ✅ | Directo si el nivel es `read`; con `ConfirmExecutionDialog` (tipeo del nombre de la base + token) si es `write`/`ddl`. Resultado en `ResultsPanel`. |
-| `GET /servers/{id}/query/history` | ✅ | Pestaña "Historial" → `QueryHistoryPanel`, con filtro por base y "Cargar en el editor" |
+| `GET /servers/{id}/query/history` | ✅ | Pestaña "Historial" → `QueryHistoryPanel`, con filtro por base y "Cargar en el editor". Las filas con `sql_masked: true` (sin `sql_console.execute` donde corrieron) muestran «Valores ocultos» y no se pueden cargar en el editor; `error_message` llega saneado |
 
 Tres cosas que no se leen en la tabla y condicionan el código:
 

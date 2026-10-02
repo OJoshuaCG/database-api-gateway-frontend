@@ -264,8 +264,17 @@ export const queryHistoryOutSchema = z.object({
   connection_mode: connectionModeSchema,
   run_as_username: z.string(),
   impersonated_role: z.string().nullable().optional(),
-  /** El lote completo, con literales de contraseña reemplazados por `'***'`, recortado a 16 KB. */
+  /**
+   * El lote completo, con literales de contraseña reemplazados por `'***'`, recortado a 16 KB. Si
+   * `sql_masked`, además cada literal llega como `?`, sin comentarios y reformateado por sqlglot.
+   */
   sql_text: z.string(),
+  /**
+   * `true` cuando el lector no tiene `sql_console.execute` donde corrió esa fila: `sql_text` no es
+   * el lote real y no se puede re-ejecutar tal cual. Por defecto `false` para backends anteriores
+   * al campo, que siempre devolvían el texto sin enmascarar.
+   */
+  sql_masked: z.boolean().optional().default(false),
   danger_level: dangerLevelSchema,
   statement_count: z.number().int(),
   /** `error` incluye "el motor rechazó por permisos"; `blocked` = nunca se tocó el motor. */
@@ -277,7 +286,10 @@ export const queryHistoryOutSchema = z.object({
   rows_affected: z.number().int(),
   duration_ms: z.number(),
   error_code: z.string().nullable().optional(),
-  /** En las filas `blocked` trae los motivos concatenados. */
+  /**
+   * Saneado para todo lector: primera línea, sin valores de filas ni literales (`'?'`). En las filas
+   * `blocked` trae los motivos concatenados.
+   */
   error_message: z.string().nullable().optional(),
   created_at: z.string(),
 })
