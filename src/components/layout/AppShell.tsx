@@ -4,6 +4,7 @@ import { ErrorBoundary } from 'react-error-boundary'
 import { Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { SodWarningsBanner } from '@/features/auth/components/SodWarningsBanner'
+import { BootstrapWindowBanner } from '@/features/auth/components/BootstrapWindowBanner'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { SectionErrorFallback } from './SectionErrorFallback'
@@ -71,6 +72,7 @@ export function AppShell() {
           {/* Fuera del boundary por sección: es un estado de la cuenta, no de la vista, y tiene que
               seguir a la vista aunque la sección falle. */}
           <SodWarningsBanner />
+          <BootstrapWindowBanner />
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
             {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
                 del shell para que el sidebar y la topbar no parpadeen al navegar. */}

@@ -53,3 +53,5 @@ export { RoleCapabilitySummary, ROLES_MATRIX_PATH } from './components/RoleCapab
 export { EffectiveAccessPanel, type EffectiveAccessGrant } from './components/EffectiveAccessPanel'
 export * from './separation-of-duties'
 export { SodWarningsBanner } from './components/SodWarningsBanner'
+export * from './bootstrap-window'
+export { BootstrapWindowBanner } from './components/BootstrapWindowBanner'

@@ -33,6 +33,22 @@ export type ScopeRole = z.infer<typeof scopeRoleSchema>
 
 // ── `/auth/me` ─────────────────────────────────────────────────────────────────
 /**
+ * `BootstrapWindowOut` — la ventana de arranque (C4, v29 §10.3). Mientras `open` y quien pide es el
+ * ÚNICO `access_admin` activo con credencial, sus elevaciones se aplican en el acto (`201`/`200`,
+ * auditadas `access.bootstrap_assignment`) en vez de quedar pendientes (`202`). Se cierra para
+ * siempre cuando un segundo `access_admin` acepta su invitación, o al vencer `closes_at`.
+ */
+export const bootstrapWindowSchema = z.object({
+  open: z.boolean(),
+  /**
+   * Vencimiento en UTC **sin zona**, como `step_up_expires_at`: se lee con `parseUtcInstant`.
+   * `null` en una ventana que nunca se abrió.
+   */
+  closes_at: z.string().nullish(),
+})
+export type BootstrapWindow = z.infer<typeof bootstrapWindowSchema>
+
+/**
  * `AdminOut` — el usuario autenticado y **con qué decidir la UI** (§1).
  *
  * Son ONCE campos, no ocho: `previous_login_at` y `last_failed_at` entran acá aunque el §7.4 los
@@ -120,6 +136,12 @@ export const adminOutSchema = z.object({
     .array(sodWarningSchema)
     .nullish()
     .transform((value) => value ?? []),
+  /**
+   * Ventana de arranque de los accesos (C4, v29 §10.4). Solo la recibe quien tiene `access.admin`;
+   * `null` para el resto, sin la tabla del backend o con un backend anterior (nullish). Alimenta
+   * `BootstrapWindowBanner` y la nota de `SecondApproverBadge`.
+   */
+  bootstrap_window: bootstrapWindowSchema.nullish(),
 })
 export type AdminOut = z.infer<typeof adminOutSchema>
 

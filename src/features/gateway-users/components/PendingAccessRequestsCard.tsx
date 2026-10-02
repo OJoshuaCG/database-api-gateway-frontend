@@ -110,7 +110,7 @@ function AccessRequestChange({
               <span className="font-mono text-xs text-muted-foreground">
                 {describeValue(row, row.before)} → {describeValue(row, row.after)}
               </span>
-              {row.elevated && <SecondApproverBadge />}
+              {row.elevated && <SecondApproverBadge bootstrapNote={false} />}
             </li>
           ))}
         </ul>

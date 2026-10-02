@@ -65,13 +65,41 @@ igual que antes. Lo que cambia es el desenlace del reenvío con `sod_override`:
    cubre nada, `409 access.sod_conflict` (la solicitud sigue `pending`) con el copy de
    `accessRequestErrorMessage`, que manda a rechazar, separar y volver a pedirla.
 
+## Primer arranque: la ventana de arranque (C4)
+
+Con C3, toda elevación espera a un **segundo** `access_admin`, y una instalación nueva tiene uno
+solo: el sembrado, que desde C4 es `viewer` + `access_admin` (no opera ni fija política). Por eso el
+primer arranque abre una **ventana de arranque** (v29 §10.3): mientras está abierta y quien pide es
+el **único** `access_admin` activo con credencial, sus elevaciones se aplican en el acto —`201` /
+`200` en vez de `202`, una capacidad sensible nace `active`— y cada una se audita
+`access.bootstrap_assignment`.
+
+Se cierra **para siempre** cuando un segundo `access_admin` **acepta su invitación** (con la
+invitación pendiente no cuenta) o al vencer `closes_at` (`ACCESS_BOOTSTRAP_WINDOW_HOURS`, 72 h por
+defecto). El procedimiento esperado: crear un `security_officer`, un `owner` y el segundo
+`access_admin`, y entregarle su invitación.
+
+En la SPA:
+
+- `/auth/me.bootstrap_window` (`{open, closes_at} | null`, declarado `.nullish()`) solo llega a
+  quien tiene `access.admin`. `BootstrapWindowBanner`, montado en `AppShell` debajo de
+  `SodWarningsBanner`, pinta un aviso persistente con el vencimiento en hora local (`closes_at` es
+  UTC sin zona y se lee con `parseUtcInstant`), el procedimiento y el enlace a «Usuarios del
+  gateway». Cerrada, `null` o sin el campo, no pinta nada. El cierre lo decide el servidor (lo
+  evalúa en cada `/auth/me`); la SPA no compara `closes_at` con el reloj.
+- Con la ventana abierta, «Requiere segundo aprobador» suma la nota «(se aplica directo durante la
+  ventana de arranque)» en los editores y formularios. En la bandeja de solicitudes no: lo que ya
+  está pendiente no se aplica solo.
+- Ninguna pantalla cambia de flujo: el alta o el cambio de acceso ya manejan el `201`/`200` como
+  el caso normal, y si igual llega un `202` (otro administrador con credencial), manda el `202`.
+
 ## Dónde vive cada cosa
 
-| Pieza                     | Ubicación                                                                                                                                |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Contratos Zod             | `src/lib/contracts/separation-of-duties.ts` (`sod_warnings` en `auth.ts`, `sod_override` en `gateway-users.ts` y `capability-grants.ts`) |
-| Contexto del 409/422      | `src/lib/api/errors.ts` → `gatewayUserContext.sodConflicts`, `sodReasonMinLength`, `sodMaxHours`                                         |
-| Espejo de la regla y copy | `features/auth/separation-of-duties.ts` (`sodConflicts`, `uncoveredSodConflicts`, `sodWarningCopy`…)                                     |
-| API y hook del reporte    | `features/auth/api/auth.api.ts` (`getSodReport`), `hooks/use-capabilities.ts` (`useSodReport`)                                           |
-| Copy de errores           | `features/gateway-users/messages.ts`                                                                                                     |
-| UI                        | `features/gateway-users/components/{SodConflictPanel,SodReportCard}.tsx`, `features/auth/components/SodWarningsBanner.tsx`               |
+| Pieza                     | Ubicación                                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contratos Zod             | `src/lib/contracts/separation-of-duties.ts` (`sod_warnings` y `bootstrap_window` en `auth.ts`, `sod_override` en `gateway-users.ts` y `capability-grants.ts`)                 |
+| Contexto del 409/422      | `src/lib/api/errors.ts` → `gatewayUserContext.sodConflicts`, `sodReasonMinLength`, `sodMaxHours`                                                                              |
+| Espejo de la regla y copy | `features/auth/separation-of-duties.ts` (`sodConflicts`, `uncoveredSodConflicts`, `sodWarningCopy`…), `features/auth/bootstrap-window.ts`                                     |
+| API y hook del reporte    | `features/auth/api/auth.api.ts` (`getSodReport`), `hooks/use-capabilities.ts` (`useSodReport`)                                                                                |
+| Copy de errores           | `features/gateway-users/messages.ts`                                                                                                                                          |
+| UI                        | `features/gateway-users/components/{SodConflictPanel,SodReportCard}.tsx`, `features/auth/components/{SodWarningsBanner,BootstrapWindowBanner}.tsx`, `SecondApproverBadge.tsx` |
