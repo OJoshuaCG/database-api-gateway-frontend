@@ -63,16 +63,17 @@ describe('gatewayUserErrorMessage', () => {
 })
 
 describe('acceptInviteErrorMessage', () => {
-  it('trata el 410 por STATUS, porque la invitación vencida llega sin código', () => {
-    const message = acceptInviteErrorMessage(error(410))
-    expect(message).toContain('venció')
-  })
-
-  it('cubre inválida / inexistente / ya usada con un solo mensaje', () => {
-    // El backend responde lo mismo para los tres a propósito, para no ser un oráculo de qué
+  it('cubre inválida / vencida / inexistente / ya usada con un solo mensaje', () => {
+    // El backend responde lo mismo para todos a propósito, para no ser un oráculo de qué
     // invitaciones hay pendientes.
     const message = acceptInviteErrorMessage(error(422, GATEWAY_USER_ERROR_CODES.notFound))
-    expect(message).toContain('no es válida o ya se usó')
+    expect(message).toContain('no es válida, venció o ya se usó')
+  })
+
+  it('un 410 de un backend anterior recibe el MISMO mensaje, sin reabrir la distinción', () => {
+    expect(acceptInviteErrorMessage(error(410))).toBe(
+      acceptInviteErrorMessage(error(422, GATEWAY_USER_ERROR_CODES.notFound)),
+    )
   })
 
   it('usa el min_length del backend cuando la contraseña es débil', () => {

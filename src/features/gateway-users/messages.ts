@@ -146,20 +146,22 @@ function roleOrCapabilityMessage(error: ApiError, fallback: string): string {
   return `${fallback} Admitidos: ${allowed.join(', ')}.`
 }
 
+const INVALID_INVITE_MESSAGE =
+  'La invitación no es válida, venció o ya se usó. Pedile una nueva a quien administra los accesos.'
+
 /**
  * Mensaje para la pantalla PÚBLICA de aceptar la invitación (§2.4).
  *
- * El endpoint **no distingue** «token inválido» de «usuario inexistente» de «ya se usó»: los tres
- * responden 422 `gateway_user.not_found`, a propósito, para no convertirlo en un oráculo de qué
- * invitaciones hay pendientes. Por eso el copy cubre los tres con un solo mensaje y ofrece la
+ * El endpoint **no distingue** «token inválido» de «vencido» de «usuario inexistente» de «ya se
+ * usó»: todos responden 422 `gateway_user.not_found`, a propósito, para no convertirlo en un oráculo
+ * de qué invitaciones hay pendientes. Por eso el copy cubre todos con un solo mensaje y ofrece la
  * única salida real: pedir una invitación nueva.
  *
- * Un token VENCIDO responde distinto —410, y sin código— así que se enruta por status.
+ * Un backend anterior respondía 410 para la vencida; se trata igual, para no reintroducir en la UI
+ * la distinción que el backend dejó de hacer.
  */
 export function acceptInviteErrorMessage(error: ApiError): string {
-  if (error.status === 410) {
-    return 'Esta invitación venció. Pedile una nueva a quien administra los accesos.'
-  }
+  if (error.status === 410) return INVALID_INVITE_MESSAGE
   if (error.status === 429) return RATE_LIMIT_HINT
   if (error.code === GATEWAY_USER_ERROR_CODES.weakPassword) {
     const min = error.gatewayUserContext?.minLength
@@ -167,8 +169,6 @@ export function acceptInviteErrorMessage(error: ApiError): string {
       ? `La contraseña es demasiado corta: necesita al menos ${min} caracteres.`
       : 'La contraseña es demasiado corta.'
   }
-  if (error.code === GATEWAY_USER_ERROR_CODES.notFound) {
-    return 'La invitación no es válida o ya se usó. Pedile una nueva a quien administra los accesos.'
-  }
+  if (error.code === GATEWAY_USER_ERROR_CODES.notFound) return INVALID_INVITE_MESSAGE
   return error.message
 }
