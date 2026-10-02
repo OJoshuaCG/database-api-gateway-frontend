@@ -189,7 +189,8 @@ export function GatewayUsersPage() {
               {/*
                 El botón DESAPARECE cuando la cuenta ya fijó su contraseña: sobre ella el endpoint
                 responde 409 `credential_already_set`, porque la invitación es solo para la primera
-                credencial. Para reemplazarla, la persona la cambia desde su propia sesión.
+                credencial. Para reemplazarla, la persona la cambia ella misma desde «Mi cuenta» →
+                «Contraseña» (`POST /auth/password`, que exige la actual).
               */}
               {!row.original.credential_set && (
                 <Button

@@ -56,7 +56,7 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
     case GATEWAY_USER_ERROR_CODES.usernameTaken:
       return 'Ya existe un usuario con ese nombre. Elegí otro.'
     case GATEWAY_USER_ERROR_CODES.credentialAlreadySet:
-      return 'Esta cuenta ya fijó su contraseña: la invitación es solo para la primera credencial. Para reemplazarla, la persona la cambia desde su propia sesión.'
+      return 'Esta cuenta ya fijó su contraseña: la invitación es solo para la primera credencial. Para reemplazarla, la persona la cambia ella misma desde «Mi cuenta» → «Contraseña», con su contraseña actual.'
     case GATEWAY_USER_ERROR_CODES.notFound:
       // Solo el 404 corresponde a estas pantallas. El 422 del mismo código es de la pantalla
       // pública de invitación y lo resuelve `acceptInviteErrorMessage`.

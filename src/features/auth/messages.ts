@@ -1,7 +1,9 @@
 import {
   ACCESS_FORBIDDEN_CODE,
   AUTH_CSRF_ERROR_CODES,
+  AUTH_PASSWORD_ERROR_CODES,
   AUTH_SESSION_ERROR_CODES,
+  GATEWAY_USER_ERROR_CODES,
 } from '@/lib/contracts'
 import { ApiError, toApiError } from '@/lib/api/errors'
 
@@ -112,6 +114,9 @@ export function isCsrfError(error: unknown): boolean {
 /** Adónde manda el 403: la persona ve ahí qué incluye su acceso. */
 export const MY_ACCESS_PATH = '/mi-cuenta'
 
+/** La sección «Contraseña» de «Mi cuenta»: el único lugar donde alguien cambia la suya. */
+export const MY_PASSWORD_PATH = '/mi-cuenta?tab=contrasena'
+
 export interface ForbiddenCopy {
   title: string
   body: string
@@ -165,3 +170,61 @@ export function isSkippedByScope(item: { ok: boolean; error_code?: string | null
 /** El motivo de un ítem omitido: no se intentó nada, y la salida es pedir el acceso. */
 export const SKIPPED_BY_SCOPE_REASON =
   'No se intentó: tu acceso no alcanza el entorno de este destino.'
+
+// ── Cambio de la contraseña propia (`POST /auth/password`) ────────────────────
+
+/** Campo del formulario al que se ata un error, o `null` si es del formulario entero. */
+export type ChangePasswordErrorField = 'currentPassword' | 'newPassword' | null
+
+export interface ChangePasswordError {
+  field: ChangePasswordErrorField
+  message: string
+}
+
+/**
+ * Traduce un error de `POST /auth/password` al copy del formulario, atado al campo culpable cuando
+ * lo hay. Los 401 no llegan acá con sentido: los atiende el handler global de sesión.
+ *
+ * El 429 dice «un minuto» y no «unos segundos» porque el límite es 5/min por usuario + IP, y
+ * cuenta también los intentos con la contraseña actual equivocada.
+ */
+export function changePasswordErrorMessage(error: ApiError): ChangePasswordError {
+  if (error.status === 429) {
+    return {
+      field: null,
+      message: 'Hiciste demasiados intentos. Esperá un minuto y volvé a probar.',
+    }
+  }
+  switch (error.code) {
+    case AUTH_PASSWORD_ERROR_CODES.invalidCurrentPassword:
+      return { field: 'currentPassword', message: 'La contraseña actual no es correcta.' }
+    case AUTH_PASSWORD_ERROR_CODES.passwordUnchanged:
+      return {
+        field: 'newPassword',
+        message: 'La contraseña nueva tiene que ser distinta de la actual.',
+      }
+    case GATEWAY_USER_ERROR_CODES.weakPassword: {
+      const min = error.gatewayUserContext?.minLength
+      return {
+        field: 'newPassword',
+        message:
+          min != null
+            ? `La contraseña es demasiado corta: necesita al menos ${min} caracteres.`
+            : 'La contraseña es demasiado corta.',
+      }
+    }
+  }
+  const csrf = csrfErrorCopy(error)
+  if (csrf) return { field: null, message: csrf }
+  if (isAccessForbidden(error)) return { field: null, message: forbiddenCopy().body }
+  return { field: null, message: error.message }
+}
+
+/**
+ * Copy del éxito. `revoked` son las sesiones OTRAS que la actual: esta pestaña sigue abierta.
+ */
+export function passwordChangedMessage(revoked: number): string {
+  if (revoked === 0) return 'Tu contraseña cambió. No había otras sesiones abiertas.'
+  if (revoked === 1) return 'Tu contraseña cambió. Se cerró 1 sesión en otro lugar.'
+  return `Tu contraseña cambió. Se cerraron ${revoked} sesiones en otros lugares.`
+}

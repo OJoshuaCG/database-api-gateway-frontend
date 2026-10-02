@@ -106,6 +106,28 @@ export const loginInSchema = z.object({
 })
 export type LoginIn = z.infer<typeof loginInSchema>
 
+// ── Cambio de la contraseña propia (`POST /auth/password`) ─────────────────────
+/**
+ * `PasswordChangeIn` — lo que viaja al backend. El schema del backend solo exige 1–200 en
+ * `new_password` a propósito: el mínimo real lo aplica la política compartida con la invitación y
+ * responde `gateway_user.weak_password` con `min_length`. El formulario valida el mínimo antes
+ * (con `GATEWAY_PASSWORD_MIN`) para no gastar un intento del rate limit en algo que ya se sabe.
+ */
+export interface PasswordChangeIn {
+  current_password: string
+  new_password: string
+}
+
+/**
+ * `PasswordChangeOut` — cuántas sesiones OTRAS que la actual se cerraron. La actual también se
+ * cierra, pero la misma respuesta abre una nueva (el `sid` rota y con él la cookie CSRF), así que
+ * para quien cambió la contraseña la pestaña sigue funcionando.
+ */
+export const passwordChangeOutSchema = z.object({
+  revoked_sessions: z.number().int().nonnegative(),
+})
+export type PasswordChangeOut = z.infer<typeof passwordChangeOutSchema>
+
 // ── Catálogo de capacidades (§2) ───────────────────────────────────────────────
 /**
  * Una fila del catálogo (`GET /authz/catalog`, detrás de `self.read` = cualquier sesión).
@@ -378,6 +400,18 @@ export const AUTH_SESSION_ERROR_CODES = {
   adminRevoked: 'auth.session_admin_revoked',
   unknown: 'auth.session_unknown',
   missing: 'auth.session_missing',
+} as const
+
+/**
+ * Códigos de los 422 de `POST /auth/password`. El tercero posible, `gateway_user.weak_password`
+ * (con `min_length`), es el mismo de la invitación y vive en `GATEWAY_USER_ERROR_CODES`.
+ *
+ * `invalidCurrentPassword` es un 422 y NO un 401 a propósito: la sesión sigue siendo válida, y un
+ * 401 dispararía el cierre de sesión global de la SPA.
+ */
+export const AUTH_PASSWORD_ERROR_CODES = {
+  invalidCurrentPassword: 'auth.invalid_current_password',
+  passwordUnchanged: 'auth.password_unchanged',
 } as const
 
 /** El 403 de autorización (§3). Es CERRADO y **no nombra la capacidad que falta**, a propósito:

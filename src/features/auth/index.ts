@@ -2,6 +2,7 @@ export { LoginPage } from './pages/LoginPage'
 export { ProtectedRoute } from './components/ProtectedRoute'
 export { SessionProvider } from './SessionProvider'
 export { SessionsPanel } from './components/SessionsPanel'
+export { ChangePasswordPanel } from './components/ChangePasswordPanel'
 export { useSession } from './hooks/use-session'
 export {
   useCapabilities,
@@ -23,6 +24,7 @@ export { ForbiddenState } from './components/ForbiddenState'
 export {
   CSRF_ERROR_TITLE,
   MY_ACCESS_PATH,
+  MY_PASSWORD_PATH,
   csrfErrorCopy,
   forbiddenCopy,
   isAccessForbidden,

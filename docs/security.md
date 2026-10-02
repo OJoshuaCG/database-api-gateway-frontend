@@ -56,6 +56,15 @@ propósito, para no mostrarle «tu sesión terminó» a alguien que nunca entró
 cerrar las demás. `sid_prefix` es un **prefijo** y nunca el identificador completo: ese
 identificador *es* la credencial de sesión.
 
+`ChangePasswordPanel` (pestaña «Contraseña», `/mi-cuenta?tab=contrasena`) cambia la contraseña
+propia con `POST /auth/password`, que **exige la actual**: es lo que separa «tengo la cookie» de
+«soy la persona». Al éxito el backend cierra **todas** las sesiones del usuario (las demás reciben
+`401 auth.session_password_change`) y abre una nueva en la misma respuesta: el `sid` rota y con él
+la cookie CSRF. No hace falta refrescar el token a mano porque `readCsrfToken` lee la cookie en
+cada request (ver §1.b); sí se invalidan `/auth/me` y la lista de sesiones, que describen la
+sesión vieja. `auth.invalid_current_password` es un **422** y no un 401 a propósito: un 401
+dispararía el cierre de sesión global.
+
 ## 1.b CSRF: header obligatorio en todo método no seguro **con sesión** (v23 §7.1)
 
 El backend deja el token en una cookie **legible por JS a propósito** (`__Host-gw_csrf`, o

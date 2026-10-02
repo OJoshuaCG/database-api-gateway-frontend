@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, TabButton } from '@/components/ui'
 import {
+  ChangePasswordPanel,
   EffectiveAccessPanel,
   ROLES_MATRIX_PATH,
   SessionsPanel,
@@ -13,7 +14,7 @@ import {
 import { useEnvironmentMap } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 
-const TABS = ['acceso', 'sesiones'] as const
+const TABS = ['acceso', 'sesiones', 'contrasena'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -21,7 +22,8 @@ function isTab(value: string | null): value is Tab {
 }
 
 /**
- * «Mi cuenta» — autoservicio de la propia sesión: qué acceso tengo y dónde está abierta.
+ * «Mi cuenta» — autoservicio de la propia sesión: qué acceso tengo, dónde está abierta y cambiar
+ * la contraseña.
  *
  * «Mi acceso» existe para que nadie tenga que pedirle a un administrador que le lea su rol: el
  * mismo cálculo que ve quien administra accesos, sobre `/auth/me`, sin nada editable. Y es el
@@ -45,7 +47,9 @@ export function MyAccountPage() {
       <PageHeader
         title="Mi cuenta"
         description={
-          admin ? `Sesión de ${admin.username}: tu acceso y dónde está abierta.` : undefined
+          admin
+            ? `Sesión de ${admin.username}: tu acceso, dónde está abierta y tu contraseña.`
+            : undefined
         }
       />
       <div
@@ -59,8 +63,17 @@ export function MyAccountPage() {
         <TabButton active={tab === 'sesiones'} onClick={() => setTab('sesiones')}>
           Mis sesiones
         </TabButton>
+        <TabButton active={tab === 'contrasena'} onClick={() => setTab('contrasena')}>
+          Contraseña
+        </TabButton>
       </div>
-      {tab === 'acceso' ? <MyAccessPanel /> : <SessionsPanel />}
+      {tab === 'acceso' ? (
+        <MyAccessPanel />
+      ) : tab === 'sesiones' ? (
+        <SessionsPanel />
+      ) : (
+        <ChangePasswordPanel />
+      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -19,6 +20,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import { formatDateTime } from '@/lib/utils'
 import { listSessions, revokeOtherSessions } from '../api/auth.api'
 import { useSession } from '../hooks/use-session'
+import { MY_PASSWORD_PATH } from '../messages'
 import { notifyMutationError } from '../notify-mutation-error'
 
 /**
@@ -61,8 +63,11 @@ export function SessionsPanel() {
       <CardHeader>
         <CardTitle>Tus sesiones abiertas</CardTitle>
         <CardDescription>
-          Dónde está abierta tu cuenta ahora mismo. Si ves una que no reconocés, cerrá las demás y
-          cambiá tu contraseña.
+          Dónde está abierta tu cuenta ahora mismo. Si ves una que no reconocés,{' '}
+          <Link to={MY_PASSWORD_PATH} className="font-medium text-primary hover:underline">
+            cambiá tu contraseña
+          </Link>
+          : eso cierra todas las demás sesiones, incluida la que no reconocés.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

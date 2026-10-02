@@ -88,7 +88,7 @@ src/
 │   ├── permission-profiles/ CRUD de perfiles de permisos por motor
 │   ├── admin/               rotación de cifrado (DEK)
 │   ├── gateway-users/       usuarios del gateway (`/gateway-users`, con la pestaña «Roles y capacidades»), sus accesos (`/gateway-users/:userId/accesos`) y la invitación pública (`/invitacion`)
-│   ├── account/             «Mi cuenta» (`/mi-cuenta`): «Mi acceso» (acceso efectivo propio) y «Mis sesiones»
+│   ├── account/             «Mi cuenta» (`/mi-cuenta`): «Mi acceso» (acceso efectivo propio), «Mis sesiones» y «Contraseña» (cambio de la propia)
 │   └── health/              indicador de estado del backend
 │
 ├── styles/

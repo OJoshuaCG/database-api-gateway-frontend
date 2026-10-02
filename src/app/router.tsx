@@ -203,8 +203,8 @@ export const router = createBrowserRouter([
           { path: 'gateway-users/:userId/accesos', element: <GatewayUserAccessPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
           { path: 'admin', element: <AdminPage /> },
-          // Autoservicio de la propia sesión: «Mi acceso» y «Mis sesiones» (que antes era una
-          // pestaña de Administración; `/admin?tab=sessions` redirige acá).
+          // Autoservicio de la propia sesión: «Mi acceso», «Mis sesiones» (que antes era una
+          // pestaña de Administración; `/admin?tab=sessions` redirige acá) y «Contraseña».
           { path: 'mi-cuenta', element: <MyAccountPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],

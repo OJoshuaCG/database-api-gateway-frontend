@@ -2,11 +2,14 @@ import { fetchData, fetchList, mutateData, mutateVoid } from '@/lib/api/client'
 import {
   adminOutSchema,
   capabilityDescriptorSchema,
+  passwordChangeOutSchema,
   scopeReadinessSchema,
   sessionInfoSchema,
   type AdminOut,
   type CapabilityDescriptor,
   type LoginIn,
+  type PasswordChangeIn,
+  type PasswordChangeOut,
   type ScopeReadiness,
   type SessionInfo,
 } from '@/lib/contracts'
@@ -63,4 +66,15 @@ export function listSessions(signal?: AbortSignal): Promise<SessionInfo[]> {
 /** `POST /auth/sessions/revoke-others` (v23 §7.4) — cierra las demás y CONSERVA la actual. */
 export function revokeOtherSessions(): Promise<string | undefined> {
   return mutateVoid('POST', '/auth/sessions/revoke-others')
+}
+
+/**
+ * `POST /auth/password` — cambia la contraseña PROPIA (exige la actual).
+ *
+ * Al éxito el backend cierra TODAS las sesiones del usuario y abre una nueva en la misma
+ * respuesta: el `sid` rota y la cookie CSRF cambia con él. No hace falta refrescar nada a mano,
+ * porque `readCsrfToken` lee la cookie en cada request y la próxima ya ve la nueva.
+ */
+export function changeOwnPassword(body: PasswordChangeIn): Promise<PasswordChangeOut> {
+  return mutateData('POST', '/auth/password', passwordChangeOutSchema, { body })
 }
