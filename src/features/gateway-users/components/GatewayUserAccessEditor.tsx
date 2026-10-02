@@ -19,19 +19,28 @@ import {
   effectiveAccessRowId,
   globalCapabilityIds,
   globalCapabilityLabel,
+  ownerOnlyCapabilityIds,
   SERVER_RESOLUTION_INVENTORY_NOTE,
+  SOD_RULE_EXPLANATION,
+  sodConflicts,
   sortByRisk,
   summarizeLabels,
+  uncoveredSodConflicts,
   useCapabilities,
   useCapabilityCatalog,
   useScopeReadiness,
+  useSodReport,
   type EffectiveAccessGrant,
+  type SodConflict,
+  type SodSourceLabelOptions,
 } from '@/features/auth'
+import { toApiError } from '@/lib/api/errors'
 import { useSelectableEnvironments } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import {
   CAPABILITIES,
   GATEWAY_ROLES,
+  GATEWAY_USER_ERROR_CODES,
   GLOBAL_CAPABILITIES,
   SCOPE_TYPES,
   isKnownGatewayRole,
@@ -41,13 +50,16 @@ import {
   type GlobalCapability,
   type ScopeGrantIn,
   type ScopeType,
+  type SodOverrideIn,
 } from '@/lib/contracts'
 import { GATEWAY_USERS_PATH } from '@/lib/routes'
 import { GLOBAL_CEILING_HINT, roleCeilingHint, withinCeiling } from '../grant-ceiling'
-import { useEffectiveAccess } from '../hooks/use-capability-grants'
+import { useCapabilityGrants, useEffectiveAccess } from '../hooks/use-capability-grants'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
+import { gatewayUserErrorMessage } from '../messages'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { CapabilityGrantsSection } from './CapabilityGrantsSection'
+import { SodConflictList, SodConflictPanel } from './SodConflictPanel'
 
 const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
   environment: 'Entorno',
@@ -90,6 +102,18 @@ function fingerprint(values: readonly string[]): string {
 interface TargetOption {
   id: number
   label: string
+}
+
+/**
+ * Un 409 `access.sod_conflict` de «Guardar accesos», atado al estado que se intentó guardar
+ * (`key`): si el formulario cambia, el rechazo ya no habla de lo que hay en pantalla y deja de
+ * mostrarse sin que haga falta limpiarlo en un efecto.
+ */
+interface SodRejection {
+  key: string
+  conflicts: SodConflict[]
+  reasonMinLength?: number
+  maxHours?: number
 }
 
 interface GatewayUserAccessEditorProps {
@@ -294,26 +318,89 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   // colisiona con ningún id real y mantiene el guardado deshabilitado hasta que se complete.
   const incomplete = grants.some((grant) => grant.scope_id < 1)
 
-  const submit = () => {
-    replaceAccess.mutate(
-      {
-        global_capabilities: capabilities,
-        scope_grants: grants.map(({ scope_type, scope_id, role }) => ({
-          scope_type,
-          scope_id,
-          role,
-        })),
+  /*
+   * Separación de deberes (v29 §8): AVISO PREVIO con el espejo de la regla del backend sobre el
+   * estado que quedaría al guardar. Decide el servidor: esto solo evita llegar al 409 a ciegas.
+   * Entran el rol base (no se edita acá, pero cuenta), los permisos con destino, las globales y las
+   * capacidades puntuales VIVAS (pendientes y activas: el backend cuenta las dos al escribir).
+   */
+  const capabilityGrants = useCapabilityGrants(user.id, { enabled: canReadEffectiveAccess })
+  const sodPreview = sodConflicts({
+    baseRole: user.gateway_role,
+    scopeGrants: grants
+      .filter((grant) => grant.scope_id >= 1)
+      .map((grant) => ({
+        scopeType: grant.scope_type,
+        scopeId: grant.scope_id,
+        role: grant.role,
+      })),
+    globalCapabilities: capabilities,
+    capabilityGrants: (capabilityGrants.data ?? [])
+      .filter((grant) => grant.status === 'pending' || grant.status === 'active')
+      .map((grant) => ({
+        capability: grant.capability,
+        scopeType: grant.scope_type,
+        scopeId: grant.scope_id,
+      })),
+    ownerOnlyCapabilities: catalog ? ownerOnlyCapabilityIds(catalog) : [],
+  })
+  // Solo se pide el reporte cuando hay algo que contrastar: una excepción viva (heredada u
+  // override) cubre la regla y el servidor acepta guardar.
+  const sodReport = useSodReport(canReadEffectiveAccess && sodPreview.length > 0)
+  const coveredRules = (sodReport.data?.exceptions ?? [])
+    .filter((exception) => exception.user.id === user.id)
+    .map((exception) => exception.rule)
+  const sodUncovered = uncoveredSodConflicts(sodPreview, coveredRules)
+  const sodLabels: SodSourceLabelOptions = {
+    targetLabel: (scopeType, scopeId) =>
+      (SCOPE_TYPES as readonly string[]).includes(scopeType)
+        ? targetsFor(scopeType as ScopeType).find((target) => target.id === scopeId)?.label
+        : undefined,
+    capabilityLabel: (id) => catalog?.find((row) => row.id === id)?.label,
+  }
+
+  const accessBody = {
+    global_capabilities: capabilities,
+    scope_grants: grants.map(({ scope_type, scope_id, role }) => ({
+      scope_type,
+      scope_id,
+      role,
+    })),
+  }
+  const bodyKey = `${fingerprint(accessBody.global_capabilities)}#${fingerprint(accessBody.scope_grants.map(grantKey))}`
+  const [sodRejection, setSodRejection] = useState<SodRejection | null>(null)
+  const [overrideError, setOverrideError] = useState<string | null>(null)
+  const activeRejection = sodRejection?.key === bodyKey ? sodRejection : null
+
+  const submit = (override?: SodOverrideIn) => {
+    setOverrideError(null)
+    replaceAccess.mutate(override ? { ...accessBody, sod_override: override } : accessBody, {
+      onSuccess: () => {
+        leavingAfterSave.current = true
+        void navigate(GATEWAY_USERS_PATH)
       },
-      {
-        onSuccess: () => {
-          leavingAfterSave.current = true
-          void navigate(GATEWAY_USERS_PATH)
-        },
+      onError: (error) => {
+        const apiError = toApiError(error)
+        if (apiError.code === GATEWAY_USER_ERROR_CODES.sodConflict) {
+          const context = apiError.gatewayUserContext
+          setSodRejection({
+            key: bodyKey,
+            conflicts: context?.sodConflicts ?? [],
+            reasonMinLength: context?.sodReasonMinLength,
+            maxHours: context?.sodMaxHours,
+          })
+        } else if (override) {
+          // El reenvío con excepción falló por otra cosa (el override inválido, un techo…): se
+          // dice junto al botón que se apretó, además del toast.
+          setOverrideError(gatewayUserErrorMessage(apiError) ?? apiError.message)
+        }
       },
-    )
+    })
   }
 
   const sessionsNoteId = `${panelId}-sesiones`
+  const sodWarningId = `${panelId}-sod`
+  const showSodWarning = sodPreview.length > 0 && !activeRejection && !blocked
 
   return (
     <div className="flex flex-col gap-6">
@@ -358,6 +445,38 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
           Debajo de `lg`, una sola columna en el mismo orden de lectura. */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
+          {/* ── Separación de funciones: aviso previo ───────────────────────
+              Arriba de las globales porque ahí se tilda lo que la dispara. Si el servidor ya
+              rechazó este mismo estado, manda su rechazo (más abajo) y este se calla. */}
+          {showSodWarning &&
+            (sodUncovered.length > 0 ? (
+              <Callout
+                id={sodWarningId}
+                tone="warning"
+                title="Esta combinación viola la separación de funciones"
+              >
+                <p>{SOD_RULE_EXPLANATION}</p>
+                <SodConflictList conflicts={sodUncovered} labelOptions={sodLabels} />
+                <p className="mt-1">
+                  Si guardás así, el servidor lo va a rechazar. Repartí las funciones en cuentas
+                  distintas; solo ante un incidente se puede declarar una excepción de emergencia.
+                </p>
+              </Callout>
+            ) : (
+              <Callout
+                id={sodWarningId}
+                tone="info"
+                title="Combinación cubierta por una excepción vigente"
+              >
+                <p>
+                  Esta cuenta combina funciones que deberían estar separadas, pero tiene una
+                  excepción vigente (heredada o de emergencia) que la cubre, así que el servidor
+                  acepta guardar. Lo correcto sigue siendo separarlas.
+                </p>
+                <SodConflictList conflicts={sodPreview} labelOptions={sodLabels} />
+              </Callout>
+            ))}
+
           {/* ── Capacidades globales ─────────────────────────────────────── */}
           <Card>
             <section aria-labelledby={`${panelId}-globales`}>
@@ -671,6 +790,23 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
         </Card>
       </div>
 
+      {/* ── Separación de funciones: rechazo del servidor ─────────────────
+          Fijo en la pantalla (el toast se va solo) y junto a la barra de guardar, que es lo que se
+          acaba de apretar. El reenvío manda EXACTAMENTE este estado más `sod_override`. */}
+      {activeRejection && (
+        <SodConflictPanel
+          key={activeRejection.key}
+          conflicts={activeRejection.conflicts}
+          labelOptions={sodLabels}
+          reasonMinLength={activeRejection.reasonMinLength}
+          maxHours={activeRejection.maxHours}
+          onResend={submit}
+          isPending={replaceAccess.isPending}
+          resendError={overrideError}
+          resendLabel="Guardar accesos con excepción de emergencia"
+        />
+      )}
+
       {/* Barra de acciones fija al pie: en una página larga, «Guardar» no puede quedar tres
           pantallas más abajo. La consecuencia del botón va al lado del botón, leída antes de
           apretarlo. */}
@@ -694,10 +830,12 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
           {!blocked && (
             <Button
               type="button"
-              onClick={submit}
+              onClick={() => submit()}
               isLoading={replaceAccess.isPending}
               disabled={incomplete}
-              aria-describedby={sessionsNoteId}
+              aria-describedby={
+                showSodWarning ? `${sessionsNoteId} ${sodWarningId}` : sessionsNoteId
+              }
             >
               Guardar accesos
             </Button>

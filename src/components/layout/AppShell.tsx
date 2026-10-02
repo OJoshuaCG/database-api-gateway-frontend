@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from 'react-error-boundary'
 import { Spinner } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { SodWarningsBanner } from '@/features/auth/components/SodWarningsBanner'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { SectionErrorFallback } from './SectionErrorFallback'
@@ -67,6 +68,9 @@ export function AppShell() {
             padding solo sigue existiendo para separar el contenido de los bordes de la
             ventana. */}
         <main className="w-full min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          {/* Fuera del boundary por sección: es un estado de la cuenta, no de la vista, y tiene que
+              seguir a la vista aunque la sección falle. */}
+          <SodWarningsBanner />
           <ErrorBoundary FallbackComponent={SectionErrorFallback} resetKeys={[location.pathname]}>
             {/* Las vistas se cargan por ruta (`React.lazy` en el router): el fallback vive DENTRO
                 del shell para que el sidebar y la topbar no parpadeen al navegar. */}

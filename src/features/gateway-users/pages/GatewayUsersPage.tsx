@@ -30,6 +30,7 @@ import { formatDateTime } from '@/lib/utils'
 import { PendingCapabilityGrantsCard } from '../components/PendingCapabilityGrantsCard'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
 import { RolesCapabilitiesPanel } from '../components/RolesCapabilitiesPanel'
+import { SodReportCard } from '../components/SodReportCard'
 import { usePendingCapabilityGrants } from '../hooks/use-capability-grants'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
 import { buildInviteLink } from '../invite-link'
@@ -44,7 +45,7 @@ interface PendingInvite {
   reissued: boolean
 }
 
-const TABS = ['users', 'pending', 'roles'] as const
+const TABS = ['users', 'pending', 'sod', 'roles'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -266,6 +267,12 @@ export function GatewayUsersPage() {
             ) : null}
           </TabButton>
         )}
+        {/* El reporte es `access.admin`, como la bandeja: sin ella la pestaña no se ofrece. */}
+        {canReviewGrants && (
+          <TabButton active={tab === 'sod'} onClick={() => setTab('sod')}>
+            Separación de funciones
+          </TabButton>
+        )}
         <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>
           Roles y capacidades
         </TabButton>
@@ -273,6 +280,12 @@ export function GatewayUsersPage() {
 
       {tab === 'roles' ? (
         <RolesCapabilitiesPanel />
+      ) : tab === 'sod' ? (
+        canReviewGrants ? (
+          <SodReportCard />
+        ) : admin !== null ? (
+          <ForbiddenState title="No tenés acceso al reporte de separación de funciones" />
+        ) : null
       ) : tab === 'pending' ? (
         canReviewGrants ? (
           <PendingCapabilityGrantsCard />

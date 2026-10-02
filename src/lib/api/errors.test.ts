@@ -589,3 +589,67 @@ describe('gatewayUserContext de los accesos que apuntan a un destino', () => {
     ])
   })
 })
+
+describe('gatewayUserContext de la separación de deberes', () => {
+  it('lee reglas, fuentes y límites del override del 409 `access.sod_conflict`', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'Esta combinación de acceso viola la separación de deberes.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'access.sod_conflict',
+          rules: ['access_admin_security_officer', 'owner_security_officer'],
+          conflicts: [
+            {
+              rule: 'access_admin_security_officer',
+              sources: [{ kind: 'global_capability', global_capability: 'access_admin' }],
+            },
+            {
+              rule: 'owner_security_officer',
+              sources: [
+                { kind: 'base_role', role: 'owner' },
+                { kind: 'scope_grant', scope_type: 'environment', scope_id: 3, role: 'owner' },
+                'basura',
+              ],
+            },
+            { sources: [] },
+          ],
+          override: { field: 'sod_override', reason_min_length: 20, max_hours: 168 },
+        },
+      },
+    })
+    expect(error.code).toBe('access.sod_conflict')
+    expect(error.gatewayUserContext?.sodConflicts).toEqual([
+      {
+        rule: 'access_admin_security_officer',
+        sources: [{ kind: 'global_capability', globalCapability: 'access_admin' }],
+      },
+      {
+        rule: 'owner_security_officer',
+        sources: [
+          { kind: 'base_role', role: 'owner' },
+          { kind: 'scope_grant', scopeType: 'environment', scopeId: 3, role: 'owner' },
+        ],
+      },
+    ])
+    expect(error.gatewayUserContext?.sodReasonMinLength).toBe(20)
+    expect(error.gatewayUserContext?.sodMaxHours).toBe(168)
+  })
+
+  it('lee los límites planos del 422 `access.sod_override_invalid`', () => {
+    const error = normalizeApiError(422, {
+      detail: {
+        msg: 'El motivo del override tiene que tener al menos 20 caracteres.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'access.sod_override_invalid',
+          reason_min_length: 20,
+          max_hours: 168,
+        },
+      },
+    })
+    expect(error.gatewayUserContext?.sodConflicts).toBeUndefined()
+    expect(error.gatewayUserContext?.sodReasonMinLength).toBe(20)
+    expect(error.gatewayUserContext?.sodMaxHours).toBe(168)
+  })
+})

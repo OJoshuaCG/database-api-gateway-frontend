@@ -1123,6 +1123,35 @@ export interface GatewayUserErrorContext {
   readonly capabilityGrantCount?: number
   /** `access.grant_scope_not_found` (422 de `PUT /access`): los alcances que ya no existen. */
   readonly missingScopes?: ApiMissingScope[]
+  /** `access.sod_conflict` (409): las reglas violadas, cada una con lo que choca. */
+  readonly sodConflicts?: ApiSodConflict[]
+  /**
+   * Límites del break-glass: `override.reason_min_length` del 409 o `reason_min_length` del 422
+   * `access.sod_override_invalid`. Ausentes si el backend no los manda.
+   */
+  readonly sodReasonMinLength?: number
+  readonly sodMaxHours?: number
+}
+
+/**
+ * Una fuente de `public_context.conflicts[].sources` (v29 §8.2): QUÉ choca con
+ * `security_officer`. `kind` es `base_role` | `scope_grant` | `capability_grant` |
+ * `global_capability`; los demás campos dependen del `kind`. Un `kind` desconocido se conserva:
+ * la UI lo nombra genérico en vez de esconder la fuente.
+ */
+export interface ApiSodSource {
+  readonly kind: string
+  readonly role?: string
+  readonly scopeType?: string
+  readonly scopeId?: number
+  readonly capability?: string
+  readonly globalCapability?: string
+}
+
+/** Una regla violada con sus fuentes. Se descarta entera si no trae `rule`. */
+export interface ApiSodConflict {
+  readonly rule: string
+  readonly sources: ApiSodSource[]
 }
 
 /** Un alcance de `public_context.missing_scopes`. Se descarta entero si le falta algún campo. */
@@ -1333,7 +1362,43 @@ function extractGatewayUserContext(
     accessGrantCount: finiteNumber(publicContext.access_grant_count),
     capabilityGrantCount: finiteNumber(publicContext.capability_grant_count),
     missingScopes: extractMissingScopes(publicContext.missing_scopes),
+    sodConflicts: extractSodConflicts(publicContext.conflicts),
+    sodReasonMinLength:
+      finiteNumber(publicContext.reason_min_length) ??
+      (isRecord(publicContext.override)
+        ? finiteNumber(publicContext.override.reason_min_length)
+        : undefined),
+    sodMaxHours:
+      finiteNumber(publicContext.max_hours) ??
+      (isRecord(publicContext.override)
+        ? finiteNumber(publicContext.override.max_hours)
+        : undefined),
   }
+}
+
+/** `public_context.conflicts` del 409 `access.sod_conflict`. */
+function extractSodConflicts(value: unknown): ApiSodConflict[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const conflicts = value.flatMap((row): ApiSodConflict[] => {
+    if (!isRecord(row) || typeof row.rule !== 'string') return []
+    const sources = Array.isArray(row.sources)
+      ? row.sources.flatMap((source): ApiSodSource[] => {
+          if (!isRecord(source) || typeof source.kind !== 'string') return []
+          return [
+            {
+              kind: source.kind,
+              role: nonEmptyString(source.role),
+              scopeType: nonEmptyString(source.scope_type),
+              scopeId: finiteNumber(source.scope_id),
+              capability: nonEmptyString(source.capability),
+              globalCapability: nonEmptyString(source.global_capability),
+            },
+          ]
+        })
+      : []
+    return [{ rule: row.rule, sources }]
+  })
+  return conflicts.length ? conflicts : undefined
 }
 
 function extractMissingScopes(value: unknown): ApiMissingScope[] | undefined {

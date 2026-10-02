@@ -5,6 +5,7 @@ import {
   passwordChangeOutSchema,
   scopeReadinessSchema,
   sessionInfoSchema,
+  sodReportSchema,
   stepUpOutSchema,
   type AdminOut,
   type CapabilityDescriptor,
@@ -13,6 +14,7 @@ import {
   type PasswordChangeOut,
   type ScopeReadiness,
   type SessionInfo,
+  type SodReport,
   type StepUpOut,
 } from '@/lib/contracts'
 
@@ -58,6 +60,15 @@ export function getCapabilityCatalog(signal?: AbortSignal): Promise<CapabilityDe
  */
 export function getScopeReadiness(signal?: AbortSignal): Promise<ScopeReadiness> {
   return fetchData('/authz/scope-readiness', scopeReadinessSchema, { signal })
+}
+
+/**
+ * `GET /authz/sod-report` (v29 §8.6, detrás de `access.admin`) — las excepciones vivas a la
+ * separación de deberes (heredadas y overrides) y las cuentas que violan una regla sin excepción.
+ * Sin step-up: es un `GET` que no divulga.
+ */
+export function getSodReport(signal?: AbortSignal): Promise<SodReport> {
+  return fetchData('/authz/sod-report', sodReportSchema, { signal })
 }
 
 /** `GET /auth/sessions` (v23 §7.4) — las sesiones vivas del propio usuario. */

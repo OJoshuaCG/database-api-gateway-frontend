@@ -10,6 +10,7 @@ export {
   useCapabilities,
   useCapabilityCatalog,
   useScopeReadiness,
+  useSodReport,
   type Capabilities,
 } from './hooks/use-capabilities'
 export {
@@ -50,3 +51,5 @@ export { CapabilityFlags } from './components/CapabilityFlags'
 export { CAPABILITY_FLAG_LEGEND, CAPABILITY_FLAGS, capabilityFlagKeys } from './capability-flags'
 export { RoleCapabilitySummary, ROLES_MATRIX_PATH } from './components/RoleCapabilitySummary'
 export { EffectiveAccessPanel, type EffectiveAccessGrant } from './components/EffectiveAccessPanel'
+export * from './separation-of-duties'
+export { SodWarningsBanner } from './components/SodWarningsBanner'

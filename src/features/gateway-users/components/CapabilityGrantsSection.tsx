@@ -20,6 +20,7 @@ import {
   groupByModule,
   isAccessForbidden,
   moduleLabel,
+  type SodConflict,
 } from '@/features/auth'
 import { useSelectableEnvironments } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
@@ -29,8 +30,10 @@ import {
   SCOPE_TYPES,
   type CapabilityDescriptor,
   type CapabilityGrant,
+  type CapabilityGrantCreate,
   type GatewayUserOut,
   type ScopeType,
+  type SodOverrideIn,
 } from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils/format'
 import {
@@ -39,9 +42,21 @@ import {
   useRevokeCapabilityGrant,
 } from '../hooks/use-capability-grants'
 import { capabilityGrantBlockedMessage, capabilityGrantErrorMessage } from '../messages'
+import { SodConflictPanel } from './SodConflictPanel'
 
 /** Largo máximo del motivo: el mismo tope que el contrato y el backend. */
 const REASON_MAX = 500
+
+/**
+ * Un 409 `access.sod_conflict` del alta: la persona es oficial de seguridad y la capacidad es
+ * exclusiva de owner. Guarda el cuerpo que se intentó, que es lo que reenvía la excepción.
+ */
+interface SodBlock {
+  body: CapabilityGrantCreate
+  conflicts: SodConflict[]
+  reasonMinLength?: number
+  maxHours?: number
+}
 
 const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
   environment: 'Entorno',
@@ -129,6 +144,7 @@ export function CapabilityGrantsSection({
   const [scopeId, setScopeId] = useState(0)
   const [reason, setReason] = useState('')
   const [toRevoke, setToRevoke] = useState<CapabilityGrant | null>(null)
+  const [sodBlock, setSodBlock] = useState<SodBlock | null>(null)
 
   const grantsQuery = useCapabilityGrants(user.id)
   const create = useCreateCapabilityGrant(user.id)
@@ -190,9 +206,12 @@ export function CapabilityGrantsSection({
   // hay en el formulario.
   const touch = () => {
     if (!create.isIdle) create.reset()
+    setSodBlock(null)
   }
 
-  const formError = (() => {
+  // Con el rechazo de separación de deberes a la vista, el error vive en su panel: ahí está el
+  // botón que lo resuelve (o lo vuelve a intentar).
+  const createErrorMessage = (() => {
     if (!create.isError) return null
     // El 403 usa el copy compartido (el toast ya dice lo mismo): el aviso del formulario queda
     // legible aunque el toast se haya cerrado.
@@ -200,28 +219,50 @@ export function CapabilityGrantsSection({
     const apiError = toApiError(create.error)
     return capabilityGrantErrorMessage(apiError) ?? apiError.message
   })()
+  const sodRejectedAgain =
+    create.isError && toApiError(create.error).code === CAPABILITY_GRANT_ERROR_CODES.sodConflict
+  const formError = sodBlock ? null : createErrorMessage
+  const overrideError = sodBlock && !sodRejectedAgain ? createErrorMessage : null
+
+  const send = (body: CapabilityGrantCreate) => {
+    create.mutate(body, {
+      onSuccess: () => {
+        // Se limpia lo que se eligió pero se deja el tipo de destino: otorgar varias seguidas
+        // sobre el mismo tipo es lo habitual.
+        setCapabilityId(null)
+        setScopeId(0)
+        setReason('')
+        setSodBlock(null)
+      },
+      onError: (error) => {
+        const apiError = toApiError(error)
+        if (apiError.code !== CAPABILITY_GRANT_ERROR_CODES.sodConflict) return
+        const { sod_override: _override, ...plain } = body
+        const context = apiError.gatewayUserContext
+        setSodBlock({
+          body: plain,
+          conflicts: context?.sodConflicts ?? [],
+          reasonMinLength: context?.sodReasonMinLength,
+          maxHours: context?.sodMaxHours,
+        })
+      },
+    })
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!canSubmit || !selected) return
     const trimmed = reason.trim()
-    create.mutate(
-      {
-        capability: selected.id,
-        scope_type: scopeType,
-        scope_id: scopeId,
-        ...(trimmed ? { reason: trimmed } : {}),
-      },
-      {
-        onSuccess: () => {
-          // Se limpia lo que se eligió pero se deja el tipo de destino: otorgar varias seguidas
-          // sobre el mismo tipo es lo habitual.
-          setCapabilityId(null)
-          setScopeId(0)
-          setReason('')
-        },
-      },
-    )
+    send({
+      capability: selected.id,
+      scope_type: scopeType,
+      scope_id: scopeId,
+      ...(trimmed ? { reason: trimmed } : {}),
+    })
+  }
+
+  const resendWithOverride = (override: SodOverrideIn) => {
+    if (sodBlock) send({ ...sodBlock.body, sod_override: override })
   }
 
   const columns = useMemo<ColumnDef<CapabilityGrant>[]>(
@@ -474,6 +515,25 @@ export function CapabilityGrantsSection({
               <p id={errorId} role="alert" className="text-sm text-error">
                 {formError}
               </p>
+            )}
+
+            {sodBlock && (
+              <SodConflictPanel
+                conflicts={sodBlock.conflicts}
+                labelOptions={{
+                  capabilityLabel: (id) => catalog?.find((row) => row.id === id)?.label,
+                  targetLabel: (type, id) =>
+                    type === scopeType
+                      ? targets.find((option) => option.id === id)?.label
+                      : undefined,
+                }}
+                reasonMinLength={sodBlock.reasonMinLength}
+                maxHours={sodBlock.maxHours}
+                onResend={resendWithOverride}
+                isPending={create.isPending}
+                resendError={overrideError}
+                resendLabel="Otorgar con excepción de emergencia"
+              />
             )}
 
             {create.isSuccess && (

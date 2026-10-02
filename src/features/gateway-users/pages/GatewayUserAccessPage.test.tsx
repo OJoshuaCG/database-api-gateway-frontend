@@ -392,3 +392,166 @@ describe('GatewayUserAccessPage', () => {
     expect(backend.detailRequests()).toBe(0)
   })
 })
+
+describe('GatewayUserAccessPage — separación de funciones', () => {
+  /** El admin sembrado: owner con las dos globales, así el techo no esconde ninguna casilla. */
+  const SEEDED = meFixture({
+    role: 'owner',
+    global_capabilities: ['access_admin', 'security_officer'],
+  })
+
+  const SOD_409 = {
+    detail: {
+      msg: 'Esta combinación de acceso viola la separación de deberes.',
+      type: 'AppHttpException',
+      public_context: {
+        code: 'access.sod_conflict',
+        rules: ['owner_security_officer'],
+        conflicts: [
+          {
+            rule: 'owner_security_officer',
+            sources: [
+              { kind: 'scope_grant', scope_type: 'environment', scope_id: 3, role: 'owner' },
+            ],
+          },
+        ],
+        override: { field: 'sod_override', reason_min_length: 20, max_hours: 168 },
+      },
+    },
+  }
+
+  function mockSod(onPut: (body: unknown) => Response) {
+    const bodies: unknown[] = []
+    server.use(
+      http.get(`${API}/authz/sod-report`, () =>
+        HttpResponse.json({ data: { exceptions: [], uncovered: [] } }),
+      ),
+      http.put(`${API}/gateway-users/7/access`, async ({ request }) => {
+        const body = await request.json()
+        bodies.push(body)
+        return onPut(body)
+      }),
+    )
+    return bodies
+  }
+
+  it('avisa ANTES de guardar si la combinación junta oficial de seguridad con owner', async () => {
+    mockBackend(SEEDED)
+    mockSod(() => HttpResponse.json({ data: target }))
+    renderAt()
+    const officer = await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
+    expect(
+      screen.queryByText('Esta combinación viola la separación de funciones'),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(officer)
+    expect(
+      await screen.findByText('Esta combinación viola la separación de funciones'),
+    ).toBeInTheDocument()
+    // La fuente nombra el destino por su nombre, no por el id.
+    expect(screen.getByText(/rol owner en el entorno Producción/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Guardar accesos' })).toHaveAttribute(
+      'aria-describedby',
+      expect.stringMatching(/-sod$/),
+    )
+
+    // Destildarla saca el aviso: no queda nada que separar.
+    await userEvent.click(officer)
+    expect(
+      screen.queryByText('Esta combinación viola la separación de funciones'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('con una excepción vigente de esa persona dice que el servidor acepta guardar', async () => {
+    mockBackend(SEEDED)
+    server.use(
+      http.get(`${API}/authz/sod-report`, () =>
+        HttpResponse.json({
+          data: {
+            exceptions: [
+              {
+                id: 1,
+                user: { id: 7, username: 'mlopez' },
+                user_active: true,
+                rule: 'owner_security_officer',
+                kind: 'grandfathered',
+                reason: 'grandfathered',
+                since: '2026-10-02T10:00:00',
+                expires_at: null,
+                requested_by: null,
+                approved_by: null,
+                still_violating: true,
+              },
+            ],
+            uncovered: [],
+          },
+        }),
+      ),
+    )
+    renderAt()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Oficial de seguridad' }))
+    expect(
+      await screen.findByText('Combinación cubierta por una excepción vigente'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Esta combinación viola la separación de funciones'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('ante el 409 fija el conflicto y reenvía el MISMO estado con `sod_override`', async () => {
+    mockBackend(SEEDED)
+    const bodies = mockSod((body) =>
+      (body as { sod_override?: unknown }).sod_override
+        ? HttpResponse.json({ data: target })
+        : HttpResponse.json(SOD_409, { status: 409 }),
+    )
+    renderAt()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Oficial de seguridad' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar accesos' }))
+
+    expect(
+      await screen.findByText('El servidor rechazó el cambio: separación de funciones'),
+    ).toBeInTheDocument()
+    // El rechazo del servidor reemplaza al aviso previo: una sola voz.
+    expect(
+      screen.queryByText('Esta combinación viola la separación de funciones'),
+    ).not.toBeInTheDocument()
+
+    // La excepción es secundaria: cerrada hasta que se abre a propósito.
+    const summary = screen.getByText('Excepción de emergencia')
+    const disclosure = within(summary.closest('details') as HTMLElement)
+    const resend = disclosure.getByRole('button', {
+      name: 'Guardar accesos con excepción de emergencia',
+    })
+    expect(resend).not.toBeVisible()
+    await userEvent.click(summary)
+    expect(resend).toBeVisible()
+
+    // Un motivo corto no sale: lo frena el formulario con el mínimo del servidor.
+    await userEvent.type(disclosure.getByLabelText(/Motivo/), 'urgente')
+    await userEvent.click(resend)
+    expect(await screen.findByText('Mínimo 20 caracteres')).toBeInTheDocument()
+    expect(bodies).toHaveLength(1)
+
+    await userEvent.clear(disclosure.getByLabelText(/Motivo/))
+    await userEvent.type(
+      disclosure.getByLabelText(/Motivo/),
+      'Incidente 4711: no hay otro security_officer',
+    )
+    const hours = disclosure.getByLabelText(/Duración/)
+    await userEvent.clear(hours)
+    await userEvent.type(hours, '24')
+    await userEvent.click(resend)
+
+    await expect.poll(() => bodies.length).toBe(2)
+    expect(bodies[1]).toEqual({
+      global_capabilities: ['security_officer'],
+      scope_grants: [{ scope_type: 'environment', scope_id: 3, role: 'owner' }],
+      sod_override: {
+        reason: 'Incidente 4711: no hay otro security_officer',
+        expires_in_hours: 24,
+      },
+    })
+    expect(await screen.findByText('Listado de usuarios')).toBeInTheDocument()
+  })
+})

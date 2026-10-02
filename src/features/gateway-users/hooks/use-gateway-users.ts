@@ -84,6 +84,8 @@ export function useUpdateGatewayUser(id: number) {
     mutationFn: (body: GatewayUserUpdate) => updateGatewayUser(id, body),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
+      // Un cambio de rol (con o sin `sod_override`) mueve las excepciones de separación de deberes.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.authz.sodReport() })
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
       toast.success('Usuario actualizado', user.username)
     },
@@ -106,6 +108,8 @@ export function useReplaceGatewayUserAccess(id: number) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
       // El acceso efectivo del servidor depende de roles y globales: quedó viejo con este reemplazo.
       void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.effective(id) })
+      // Un override crea excepciones y un cambio que deja de violar una regla cierra la suya.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.authz.sodReport() })
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
       toast.success('Accesos actualizados', `Se cerraron las sesiones de ${user.username}.`)
     },

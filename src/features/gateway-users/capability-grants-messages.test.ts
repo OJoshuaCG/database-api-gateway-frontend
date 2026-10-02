@@ -59,3 +59,32 @@ describe('capabilityGrantBlockedMessage', () => {
     )
   })
 })
+
+describe('separación de deberes en las capacidades puntuales', () => {
+  const sod = CAPABILITY_GRANT_ERROR_CODES.sodConflict
+
+  it('el alta ofrece la excepción; aprobar no (no acepta `sod_override`)', () => {
+    expect(capabilityGrantErrorMessage(error(409, sod))).toContain('declará una excepción')
+    const decision = capabilityGrantErrorMessage(error(409, sod), { decision: true })
+    expect(decision).toMatch(/^No se puede aprobar:/)
+    expect(decision).not.toContain('declará una excepción')
+  })
+
+  it('el `blocked_reason` de la bandeja explica la regla y la salida', () => {
+    const message = capabilityGrantBlockedMessage(sod)
+    expect(message).toContain('Una misma cuenta no puede ser oficial de seguridad y a la vez owner')
+    expect(message).toContain('excepción de emergencia desde sus accesos')
+  })
+
+  it('el override inválido dice los límites que mandó el servidor', () => {
+    const invalid = new ApiError({
+      status: 422,
+      message: 'mensaje del backend',
+      code: CAPABILITY_GRANT_ERROR_CODES.sodOverrideInvalid,
+      gatewayUserContext: { sodReasonMinLength: 30, sodMaxHours: 72 },
+    })
+    expect(capabilityGrantErrorMessage(invalid)).toBe(
+      'La excepción de emergencia no es válida: el motivo necesita al menos 30 caracteres y la duración va de 1 a 72 horas.',
+    )
+  })
+})

@@ -78,3 +78,82 @@ describe('GatewayUserFormModal — edición de la propia cuenta', () => {
     expect(screen.queryByText(SELF_ACCESS_NOTE)).not.toBeInTheDocument()
   })
 })
+
+describe('GatewayUserFormModal — separación de funciones', () => {
+  const officer: GatewayUserOut = {
+    ...user,
+    id: 7,
+    username: 'mlopez',
+    gateway_role: 'viewer',
+    global_capabilities: ['security_officer'],
+  }
+
+  const SOD_409 = {
+    detail: {
+      msg: 'Esta combinación de acceso viola la separación de deberes.',
+      type: 'AppHttpException',
+      public_context: {
+        code: 'access.sod_conflict',
+        rules: ['owner_security_officer'],
+        conflicts: [
+          { rule: 'owner_security_officer', sources: [{ kind: 'base_role', role: 'owner' }] },
+        ],
+        override: { field: 'sod_override', reason_min_length: 20, max_hours: 168 },
+      },
+    },
+  }
+
+  it('avisa al elegir owner y, ante el 409, reenvía el PATCH con `sod_override`', async () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.get('http://localhost/api/v1/authz/sod-report', () =>
+        HttpResponse.json({ data: { exceptions: [], uncovered: [] } }),
+      ),
+      http.patch('http://localhost/api/v1/gateway-users/7', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return body.sod_override
+          ? HttpResponse.json({ data: { ...officer, gateway_role: 'owner' } })
+          : HttpResponse.json(SOD_409, { status: 409 })
+      }),
+    )
+    const closed: string[] = []
+    renderWithProviders(
+      <GatewayUserFormModal
+        open
+        user={officer}
+        currentUserId={1}
+        onClose={() => closed.push('cerrado')}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'owner' }))
+    expect(await screen.findByText('Este rol viola la separación de funciones')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(
+      await screen.findByText('El servidor rechazó el cambio: separación de funciones'),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/rol base owner/).length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByText('Excepción de emergencia'))
+    await userEvent.type(
+      screen.getByLabelText(/^Motivo/),
+      'Incidente 4711: no hay otro security_officer',
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Guardar con excepción de emergencia' }),
+    )
+
+    await expect.poll(() => bodies.length).toBe(2)
+    expect(bodies[0]).not.toHaveProperty('sod_override')
+    expect(bodies[1]).toMatchObject({
+      gateway_role: 'owner',
+      sod_override: {
+        reason: 'Incidente 4711: no hay otro security_officer',
+        expires_in_hours: 168,
+      },
+    })
+    await expect.poll(() => closed).toEqual(['cerrado'])
+  })
+})

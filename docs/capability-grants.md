@@ -69,6 +69,15 @@ Una pendiente no cuenta como acceso. Tras cualquier cambio los hooks invalidan t
 `queryKeys.capabilityGrants.all` (lista, bandeja y acceso efectivo) y `/auth/me` si la persona
 afectada es la de la sesión.
 
+## Separación de funciones
+
+Una capacidad puntual exclusiva de `owner` (las que `operator` no tiene) sobre alguien con
+`security_officer` cuenta como `owner` para la separación de deberes, **viva o pendiente**: el alta
+responde `409 access.sod_conflict` y el formulario ofrece la «Excepción de emergencia», que reenvía
+con `sod_override`. Una pendiente que quedó en esa situación llega a la bandeja con
+`blocked_reason: access.sod_conflict`, y aprobarla no acepta override. Todo el flujo, en
+[`separation-of-duties.md`](separation-of-duties.md).
+
 ## Dónde vive cada cosa
 
 | Pieza | Ubicación |

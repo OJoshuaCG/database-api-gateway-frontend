@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { sodOverrideInSchema } from './separation-of-duties'
 
 /**
  * Usuarios del GATEWAY: las identidades que se autentican contra este servicio (addendum de
@@ -210,6 +211,8 @@ export const gatewayUserCreateSchema = z.object({
   notes: z.string().nullable().optional(),
   gateway_role: gatewayRoleSchema.optional(),
   global_capabilities: z.array(globalCapabilitySchema).optional(),
+  /** Break-glass de la separación de deberes (v29 §8.3). Solo cuenta si el alta la viola. */
+  sod_override: sodOverrideInSchema.optional(),
 })
 export type GatewayUserCreate = z.infer<typeof gatewayUserCreateSchema>
 
@@ -237,6 +240,8 @@ export const gatewayUserUpdateSchema = z.object({
   notes: z.string().nullable().optional(),
   gateway_role: gatewayRoleSchema.optional(),
   is_active: z.boolean().optional(),
+  /** Solo cuenta si cambia `gateway_role` y el resultado viola la separación de deberes. */
+  sod_override: sodOverrideInSchema.optional(),
 })
 export type GatewayUserUpdate = z.infer<typeof gatewayUserUpdateSchema>
 
@@ -268,6 +273,11 @@ export const GATEWAY_USER_WRITE_ONLY_FIELDS = ['notes'] as const
 export const gatewayUserAccessUpdateSchema = z.object({
   global_capabilities: z.array(globalCapabilitySchema),
   scope_grants: z.array(scopeGrantInSchema),
+  /**
+   * Break-glass de la separación de deberes (v29 §8.3). Este SÍ es opcional de verdad: no es un
+   * campo del estado sino una declaración sobre este envío, y sin conflicto el servidor lo ignora.
+   */
+  sod_override: sodOverrideInSchema.optional(),
 })
 export type GatewayUserAccessUpdate = z.infer<typeof gatewayUserAccessUpdateSchema>
 
@@ -323,4 +333,8 @@ export const GATEWAY_USER_ERROR_CODES = {
    * pero acá el alcance es un campo del payload y no se escribe nada.
    */
   grantScopeNotFound: 'access.grant_scope_not_found',
+  /** 409: el estado resultante viola la separación de deberes (v29 §8.2). */
+  sodConflict: 'access.sod_conflict',
+  /** 422: el `sod_override` no cumple los límites (v29 §8.3). */
+  sodOverrideInvalid: 'access.sod_override_invalid',
 } as const

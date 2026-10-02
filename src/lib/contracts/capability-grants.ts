@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { scopeTypeSchema } from './gateway-users'
+import { sodOverrideInSchema } from './separation-of-duties'
 
 /**
  * Capacidades PUNTUALES (`capability_grants`): una capacidad concreta otorgada sobre UN entorno o
@@ -164,6 +165,11 @@ export const capabilityGrantCreateSchema = z.object({
   scope_type: scopeTypeSchema,
   scope_id: z.number().int().min(1),
   reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
+  /**
+   * Break-glass de la separación de deberes (v29 §8.3): solo cuenta si la capacidad es exclusiva
+   * de `owner` y la persona tiene `security_officer`.
+   */
+  sod_override: sodOverrideInSchema.optional(),
 })
 export type CapabilityGrantCreate = z.infer<typeof capabilityGrantCreateSchema>
 
@@ -192,6 +198,9 @@ export const CAPABILITY_GRANT_ERROR_CODES = {
   grantDuplicate: 'access.grant_duplicate',
   grantNotFound: 'access.grant_not_found',
   grantNotPending: 'access.grant_not_pending',
+  /** 409 del alta y de `approve`; también el `blocked_reason` de una pendiente (v29 §8.2). */
+  sodConflict: 'access.sod_conflict',
+  sodOverrideInvalid: 'access.sod_override_invalid',
 } as const
 
 /**

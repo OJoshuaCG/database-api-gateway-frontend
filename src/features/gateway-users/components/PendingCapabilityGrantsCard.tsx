@@ -81,7 +81,7 @@ export function PendingCapabilityGrantsCard() {
     if (!mutation.isError) return null
     if (isAccessForbidden(mutation.error)) return forbiddenCopy().body
     const apiError = toApiError(mutation.error)
-    return capabilityGrantErrorMessage(apiError) ?? apiError.message
+    return capabilityGrantErrorMessage(apiError, { decision: true }) ?? apiError.message
   })()
 
   const { reset: resetApprove } = approve

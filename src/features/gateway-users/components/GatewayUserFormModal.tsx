@@ -3,9 +3,19 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Callout, Combobox, Input, Modal, Switch, Textarea } from '@/components/ui'
-import { RoleCapabilitySummary, useCapabilities, useCapabilityCatalog } from '@/features/auth'
+import {
+  RoleCapabilitySummary,
+  SOD_RULE_EXPLANATION,
+  sodConflicts,
+  uncoveredSodConflicts,
+  useCapabilities,
+  useCapabilityCatalog,
+  useSodReport,
+  type SodConflict,
+} from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
 import {
+  CAPABILITIES,
   GATEWAY_EMAIL_MAX,
   GATEWAY_FULL_NAME_MAX,
   GATEWAY_ROLES,
@@ -16,11 +26,13 @@ import {
   type GatewayRole,
   type GatewayUserCreatedOut,
   type GatewayUserOut,
+  type SodOverrideIn,
 } from '@/lib/contracts'
 import { roleCeilingHint, withinCeiling } from '../grant-ceiling'
 import { useCreateGatewayUser, useUpdateGatewayUser } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
+import { SodConflictList, SodConflictPanel } from './SodConflictPanel'
 
 interface RoleOption {
   value: GatewayRole
@@ -87,6 +99,17 @@ type CreateValues = z.infer<typeof createSchema>
 
 const editSchema = createSchema.omit({ username: true }).extend({ is_active: z.boolean() })
 type EditValues = z.infer<typeof editSchema>
+
+/**
+ * Un 409 `access.sod_conflict` del PATCH, atado al rol que se intentó guardar: es lo único de este
+ * formulario que la regla mira, así que cambiar el rol lo deja atrás sin limpiarlo en un efecto.
+ */
+interface SodRejection {
+  role: string
+  conflicts: SodConflict[]
+  reasonMinLength?: number
+  maxHours?: number
+}
 
 interface GatewayUserFormModalProps {
   open: boolean
@@ -271,7 +294,10 @@ function EditForm({
 }: GatewayUserFormModalProps & { user: GatewayUserOut }) {
   const update = useUpdateGatewayUser(user.id)
   const roles = useBaseRoleOptions(user.gateway_role)
+  const actor = useCapabilities()
   const [formError, setFormError] = useState<string | null>(null)
+  const [sodRejection, setSodRejection] = useState<SodRejection | null>(null)
+  const [overrideError, setOverrideError] = useState<string | null>(null)
 
   const {
     register,
@@ -301,8 +327,36 @@ function EditForm({
   // nombre no, y avisar ahí sería ruido que entrena a ignorar el aviso cuando importa.
   const invalidatesSessions = nextRole !== user.gateway_role || nextActive !== user.is_active
 
-  const submit = (values: EditValues) => {
+  /*
+   * Separación de deberes (v29 §8). El PATCH solo la chequea cuando cambia el rol base, y lo único
+   * que este formulario mueve es eso: el aviso previo aparece cuando el rol NUEVO deja a la cuenta
+   * violando una regla que ninguna excepción viva cubre (el reporte lo dice; solo se pide si hace
+   * falta). Los permisos y globales se editan en «Accesos», que tiene su propio aviso.
+   */
+  const roleChanged = nextRole !== user.gateway_role
+  const sodPreview = roleChanged
+    ? sodConflicts({
+        baseRole: nextRole,
+        scopeGrants: user.scope_grants.map((grant) => ({
+          scopeType: grant.scope_type,
+          scopeId: grant.scope_id,
+          role: grant.role,
+        })),
+        globalCapabilities: user.global_capabilities,
+      })
+    : []
+  const sodReport = useSodReport(sodPreview.length > 0 && actor.can(CAPABILITIES.accessAdmin))
+  const sodUncovered = uncoveredSodConflicts(
+    sodPreview,
+    (sodReport.data?.exceptions ?? [])
+      .filter((exception) => exception.user.id === user.id)
+      .map((exception) => exception.rule),
+  )
+  const activeRejection = sodRejection?.role === nextRole ? sodRejection : null
+
+  const submit = (values: EditValues, override?: SodOverrideIn) => {
     setFormError(null)
+    setOverrideError(null)
     update.mutate(
       {
         email: values.email || undefined,
@@ -312,12 +366,25 @@ function EditForm({
         notes: values.notes ? values.notes : undefined,
         gateway_role: values.gateway_role,
         is_active: values.is_active,
+        ...(override ? { sod_override: override } : {}),
       },
       {
         onSuccess: onClose,
         onError: (error) => {
           const apiError = toApiError(error)
-          setFormError(gatewayUserErrorMessage(apiError) ?? apiError.message)
+          if (apiError.code === GATEWAY_USER_ERROR_CODES.sodConflict) {
+            const context = apiError.gatewayUserContext
+            setSodRejection({
+              role: values.gateway_role,
+              conflicts: context?.sodConflicts ?? [],
+              reasonMinLength: context?.sodReasonMinLength,
+              maxHours: context?.sodMaxHours,
+            })
+            return
+          }
+          const message = gatewayUserErrorMessage(apiError) ?? apiError.message
+          if (override) setOverrideError(message)
+          else setFormError(message)
         },
       },
     )
@@ -331,7 +398,10 @@ function EditForm({
       description="Los accesos por entorno y por servidor se editan aparte, en «Accesos»."
       size="lg"
     >
-      <form className="flex flex-col gap-4" onSubmit={(event) => void handleSubmit(submit)(event)}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => void handleSubmit((values) => submit(values))(event)}
+      >
         {formError && (
           <p
             role="alert"
@@ -430,6 +500,30 @@ function EditForm({
           error={errors.notes?.message}
           {...register('notes')}
         />
+
+        {sodUncovered.length > 0 && !activeRejection && (
+          <Callout tone="warning" title="Este rol viola la separación de funciones">
+            <p>{SOD_RULE_EXPLANATION}</p>
+            <SodConflictList conflicts={sodUncovered} />
+            <p className="mt-1">
+              Si guardás así, el servidor lo va a rechazar. Quitale primero la capacidad global en
+              «Accesos», o elegí otro rol.
+            </p>
+          </Callout>
+        )}
+
+        {activeRejection && (
+          <SodConflictPanel
+            key={activeRejection.role}
+            conflicts={activeRejection.conflicts}
+            reasonMinLength={activeRejection.reasonMinLength}
+            maxHours={activeRejection.maxHours}
+            onResend={(override) => void handleSubmit((values) => submit(values, override))()}
+            isPending={update.isPending}
+            resendError={overrideError}
+            resendLabel="Guardar con excepción de emergencia"
+          />
+        )}
 
         {invalidatesSessions && (
           <Callout tone="warning" title="Esto cierra las sesiones abiertas de esta persona">

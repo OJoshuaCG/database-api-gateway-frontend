@@ -21,9 +21,9 @@ import {
 import { capabilityGrantErrorMessage } from '../messages'
 
 /** Título + detalle de un error, con el copy de las capacidades puntuales cuando lo reconoce. */
-function errorToast(title: string, error: unknown): [string, string] {
+function errorToast(title: string, error: unknown, decision = false): [string, string] {
   const apiError = toApiError(error)
-  return [title, capabilityGrantErrorMessage(apiError) ?? apiError.message]
+  return [title, capabilityGrantErrorMessage(apiError, { decision }) ?? apiError.message]
 }
 
 /** Etiqueta corta del destino para los toasts: «servidor 3» si el nombre no vino. */
@@ -47,6 +47,8 @@ function useRefreshAfterGrantChange() {
   const sessionUserId = admin?.id ?? null
   return (granteeId: number) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.all })
+    // Una capacidad exclusiva de `owner` cuenta para la separación de deberes (v29 §8).
+    void queryClient.invalidateQueries({ queryKey: queryKeys.authz.sodReport() })
     if (sessionUserId === null || sessionUserId === granteeId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.auth.me() })
     }
@@ -170,7 +172,7 @@ function useDecideCapabilityGrant(
     },
     onError: (error) => {
       refreshStale(error)
-      notifyMutationError(toast, error, ...errorToast(copy.failure, error))
+      notifyMutationError(toast, error, ...errorToast(copy.failure, error, true))
     },
   })
 }

@@ -400,6 +400,23 @@ pide; un enlace directo muestra `ForbiddenState`). La pestaña lleva el recuento
   por ser la confirmación final. Un 404/409 se queda en el diálogo (`role="alert"`) con la
   confirmación deshabilitada; los hooks refrescan la bandeja y la fila desaparece sola.
 
+### `SodConflictPanel`, `SodReportCard` y `SodWarningsBanner` («Separación de funciones»)
+Las piezas de la separación de deberes (v29 §8; flujo en
+[`separation-of-duties.md`](separation-of-duties.md)).
+
+- **`SodConflictPanel`** (`features/gateway-users/components`): el 409 `access.sod_conflict` fijo
+  en un formulario. Props: `conflicts`, `labelOptions?` (nombres de destino y capacidad),
+  `onResend(override)`, `isPending?`, `resendError?`, `reasonMinLength?`, `maxHours?`,
+  `resendLabel`. Lo recomendado (repartir las funciones) va a la vista; la «Excepción de
+  emergencia» queda en un `<details>` cerrado y en rojo, con motivo y duración validados con
+  `sodOverrideInSchema` y el botón `danger`. `SodConflictList` es la lista de reglas y fuentes que
+  comparte con el aviso previo.
+- **`SodReportCard`**: pestaña `?tab=sod` de `GatewayUsersPage`, sin props, solo `access.admin`.
+  Dos `DataTable` (tarjetas bajo `md`): cuentas sin excepción y excepciones vivas, con
+  `still_violating` como insignia roja «Sigue combinando».
+- **`SodWarningsBanner`** (`features/auth/components`): montado en `AppShell`, fuera del boundary
+  por sección. Un `Callout` por regla de `/auth/me.sod_warnings`; no se puede cerrar.
+
 `GatewayUserAccessPage` (`/gateway-users/:userId/accesos`, en `features/gateway-users`) es el
 editor de accesos de una persona, que antes era un modal: cabecera con el usuario y su rol base,
 y en dos columnas desde `lg` el formulario (`GatewayUserAccessEditor`: «Capacidades globales»,

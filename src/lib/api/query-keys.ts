@@ -26,6 +26,8 @@ export const queryKeys = {
     all: ['authz'] as const,
     catalog: (version: string | null) => ['authz', 'catalog', version] as const,
     scopeReadiness: () => ['authz', 'scope-readiness'] as const,
+    /** Separación de deberes (v29 §8.6). Cuelga de `authz.all`: se invalida con los accesos. */
+    sodReport: () => ['authz', 'sod-report'] as const,
   },
   health: {
     liveness: () => ['health', 'liveness'] as const,

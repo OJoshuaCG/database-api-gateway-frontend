@@ -1,5 +1,10 @@
 import { CAPABILITY_GRANT_ERROR_CODES, GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
+import {
+  SOD_RULE_EXPLANATION,
+  sodConflictMessage,
+  sodOverrideInvalidMessage,
+} from '@/features/auth/separation-of-duties'
 import { SELF_ACCESS_NOTE } from './self-access'
 
 /**
@@ -83,6 +88,15 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
       )
     case GATEWAY_USER_ERROR_CODES.grantScopeNotFound:
       return grantScopeNotFoundMessage(error)
+    // Los dos de la separación de deberes (v29 §8). El 409 trae QUÉ choca; acá va en una frase
+    // para el toast, y los formularios lo muestran además fijo con la excepción de emergencia.
+    case GATEWAY_USER_ERROR_CODES.sodConflict:
+      return sodConflictMessage(error.gatewayUserContext?.sodConflicts)
+    case GATEWAY_USER_ERROR_CODES.sodOverrideInvalid:
+      return sodOverrideInvalidMessage({
+        reasonMinLength: error.gatewayUserContext?.sodReasonMinLength,
+        maxHours: error.gatewayUserContext?.sodMaxHours,
+      })
     default:
       return null
   }
@@ -139,11 +153,27 @@ const CAPABILITY_GRANT_COPY: Record<string, string> = {
 }
 
 /**
+ * `blocked_reason: access.sod_conflict` de la bandeja: aprobarla haría que la persona combine
+ * oficial de seguridad con una capacidad exclusiva de owner sin excepción que lo cubra. Aprobar
+ * no acepta `sod_override`, así que la salida es separar las funciones o volver a pedirla con la
+ * excepción desde los accesos de la persona.
+ */
+const SOD_BLOCKED_MESSAGE = `No se puede aprobar: ${SOD_RULE_EXPLANATION} Esta persona es oficial de seguridad y la capacidad es exclusiva de owner. Separá las funciones, o cancelala y volvé a otorgarla con una excepción de emergencia desde sus accesos.`
+
+/**
  * Mensaje para un error de las operaciones sobre capacidades puntuales (alta, revocación,
  * aprobación, rechazo, listado). Cubre los nueve códigos y, si no lo reconoce, cae al copy general
  * del módulo; `null` deja que el llamador use `apiError.message`.
  */
-export function capabilityGrantErrorMessage(error: ApiError): string | null {
+export function capabilityGrantErrorMessage(
+  error: ApiError,
+  options: { decision?: boolean } = {},
+): string | null {
+  // Aprobar no acepta `sod_override`: el 409 de separación de deberes ahí no ofrece la excepción
+  // sino el camino que sí existe (el mismo texto que el `blocked_reason` de la bandeja).
+  if (options.decision && error.code === CAPABILITY_GRANT_ERROR_CODES.sodConflict) {
+    return SOD_BLOCKED_MESSAGE
+  }
   const own = error.code ? CAPABILITY_GRANT_COPY[error.code] : undefined
   return own ?? gatewayUserErrorMessage(error)
 }
@@ -157,6 +187,7 @@ export function capabilityGrantBlockedMessage(code: string | null | undefined): 
   if (!code) return null
   // Sin `msg` del backend no hay detalle de qué se excedió: va solo el texto de respaldo.
   if (code === CAPABILITY_GRANT_ERROR_CODES.grantCeilingExceeded) return GRANT_CEILING_FALLBACK
+  if (code === CAPABILITY_GRANT_ERROR_CODES.sodConflict) return SOD_BLOCKED_MESSAGE
   return (
     CAPABILITY_GRANT_COPY[code] ??
     'No podés decidir esta solicitud ahora. Consultá con otra persona con `access_admin`.'

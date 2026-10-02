@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { myCapabilityGrantSchema } from './capability-grants'
+import { sodWarningSchema } from './separation-of-duties'
 
 /**
  * Autenticación y contrato de autorización (api-reference-v23).
@@ -111,6 +112,14 @@ export const adminOutSchema = z.object({
   last_failed_at: z.string().nullish(),
   /** sha256 corto del catálogo. Cambia cuando cambia el catálogo: es la clave de caché. */
   catalog_version: z.string().nullish(),
+  /**
+   * Reglas de separación de deberes que ESTA cuenta viola, y qué las cubre (v29 §8.5). Vacía en el
+   * caso normal. Nullish con default, como pide el addendum: un backend anterior no la manda.
+   */
+  sod_warnings: z
+    .array(sodWarningSchema)
+    .nullish()
+    .transform((value) => value ?? []),
 })
 export type AdminOut = z.infer<typeof adminOutSchema>
 

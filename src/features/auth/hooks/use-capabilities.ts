@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
 import type { Capability, ScopeRole } from '@/lib/contracts'
-import { getCapabilityCatalog, getScopeReadiness } from '../api/auth.api'
+import { getCapabilityCatalog, getScopeReadiness, getSodReport } from '../api/auth.api'
 import { useSession } from './use-session'
 
 /**
@@ -133,6 +133,21 @@ export function useScopeReadiness(enabled = true) {
   return useQuery({
     queryKey: queryKeys.authz.scopeReadiness(),
     queryFn: ({ signal }) => getScopeReadiness(signal),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+/**
+ * `GET /authz/sod-report` (v29 §8.6) — solo con `access.admin`: quien llama lo apaga con
+ * `enabled` si no la tiene (un `security_officer` solo recibiría un 403 seguro).
+ *
+ * Sin caché larga: lo mueve cada cambio de accesos, y los hooks de escritura lo invalidan.
+ */
+export function useSodReport(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.authz.sodReport(),
+    queryFn: ({ signal }) => getSodReport(signal),
     enabled,
     staleTime: 30_000,
   })
