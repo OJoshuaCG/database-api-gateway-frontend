@@ -45,6 +45,8 @@ import {
   SCOPE_TYPES,
   isKnownGatewayRole,
   isKnownGlobalCapability,
+  pendingElevationOf,
+  type AccessElevation,
   type GatewayRole,
   type GatewayUserOut,
   type GlobalCapability,
@@ -52,13 +54,14 @@ import {
   type ScopeType,
   type SodOverrideIn,
 } from '@/lib/contracts'
-import { GATEWAY_USERS_PATH } from '@/lib/routes'
-import { GLOBAL_CEILING_HINT, roleCeilingHint, withinCeiling } from '../grant-ceiling'
+import { GATEWAY_USERS_PATH, accessRequestPath } from '@/lib/routes'
+import { accessElevations, needsSecondApprover } from '../assignment-policy'
 import { useCapabilityGrants, useEffectiveAccess } from '../hooks/use-capability-grants'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { CapabilityGrantsSection } from './CapabilityGrantsSection'
+import { SecondApproverBadge } from './SecondApproverBadge'
 import { SodConflictList, SodConflictPanel } from './SodConflictPanel'
 
 const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
@@ -149,16 +152,21 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   const leavingAfterSave = useRef(false)
   const catalogQuery = useCapabilityCatalog()
   const catalog = catalogQuery.data
-  // Techo del ACTOR (quien edita), no de la persona editada: ver `grant-ceiling.ts`.
   const actor = useCapabilities()
-  const actorGlobals = new Set(actor.globalCapabilities)
   // `GET …/effective-access` es `access.admin`, que tiene solo `access_admin` (un `security_officer`
   // recibiría un 403 seguro): sin esa capacidad no se pide, y el panel cae al cálculo del navegador.
   const canReadEffectiveAccess = actor.can(CAPABILITIES.accessAdmin)
   const effectiveAccess = useEffectiveAccess(user.id, canReadEffectiveAccess)
   const effectiveHeading = canReadEffectiveAccess ? 'Acceso efectivo' : 'Acceso efectivo al guardar'
   const originalGlobals = new Set(user.global_capabilities)
-  const originalGrants = new Set(user.scope_grants.map(grantKey))
+  /** Rol que la persona tiene HOY en cada destino: contra eso se mide si un `owner` es nuevo. */
+  const originalRoleAt = new Map(
+    user.scope_grants.map((grant) => [`${grant.scope_type}:${grant.scope_id}`, grant.role]),
+  )
+  /** ¿Dejar `role` en este destino eleva? `owner` donde hoy no lo es (espejo de `split`). */
+  const scopeRoleElevates = (grant: { scope_type: string; scope_id: number }, role: string) =>
+    needsSecondApprover({ role }) &&
+    originalRoleAt.get(`${grant.scope_type}:${grant.scope_id}`) !== role
 
   /*
    * Un grant cuyo `scope_type` o `role` esta versión de la SPA no conoce NO se puede representar
@@ -244,21 +252,13 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   }
 
   /*
-   * Cambiar el tipo o el destino puede dejar el rol FUERA de lo que se ofrece: el rol se conservaba
-   * por ser el que la persona ya tenía en ESE destino, y en otro destino es un rol nuevo, que el
-   * backend mide contra el techo (409 `access.grant_ceiling_exceeded`). Se baja al más alto
-   * permitido, así el selector nunca muestra un valor que no está entre sus opciones.
+   * Ya no se recorta el rol al cambiar el destino: el techo por tenencia se retiró (v29 §9.1) y
+   * `access_admin` asigna cualquier rol. Un `owner` que pasa a otro destino es un `owner` NUEVO
+   * ahí, y eso lo dice el distintivo de la fila: al guardar queda pendiente de otra persona.
    */
   const updateGrant = (rowId: string, patch: Partial<ScopeGrantIn>) => {
     setGrants((current) =>
-      current.map((grant) => {
-        if (grant.rowId !== rowId) return grant
-        const next = { ...grant, ...patch }
-        const allowed = roleOptionsFor(next)
-        if (allowed.some((option) => option.value === next.role)) return next
-        const highest = allowed[allowed.length - 1]
-        return highest ? { ...next, role: highest.value } : next
-      }),
+      current.map((grant) => (grant.rowId === rowId ? { ...grant, ...patch } : grant)),
     )
   }
 
@@ -266,19 +266,6 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
     scopeType === 'environment'
       ? environments.selectable.map((env) => ({ id: env.id, label: env.name }))
       : (servers.data ?? []).map((server) => ({ id: server.id, label: server.name }))
-
-  /*
-   * Los roles que se ofrecen en un permiso: hasta el techo del actor, MÁS el que ese permiso ya
-   * tenía si se está conservando tal cual (el backend solo mide lo que se agrega). Ofrecer uno por
-   * encima del techo sería llevar al administrador hasta un 409 al guardar.
-   */
-  const roleOptionsFor = (grant: ScopeGrantIn): RoleOption[] =>
-    ROLE_OPTIONS.filter(
-      (option) =>
-        withinCeiling(option.value, actor.role) ||
-        originalGrants.has(grantKey({ ...grant, role: option.value })),
-    )
-  const scopeCeilingHint = roleCeilingHint(GATEWAY_ROLES, actor.role, 'scope')
 
   const targetLabel = (grant: ScopeGrantIn): string => {
     const found = targetsFor(grant.scope_type).find((target) => target.id === grant.scope_id)
@@ -297,22 +284,11 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
 
   /** Qué suma una capacidad global, leído del catálogo; sin catálogo no se inventa nada. */
   const globalHint = (capability: GlobalCapability): string => {
-    const reason =
-      !actorGlobals.has(capability) && !originalGlobals.has(capability) && actor.role !== null
-        ? ` ${GLOBAL_CEILING_HINT}`
-        : ''
-    if (!catalog) return `No se pudo cargar qué incluye.${reason}`
+    if (!catalog) return 'No se pudo cargar qué incluye.'
     const ids = globalCapabilityIds(catalog, capability)
     const labels = sortByRisk(ids, catalog).map((row) => row.label)
-    return `Suma ${ids.length}: ${summarizeLabels(labels, ids.length)}.${reason}`
+    return `Suma ${ids.length}: ${summarizeLabels(labels, ids.length)}.`
   }
-  // Una global que el actor no tiene solo se puede QUITAR (si la persona ya la tenía), nunca
-  // poner. Con roles desconocidos (`actor.role === null`) no hay techo que aplicar.
-  const globalLocked = (capability: GlobalCapability, checked: boolean): boolean =>
-    actor.role !== null &&
-    !actorGlobals.has(capability) &&
-    !originalGlobals.has(capability) &&
-    !checked
 
   // `scope_id` 0 es el centinela de "fila sin destino elegido": el contrato exige >= 1, así que no
   // colisiona con ningún id real y mantiene el guardado deshabilitado hasta que se complete.
@@ -372,12 +348,49 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   const [overrideError, setOverrideError] = useState<string | null>(null)
   const activeRejection = sodRejection?.key === bodyKey ? sodRejection : null
 
+  /*
+   * Elevaciones (v29 §9): lo que de este estado quedaría PENDIENTE al guardar, con el mismo espejo
+   * de `split` que usa el backend. Solo para avisar: el `202` dice lo que de verdad quedó.
+   */
+  const pendingPreview: AccessElevation[] = accessElevations(
+    {
+      baseRole: user.gateway_role,
+      globalCapabilities: user.global_capabilities,
+      scopeGrants: user.scope_grants,
+    },
+    {
+      baseRole: user.gateway_role,
+      globalCapabilities: capabilities,
+      scopeGrants: accessBody.scope_grants.filter((grant) => grant.scope_id >= 1),
+    },
+  )
+  const elevationLabel = (elevation: AccessElevation): string => {
+    if (elevation.kind === 'global_capability' && elevation.global_capability) {
+      return `${globalCapabilityLabel(elevation.global_capability)} (${elevation.global_capability})`
+    }
+    if (elevation.kind === 'scope_grant' && elevation.scope_type && elevation.scope_id) {
+      const known = (SCOPE_TYPES as readonly string[]).includes(elevation.scope_type)
+      const label = known
+        ? targetLabel({
+            scope_type: elevation.scope_type as ScopeType,
+            scope_id: elevation.scope_id,
+            role: 'owner',
+          })
+        : `${elevation.scope_type} #${elevation.scope_id}`
+      return `${elevation.role ?? 'owner'} en ${label}`
+    }
+    return `rol base ${elevation.role ?? 'owner'}`
+  }
+
   const submit = (override?: SodOverrideIn) => {
     setOverrideError(null)
     replaceAccess.mutate(override ? { ...accessBody, sod_override: override } : accessBody, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         leavingAfterSave.current = true
-        void navigate(GATEWAY_USERS_PATH)
+        // 202: lo que no eleva ya rige y el resto espera a otra persona. Se lleva a la solicitud en
+        // la bandeja, que lo dice fijo (el toast se va solo).
+        const pending = pendingElevationOf(result)
+        void navigate(pending ? accessRequestPath(pending.id) : GATEWAY_USERS_PATH)
       },
       onError: (error) => {
         const apiError = toApiError(error)
@@ -390,7 +403,7 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
             maxHours: context?.sodMaxHours,
           })
         } else if (override) {
-          // El reenvío con excepción falló por otra cosa (el override inválido, un techo…): se
+          // El reenvío con excepción falló por otra cosa (el override inválido, la asignación…): se
           // dice junto al botón que se apretó, además del toast.
           setOverrideError(gatewayUserErrorMessage(apiError) ?? apiError.message)
         }
@@ -400,7 +413,16 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
 
   const sessionsNoteId = `${panelId}-sesiones`
   const sodWarningId = `${panelId}-sod`
+  const pendingNoteId = `${panelId}-pendiente`
   const showSodWarning = sodPreview.length > 0 && !activeRejection && !blocked
+  const showPendingNote = pendingPreview.length > 0 && !blocked
+  const saveDescribedBy = [
+    sessionsNoteId,
+    showSodWarning ? sodWarningId : null,
+    showPendingNote ? pendingNoteId : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="flex flex-col gap-6">
@@ -496,13 +518,21 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                       key={capability}
                       label={globalCapabilityLabel(capability)}
                       caption={
-                        <code className="font-mono text-[11px] text-muted-foreground">
-                          {capability}
-                        </code>
+                        <span className="flex flex-wrap items-center gap-2">
+                          <code className="font-mono text-[11px] text-muted-foreground">
+                            {capability}
+                          </code>
+                          {/* Agregar una global SIEMPRE eleva; conservar o quitar la que ya
+                              tiene, nunca. */}
+                          {!originalGlobals.has(capability) &&
+                            needsSecondApprover({ globalCapability: capability }) && (
+                              <SecondApproverBadge />
+                            )}
+                        </span>
                       }
                       hint={globalHint(capability)}
                       checked={checked}
-                      disabled={blocked || globalLocked(capability, checked)}
+                      disabled={blocked}
                       onChange={(event) => toggleCapability(capability, event.target.checked)}
                     />
                   )
@@ -530,9 +560,6 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                   sobre el mismo destino rige el más restrictivo. En «{effectiveHeading}» se ve qué
                   queda y en qué operaciones se aplica.
                 </p>
-                {scopeCeilingHint && !blocked && (
-                  <p className="text-sm text-muted-foreground">{scopeCeilingHint}</p>
-                )}
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 {/*
@@ -607,7 +634,8 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                       const targets = targetsFor(grant.scope_type)
                       const selected =
                         targets.find((target) => target.id === grant.scope_id) ?? null
-                      const roleOptions = roleOptionsFor(grant)
+                      const rowElevates =
+                        grant.scope_id >= 1 && scopeRoleElevates(grant, grant.role)
                       return (
                         <li
                           key={grant.rowId}
@@ -660,17 +688,23 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                             </div>
                             <div className="w-full sm:w-36">
                               <Combobox<RoleOption>
-                                items={roleOptions}
-                                // De `roleOptions` y no de todos: un valor fuera de las opciones
-                                // se pintaría como elegido sin poder volver a elegirse.
+                                items={ROLE_OPTIONS}
                                 value={
-                                  roleOptions.find((option) => option.value === grant.role) ?? null
+                                  ROLE_OPTIONS.find((option) => option.value === grant.role) ?? null
                                 }
                                 onChange={(option) => {
                                   if (option) updateGrant(grant.rowId, { role: option.value })
                                 }}
                                 itemToString={(option) => option.label}
                                 itemToKey={(option) => option.value}
+                                renderItem={(option) => (
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span>{option.label}</span>
+                                    {scopeRoleElevates(grant, option.value) && (
+                                      <SecondApproverBadge />
+                                    )}
+                                  </span>
+                                )}
                                 label="Rol en ese alcance"
                                 disabled={blocked}
                               />
@@ -695,6 +729,15 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                               guardar», en su fila: repetirlo acá mostraba la misma diferencia dos
                               veces, con colores distintos. En `lg` esa fila está al costado, en
                               pantallas chicas más abajo: el texto no dice «abajo». */}
+                          {rowElevates && (
+                            <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <SecondApproverBadge />
+                              <span>
+                                Es un owner nuevo en este destino: al guardar queda pendiente de
+                                otra persona con access_admin; hasta entonces rige lo que tenía.
+                              </span>
+                            </p>
+                          )}
                           {grant.scope_id >= 1 && (
                             <a
                               href={`#${effectiveAccessRowId(panelId, grant.scope_type, grant.scope_id)}`}
@@ -807,6 +850,27 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
         />
       )}
 
+      {/* ── Elevaciones: lo que va a quedar pendiente ───────────────────────
+          Junto a la barra de guardar, que es donde se decide. Informativo: no bloquea, porque
+          `access_admin` puede asignarlo; solo dice que una parte no va a regir al instante. */}
+      {showPendingNote && (
+        <Callout
+          id={pendingNoteId}
+          tone="info"
+          title="Parte de este cambio requiere un segundo aprobador"
+        >
+          <p>
+            Al guardar, lo que no eleva se aplica en el acto; esto queda pendiente hasta que otra
+            persona con access_admin lo apruebe (vence a los 7 días):
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {pendingPreview.map((elevation) => (
+              <li key={JSON.stringify(elevation)}>{elevationLabel(elevation)}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+
       {/* Barra de acciones fija al pie: en una página larga, «Guardar» no puede quedar tres
           pantallas más abajo. La consecuencia del botón va al lado del botón, leída antes de
           apretarlo. */}
@@ -833,9 +897,7 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
               onClick={() => submit()}
               isLoading={replaceAccess.isPending}
               disabled={incomplete}
-              aria-describedby={
-                showSodWarning ? `${sessionsNoteId} ${sodWarningId}` : sessionsNoteId
-              }
+              aria-describedby={saveDescribedBy}
             >
               Guardar accesos
             </Button>

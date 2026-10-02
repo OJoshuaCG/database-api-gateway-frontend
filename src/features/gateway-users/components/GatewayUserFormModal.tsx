@@ -24,14 +24,15 @@ import {
   GATEWAY_USER_ERROR_CODES,
   isKnownGatewayRole,
   type GatewayRole,
-  type GatewayUserCreatedOut,
+  type GatewayUserCreatedWriteOut,
   type GatewayUserOut,
   type SodOverrideIn,
 } from '@/lib/contracts'
-import { roleCeilingHint, withinCeiling } from '../grant-ceiling'
+import { needsSecondApprover } from '../assignment-policy'
 import { useCreateGatewayUser, useUpdateGatewayUser } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
+import { SecondApproverBadge } from './SecondApproverBadge'
 import { SodConflictList, SodConflictPanel } from './SodConflictPanel'
 
 interface RoleOption {
@@ -51,23 +52,35 @@ const BASE_ROLE_HINT =
   'Es el rol en todo lo que no tenga un permiso por entorno o servidor. Esos permisos se asignan después, desde «Accesos».'
 
 /**
- * Selector de rol base con su resumen de capacidades y el techo del actor aplicado: los roles por
- * encima del rol base de quien edita no se ofrecen (el backend respondería 409), salvo el que la
- * cuenta ya tiene, que se puede conservar.
+ * Selector de rol base con su resumen de capacidades. Se ofrecen TODOS los roles: el techo por
+ * tenencia se retiró (v29 §9.1) y `access_admin` asigna cualquiera. Lo que eleva (`owner` desde
+ * otro rol) no se bloquea: se marca, porque al guardar queda pendiente de otra persona.
  */
-function useBaseRoleOptions(currentRole?: string) {
-  const actor = useCapabilities()
+function useBaseRoleOptions() {
   const catalog = useCapabilityCatalog()
-  const options = ROLE_OPTIONS.filter(
-    (option) => withinCeiling(option.value, actor.baseRole) || option.value === currentRole,
-  )
-  return {
-    options,
-    ceilingHint: roleCeilingHint(GATEWAY_ROLES, actor.baseRole, 'base'),
-    catalog: catalog.data,
-    catalogLoading: catalog.isLoading,
-  }
+  return { options: ROLE_OPTIONS, catalog: catalog.data, catalogLoading: catalog.isLoading }
 }
+
+/** ¿Elegir `role` sobre una cuenta con `currentRole` (ninguno en el alta) es una elevación? */
+function elevatesBaseRole(role: string, currentRole: string | null): boolean {
+  return role !== currentRole && currentRole !== 'owner' && needsSecondApprover({ role })
+}
+
+/** Opción del selector con el distintivo cuando elegirla eleva. */
+function renderRoleOption(currentRole: string | null) {
+  return (option: RoleOption) => (
+    <span className="flex flex-wrap items-center gap-2">
+      <span>{option.label}</span>
+      {elevatesBaseRole(option.value, currentRole) && <SecondApproverBadge />}
+    </span>
+  )
+}
+
+/** Qué pasa al guardar un rol que eleva: el texto del alta y el de la edición no coinciden. */
+const CREATE_ELEVATION_NOTE =
+  'La cuenta se crea como viewer y la invitación se emite igual; el rol owner queda pendiente hasta que otra persona con access_admin lo apruebe.'
+const EDIT_ELEVATION_NOTE =
+  'El resto de los cambios se guarda ya; el rol owner queda pendiente hasta que otra persona con access_admin lo apruebe.'
 
 const emailField = z
   .string()
@@ -116,8 +129,11 @@ interface GatewayUserFormModalProps {
   onClose: () => void
   /** Ausente = alta; presente = edición. */
   user?: GatewayUserOut
-  /** Solo en alta: entrega el usuario recién creado CON su token de invitación. */
-  onCreated?: (created: GatewayUserCreatedOut) => void
+  /**
+   * Solo en alta: entrega el usuario recién creado CON su token de invitación. En un 202 trae además
+   * `pending_request`: la cuenta nació sin la elevación (v29 §9.3).
+   */
+  onCreated?: (created: GatewayUserCreatedWriteOut) => void
   /**
    * `id` de la cuenta con la sesión abierta. Sobre la propia cuenta el rol y el estado van
    * deshabilitados: el backend rechaza cambiarlos (409 `access.self_modification_forbidden`).
@@ -172,9 +188,9 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
             setUsernameConflict('Ya existe un usuario con ese nombre.')
             setFocus('username')
           }
-          // El techo de otorgamiento en el alta solo puede venir del rol base: es el único acceso
-          // que este formulario otorga. Se marca en el campo, además del toast del hook.
-          if (apiError.code === GATEWAY_USER_ERROR_CODES.grantCeilingExceeded) {
+          // La asignación por función solo puede rechazar el rol base: es el único acceso que este
+          // formulario asigna. Se marca en el campo, además del toast del hook.
+          if (apiError.code === GATEWAY_USER_ERROR_CODES.notAssignable) {
             setRoleError(gatewayUserErrorMessage(apiError))
           }
         },
@@ -249,11 +265,18 @@ function CreateForm({ open, onClose, onCreated }: GatewayUserFormModalProps) {
                 }}
                 itemToString={(option) => option.label}
                 itemToKey={(option) => option.value}
+                renderItem={renderRoleOption(null)}
                 label="Rol base"
                 required
-                hint={roles.ceilingHint ? `${BASE_ROLE_HINT} ${roles.ceilingHint}` : BASE_ROLE_HINT}
+                hint={BASE_ROLE_HINT}
                 error={roleError ?? errors.gateway_role?.message}
               />
+              {elevatesBaseRole(field.value, null) && (
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <SecondApproverBadge />
+                  <span>{CREATE_ELEVATION_NOTE}</span>
+                </p>
+              )}
               <RoleCapabilitySummary
                 role={field.value}
                 catalog={roles.catalog}
@@ -293,7 +316,7 @@ function EditForm({
   currentUserId,
 }: GatewayUserFormModalProps & { user: GatewayUserOut }) {
   const update = useUpdateGatewayUser(user.id)
-  const roles = useBaseRoleOptions(user.gateway_role)
+  const roles = useBaseRoleOptions()
   const actor = useCapabilities()
   const [formError, setFormError] = useState<string | null>(null)
   const [sodRejection, setSodRejection] = useState<SodRejection | null>(null)
@@ -453,18 +476,19 @@ function EditForm({
                 onChange={(option) => field.onChange(option?.value ?? 'viewer')}
                 itemToString={(option) => option.label}
                 itemToKey={(option) => option.value}
+                renderItem={renderRoleOption(user.gateway_role)}
                 label="Rol base"
                 required
                 disabled={editingSelf}
-                hint={
-                  editingSelf
-                    ? SELF_ACCESS_NOTE
-                    : roles.ceilingHint
-                      ? `${BASE_ROLE_HINT} ${roles.ceilingHint}`
-                      : BASE_ROLE_HINT
-                }
+                hint={editingSelf ? SELF_ACCESS_NOTE : BASE_ROLE_HINT}
                 error={errors.gateway_role?.message}
               />
+              {!editingSelf && elevatesBaseRole(field.value, user.gateway_role) && (
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <SecondApproverBadge />
+                  <span>{EDIT_ELEVATION_NOTE}</span>
+                </p>
+              )}
               <RoleCapabilitySummary
                 role={field.value}
                 catalog={roles.catalog}

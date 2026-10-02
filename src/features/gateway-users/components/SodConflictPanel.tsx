@@ -123,8 +123,9 @@ export function SodConflictPanel({
         <div className="mt-3 flex flex-col gap-3">
           <p className="text-sm text-foreground">
             Solo para un incidente en el que no hay otra persona que pueda cubrir una de las
-            funciones. Se aplica en el acto, queda auditada con tu nombre y el motivo, y vence sola:
-            al vencer, el servidor desactiva las funciones de oficial de seguridad de esta cuenta.
+            funciones. No se aplica en el acto: viaja con el cambio y lo aprueba otra persona con
+            access_admin. Queda auditada con tu nombre y el motivo, y vence sola: al vencer, el
+            servidor desactiva las funciones de oficial de seguridad de esta cuenta.
           </p>
           <Textarea
             label="Motivo"

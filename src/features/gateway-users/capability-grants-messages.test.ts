@@ -4,7 +4,7 @@ import { CAPABILITY_GRANT_ERROR_CODES } from '@/lib/contracts'
 import {
   capabilityGrantBlockedMessage,
   capabilityGrantErrorMessage,
-  GRANT_CEILING_FALLBACK,
+  NOT_ASSIGNABLE_MESSAGE,
   RATE_LIMIT_HINT,
 } from './messages'
 
@@ -23,10 +23,14 @@ describe('capabilityGrantErrorMessage', () => {
     expect(message).not.toMatch(/\bpuedes\b|\btienes\b/u)
   })
 
-  it('el techo sin msg del backend usa el respaldo', () => {
+  it('`not_assignable` (reemplazo del techo, C3) dice que lo asigna access_admin', () => {
     expect(
-      capabilityGrantErrorMessage(error(409, CAPABILITY_GRANT_ERROR_CODES.grantCeilingExceeded)),
-    ).toBe(GRANT_CEILING_FALLBACK)
+      capabilityGrantErrorMessage(error(409, CAPABILITY_GRANT_ERROR_CODES.notAssignable)),
+    ).toBe(NOT_ASSIGNABLE_MESSAGE)
+  })
+
+  it('el código retirado `grant_ceiling_exceeded` ya no tiene copy propio', () => {
+    expect(capabilityGrantErrorMessage(error(409, 'access.grant_ceiling_exceeded'))).toBeNull()
   })
 
   it('el auto-otorgamiento habla de capacidades, no del PUT de accesos', () => {
@@ -53,10 +57,8 @@ describe('capabilityGrantBlockedMessage', () => {
     expect(capabilityGrantBlockedMessage('access.nuevo')).toContain('No podés decidir')
   })
 
-  it('el techo excedido usa el respaldo, que es voseo', () => {
-    expect(capabilityGrantBlockedMessage('access.grant_ceiling_exceeded')).toBe(
-      GRANT_CEILING_FALLBACK,
-    )
+  it('`not_assignable` como motivo de bloqueo usa el mismo copy que el error', () => {
+    expect(capabilityGrantBlockedMessage('access.not_assignable')).toBe(NOT_ASSIGNABLE_MESSAGE)
   })
 })
 

@@ -18,7 +18,7 @@ import { ThemeProvider } from '@/lib/theme/ThemeProvider'
 import { ToastProvider } from '@/lib/toast/ToastProvider'
 import type { GatewayUserOut } from '@/lib/contracts'
 import { SERVER_RESOLUTION_INVENTORY_NOTE } from '@/features/auth'
-import { GLOBAL_CEILING_HINT } from '../grant-ceiling'
+import { SECOND_APPROVER_LABEL } from '../assignment-policy'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { GatewayUserAccessPage } from './GatewayUserAccessPage'
 
@@ -33,8 +33,8 @@ const target: GatewayUserOut = {
   is_active: true,
   credential_set: true,
   global_capabilities: [],
-  // Un permiso que supera el techo de quien edita, otorgado antes por otra persona: se tiene que
-  // poder conservar, porque el backend solo mide lo que se AGREGA.
+  // Un owner que ya tiene en Producción: conservarlo NO es una elevación (el backend solo mide lo
+  // que se agrega), moverlo a otro destino sí.
   scope_grants: [{ scope_type: 'environment', scope_id: 3, role: 'owner' }],
   last_login_at: null,
   previous_login_at: null,
@@ -42,7 +42,10 @@ const target: GatewayUserOut = {
   created_at: '2026-08-20T11:00:00Z',
 }
 
-/** Quien edita: operator con access_admin. No tiene security_officer ni llega a owner. */
+/**
+ * Quien edita: operator con access_admin. No tiene security_officer ni llega a owner, y desde C3
+ * igual puede asignar las dos cosas: lo que eleva queda pendiente de otra persona.
+ */
 const ACTOR = meFixture({ role: 'operator', global_capabilities: ['access_admin'] })
 
 /**
@@ -210,23 +213,24 @@ describe('GatewayUserAccessPage', () => {
     expect(screen.queryByText(SERVER_RESOLUTION_INVENTORY_NOTE, { exact: false })).toBeNull()
   })
 
-  it('deshabilita la global que el actor no tiene, con el motivo a la vista', async () => {
+  it('sin techo (C3): las globales que el actor no tiene se ofrecen y se marcan como elevación', async () => {
     mockBackend()
     renderAt()
     const officer = await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
-    // El techo llega con `/auth/me`: hasta entonces no se sabe qué ocultar.
-    await screen.findByText(/Solo podés otorgar hasta operator/)
-    expect(officer).toBeDisabled()
+    expect(officer).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Administración de accesos' })).toBeEnabled()
     expect(screen.getByText('security_officer')).toBeInTheDocument()
-    expect(screen.getByText(new RegExp(GLOBAL_CEILING_HINT))).toBeInTheDocument()
+    // Las dos globales son nuevas para esta persona: agregar cualquiera eleva.
+    expect(screen.getAllByText(SECOND_APPROVER_LABEL)).toHaveLength(2)
+    expect(screen.queryByText(/Solo podés otorgar hasta/)).not.toBeInTheDocument()
   })
 
-  it('un permiso nuevo no ofrece roles por encima del techo; el existente conserva el suyo', async () => {
+  it('ofrece todos los roles; owner se marca solo donde sería nuevo', async () => {
     mockBackend()
     renderAt()
-    await screen.findByText(/Solo podés otorgar hasta operator/)
+    await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
 
+    // En Producción ya es owner: conservarlo no eleva.
     await userEvent.click(roleToggle(0))
     expect(screen.getByRole('option', { name: 'owner' })).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
@@ -234,7 +238,9 @@ describe('GatewayUserAccessPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Añadir permiso' }))
     await userEvent.click(roleToggle(1))
     expect(screen.getByRole('option', { name: 'operator' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'owner' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: new RegExp(`^owner\\s*${SECOND_APPROVER_LABEL}$`) }),
+    ).toBeInTheDocument()
   })
 
   it('muestra lo que rige hoy según el servidor, con su fuente, enlazado desde cada permiso', async () => {
@@ -311,7 +317,7 @@ describe('GatewayUserAccessPage', () => {
     expect(backend.effectiveRequests()).toBe(0)
   })
 
-  it('al cambiar el destino baja el rol al techo, guarda el estado COMPLETO y vuelve al listado', async () => {
+  it('mover un owner a otro destino lo marca como elevación, guarda el estado COMPLETO y vuelve al listado', async () => {
     mockBackend()
     let body: unknown = null
     server.use(
@@ -321,20 +327,30 @@ describe('GatewayUserAccessPage', () => {
       }),
     )
     const router = renderAt()
-    await screen.findByText(/Solo podés otorgar hasta operator/)
+    await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
+    expect(
+      screen.queryByText('Parte de este cambio requiere un segundo aprobador'),
+    ).not.toBeInTheDocument()
 
-    // El `owner` sobre Producción se conservaba por ser el que ya tenía AHÍ. En Desarrollo es un
-    // permiso nuevo y supera el techo: sin el recorte, el backend respondería 409.
+    // El `owner` sobre Producción no elevaba por ser el que ya tenía AHÍ. En Desarrollo es un
+    // owner nuevo: ya no se recorta (no hay techo), se avisa que queda pendiente.
     await userEvent.click(comboToggle('Entorno', 0))
     await userEvent.click(screen.getByRole('option', { name: 'Desarrollo' }))
-    expect(screen.getByRole('combobox', { name: 'Rol en ese alcance' })).toHaveValue('operator')
+    expect(screen.getByRole('combobox', { name: 'Rol en ese alcance' })).toHaveValue('owner')
+    expect(screen.getByText(/Es un owner nuevo en este destino/)).toBeInTheDocument()
+    const note = screen.getByText('Parte de este cambio requiere un segundo aprobador')
+    expect(note.closest('[id]')).toHaveTextContent('owner en Desarrollo')
+    expect(screen.getByRole('button', { name: 'Guardar accesos' })).toHaveAttribute(
+      'aria-describedby',
+      expect.stringMatching(/-pendiente$/),
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar accesos' }))
     await expect.poll(() => body).not.toBeNull()
     // Reemplazo total: los dos campos, siempre, y sin campos internos del formulario.
     expect(body).toEqual({
       global_capabilities: [],
-      scope_grants: [{ scope_type: 'environment', scope_id: 1, role: 'operator' }],
+      scope_grants: [{ scope_type: 'environment', scope_id: 1, role: 'owner' }],
     })
     // Guardado: sale sin preguntar por cambios sin guardar.
     expect(await screen.findByText('Listado de usuarios')).toBeInTheDocument()
@@ -342,10 +358,67 @@ describe('GatewayUserAccessPage', () => {
     expect(screen.queryByText('¿Salir sin guardar?')).not.toBeInTheDocument()
   })
 
+  it('un 202 (elevación pendiente) lleva a la solicitud en la bandeja, sin preguntar por cambios', async () => {
+    mockBackend()
+    server.use(
+      http.put(`${API}/gateway-users/7/access`, () =>
+        HttpResponse.json(
+          {
+            data: {
+              ...target,
+              code: 'access.elevation_pending',
+              pending_request: {
+                id: 12,
+                status: 'pending',
+                origin: 'set_access',
+                target: { id: 7, username: 'mlopez' },
+                requested_by: { id: 1, username: 'admin' },
+                desired: {
+                  gateway_role: 'viewer',
+                  global_capabilities: ['access_admin'],
+                  scope_grants: target.scope_grants,
+                },
+                elevations: [{ kind: 'global_capability', global_capability: 'access_admin' }],
+                sod_override: null,
+                created_at: '2026-10-02T10:00:00Z',
+                expires_at: '2026-10-09T10:00:00Z',
+              },
+            },
+            message: 'La elevación quedó pendiente.',
+          },
+          { status: 202 },
+        ),
+      ),
+    )
+    const router = renderAt()
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Administración de accesos' }),
+    )
+    expect(
+      screen.getByText('Parte de este cambio requiere un segundo aprobador'),
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar accesos' }))
+
+    expect(await screen.findByText('Listado de usuarios')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/gateway-users')
+    expect(router.state.location.search).toBe('?tab=pending&solicitud=12')
+    expect(screen.queryByText('¿Salir sin guardar?')).not.toBeInTheDocument()
+    // El aviso dice qué pasó y enlaza a la solicitud.
+    expect(
+      await screen.findByText(
+        'Se aplicó lo que no requiere aprobación; la elevación quedó pendiente de otro administrador de accesos.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver la solicitud' })).toHaveAttribute(
+      'href',
+      '/gateway-users?tab=pending&solicitud=12',
+    )
+  })
+
   it('con cambios sin guardar, salir pide confirmación', async () => {
     mockBackend()
     const router = renderAt()
-    await screen.findByText(/Solo podés otorgar hasta operator/)
+    await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
     await userEvent.click(screen.getByRole('checkbox', { name: 'Administración de accesos' }))
 
     await userEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
@@ -359,7 +432,7 @@ describe('GatewayUserAccessPage', () => {
   it('sin cambios, «Cancelar» vuelve al listado sin preguntar', async () => {
     mockBackend()
     renderAt()
-    await screen.findByText(/Solo podés otorgar hasta operator/)
+    await screen.findByRole('checkbox', { name: 'Oficial de seguridad' })
     await userEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
     expect(await screen.findByText('Listado de usuarios')).toBeInTheDocument()
   })
@@ -394,7 +467,7 @@ describe('GatewayUserAccessPage', () => {
 })
 
 describe('GatewayUserAccessPage — separación de funciones', () => {
-  /** El admin sembrado: owner con las dos globales, así el techo no esconde ninguna casilla. */
+  /** El admin sembrado: owner con las dos globales. */
   const SEEDED = meFixture({
     role: 'owner',
     global_capabilities: ['access_admin', 'security_officer'],
@@ -450,9 +523,10 @@ describe('GatewayUserAccessPage — separación de funciones', () => {
     ).toBeInTheDocument()
     // La fuente nombra el destino por su nombre, no por el id.
     expect(screen.getByText(/rol owner en el entorno Producción/)).toBeInTheDocument()
+    // Además del aviso de separación, agregar la global eleva: los dos describen el botón.
     expect(screen.getByRole('button', { name: 'Guardar accesos' })).toHaveAttribute(
       'aria-describedby',
-      expect.stringMatching(/-sod$/),
+      expect.stringMatching(/-sod(\s|$)/),
     )
 
     // Destildarla saca el aviso: no queda nada que separar.

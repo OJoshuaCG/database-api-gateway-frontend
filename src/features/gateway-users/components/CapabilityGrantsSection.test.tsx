@@ -155,13 +155,16 @@ describe('CapabilityGrantsSection', () => {
     // Una global (eje `global`) no se otorga de forma puntual.
     expect(names.some((name) => name.includes(GLOBAL_ONLY))).toBe(false)
     expect(options).toHaveLength(GRANTS_CATALOG_FIXTURE.filter((row) => row.grantable).length)
-    // Las sensibles lo dicen en la opción; las otras no.
+    // Las sensibles (espejo de `is_sensitive`: otorgable y exclusiva de owner) lo dicen en la
+    // opción; las otras no. `blueprints.apply` es sensible desde C3.
     const drop = options.find((option) => option.textContent?.includes(DROP))
-    expect(drop).toHaveTextContent('Requiere aprobación de otro admin')
+    expect(drop).toHaveTextContent('Requiere segundo aprobador')
     const write = options.find((option) => option.textContent?.includes(WRITE))
-    expect(write).not.toHaveTextContent('Requiere aprobación de otro admin')
+    expect(write).not.toHaveTextContent('Requiere segundo aprobador')
     // Agrupadas: las capacidades de un mismo módulo van seguidas.
-    const modules = options.map((option) => option.textContent?.split('·')[1]?.trim())
+    const modules = options.map((option) =>
+      option.textContent?.split('·')[1]?.replace('Requiere segundo aprobador', '').trim(),
+    )
     const firstSeen = [...new Set(modules)]
     expect(modules).toEqual(firstSeen.flatMap((module) => modules.filter((m) => m === module)))
   })
@@ -225,7 +228,7 @@ describe('CapabilityGrantsSection', () => {
 
     await pick('Capacidad', new RegExp(DROP))
     expect(
-      within(form()).getByText(/Requiere aprobación de otro admin: queda pendiente/),
+      within(form()).getByText(/Queda pendiente y no concede acceso hasta que otra persona/),
     ).toBeVisible()
 
     await pick('Tipo de destino', 'Servidor')

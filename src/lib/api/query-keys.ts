@@ -251,6 +251,15 @@ export const queryKeys = {
     effective: (userId: number) => ['capability-grants', 'effective', userId] as const,
   },
   /**
+   * Elevaciones de acceso con segundo aprobador (v29 §9.4). Todo cuelga de `all`: aprobar,
+   * rechazar o cancelar mueve a la vez la bandeja y el detalle de esa solicitud.
+   */
+  accessRequests: {
+    all: ['access-requests'] as const,
+    pending: () => ['access-requests', 'pending'] as const,
+    detail: (id: number) => ['access-requests', 'detail', id] as const,
+  },
+  /**
    * Tokens de agente (§3). El secreto del alta NO se cachea en ningún lado: viaja una sola vez y
    * vive en el estado local de la vista de entrega hasta que el operador la cierra.
    */

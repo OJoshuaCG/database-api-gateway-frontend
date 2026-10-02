@@ -1,4 +1,8 @@
-import { CAPABILITY_GRANT_ERROR_CODES, GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
+import {
+  ACCESS_REQUEST_ERROR_CODES,
+  CAPABILITY_GRANT_ERROR_CODES,
+  GATEWAY_USER_ERROR_CODES,
+} from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
 import {
   SOD_RULE_EXPLANATION,
@@ -29,23 +33,19 @@ export const RATE_LIMIT_HINT =
 export const SELF_MODIFICATION_MESSAGE = `No podés cambiar tu propio rol, tu propio acceso ni desactivar tu cuenta. ${SELF_ACCESS_NOTE}`
 
 /**
- * `access.grant_ceiling_exceeded`: el texto propio (en voseo). El `msg` del backend viene en tú
- * («No puedes otorgar más acceso del que tienes: rol base 'owner'. Pídeselo…»), así que no se
- * muestra tal cual: de él se toma solo el DETALLE de qué se excedió (`grantCeilingDetail`).
+ * `access.not_assignable` (v29 §9.1): reemplaza al viejo techo por tenencia
+ * (`access.grant_ceiling_exceeded`, retirado). Ya no importa qué tiene quien asigna sino qué le
+ * deja asignar su función, y hoy la única que asigna es `access_admin`.
  */
-export const GRANT_CEILING_FALLBACK =
-  'No podés otorgar más acceso del que tenés. Pedíselo a alguien que tenga ese nivel.'
+export const NOT_ASSIGNABLE_MESSAGE =
+  'Tu función no permite asignar ese acceso: lo asigna una persona con `access_admin`.'
 
 /**
- * Lo que se excedió, tal como lo enumera el backend (`_assert_within_ceiling`): «rol base
- * 'owner'», «rol por alcance 'owner'», «capacidades globales [security_officer]», separados por
- * «; ». `null` si el mensaje no tiene esa forma: entonces solo va el respaldo.
+ * El aviso del `202 access.elevation_pending` (v29 §9.3): una parte del cambio se aplicó y otra
+ * espera a una segunda persona. Decir solo «guardado» sería mentir sobre lo que rige.
  */
-export function grantCeilingDetail(backendMessage: string): string | null {
-  const match = /tienes:\s*(.+?)\.\s*P[ií]d/u.exec(backendMessage)
-  const detail = match?.[1]?.trim()
-  return detail ? detail : null
-}
+export const ELEVATION_PENDING_MESSAGE =
+  'Se aplicó lo que no requiere aprobación; la elevación quedó pendiente de otro administrador de accesos.'
 
 /**
  * Mensaje para un error de las pantallas ADMINISTRADAS (listado, alta, edición, accesos,
@@ -70,12 +70,8 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
         : null
     case GATEWAY_USER_ERROR_CODES.selfModificationForbidden:
       return SELF_MODIFICATION_MESSAGE
-    case GATEWAY_USER_ERROR_CODES.grantCeilingExceeded: {
-      // `type` presente = el cuerpo era el envelope del backend, así que `message` es su `msg`,
-      // no el genérico del status. De ahí sale solo el detalle; la frase es la nuestra.
-      const detail = error.type ? grantCeilingDetail(error.message) : null
-      return detail ? `${GRANT_CEILING_FALLBACK} Lo que excede: ${detail}.` : GRANT_CEILING_FALLBACK
-    }
+    case GATEWAY_USER_ERROR_CODES.notAssignable:
+      return NOT_ASSIGNABLE_MESSAGE
     case GATEWAY_USER_ERROR_CODES.invalidRole:
       return roleOrCapabilityMessage(error, 'El rol enviado no es válido.')
     case GATEWAY_USER_ERROR_CODES.invalidGlobalCapability:
@@ -130,8 +126,8 @@ function grantScopeNotFoundMessage(error: ApiError): string {
  * pendientes (`capabilityGrantBlockedMessage`), que llega como el mismo código `access.*` pero
  * sin ser un error HTTP.
  *
- * `grantCeilingExceeded` queda fuera a propósito: su texto depende del `msg` del backend y lo
- * arma `gatewayUserErrorMessage`.
+ * `notAssignable` no está: lo arma `gatewayUserErrorMessage`, que es el mismo texto para todos
+ * los escritores.
  */
 const CAPABILITY_GRANT_COPY: Record<string, string> = {
   [CAPABILITY_GRANT_ERROR_CODES.selfModificationForbidden]:
@@ -185,11 +181,57 @@ export function capabilityGrantErrorMessage(
  */
 export function capabilityGrantBlockedMessage(code: string | null | undefined): string | null {
   if (!code) return null
-  // Sin `msg` del backend no hay detalle de qué se excedió: va solo el texto de respaldo.
-  if (code === CAPABILITY_GRANT_ERROR_CODES.grantCeilingExceeded) return GRANT_CEILING_FALLBACK
+  if (code === CAPABILITY_GRANT_ERROR_CODES.notAssignable) return NOT_ASSIGNABLE_MESSAGE
   if (code === CAPABILITY_GRANT_ERROR_CODES.sodConflict) return SOD_BLOCKED_MESSAGE
   return (
     CAPABILITY_GRANT_COPY[code] ??
+    'No podés decidir esta solicitud ahora. Consultá con otra persona con `access_admin`.'
+  )
+}
+
+/**
+ * Copy fijo de las elevaciones de acceso (`/access-requests`, v29 §9.4). Mismo doble uso que el
+ * de las capacidades puntuales: el error de una decisión y el `blocked_reason` de la bandeja.
+ * Varios códigos se repiten con las puntuales, pero el texto habla de «elevación», no de
+ * «capacidad»: en esta bandeja lo que se decide es un rol o una global.
+ */
+const ACCESS_REQUEST_COPY: Record<string, string> = {
+  [ACCESS_REQUEST_ERROR_CODES.requestNotFound]:
+    'Esa solicitud ya no existe. Refrescá la lista para ver el estado actual.',
+  [ACCESS_REQUEST_ERROR_CODES.requestNotPending]:
+    'Esa solicitud ya no está pendiente: otra persona la decidió, venció, se canceló o quien la pidió perdió `access_admin`. Refrescá la lista.',
+  [ACCESS_REQUEST_ERROR_CODES.requestStale]:
+    'El acceso de la persona cambió desde que se pidió esta elevación, así que se canceló sola: aprobarla pisaría un cambio que nadie revisó. Si todavía corresponde, pedila de nuevo desde sus accesos.',
+  [ACCESS_REQUEST_ERROR_CODES.requestNotRequester]:
+    'Solo quien pidió la elevación puede cancelarla. Si no corresponde, rechazala.',
+  [ACCESS_REQUEST_ERROR_CODES.selfApprovalForbidden]:
+    'No podés aprobar una elevación que pediste vos. La decide otra persona con `access_admin`.',
+  [ACCESS_REQUEST_ERROR_CODES.selfModificationForbidden]:
+    'Es una elevación de tu propia cuenta: la decide otra persona con `access_admin`.',
+  [ACCESS_REQUEST_ERROR_CODES.grantUserInactive]:
+    'La cuenta está desactivada, así que no se le puede aplicar la elevación. Reactivala primero.',
+  [ACCESS_REQUEST_ERROR_CODES.notAssignable]: NOT_ASSIGNABLE_MESSAGE,
+  [ACCESS_REQUEST_ERROR_CODES.sodConflict]: `No se puede aprobar: ${SOD_RULE_EXPLANATION} El acceso final de esta persona la violaría sin una excepción que lo cubra. Rechazala, separá las funciones y volvé a pedirla (con una excepción de emergencia si es un incidente).`,
+}
+
+/**
+ * Mensaje para un error de las decisiones sobre elevaciones (aprobar, rechazar, cancelar) y del
+ * listado. Un código propio gana; si no, cae al copy general del módulo (último administrador,
+ * 429…); `null` deja que el llamador use `apiError.message`.
+ */
+export function accessRequestErrorMessage(error: ApiError): string | null {
+  const own = error.code ? ACCESS_REQUEST_COPY[error.code] : undefined
+  return own ?? gatewayUserErrorMessage(error)
+}
+
+/**
+ * Por qué una elevación pendiente no se puede decidir (`blocked_reason` de la bandeja). `null` sin
+ * motivo; un código desconocido devuelve el genérico para no dejar un botón mudo.
+ */
+export function accessRequestBlockedMessage(code: string | null | undefined): string | null {
+  if (!code) return null
+  return (
+    ACCESS_REQUEST_COPY[code] ??
     'No podés decidir esta solicitud ahora. Consultá con otra persona con `access_admin`.'
   )
 }

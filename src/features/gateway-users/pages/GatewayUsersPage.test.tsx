@@ -185,9 +185,48 @@ describe('GatewayUsersPage — bandeja de solicitudes pendientes', () => {
     blocked_reason: null,
   }
 
-  function mockAs(globals: string[], pending: unknown[] = [pendingRow]) {
+  const accessRow = {
+    id: 21,
+    target: { id: 8, username: 'jperez' },
+    requested_by: { id: 2, username: 'otra-admin' },
+    status: 'pending',
+    origin: 'update',
+    desired: { gateway_role: 'owner', global_capabilities: [], scope_grants: [] },
+    elevations: [{ kind: 'base_role', role: 'owner' }],
+    sod_override: null,
+    created_at: '2026-10-01T18:00:00Z',
+    expires_at: '2026-10-08T18:00:00Z',
+    can_decide: true,
+    blocked_reason: null,
+  }
+
+  function mockAs(
+    globals: string[],
+    pending: unknown[] = [pendingRow],
+    elevations: unknown[] = [accessRow],
+  ) {
     let pendingRequests = 0
     server.use(
+      http.get('http://localhost/api/v1/access-requests/pending', () => {
+        pendingRequests += 1
+        return HttpResponse.json({ data: elevations })
+      }),
+      http.get('http://localhost/api/v1/access-requests/21', () =>
+        HttpResponse.json({
+          data: { ...accessRow, status: 'applied', decided_by: { id: 4, username: 'aa2' } },
+        }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users/8', () =>
+        HttpResponse.json({
+          data: { ...gatewayUser(8, 'jperez'), gateway_role: 'operator', global_capabilities: [] },
+        }),
+      ),
+      http.get('http://localhost/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.get('http://localhost/api/v1/servers', () =>
+        HttpResponse.json({ data: [], pagination: { ...pagination, total: 0 } }),
+      ),
       http.get('http://localhost/api/v1/auth/me', () =>
         HttpResponse.json({
           data: { ...meFixture({ role: 'owner', global_capabilities: globals }), id: 1 },
@@ -207,15 +246,32 @@ describe('GatewayUsersPage — bandeja de solicitudes pendientes', () => {
     return () => pendingRequests
   }
 
-  it('access_admin ve la pestaña con el recuento y abre la bandeja', async () => {
+  it('access_admin ve la pestaña con el recuento de las DOS bandejas y las abre juntas', async () => {
     mockAs(['access_admin'])
     renderWithProviders(<GatewayUsersPage />)
 
     const tab = await screen.findByRole('tab', { name: /Solicitudes pendientes/ })
-    await waitFor(() => expect(tab).toHaveTextContent('Solicitudes pendientes1'))
+    // Una capacidad puntual + una elevación de acceso.
+    await waitFor(() => expect(tab).toHaveTextContent('Solicitudes pendientes2'))
     await userEvent.click(tab)
+    expect(screen.getByRole('heading', { name: 'Elevaciones de acceso' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Capacidades puntuales' })).toBeInTheDocument()
+    // Cada una con su fila: la elevación (jperez → owner) y la puntual (mlopez).
+    expect(await screen.findAllByText('jperez')).not.toHaveLength(0)
+    expect(await screen.findAllByText('operator → owner')).not.toHaveLength(0)
     expect(await screen.findAllByText('mlopez')).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { name: 'Solicitudes pendientes' })).toBeInTheDocument()
+  })
+
+  it('al llegar desde el aviso de un 202 destaca la solicitud con su estado actual', async () => {
+    mockAs(['access_admin'], [], [])
+    renderWithProviders(<GatewayUsersPage />, {
+      route: '/gateway-users?tab=pending&solicitud=21',
+    })
+    // Otra persona ya la aprobó entre el aviso y el clic: no está en la bandeja, pero se dice.
+    expect(
+      await screen.findByText('La solicitud de jperez ya no está pendiente'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/se aprobó y ya rige \(aa2\)/)).toBeInTheDocument()
   })
 
   it('security_officer no tiene `access.admin`: ni listado ni bandeja, y entra a «Roles y capacidades»', async () => {
@@ -239,5 +295,78 @@ describe('GatewayUsersPage — bandeja de solicitudes pendientes', () => {
     expect(
       await screen.findByText('No tenés acceso a las solicitudes pendientes'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('GatewayUsersPage — alta con elevación pendiente (202)', () => {
+  it('entrega la invitación igual y dice, fijo, que el rol pedido espera a otra persona', async () => {
+    let createBody: unknown = null
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({
+          data: { ...meFixture({ role: 'viewer', global_capabilities: ['access_admin'] }), id: 1 },
+        }),
+      ),
+      http.get('http://localhost/api/v1/authz/catalog', () =>
+        HttpResponse.json({ data: CATALOG_FIXTURE }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json({ data: [], pagination }),
+      ),
+      http.get('http://localhost/api/v1/capability-grants/pending', () =>
+        HttpResponse.json({ data: [] }),
+      ),
+      http.get('http://localhost/api/v1/access-requests/pending', () =>
+        HttpResponse.json({ data: [] }),
+      ),
+      http.post('http://localhost/api/v1/gateway-users', async ({ request }) => {
+        createBody = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              ...gatewayUser(9, 'ana'),
+              gateway_role: 'viewer',
+              global_capabilities: [],
+              credential_set: false,
+              invite_token: '1757462400.9f2c1a',
+              invite_expires_at: '2026-10-09T10:00:00Z',
+              code: 'access.elevation_pending',
+              pending_request: {
+                id: 12,
+                status: 'pending',
+                origin: 'create',
+                target: { id: 9, username: 'ana' },
+                requested_by: { id: 1, username: 'admin' },
+                desired: { gateway_role: 'owner', global_capabilities: [], scope_grants: [] },
+                elevations: [{ kind: 'base_role', role: 'owner' }],
+                created_at: '2026-10-02T10:00:00Z',
+                expires_at: '2026-10-09T10:00:00Z',
+              },
+            },
+          },
+          { status: 202 },
+        )
+      }),
+    )
+    renderWithProviders(<GatewayUsersPage />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Nuevo usuario' }))
+    await userEvent.type(screen.getByLabelText(/Nombre de usuario/), 'ana')
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    await userEvent.click(
+      screen.getByRole('option', { name: /^owner\s*Requiere segundo aprobador$/ }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Crear y generar invitación' }))
+
+    expect(await screen.findByText('Usuario ana creado')).toBeInTheDocument()
+    expect(createBody).toMatchObject({ username: 'ana', gateway_role: 'owner' })
+    expect(screen.getByText('El acceso pedido todavía no rige')).toBeInTheDocument()
+    expect(screen.getByText(/La cuenta se creó como/)).toHaveTextContent('viewer')
+    // El enlace fijo del diálogo y el del toast llevan a la misma solicitud.
+    const links = screen.getAllByRole('link', { name: 'Ver la solicitud' })
+    expect(links.length).toBeGreaterThan(0)
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', '/gateway-users?tab=pending&solicitud=12')
+    }
   })
 })

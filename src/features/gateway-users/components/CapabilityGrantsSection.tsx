@@ -41,7 +41,9 @@ import {
   useCreateCapabilityGrant,
   useRevokeCapabilityGrant,
 } from '../hooks/use-capability-grants'
+import { isSensitiveCapability } from '../assignment-policy'
 import { capabilityGrantBlockedMessage, capabilityGrantErrorMessage } from '../messages'
+import { SecondApproverBadge } from './SecondApproverBadge'
 import { SodConflictPanel } from './SodConflictPanel'
 
 /** Largo máximo del motivo: el mismo tope que el contrato y el backend. */
@@ -422,12 +424,13 @@ export function CapabilityGrantsSection({
               itemToString={(row) => row.label}
               itemToKey={(row) => row.id}
               renderItem={(row) => (
-                <span className="flex flex-col">
+                <span className="flex flex-col items-start gap-0.5">
                   <span>{row.label}</span>
                   <span className="text-xs font-normal text-muted-foreground">
                     <code className="font-mono">{row.id}</code> · {moduleLabel(row.module)}
-                    {row.sensitive ? ' · Requiere aprobación de otro admin' : ''}
                   </span>
+                  {/* Espejo de `is_sensitive` (C3): otorgable y exclusiva de owner. */}
+                  {isSensitiveCapability(row.id, catalog) && <SecondApproverBadge />}
                 </span>
               )}
               label="Capacidad"
@@ -449,10 +452,13 @@ export function CapabilityGrantsSection({
                     Incluye la lectura: {selected.implies.map(capabilityName).join(', ')}.
                   </span>
                 )}
-                {selected.sensitive && (
-                  <span className="font-medium text-foreground">
-                    Requiere aprobación de otro admin: queda pendiente y no concede acceso hasta que
-                    otra persona con access_admin la apruebe.
+                {isSensitiveCapability(selected.id, catalog) && (
+                  <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+                    <SecondApproverBadge />
+                    <span>
+                      Queda pendiente y no concede acceso hasta que otra persona con access_admin la
+                      apruebe.
+                    </span>
                   </span>
                 )}
               </div>

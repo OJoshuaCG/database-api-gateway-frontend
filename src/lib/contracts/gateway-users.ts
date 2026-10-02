@@ -312,10 +312,12 @@ export type AcceptInviteIn = z.infer<typeof acceptInviteInSchema>
  * (que **no trae `allowed` en absoluto**). Un cliente que asuma que el campo siempre está rompe en
  * ese caso.
  *
- * Los dos guards anti auto-escalada son 409 y van siempre juntos en el backend:
- * `selfModificationForbidden` (nadie cambia su propio rol, su propio acceso ni se desactiva) y
- * `grantCeilingExceeded` (nadie otorga más de lo que tiene, que es lo que impide esquivar el
- * primero creando una cuenta títere).
+ * Anti auto-escalada: `selfModificationForbidden` (409: nadie cambia su propio rol, su propio
+ * acceso ni se desactiva). El viejo `access.grant_ceiling_exceeded` («nadie otorga más de lo que
+ * tiene») se retiró en C3 (v29 §9.1) y ya no lo emite ningún endpoint: lo que impedía —esquivar el
+ * primer guard creando una cuenta títere `owner`— lo impide ahora el segundo aprobador
+ * (`202 access.elevation_pending`, ver `contracts/access-requests.ts`). Su reemplazo como error es
+ * `notAssignable`: la función de quien asigna no permite asignar eso.
  */
 export const GATEWAY_USER_ERROR_CODES = {
   lastAdminProtected: 'access.last_admin_protected',
@@ -326,7 +328,8 @@ export const GATEWAY_USER_ERROR_CODES = {
   invalidGlobalCapability: 'gateway_user.invalid_global_capability',
   weakPassword: 'gateway_user.weak_password',
   selfModificationForbidden: 'access.self_modification_forbidden',
-  grantCeilingExceeded: 'access.grant_ceiling_exceeded',
+  /** 409: la función del actor no asigna eso (`ASSIGNABLE_BY`). Reemplaza al techo (v29 §9.1). */
+  notAssignable: 'access.not_assignable',
   /**
    * 422 de `PUT /access`: algún `scope_grants[]` apunta a un entorno o servidor que ya no existe
    * (`public_context.missing_scopes`). Es el mismo código que el 404 de las capacidades puntuales,

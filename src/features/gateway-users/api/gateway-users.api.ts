@@ -1,17 +1,19 @@
 import { fetchData, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
 import {
   acceptInviteOutSchema,
-  gatewayUserCreatedOutSchema,
+  gatewayUserCreatedWriteOutSchema,
   gatewayUserInviteOutSchema,
   gatewayUserOutSchema,
+  gatewayUserWriteOutSchema,
   type AcceptInviteIn,
   type AcceptInviteOut,
   type GatewayUserAccessUpdate,
   type GatewayUserCreate,
-  type GatewayUserCreatedOut,
+  type GatewayUserCreatedWriteOut,
   type GatewayUserInviteOut,
   type GatewayUserOut,
   type GatewayUserUpdate,
+  type GatewayUserWriteOut,
   type Page,
 } from '@/lib/contracts'
 
@@ -35,9 +37,13 @@ export function getGatewayUser(id: number, signal?: AbortSignal): Promise<Gatewa
 /**
  * `POST /gateway-users` → 201. El alta NO lleva contraseña (§2.2) y devuelve el token de
  * invitación, que viaja acá y en ninguna otra respuesta: quien llame a esto TIENE que entregarlo.
+ *
+ * ⚠️ Puede ser **202 `access.elevation_pending`** (v29 §9.3): si el alta pedía `owner` o una
+ * global, la cuenta nace sin eso (viewer/operator, sin globales), la invitación se emite igual y
+ * la elevación queda en `pending_request`. Ver `pendingElevationOf`.
  */
-export function createGatewayUser(body: GatewayUserCreate): Promise<GatewayUserCreatedOut> {
-  return mutateData('POST', BASE, gatewayUserCreatedOutSchema, { body })
+export function createGatewayUser(body: GatewayUserCreate): Promise<GatewayUserCreatedWriteOut> {
+  return mutateData('POST', BASE, gatewayUserCreatedWriteOutSchema, { body })
 }
 
 /**
@@ -58,20 +64,29 @@ export function acceptGatewayUserInvite(body: AcceptInviteIn): Promise<AcceptInv
   })
 }
 
-/** `PATCH /gateway-users/{id}` — `exclude_unset`; `username` NO es editable por diseño (§2.5). */
-export function updateGatewayUser(id: number, body: GatewayUserUpdate): Promise<GatewayUserOut> {
-  return mutateData('PATCH', `${BASE}/${id}`, gatewayUserOutSchema, { body })
+/**
+ * `PATCH /gateway-users/{id}` — `exclude_unset`; `username` NO es editable por diseño (§2.5). Subir
+ * a `owner` responde 202 (v29 §9.3): el resto del PATCH se aplica y el rol queda pendiente.
+ */
+export function updateGatewayUser(
+  id: number,
+  body: GatewayUserUpdate,
+): Promise<GatewayUserWriteOut> {
+  return mutateData('PATCH', `${BASE}/${id}`, gatewayUserWriteOutSchema, { body })
 }
 
 /**
  * `PUT /gateway-users/{id}/access` — ⚠️ REEMPLAZO TOTAL (§2.6). Omitir un campo equivale a
  * enviarlo vacío, y vacío REVOCA. El cuerpo tiene que traer el estado completo, no el delta.
+ *
+ * Con una elevación responde 202 (v29 §9.3): las altas `viewer`/`operator` y las bajas se aplican
+ * ya, y `pending_request.desired` es el acceso FINAL que queda si otra persona lo aprueba.
  */
 export function replaceGatewayUserAccess(
   id: number,
   body: GatewayUserAccessUpdate,
-): Promise<GatewayUserOut> {
-  return mutateData('PUT', `${BASE}/${id}/access`, gatewayUserOutSchema, { body })
+): Promise<GatewayUserWriteOut> {
+  return mutateData('PUT', `${BASE}/${id}/access`, gatewayUserWriteOutSchema, { body })
 }
 
 /**

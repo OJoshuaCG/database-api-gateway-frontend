@@ -456,7 +456,8 @@ export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
 /**
  * El mismo catálogo en la forma del backend con capacidades puntuales: `grantable`, `sensitive` e
  * `implies` calculados con las reglas de `capability_catalog.py` (`is_grantable`: todo menos el eje
- * global; `is_sensitive`: divulga o es de nivel `drop`; `IMPLIED_READ`: la lectura de nivel viewer
+ * global; `is_sensitive`: desde C3, otorgable y exclusiva de `owner` —la tiene `owner` y no
+ * `operator`—, que da las 11 de `_SENSITIVE_POLICY`; `IMPLIED_READ`: la lectura de nivel viewer
  * del mismo módulo para lo otorgable que muta o divulga), y `destructive` según
  * `DESTRUCTIVE_CAPABILITY_IDS`. Los espejos de `authz-model` se prueban contra esto, no contra el
  * fixture viejo, donde nada es otorgable y la marca destructiva no viene.
@@ -479,7 +480,7 @@ export const GRANTS_CATALOG_FIXTURE: CapabilityDescriptor[] = (() => {
     return {
       ...row,
       grantable,
-      sensitive: grantable && (row.discloses || row.level === 'drop'),
+      sensitive: grantable && row.roles.includes('owner') && !row.roles.includes('operator'),
       implies: grantable && (row.mutates || row.discloses) && read ? [read] : [],
       destructive: DESTRUCTIVE_CAPABILITY_IDS.includes(row.id),
     }

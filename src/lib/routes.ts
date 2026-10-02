@@ -60,3 +60,15 @@ export const GATEWAY_USERS_PATH = '/gateway-users'
 export function gatewayUserAccessPath(userId: number): string {
   return `${GATEWAY_USERS_PATH}/${userId}/accesos`
 }
+
+/**
+ * Una elevación de acceso pendiente (v29 §9), dentro de la bandeja «Solicitudes pendientes» de
+ * `/gateway-users`. No hay página propia: `?solicitud=` la destaca arriba de la bandeja con su
+ * estado ACTUAL (`GET /access-requests/{id}`), que es lo que sirve cuando se llega desde el aviso
+ * de un `202` y otra persona ya la decidió.
+ */
+export const ACCESS_REQUEST_PARAM = 'solicitud'
+
+export function accessRequestPath(requestId: number): string {
+  return `${GATEWAY_USERS_PATH}?tab=pending&${ACCESS_REQUEST_PARAM}=${requestId}`
+}

@@ -3,12 +3,15 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
-import type {
-  AcceptInviteIn,
-  GatewayUserAccessUpdate,
-  GatewayUserCreate,
-  GatewayUserUpdate,
+import {
+  pendingElevationOf,
+  type AcceptInviteIn,
+  type AccessRequest,
+  type GatewayUserAccessUpdate,
+  type GatewayUserCreate,
+  type GatewayUserUpdate,
 } from '@/lib/contracts'
+import { accessRequestPath } from '@/lib/routes'
 import {
   acceptGatewayUserInvite,
   createGatewayUser,
@@ -18,13 +21,34 @@ import {
   replaceGatewayUserAccess,
   updateGatewayUser,
 } from '../api/gateway-users.api'
-import { gatewayUserErrorMessage } from '../messages'
+import { ELEVATION_PENDING_MESSAGE, gatewayUserErrorMessage } from '../messages'
 import { notifyMutationError } from '@/features/auth'
 
 /** Título + detalle de un error, con el copy del módulo cuando lo reconoce. */
 function errorToast(title: string, error: unknown): [string, string] {
   const apiError = toApiError(error)
   return [title, gatewayUserErrorMessage(apiError) ?? apiError.message]
+}
+
+/**
+ * Aviso del `202 access.elevation_pending` (v29 §9.3), común a los tres escritores. Más largo que un
+ * éxito y en `warning`: dice que NO todo rige todavía, y lleva a la solicitud en la bandeja. El
+ * enlace es un `href` (el proveedor de toasts vive fuera del router), así que recarga, que trae la
+ * bandeja fresca de todas formas.
+ */
+function useNotifyElevationPending() {
+  const toast = useToast()
+  const queryClient = useQueryClient()
+  return (request: AccessRequest) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.accessRequests.all })
+    toast.push({
+      variant: 'warning',
+      title: `Elevación pendiente para ${request.target.username}`,
+      description: ELEVATION_PENDING_MESSAGE,
+      action: { label: 'Ver la solicitud', href: accessRequestPath(request.id) },
+      duration: 10_000,
+    })
+  }
 }
 
 /**
@@ -61,11 +85,16 @@ export function useGatewayUser(id: number, enabled = true) {
 export function useCreateGatewayUser() {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const notifyPending = useNotifyElevationPending()
   return useMutation({
     mutationFn: (body: GatewayUserCreate) => createGatewayUser(body),
     gcTime: 0,
-    onSuccess: () => {
+    onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
+      // 202: la cuenta nació sin la elevación (y la invitación igual). La entrega del token la
+      // repite fija; el toast es para quien no llega a leerla.
+      const pending = pendingElevationOf(created)
+      if (pending) notifyPending(pending)
     },
     onError: (error) =>
       notifyMutationError(toast, error, ...errorToast('No se pudo crear el usuario', error)),
@@ -80,14 +109,18 @@ export function useCreateGatewayUser() {
 export function useUpdateGatewayUser(id: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const notifyPending = useNotifyElevationPending()
   return useMutation({
     mutationFn: (body: GatewayUserUpdate) => updateGatewayUser(id, body),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.all })
       // Un cambio de rol (con o sin `sod_override`) mueve las excepciones de separación de deberes.
       void queryClient.invalidateQueries({ queryKey: queryKeys.authz.sodReport() })
+      // `data` es la persona tal como quedó YA (en un 202, sin la elevación): sirve igual de caché.
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
-      toast.success('Usuario actualizado', user.username)
+      const pending = pendingElevationOf(user)
+      if (pending) notifyPending(pending)
+      else toast.success('Usuario actualizado', user.username)
     },
     onError: (error) =>
       notifyMutationError(toast, error, ...errorToast('No se pudo actualizar el usuario', error)),
@@ -102,6 +135,7 @@ export function useUpdateGatewayUser(id: number) {
 export function useReplaceGatewayUserAccess(id: number) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const notifyPending = useNotifyElevationPending()
   return useMutation({
     mutationFn: (body: GatewayUserAccessUpdate) => replaceGatewayUserAccess(id, body),
     onSuccess: (user) => {
@@ -111,7 +145,9 @@ export function useReplaceGatewayUserAccess(id: number) {
       // Un override crea excepciones y un cambio que deja de violar una regla cierra la suya.
       void queryClient.invalidateQueries({ queryKey: queryKeys.authz.sodReport() })
       queryClient.setQueryData(queryKeys.gatewayUsers.detail(id), user)
-      toast.success('Accesos actualizados', `Se cerraron las sesiones de ${user.username}.`)
+      const pending = pendingElevationOf(user)
+      if (pending) notifyPending(pending)
+      else toast.success('Accesos actualizados', `Se cerraron las sesiones de ${user.username}.`)
     },
     onError: (error) =>
       notifyMutationError(

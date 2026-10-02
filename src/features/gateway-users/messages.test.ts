@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/errors'
-import { GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
+import { ACCESS_REQUEST_ERROR_CODES, GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
 import {
   acceptInviteErrorMessage,
+  accessRequestBlockedMessage,
+  accessRequestErrorMessage,
+  ELEVATION_PENDING_MESSAGE,
   gatewayUserErrorMessage,
-  GRANT_CEILING_FALLBACK,
+  NOT_ASSIGNABLE_MESSAGE,
   RATE_LIMIT_HINT,
   SELF_MODIFICATION_MESSAGE,
 } from './messages'
@@ -121,35 +124,57 @@ describe('guards anti auto-escalada', () => {
     expect(message).toContain(SELF_ACCESS_NOTE)
   })
 
-  it('`grant_ceiling_exceeded` usa la frase propia en voseo y conserva solo el detalle del backend', () => {
-    const backend =
-      "No puedes otorgar más acceso del que tienes: rol base 'owner'; capacidades globales [security_officer]. Pídeselo a alguien que tenga ese nivel."
-    const message = gatewayUserErrorMessage(
-      error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded, {
-        message: backend,
-        type: 'AppHttpException',
-      }),
-    )
-    expect(message).toBe(
-      `${GRANT_CEILING_FALLBACK} Lo que excede: rol base 'owner'; capacidades globales [security_officer].`,
-    )
-    expect(message).not.toContain('puedes')
-    expect(message).not.toContain('Pídeselo')
+  it('`not_assignable` reemplaza al techo retirado y dice quién asigna', () => {
+    const message = gatewayUserErrorMessage(error(409, GATEWAY_USER_ERROR_CODES.notAssignable))
+    expect(message).toBe(NOT_ASSIGNABLE_MESSAGE)
+    expect(message).toContain('access_admin')
   })
 
-  it('`grant_ceiling_exceeded` con un `msg` de otra forma cae en el respaldo, sin copiarlo', () => {
-    const message = gatewayUserErrorMessage(
-      error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded, {
-        message: 'Otro texto cualquiera.',
-        type: 'AppHttpException',
-      }),
-    )
-    expect(message).toBe(GRANT_CEILING_FALLBACK)
+  it('el código retirado `grant_ceiling_exceeded` ya no tiene copy propio (cae al del backend)', () => {
+    expect(gatewayUserErrorMessage(error(409, 'access.grant_ceiling_exceeded'))).toBeNull()
+  })
+})
+
+describe('elevaciones con segundo aprobador (v29 §9)', () => {
+  const codes = Object.values(ACCESS_REQUEST_ERROR_CODES)
+
+  it.each(codes)('%s tiene copy propio en voseo, nunca el mensaje del backend', (code) => {
+    const message = accessRequestErrorMessage(error(409, code))
+    expect(message).toBeTruthy()
+    expect(message).not.toContain('mensaje del backend')
+    expect(message).not.toMatch(/\bpuedes\b|\btienes\b/u)
   })
 
-  it('`grant_ceiling_exceeded` sin envelope del backend cae en el respaldo, no en el genérico', () => {
-    expect(gatewayUserErrorMessage(error(409, GATEWAY_USER_ERROR_CODES.grantCeilingExceeded))).toBe(
-      GRANT_CEILING_FALLBACK,
+  it('la solicitud vieja explica que se canceló sola y cómo volver a pedirla', () => {
+    const message = accessRequestErrorMessage(error(409, ACCESS_REQUEST_ERROR_CODES.requestStale))
+    expect(message).toContain('cambió desde que se pidió')
+    expect(message).toContain('pedila de nuevo')
+  })
+
+  it('cancelar algo ajeno manda a rechazarlo', () => {
+    expect(
+      accessRequestErrorMessage(error(409, ACCESS_REQUEST_ERROR_CODES.requestNotRequester)),
+    ).toContain('rechazala')
+  })
+
+  it('el auto-aprobado habla de elevaciones, no de capacidades', () => {
+    const message = accessRequestBlockedMessage('access.self_approval_forbidden')
+    expect(message).toContain('elevación que pediste vos')
+  })
+
+  it('sin motivo devuelve null; uno desconocido, un genérico', () => {
+    expect(accessRequestBlockedMessage(null)).toBeNull()
+    expect(accessRequestBlockedMessage('access.algo_nuevo')).toContain('No podés decidir')
+  })
+
+  it('cae al copy general del módulo (429) y a null en un código ajeno', () => {
+    expect(accessRequestErrorMessage(error(429))).toBe(RATE_LIMIT_HINT)
+    expect(accessRequestErrorMessage(error(500, 'otra.cosa'))).toBeNull()
+  })
+
+  it('el aviso del 202 dice qué se aplicó y qué espera', () => {
+    expect(ELEVATION_PENDING_MESSAGE).toBe(
+      'Se aplicó lo que no requiere aprobación; la elevación quedó pendiente de otro administrador de accesos.',
     )
   })
 })

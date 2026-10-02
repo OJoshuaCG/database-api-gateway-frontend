@@ -23,17 +23,21 @@ import {
   CAPABILITIES,
   PAGINATION,
   isSyntheticGatewayEmail,
+  pendingElevationOf,
+  type AccessRequest,
   type GatewayUserOut,
 } from '@/lib/contracts'
-import { gatewayUserAccessPath } from '@/lib/routes'
+import { accessRequestPath, gatewayUserAccessPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/utils'
-import { PendingCapabilityGrantsCard } from '../components/PendingCapabilityGrantsCard'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
+import { PendingRequestsInbox } from '../components/PendingRequestsInbox'
 import { RolesCapabilitiesPanel } from '../components/RolesCapabilitiesPanel'
 import { SodReportCard } from '../components/SodReportCard'
+import { usePendingAccessRequests } from '../hooks/use-access-requests'
 import { usePendingCapabilityGrants } from '../hooks/use-capability-grants'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
 import { buildInviteLink } from '../invite-link'
+import { ELEVATION_PENDING_MESSAGE } from '../messages'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
 
 /** Invitación pendiente de entregar, con el nombre de a quién pertenece. */
@@ -43,6 +47,10 @@ interface PendingInvite {
   expiresAt: string
   /** `true` cuando viene de reinvitar: el copy tiene que decir que la anterior quedó inválida. */
   reissued: boolean
+  /** Alta con `202`: la cuenta nació sin la elevación, que espera a otra persona (v29 §9.3). */
+  pendingRequest?: AccessRequest | null
+  /** Rol con el que nació la cuenta: en un `202`, el que NO eleva, no el pedido. */
+  createdRole?: string
 }
 
 const TABS = ['users', 'pending', 'sod', 'roles'] as const
@@ -73,11 +81,13 @@ export function GatewayUsersPage() {
   }
 
   const { admin } = useSession()
-  // La bandeja también es `access.admin` (la tiene solo `access_admin`). Se pide aun fuera de su
-  // pestaña: el recuento de la pestaña es lo que la hace descubrible. Sin sesión cargada ni se
-  // ofrece ni se pide: `can()` falla abierto y sería un 403 seguro para quien no administra accesos.
+  // Las dos bandejas también son `access.admin` (la tiene solo `access_admin`). Se piden aun fuera
+  // de su pestaña: el recuento de la pestaña es lo que las hace descubribles. Sin sesión cargada ni
+  // se ofrecen ni se piden: `can()` falla abierto y sería un 403 seguro para quien no administra.
   const canReviewGrants = admin !== null && canAdmin
-  const pendingCount = usePendingCapabilityGrants(canReviewGrants).data?.length
+  const pendingGrants = usePendingCapabilityGrants(canReviewGrants).data?.length ?? 0
+  const pendingElevations = usePendingAccessRequests(canReviewGrants).data?.length ?? 0
+  const pendingCount = pendingGrants + pendingElevations
   const [page, setPage] = useState(1)
   const [size, setSize] = useState<number>(PAGINATION.defaultSize)
   const [formOpen, setFormOpen] = useState(false)
@@ -288,7 +298,7 @@ export function GatewayUsersPage() {
         ) : null
       ) : tab === 'pending' ? (
         canReviewGrants ? (
-          <PendingCapabilityGrantsCard />
+          <PendingRequestsInbox />
         ) : admin !== null ? (
           <ForbiddenState title="No tenés acceso a las solicitudes pendientes" />
         ) : null
@@ -364,6 +374,8 @@ export function GatewayUsersPage() {
               token: created.invite_token,
               expiresAt: created.invite_expires_at,
               reissued: false,
+              pendingRequest: pendingElevationOf(created),
+              createdRole: created.gateway_role,
             })
           }}
         />
@@ -447,6 +459,24 @@ function InviteDeliveryModal({ invite, onDone }: { invite: PendingInvite; onDone
         {invite.reissued && (
           <Callout tone="info" title="La invitación anterior quedó inválida">
             Emitir una nueva revoca la anterior. Si la vieja se había filtrado, ya no sirve.
+          </Callout>
+        )}
+        {/* Fijo junto al token, que es lo que se lee acá: la cuenta existe, pero sin la elevación.
+            El enlace no cierra este diálogo, así que el token no se pierde por seguirlo. */}
+        {invite.pendingRequest && (
+          <Callout tone="warning" title="El acceso pedido todavía no rige">
+            <p>
+              {ELEVATION_PENDING_MESSAGE} La cuenta se creó como{' '}
+              <strong>{invite.createdRole ?? 'viewer'}</strong> y sin capacidades globales.
+            </p>
+            <p className="mt-1">
+              <Link
+                to={accessRequestPath(invite.pendingRequest.id)}
+                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Ver la solicitud
+              </Link>
+            </p>
           </Callout>
         )}
         {/* Se entrega el LINK, no el token pelado: con el token solo, quien lo recibe no sabe

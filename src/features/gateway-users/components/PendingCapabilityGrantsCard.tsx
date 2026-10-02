@@ -47,9 +47,9 @@ type Decision = { kind: 'approve' | 'reject'; grant: PendingCapabilityGrant }
  * Bandeja de capacidades puntuales sensibles que esperan una segunda aprobación (api-reference
  * §19). Solo la ve quien tiene `access.admin`: quien la monta lo decide, acá no se vuelve a preguntar.
  *
- * **`can_decide` y `blocked_reason` son del servidor.** La UI no recalcula quién pidió ni cuál es
- * el techo de quien mira: deshabilita ambos botones con el motivo a la vista y deja que el backend
- * sea la verdad al decidir. (Rechazar nunca da acceso y el backend no lo bloquea por auto-solicitud;
+ * **`can_decide` y `blocked_reason` son del servidor.** La UI no recalcula quién pidió ni qué
+ * puede asignar quien mira: deshabilita ambos botones con el motivo a la vista y deja que el
+ * backend sea la verdad al decidir. (Rechazar nunca da acceso y el backend no lo bloquea por auto-solicitud;
  * se deshabilita igual para que la fila hable con una sola voz. Quien pidió cancela desde la
  * sección de la persona, que es su lugar.)
  *
@@ -227,12 +227,12 @@ export function PendingCapabilityGrantsCard() {
       <section aria-labelledby={headingId}>
         <CardHeader>
           <h2 id={headingId} className="text-base font-semibold text-foreground">
-            Solicitudes pendientes
+            Capacidades puntuales
           </h2>
           <p className="text-sm text-muted-foreground">
-            Capacidades sensibles que pidió otra persona con access_admin. No rigen hasta que las
-            apruebes vos u otra persona con access_admin distinta de quien las pidió; si nadie las
-            decide, vencen a los 7 días.
+            Capacidades sensibles (las exclusivas de owner) o con excepción de emergencia que pidió
+            una persona con access_admin. No rigen hasta que las apruebe otra persona con
+            access_admin distinta de quien las pidió; si nadie las decide, vencen a los 7 días.
           </p>
         </CardHeader>
         <CardContent>
@@ -254,7 +254,7 @@ export function PendingCapabilityGrantsCard() {
               getRowId={(grant) => String(grant.id)}
               emptyState={
                 <EmptyState
-                  title="No hay solicitudes pendientes"
+                  title="No hay capacidades puntuales pendientes"
                   description="Cuando alguien pida una capacidad sensible para otra persona, aparece acá para que la decida un segundo administrador de accesos."
                 />
               }

@@ -404,7 +404,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
     expect(expandGrant(EXEC_SQL, CATALOG_FIXTURE)).toEqual([EXEC_SQL])
   })
 
-  it('las sensibles son las ocho de `_SENSITIVE_POLICY`, con `engine_users.credentials`', () => {
+  it('las sensibles son las 11 de `_SENSITIVE_POLICY` (C3), con `engine_users.credentials`', () => {
     const sensitive = grantsCatalog.filter((row) => row.sensitive).map((row) => row.id)
     expect([...sensitive].sort()).toEqual(
       [
@@ -416,6 +416,10 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
         'sql_console.execute',
         'engine_users.drop',
         'databases.drop',
+        // C3: sin el techo por tenencia, estas tres las otorgaba un solo administrador.
+        'blueprints.apply',
+        'schema_diff.execute',
+        'collation.execute',
       ].sort(),
     )
     // Elegir una contraseña trae la lectura de los usuarios del motor, y nada más.

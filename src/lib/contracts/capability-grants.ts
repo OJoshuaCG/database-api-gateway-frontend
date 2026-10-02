@@ -5,7 +5,8 @@ import { sodOverrideInSchema } from './separation-of-duties'
 /**
  * Capacidades PUNTUALES (`capability_grants`): una capacidad concreta otorgada sobre UN entorno o
  * UN servidor, aparte del rol (api-reference §19). Las no sensibles quedan activas al crearse; las
- * sensibles nacen `pending` y las decide una segunda persona con `access_admin`.
+ * sensibles (desde C3, las 11 exclusivas de `owner`) y las que llevan `sod_override` nacen
+ * `pending` y las decide una segunda persona con `access_admin` (v29 §9.6).
  *
  * Las respuestas siguen la regla del módulo de usuarios: los vocabularios (`status`, `capability`,
  * `source`) van `z.string()`, no `z.enum`, porque un valor nuevo del backend no debe tumbar el
@@ -68,6 +69,13 @@ export const capabilityGrantSchema = z.object({
   expires_at: z.string().nullish(),
   request_reason: z.string().nullish(),
   decision_reason: z.string().nullish(),
+  /**
+   * Break-glass de la separación de deberes que viaja con la alta (v29 §9.6): con él la capacidad
+   * nace `pending` aunque no sea sensible, y la excepción se escribe al aprobarla. `null` en el resto.
+   */
+  sod_override: z
+    .object({ reason: z.string(), expires_in_hours: z.number().int().nullish() })
+    .nullish(),
   /** Lecturas que la capacidad trae implícitas. */
   implies: z
     .array(z.string())
@@ -184,9 +192,12 @@ export type CapabilityGrantDecision = z.infer<typeof capabilityGrantDecisionSche
  * `detail.public_context.code` de las operaciones sobre capacidades puntuales. Todos son
  * `access.*`, así que `ApiError.gatewayUserContext` también se arma para ellos.
  *
- * `selfModificationForbidden` y `grantCeilingExceeded` ya viven en `GATEWAY_USER_ERROR_CODES`
- * (los comparte `PUT /access`); se repiten acá para que quien trabaja con capacidades puntuales
- * tenga el vocabulario completo en un solo lugar. Los valores son los mismos strings.
+ * `selfModificationForbidden` y `notAssignable` ya viven en `GATEWAY_USER_ERROR_CODES` (los
+ * comparte `PUT /access`); se repiten acá para que quien trabaja con capacidades puntuales tenga
+ * el vocabulario completo en un solo lugar. Los valores son los mismos strings.
+ *
+ * `access.grant_ceiling_exceeded` ya no está: el techo por tenencia se retiró en C3 (v29 §9.6) y
+ * lo reemplaza la asignación por función (`notAssignable`).
  */
 export const CAPABILITY_GRANT_ERROR_CODES = {
   selfModificationForbidden: 'access.self_modification_forbidden',
@@ -194,7 +205,8 @@ export const CAPABILITY_GRANT_ERROR_CODES = {
   grantUserInactive: 'access.grant_user_inactive',
   capabilityNotGrantable: 'access.capability_not_grantable',
   grantScopeNotFound: 'access.grant_scope_not_found',
-  grantCeilingExceeded: 'access.grant_ceiling_exceeded',
+  /** 409 del alta; también un `blocked_reason` de la bandeja (v29 §9.6). */
+  notAssignable: 'access.not_assignable',
   grantDuplicate: 'access.grant_duplicate',
   grantNotFound: 'access.grant_not_found',
   grantNotPending: 'access.grant_not_pending',

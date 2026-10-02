@@ -4,11 +4,13 @@ import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
+import { pendingElevationOf } from '@/lib/contracts'
 import {
   useAcceptGatewayUserInvite,
   useCreateGatewayUser,
   useGatewayUsers,
   useReplaceGatewayUserAccess,
+  useUpdateGatewayUser,
 } from './use-gateway-users'
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -111,6 +113,100 @@ describe('useReplaceGatewayUserAccess', () => {
     // `scope_grants: []` viaja EXPLÍCITO. El contrato obliga a mandarlo justamente para que un
     // formulario no pueda enviar un delta y borrar la otra mitad sin enterarse.
     expect(received).toEqual({ global_capabilities: ['access_admin'], scope_grants: [] })
+  })
+})
+
+/** El `pending_request` de un `202 access.elevation_pending` (v29 §9.3). */
+const pendingRequest = {
+  id: 12,
+  status: 'pending',
+  origin: 'create',
+  target: { id: 7, username: 'mlopez' },
+  requested_by: { id: 3, username: 'aa1' },
+  desired: { gateway_role: 'owner', global_capabilities: ['access_admin'], scope_grants: [] },
+  elevations: [
+    { kind: 'base_role', role: 'owner' },
+    { kind: 'global_capability', global_capability: 'access_admin' },
+  ],
+  sod_override: null,
+  created_at: '2026-10-02T10:00:00Z',
+  expires_at: '2026-10-09T10:00:00Z',
+  decided_by: null,
+  decided_at: null,
+  reason: null,
+}
+
+describe('202 access.elevation_pending', () => {
+  it('el alta devuelve la cuenta como quedó, la invitación y la solicitud pendiente', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json(
+          {
+            data: {
+              ...userFixture,
+              gateway_role: 'viewer',
+              global_capabilities: [],
+              invite_token: '1757462400.9f2c1a',
+              invite_expires_at: '2026-09-11T18:00:00Z',
+              code: 'access.elevation_pending',
+              pending_request: pendingRequest,
+            },
+            message: 'La elevación quedó pendiente.',
+          },
+          { status: 202 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useCreateGatewayUser(), { wrapper })
+    act(() => {
+      result.current.mutate({ username: 'mlopez', gateway_role: 'owner' })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    const data = result.current.data
+    if (!data) throw new Error('sin respuesta')
+    // La persona en `data` es el estado YA aplicado, no el pedido.
+    expect(data.gateway_role).toBe('viewer')
+    expect(data.invite_token).toBe('1757462400.9f2c1a')
+    expect(pendingElevationOf(data)?.id).toBe(12)
+    expect(pendingElevationOf(data)?.desired.gateway_role).toBe('owner')
+  })
+
+  it('un PATCH sin elevación responde como siempre y no trae solicitud', async () => {
+    server.use(
+      http.patch('http://localhost/api/v1/gateway-users/7', () =>
+        HttpResponse.json({ data: userFixture }),
+      ),
+    )
+    const { result } = renderHook(() => useUpdateGatewayUser(7), { wrapper })
+    act(() => {
+      result.current.mutate({ full_name: 'Marina' })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(pendingElevationOf(result.current.data ?? {})).toBeNull()
+  })
+
+  it('el PATCH que sube a owner devuelve 202 con la solicitud', async () => {
+    server.use(
+      http.patch('http://localhost/api/v1/gateway-users/7', () =>
+        HttpResponse.json(
+          {
+            data: {
+              ...userFixture,
+              code: 'access.elevation_pending',
+              pending_request: { ...pendingRequest, origin: 'update' },
+            },
+          },
+          { status: 202 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useUpdateGatewayUser(7), { wrapper })
+    act(() => {
+      result.current.mutate({ gateway_role: 'owner' })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.gateway_role).toBe('operator')
+    expect(pendingElevationOf(result.current.data ?? {})?.origin).toBe('update')
   })
 })
 

@@ -46,15 +46,45 @@ describe('GatewayUserFormModal — rol base', () => {
     expect(screen.queryByText(/acotar o ampliar/)).not.toBeInTheDocument()
   })
 
-  it('no ofrece un rol base por encima del de quien crea la cuenta', async () => {
+  it('sin techo (C3): ofrece owner aunque quien crea sea operator, marcado como elevación', async () => {
     mockActor('operator')
     renderWithProviders(<GatewayUserFormModal open onClose={() => undefined} />)
-    expect(
-      await screen.findByText(/Solo podés asignar un rol base hasta operator/),
-    ).toBeInTheDocument()
+    await screen.findByText(/Otorga 12 de 32/)
+    expect(screen.queryByText(/Solo podés asignar un rol base hasta/)).not.toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
     expect(screen.getByRole('option', { name: 'operator' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'owner' })).not.toBeInTheDocument()
+    const owner = screen.getByRole('option', { name: /^owner\s*Requiere segundo aprobador$/ })
+    await userEvent.click(owner)
+    // Elegido, dice qué va a pasar al crear: nace viewer y la invitación sale igual.
+    expect(
+      screen.getByText(/La cuenta se crea como viewer y la invitación se emite igual/),
+    ).toBeInTheDocument()
+  })
+
+  it('en la edición, owner solo se marca si la cuenta no lo es ya', async () => {
+    renderWithProviders(
+      <GatewayUserFormModal
+        open
+        user={{ ...user, id: 7, username: 'mlopez', gateway_role: 'operator' }}
+        currentUserId={1}
+        onClose={() => undefined}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: /^owner\s*Requiere segundo aprobador$/ }),
+    )
+    expect(screen.getByText(/el rol owner queda pendiente/)).toBeInTheDocument()
+  })
+
+  it('sobre una cuenta que ya es owner no marca nada', async () => {
+    renderWithProviders(
+      <GatewayUserFormModal open user={user} currentUserId={99} onClose={() => undefined} />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
+    expect(await screen.findByRole('option', { name: 'owner' })).toBeInTheDocument()
+    expect(screen.queryByText('Requiere segundo aprobador')).not.toBeInTheDocument()
   })
 })
 
@@ -127,7 +157,7 @@ describe('GatewayUserFormModal — separación de funciones', () => {
       />,
     )
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'owner' }))
+    await userEvent.click(await screen.findByRole('option', { name: /^owner/ }))
     expect(await screen.findByText('Este rol viola la separación de funciones')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))

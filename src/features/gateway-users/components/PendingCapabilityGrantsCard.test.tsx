@@ -200,10 +200,12 @@ describe('PendingCapabilityGrantsCard', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/ya no existe/)
   })
 
-  it('vacío: dice que no hay solicitudes', async () => {
+  it('vacío: dice que no hay capacidades pendientes', async () => {
     mockBackend([])
     renderWithProviders(<PendingCapabilityGrantsCard />)
-    expect((await screen.findAllByText('No hay solicitudes pendientes')).length).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText('No hay capacidades puntuales pendientes')).length,
+    ).toBeGreaterThan(0)
   })
 
   it('un 403 muestra el estado de acceso compartido, sin «Reintentar»', async () => {
