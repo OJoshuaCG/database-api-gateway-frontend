@@ -28,7 +28,7 @@ function errorToast(title: string, error: unknown): [string, string] {
 }
 
 /**
- * `enabled` lo apaga quien no tiene `gateway.admin` (o no está en la pestaña del listado): el
+ * `enabled` lo apaga quien no tiene `access.admin` (o no está en la pestaña del listado): el
  * pedido sería un 403 seguro, y además es ruido en el log de auditoría del backend.
  */
 export function useGatewayUsers(params: QueryParams, enabled = true) {

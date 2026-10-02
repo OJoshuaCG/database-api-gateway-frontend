@@ -3,9 +3,11 @@ import { capabilityDescriptorSchema, type CapabilityDescriptor } from '@/lib/con
 /**
  * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (generado en 0b43532 con
  * `capability_matrix()` y alineado con c5edee5 del backend, donde `collation.execute` pasó a ser
- * solo de `owner` y destructiva, y con la llegada de `engine_users.credentials`: solo `owner`,
- * divulga, con step-up y, otorgada suelta, sensible), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
- * del catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
+ * solo de `owner` y destructiva; con la llegada de `engine_users.credentials`: solo `owner`,
+ * divulga, con step-up y, otorgada suelta, sensible; y con la partición de `gateway.admin` (v29)
+ * en `access.admin`, solo de `access_admin`, y `policy.admin`, solo de `security_officer`), para
+ * tests. **Solo fixtures**: la UI nunca lee esto, lo deriva del catálogo real. Si el backend
+ * cambia un rol, este archivo se regenera desde ahí.
  */
 const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
   {
@@ -399,17 +401,30 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     global_capabilities: ['security_officer'],
   },
   {
-    id: 'gateway.admin',
-    module: 'gateway',
+    id: 'access.admin',
+    module: 'access',
     level: 'admin',
-    label: 'Administrar el gateway: crypto, usuarios y tokens',
+    label: 'Administrar usuarios del gateway, accesos, capacidades puntuales y tokens',
     mutates: true,
     discloses: false,
     requires_step_up: true,
     agent_allowed: false,
     scope_axis: 'global',
     roles: [],
-    global_capabilities: ['access_admin', 'security_officer'],
+    global_capabilities: ['access_admin'],
+  },
+  {
+    id: 'policy.admin',
+    module: 'policy',
+    level: 'admin',
+    label: 'Administrar la política del gateway: rotación del cifrado',
+    mutates: true,
+    discloses: false,
+    requires_step_up: true,
+    agent_allowed: false,
+    scope_axis: 'global',
+    roles: [],
+    global_capabilities: ['security_officer'],
   },
 ]
 

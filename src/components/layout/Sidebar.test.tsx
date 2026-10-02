@@ -11,7 +11,7 @@ function mockMe(me: Record<string, unknown>) {
 }
 
 describe('Sidebar — entradas según capacidades', () => {
-  it('sin `gateway.admin` esconde usuarios del gateway y tokens', async () => {
+  it('sin `access.admin` esconde usuarios del gateway y tokens', async () => {
     mockMe(meFixture({ role: 'operator' }))
     renderWithProviders(<Sidebar />)
     // La sesión llega asíncrona: hasta entonces falla abierto y muestra todo.
@@ -47,5 +47,15 @@ describe('Sidebar — entradas según capacidades', () => {
     expect(await screen.findByRole('link', { name: 'Usuarios del gateway' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tokens de agente' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Consola SQL' })).toBeInTheDocument()
+  })
+
+  it('security_officer no tiene `access.admin`: tampoco ve usuarios del gateway ni tokens', async () => {
+    mockMe(meFixture({ role: 'owner', global_capabilities: ['security_officer'] }))
+    renderWithProviders(<Sidebar />)
+    await screen.findByRole('link', { name: 'Servidores' })
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Usuarios del gateway' })).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('link', { name: 'Tokens de agente' })).not.toBeInTheDocument()
   })
 })

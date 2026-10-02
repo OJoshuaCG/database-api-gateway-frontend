@@ -152,7 +152,7 @@ const NAV_ITEMS: NavItem[] = [
     // poblaciones distintas. Sin el sufijo, las dos se leen igual y se entra a la equivocada.
     to: '/gateway-users',
     label: 'Usuarios del gateway',
-    anyOf: [CAPABILITIES.gatewayAdmin],
+    anyOf: [CAPABILITIES.accessAdmin],
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <circle cx="9" cy="8" r="3.2" strokeWidth="1.6" />
@@ -169,7 +169,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: '/api-tokens',
     label: 'Tokens de agente',
-    anyOf: [CAPABILITIES.gatewayAdmin],
+    anyOf: [CAPABILITIES.accessAdmin],
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <circle cx="7.5" cy="12" r="3.5" strokeWidth="1.6" />

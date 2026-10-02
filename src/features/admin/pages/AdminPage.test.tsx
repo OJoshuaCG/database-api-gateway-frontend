@@ -40,7 +40,7 @@ describe('AdminPage', () => {
     )
   })
 
-  it('sin `gateway.admin` no ofrece «Cifrado» y arranca en «Privilegios»', async () => {
+  it('sin `policy.admin` no ofrece «Cifrado» y arranca en «Privilegios»', async () => {
     mockBackend(meFixture({ role: 'owner' }))
     renderWithProviders(<AdminPage />, { route: '/admin' })
     await waitFor(() =>
@@ -53,12 +53,24 @@ describe('AdminPage', () => {
     expect(screen.getByRole('tablist')).toHaveAccessibleName('Secciones de administración')
   })
 
-  it('con `gateway.admin` arranca en «Cifrado»', async () => {
-    mockBackend(meFixture({ role: 'viewer', global_capabilities: ['access_admin'] }))
+  it('con `policy.admin` (security_officer) arranca en «Cifrado»', async () => {
+    mockBackend(meFixture({ role: 'viewer', global_capabilities: ['security_officer'] }))
     renderWithProviders(<AdminPage />, { route: '/admin' })
     expect(await screen.findByRole('tab', { name: 'Cifrado' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
+  })
+
+  it('access_admin no tiene `policy.admin`: no ofrece «Cifrado»', async () => {
+    mockBackend(meFixture({ role: 'owner', global_capabilities: ['access_admin'] }))
+    renderWithProviders(<AdminPage />, { route: '/admin' })
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Privilegios' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+    expect(screen.queryByRole('tab', { name: 'Cifrado' })).not.toBeInTheDocument()
   })
 })

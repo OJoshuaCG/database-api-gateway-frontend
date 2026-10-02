@@ -55,15 +55,11 @@ export function GatewayUsersPage() {
   // La pestaña vive en la URL (`?tab=roles`), igual que en `AdminPage`: los selectores de rol
   // enlazan directo a la matriz, y un valor desconocido cae en el listado.
   //
-  // Sin `gateway.admin` el listado es un 403 seguro, así que sin `?tab` se entra a «Roles y
+  // Sin `access.admin` el listado es un 403 seguro, así que sin `?tab` se entra a «Roles y
   // capacidades», que sí le sirve (es `self.read`). La pestaña por defecto no se escribe en la URL.
   const [searchParams, setSearchParams] = useSearchParams()
-  const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  const canAdmin = useCapabilities().can(CAPABILITIES.accessAdmin)
   const defaultTab: Tab = canAdmin ? 'users' : 'roles'
-  // La bandeja es solo de `access_admin` (un `security_officer` también tiene `gateway.admin` y
-  // recibiría un 403 seguro). Se pide aun fuera de su pestaña: el recuento de la pestaña es lo que
-  // la hace descubrible. Sin sesión cargada no se pide (`can()` falla abierto).
-  const isAccessAdmin = useCapabilities().globalCapabilities.includes('access_admin')
   const tabParam = searchParams.get('tab')
   const tab: Tab = isTab(tabParam) ? tabParam : defaultTab
   const setTab = (next: Tab) => {
@@ -76,7 +72,11 @@ export function GatewayUsersPage() {
   }
 
   const { admin } = useSession()
-  const pendingCount = usePendingCapabilityGrants(admin !== null && isAccessAdmin).data?.length
+  // La bandeja también es `access.admin` (la tiene solo `access_admin`). Se pide aun fuera de su
+  // pestaña: el recuento de la pestaña es lo que la hace descubrible. Sin sesión cargada ni se
+  // ofrece ni se pide: `can()` falla abierto y sería un 403 seguro para quien no administra accesos.
+  const canReviewGrants = admin !== null && canAdmin
+  const pendingCount = usePendingCapabilityGrants(canReviewGrants).data?.length
   const [page, setPage] = useState(1)
   const [size, setSize] = useState<number>(PAGINATION.defaultSize)
   const [formOpen, setFormOpen] = useState(false)
@@ -91,7 +91,7 @@ export function GatewayUsersPage() {
   )
   const reissue = useReissueGatewayUserInvite()
   const sessionUserId = admin?.id ?? null
-  // El listado y sus acciones van detrás de `gateway.admin`; «Roles y capacidades» no (es
+  // El listado y sus acciones van detrás de `access.admin`; «Roles y capacidades» no (es
   // `self.read`), así que la pestaña sigue sirviendo a quien solo quiere saber qué otorga un rol.
   const forbidden = !canAdmin || isAccessForbidden(error)
 
@@ -249,14 +249,14 @@ export function GatewayUsersPage() {
         role="tablist"
         aria-label="Secciones de usuarios del gateway"
       >
-        {/* Sin `gateway.admin` la pestaña no se ofrece (como «Cifrado» en Administración): un
+        {/* Sin `access.admin` la pestaña no se ofrece (como «Cifrado» en Administración): un
             enlace directo a `?tab=users` muestra el 403 compartido. */}
         {canAdmin && (
           <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
             Usuarios
           </TabButton>
         )}
-        {isAccessAdmin && (
+        {canReviewGrants && (
           <TabButton active={tab === 'pending'} onClick={() => setTab('pending')}>
             Solicitudes pendientes
             {pendingCount ? (
@@ -274,7 +274,7 @@ export function GatewayUsersPage() {
       {tab === 'roles' ? (
         <RolesCapabilitiesPanel />
       ) : tab === 'pending' ? (
-        isAccessAdmin ? (
+        canReviewGrants ? (
           <PendingCapabilityGrantsCard />
         ) : admin !== null ? (
           <ForbiddenState title="No tenés acceso a las solicitudes pendientes" />

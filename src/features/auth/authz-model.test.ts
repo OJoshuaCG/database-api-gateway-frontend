@@ -59,18 +59,20 @@ describe('derivación de roles y globales desde el catálogo', () => {
     expect(owner).toHaveLength(27)
     expect(viewer.every((id) => operator.includes(id))).toBe(true)
     expect(operator.every((id) => owner.includes(id))).toBe(true)
-    // `owner` NO tiene las tres de política: van en las globales.
-    expect(owner).not.toContain('gateway.admin')
+    // `owner` NO tiene las de política ni la de accesos: van en las globales.
+    expect(owner).not.toContain('access.admin')
+    expect(owner).not.toContain('policy.admin')
     expect(owner).not.toContain('servers.admin')
   })
 
   it('las globales salen de `global_capabilities`', () => {
-    expect(globalCapabilityIds(catalog, 'access_admin')).toEqual(['gateway.admin'])
+    // `access_admin` es EXACTAMENTE `access.admin`, y los dos conjuntos son disjuntos (v29).
+    expect(globalCapabilityIds(catalog, 'access_admin')).toEqual(['access.admin'])
     expect(globalCapabilityIds(catalog, 'security_officer')).toEqual([
       'servers.admin',
       'catalogs.write',
       'environments.write',
-      'gateway.admin',
+      'policy.admin',
     ])
     expect(catalogRoles(catalog)).toEqual(['viewer', 'operator', 'owner'])
     expect(catalogGlobalCapabilities(catalog)).toEqual(['access_admin', 'security_officer'])
@@ -217,7 +219,8 @@ describe('capacidades por destino', () => {
     })
     const atProd = capabilitiesAt(access, { serverId: 9, environmentId: PROD }, environments)
     expect(atProd).toContain('servers.admin')
-    expect(atProd).toContain('gateway.admin')
+    expect(atProd).toContain('policy.admin')
+    expect(atProd).not.toContain('access.admin')
     expect(atProd).not.toContain('databases.drop')
   })
 
@@ -500,7 +503,10 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
   })
 
   it.each([
+    // Retirada en v29: un `gateway.admin` heredado en una fila no puede acuñar nada.
     'gateway.admin',
+    'access.admin',
+    'policy.admin',
     'environments.write',
     'self.read',
     'no.existe',
@@ -549,7 +555,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
     const input = withGrants([cg(APPLY, 'environment', PROD)], {
       globalCapabilities: ['access_admin'],
     })
-    expect(has(capabilitiesAt(input, devTarget, environments), 'gateway.admin')).toBe(true)
+    expect(has(capabilitiesAt(input, devTarget, environments), 'access.admin')).toBe(true)
     expect(effectiveRoleAt(input, devTarget, environments)).toBe('viewer')
   })
 
@@ -560,7 +566,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
         const input = withGrants(
           [
             cg(EXEC_SQL, 'server', 9, { grantId: 7 }),
-            cg('gateway.admin', 'server', 9, { grantId: 8 }),
+            cg('access.admin', 'server', 9, { grantId: 8 }),
           ],
           {
             baseRole,
@@ -581,7 +587,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
           [EXEC_SQL, null],
           [HISTORY, EXEC_SQL],
         ])
-        // La fila no otorgable (`gateway.admin`) ni aparece como puntual.
+        // La fila no otorgable (`access.admin`) ni aparece como puntual.
         expect(grantRows.every((row) => row.grantId === 7)).toBe(true)
       },
     )

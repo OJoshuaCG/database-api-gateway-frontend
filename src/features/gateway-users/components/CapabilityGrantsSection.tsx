@@ -97,8 +97,8 @@ interface CapabilityGrantsSectionProps {
  * «Capacidades puntuales» de la pantalla de accesos: otorgar UNA capacidad sobre UN entorno o
  * servidor sin tocar el rol (api-reference §19), y ver, revocar o cancelar las que ya hay.
  *
- * **Se monta solo para `access_admin`**: el listado es de ese rol y pedirlo con otro sería un 403
- * seguro. Quien monta esto decide; acá no se vuelve a preguntar, así que las consultas se disparan
+ * **Se monta solo con `access.admin`** (la tiene solo `access_admin`): pedir el listado sin ella
+ * sería un 403 seguro. Quien monta esto decide; acá no se vuelve a preguntar, así que las consultas se disparan
  * apenas se monta.
  *
  * **Es inmediato, no pasa por «Guardar accesos».** `PUT /access` no toca las capacidades puntuales

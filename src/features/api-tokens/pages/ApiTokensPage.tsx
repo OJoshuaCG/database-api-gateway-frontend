@@ -30,10 +30,10 @@ export function ApiTokensPage() {
   const [issued, setIssued] = useState<ApiTokenCreatedOut | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenOut | null>(null)
 
-  // Todo el módulo va detrás de `gateway.admin`. Sin ella la pantalla no ofrece emitir ni revocar
+  // Todo el módulo va detrás de `access.admin`. Sin ella la pantalla no ofrece emitir ni revocar
   // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403. Por eso el
   // listado ni se pide: sería un 403 seguro.
-  const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  const canAdmin = useCapabilities().can(CAPABILITIES.accessAdmin)
   // Antes de que llegue la sesión `can()` falla abierto: se espera para no pedir un 403 seguro.
   const { admin } = useSession()
   const { data, isLoading, isFetching, isError, error, refetch } = useApiTokens(

@@ -21,10 +21,13 @@ describe('scope-readiness: F-17', () => {
 })
 
 describe('capacidades', () => {
-  it('incluye environments.write y engine_users.credentials (31 en total)', () => {
+  it('incluye environments.write, engine_users.credentials y la partición de gateway.admin (32 en total)', () => {
     expect(CAPABILITIES.environmentsWrite).toBe('environments.write')
     expect(CAPABILITIES.engineUsersCredentials).toBe('engine_users.credentials')
-    expect(Object.keys(CAPABILITIES)).toHaveLength(31)
+    expect(CAPABILITIES.accessAdmin).toBe('access.admin')
+    expect(CAPABILITIES.policyAdmin).toBe('policy.admin')
+    expect(Object.values(CAPABILITIES)).not.toContain('gateway.admin')
+    expect(Object.keys(CAPABILITIES)).toHaveLength(32)
   })
 })
 

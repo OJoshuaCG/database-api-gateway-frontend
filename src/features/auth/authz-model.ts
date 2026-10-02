@@ -754,8 +754,8 @@ export const ROLE_PURPOSES: Record<string, string> = {
   viewer: 'Consulta sin cambiar nada',
   operator: 'Crea y edita sin borrar ni ejecutar cambios de esquema',
   owner: 'Opera todo en su alcance, incluido lo destructivo',
-  access_admin: 'Administra usuarios y accesos',
-  security_officer: 'Administra servidores, catálogos y política',
+  access_admin: 'Administra usuarios, accesos, capacidades puntuales y tokens',
+  security_officer: 'Administra servidores, catálogos, entornos, el acceso de agentes y el cifrado',
 }
 
 /** Nombre legible de cada capacidad global; el id va aparte, en monoespaciada. */
@@ -807,7 +807,9 @@ export const MODULE_LABELS: Record<string, string> = {
   sql_console: 'Consola SQL',
   catalogs: 'Catálogos',
   environments: 'Entornos',
-  gateway: 'Administración del gateway',
+  // Eran un solo módulo (`gateway`) hasta que `gateway.admin` se partió en dos (v29).
+  access: 'Accesos del gateway',
+  policy: 'Política del gateway',
 }
 
 export function moduleLabel(module: string): string {

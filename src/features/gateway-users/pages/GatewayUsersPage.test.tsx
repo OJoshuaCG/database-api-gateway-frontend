@@ -94,7 +94,7 @@ describe('GatewayUsersPage — sin acceso', () => {
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
   })
 
-  it('sin `gateway.admin` entra a «Roles y capacidades» y no ofrece el alta', async () => {
+  it('sin `access.admin` entra a «Roles y capacidades» y no ofrece el alta', async () => {
     let listRequests = 0
     server.use(
       http.get('http://localhost/api/v1/auth/me', () =>
@@ -118,14 +118,14 @@ describe('GatewayUsersPage — sin acceso', () => {
         'true',
       ),
     )
-    expect(await screen.findByText('Otorga 12 de 31')).toBeInTheDocument()
+    expect(await screen.findByText('Otorga 12 de 32')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
     // Ni se ofrece la pestaña (como «Cifrado» en Administración) ni se pide el listado.
     expect(screen.queryByRole('tab', { name: 'Usuarios' })).not.toBeInTheDocument()
     expect(listRequests).toBe(0)
   })
 
-  it('sin `gateway.admin`, pedir el listado a mano muestra el estado de acceso', async () => {
+  it('sin `access.admin`, pedir el listado a mano muestra el estado de acceso', async () => {
     server.use(
       http.get('http://localhost/api/v1/auth/me', () =>
         HttpResponse.json({
@@ -218,11 +218,17 @@ describe('GatewayUsersPage — bandeja de solicitudes pendientes', () => {
     expect(screen.getByRole('heading', { name: 'Solicitudes pendientes' })).toBeInTheDocument()
   })
 
-  it('sin access_admin no hay pestaña ni se pide la bandeja', async () => {
+  it('security_officer no tiene `access.admin`: ni listado ni bandeja, y entra a «Roles y capacidades»', async () => {
     const requests = mockAs(['security_officer'])
     renderWithProviders(<GatewayUsersPage />)
 
-    await screen.findByRole('tab', { name: 'Usuarios' })
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Roles y capacidades' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+    expect(screen.queryByRole('tab', { name: 'Usuarios' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /Solicitudes pendientes/ })).not.toBeInTheDocument()
     expect(requests()).toBe(0)
   })

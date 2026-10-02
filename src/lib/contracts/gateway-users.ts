@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * Usuarios del GATEWAY: las identidades que se autentican contra este servicio (addendum de
- * identidades §2). Todo el módulo va detrás de `gateway.admin` salvo aceptar la invitación, que
+ * identidades §2). Todo el módulo va detrás de `access.admin` salvo aceptar la invitación, que
  * es público.
  *
  * ⚠️ NO CONFUNDIR con los usuarios del MOTOR, que viven en `contracts/engine-users.ts` y

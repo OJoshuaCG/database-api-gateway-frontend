@@ -45,7 +45,7 @@ type Decision = { kind: 'approve' | 'reject'; grant: PendingCapabilityGrant }
 
 /**
  * Bandeja de capacidades puntuales sensibles que esperan una segunda aprobación (api-reference
- * §19). Solo la ve `access_admin`: quien la monta lo decide, acá no se vuelve a preguntar.
+ * §19). Solo la ve quien tiene `access.admin`: quien la monta lo decide, acá no se vuelve a preguntar.
  *
  * **`can_decide` y `blocked_reason` son del servidor.** La UI no recalcula quién pidió ni cuál es
  * el techo de quien mira: deshabilita ambos botones con el motivo a la vista y deja que el backend

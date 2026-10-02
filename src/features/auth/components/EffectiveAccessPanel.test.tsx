@@ -253,7 +253,7 @@ function serverState(
           scope_id: 3,
           scope_name: 'Producción',
         },
-        { capability: 'gateway.admin', source: 'global' },
+        { capability: 'access.admin', source: 'global' },
         {
           capability: 'blueprints.apply',
           source: 'capability_grant',

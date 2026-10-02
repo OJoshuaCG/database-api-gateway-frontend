@@ -9,12 +9,13 @@ el **flujo del frontend**). Cobertura endpoint → pantalla en [`api-coverage.md
 
 ## Quién hace qué
 
-- **Solo `access_admin`** otorga, revoca, aprueba y rechaza. `security_officer` tiene
-  `gateway.admin` pero recibe 403 seguro: sus pantallas no se montan ni se piden.
+- **Solo `access_admin`** otorga, revoca, aprueba y rechaza: todo va detrás de `access.admin`, que
+  tiene solo esa global (v29). `security_officer` no la tiene: sus pantallas no se montan ni se
+  piden.
 - **Nadie se toca a sí mismo**: no se otorga ni se revoca capacidades (409
   `access.self_modification_forbidden`). La sección sale deshabilitada con el motivo a la vista.
 - **Techo**: quien otorga o aprueba tiene que tener la capacidad en ese alcance. Las capacidades
-  del eje global (`servers.admin`, `gateway.admin`…) nunca se otorgan: el selector solo ofrece las
+  del eje global (`servers.admin`, `access.admin`, `policy.admin`…) nunca se otorgan: el selector solo ofrece las
   filas del catálogo con `grantable`.
 - **Escribir/ejecutar trae la lectura** de su módulo (`implies`); la UI lo dice.
 

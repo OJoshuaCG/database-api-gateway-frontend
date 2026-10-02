@@ -282,18 +282,6 @@ describe('GatewayUserAccessPage', () => {
     expect(document.getElementById(anchor)).toHaveTextContent('Producción · owner')
   })
 
-  it('«Capacidades puntuales» es solo de access_admin: otro rol no la ve ni dispara sus consultas', async () => {
-    const officer = meFixture({ role: 'operator', global_capabilities: ['security_officer'] })
-    const { grantsRequests } = mockBackend(officer)
-    renderAt()
-    await screen.findByRole('heading', { level: 2, name: 'Acceso efectivo al guardar' })
-    expect(
-      screen.queryByRole('heading', { level: 2, name: 'Capacidades puntuales' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Otorgar capacidad' })).not.toBeInTheDocument()
-    expect(grantsRequests()).toBe(0)
-  })
-
   it('para access_admin la sección pide las capacidades de ESA persona y no depende de «Guardar accesos»', async () => {
     const { grantsRequests } = mockBackend()
     renderAt()
@@ -308,16 +296,19 @@ describe('GatewayUserAccessPage', () => {
     expect(screen.queryByText('Vista previa: así quedaría al guardar')).not.toBeInTheDocument()
   })
 
-  it('el acceso efectivo del servidor solo se pide a quien es access_admin', async () => {
+  it('security_officer no tiene `access.admin`: no abre la página ni pide el usuario, sus puntuales ni su acceso efectivo', async () => {
     const officer = meFixture({ role: 'operator', global_capabilities: ['security_officer'] })
-    const { effectiveRequests } = mockBackend(officer)
+    const backend = mockBackend(officer)
     renderAt()
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Acceso efectivo al guardar' }),
+      await screen.findByText('No tenés acceso a los accesos de los usuarios del gateway'),
     ).toBeInTheDocument()
-    expect((await screen.findAllByText('Producción · owner')).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Las capacidades puntuales no se incluyen acá/)).toBeInTheDocument()
-    expect(effectiveRequests()).toBe(0)
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Capacidades puntuales' }),
+    ).not.toBeInTheDocument()
+    expect(backend.detailRequests()).toBe(0)
+    expect(backend.grantsRequests()).toBe(0)
+    expect(backend.effectiveRequests()).toBe(0)
   })
 
   it('al cambiar el destino baja el rol al techo, guarda el estado COMPLETO y vuelve al listado', async () => {
@@ -387,7 +378,7 @@ describe('GatewayUserAccessPage', () => {
     )
   })
 
-  it('sin `gateway.admin` muestra el estado de acceso compartido y no pide el usuario', async () => {
+  it('sin `access.admin` muestra el estado de acceso compartido y no pide el usuario', async () => {
     const backend = mockBackend(meFixture({ role: 'owner' }))
     renderAt()
     expect(

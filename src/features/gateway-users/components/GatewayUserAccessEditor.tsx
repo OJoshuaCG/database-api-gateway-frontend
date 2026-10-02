@@ -30,6 +30,7 @@ import {
 import { useSelectableEnvironments } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import {
+  CAPABILITIES,
   GATEWAY_ROLES,
   GLOBAL_CAPABILITIES,
   SCOPE_TYPES,
@@ -127,9 +128,9 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
   // Techo del ACTOR (quien edita), no de la persona editada: ver `grant-ceiling.ts`.
   const actor = useCapabilities()
   const actorGlobals = new Set(actor.globalCapabilities)
-  // `GET …/effective-access` es SOLO de `access_admin` (un `security_officer` recibiría un 403 seguro):
-  // sin esa global no se pide, y el panel cae al cálculo del navegador.
-  const canReadEffectiveAccess = actorGlobals.has('access_admin')
+  // `GET …/effective-access` es `access.admin`, que tiene solo `access_admin` (un `security_officer`
+  // recibiría un 403 seguro): sin esa capacidad no se pide, y el panel cae al cálculo del navegador.
+  const canReadEffectiveAccess = actor.can(CAPABILITIES.accessAdmin)
   const effectiveAccess = useEffectiveAccess(user.id, canReadEffectiveAccess)
   const effectiveHeading = canReadEffectiveAccess ? 'Acceso efectivo' : 'Acceso efectivo al guardar'
   const originalGlobals = new Set(user.global_capabilities)
@@ -612,8 +613,8 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
           </Card>
 
           {/* ── Capacidades puntuales ────────────────────────────────────────
-              Solo para `access_admin` (el listado es suyo) y con sus propios endpoints: no pasan
-              por «Guardar accesos». Quien no es `access_admin` no ve la sección; el panel de
+              Solo con `access.admin` (el listado es suyo) y con sus propios endpoints: no pasan
+              por «Guardar accesos». Quien no la tiene no ve la sección; el panel de
               acceso efectivo ya le avisa que las puntuales no se incluyen. */}
           {canReadEffectiveAccess && (
             <CapabilityGrantsSection

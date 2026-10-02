@@ -244,7 +244,7 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 31 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 32 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
@@ -309,11 +309,18 @@ export const CAPABILITIES = {
   /**
    * Solo `security_officer`: crear, editar y borrar entornos, abrir bases a agentes y reclasificar
    * una base. Sin nadie con `security_officer` esas escrituras quedan BLOQUEADAS (no hay
-   * fallback a `gateway.admin`).
+   * fallback a `access.admin`).
    */
   environmentsWrite: 'environments.write',
 
-  gatewayAdmin: 'gateway.admin',
+  /**
+   * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens
+   * de API y el reporte de preparación de alcances. Junto con `policyAdmin` reemplaza a la vieja
+   * `gateway.admin`, que tenían las dos globales: partida en dos, los conjuntos son disjuntos.
+   */
+  accessAdmin: 'access.admin',
+  /** Solo `security_officer`: la política del gateway (hoy, la rotación del cifrado). */
+  policyAdmin: 'policy.admin',
 } as const
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES]
@@ -415,7 +422,7 @@ export const scopeReadinessServerSchema = z.object({
 export type ScopeReadinessServer = z.infer<typeof scopeReadinessServerSchema>
 
 /**
- * `GET /authz/scope-readiness` (§8, detrás de `gateway.admin`) — **se consulta ANTES de otorgar el
+ * `GET /authz/scope-readiness` (§8, detrás de `access.admin`) — **se consulta ANTES de otorgar el
  * primer acceso por alcance.**
  *
  * Por qué existe, que es lo contraintuitivo: una base sin `environment_id` **no** resuelve al

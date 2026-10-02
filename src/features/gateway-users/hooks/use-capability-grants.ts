@@ -68,8 +68,8 @@ function useRefreshStale() {
 }
 
 /**
- * Historial de capacidades puntuales de una persona. `enabled` lo apaga quien no es `access_admin`:
- * el listado es solo para ese rol y pedirlo sería un 403 seguro.
+ * Historial de capacidades puntuales de una persona. `enabled` lo apaga quien no tiene
+ * `access.admin` (solo de `access_admin`): pedirlo sería un 403 seguro.
  */
 export function useCapabilityGrants(
   userId: number,
@@ -83,7 +83,7 @@ export function useCapabilityGrants(
   })
 }
 
-/** Acceso efectivo de otra persona, con procedencia. Solo `access_admin`. */
+/** Acceso efectivo de otra persona, con procedencia. Solo con `access.admin`. */
 export function useEffectiveAccess(userId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.capabilityGrants.effective(userId),
@@ -92,7 +92,7 @@ export function useEffectiveAccess(userId: number, enabled = true) {
   })
 }
 
-/** Bandeja de solicitudes pendientes (todas las personas). Solo `access_admin`. */
+/** Bandeja de solicitudes pendientes (todas las personas). Solo con `access.admin`. */
 export function usePendingCapabilityGrants(enabled = true) {
   return useQuery({
     queryKey: queryKeys.capabilityGrants.pending(),

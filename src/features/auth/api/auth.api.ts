@@ -52,7 +52,7 @@ export function getCapabilityCatalog(signal?: AbortSignal): Promise<CapabilityDe
 }
 
 /**
- * `GET /authz/scope-readiness` (v23 §8, detrás de `gateway.admin`) — se consulta ANTES de otorgar
+ * `GET /authz/scope-readiness` (v23 §8, detrás de `access.admin`) — se consulta ANTES de otorgar
  * el primer acceso por alcance, porque una base sin entorno resuelve al entorno MÁS PROTEGIDO y no
  * al default.
  */

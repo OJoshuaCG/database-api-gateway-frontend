@@ -14,14 +14,14 @@ import { isOwnAccount } from '../self-access'
  *
  * Era un modal y dejó de entrar: capacidades globales, permisos por alcance y el acceso efectivo
  * a la vez eran un diálogo con scroll interminable. Lee al usuario con `GET /gateway-users/{id}`
- * (`gateway.admin`), así que la URL sirve también escrita a mano o recargada.
+ * (`access.admin`), así que la URL sirve también escrita a mano o recargada.
  */
 export function GatewayUserAccessPage() {
   const params = useParams()
   const userId = Number(params.userId)
   const isValidId = Number.isInteger(userId) && userId > 0
   const { admin, isLoading: sessionLoading } = useSession()
-  const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
+  const canAdmin = useCapabilities().can(CAPABILITIES.accessAdmin)
   // Antes de la sesión `can()` falla abierto: sin esperarla, el detalle se pediría igual y sería
   // un 403 seguro para quien no administra accesos.
   const user = useGatewayUser(userId, isValidId && admin !== null && canAdmin)

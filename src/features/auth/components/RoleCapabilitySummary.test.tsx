@@ -7,7 +7,7 @@ import { RoleCapabilitySummary } from './RoleCapabilitySummary'
 describe('RoleCapabilitySummary', () => {
   it('dice cuántas otorga y nombra primero lo destructivo que NO incluye', () => {
     renderWithProviders(<RoleCapabilitySummary role="operator" catalog={CATALOG_FIXTURE} />)
-    const text = screen.getByText(/Otorga 16 de 31/).textContent ?? ''
+    const text = screen.getByText(/Otorga 16 de 32/).textContent ?? ''
     expect(text).toContain('No incluye:')
     // Lo que no se deshace va primero: borrar usuarios del motor y bases son de `owner`.
     expect(text).toContain('Borrar usuarios del motor')

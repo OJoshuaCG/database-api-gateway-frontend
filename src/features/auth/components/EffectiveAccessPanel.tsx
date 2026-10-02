@@ -59,8 +59,8 @@ interface EffectiveAccessPanelProps {
   capabilityGrants?: readonly CapabilityGrantInput[]
   /**
    * Lo que rige hoy, según el servidor, que es la AUTORIDAD: con esto el panel lo muestra con su
-   * procedencia. Sin esto el panel solo calcula en el navegador (`self`, o quien no es
-   * `access_admin` y no puede leer el acceso efectivo).
+   * procedencia. Sin esto el panel solo calcula en el navegador (`self`, o quien no tiene
+   * `access.admin` y no puede leer el acceso efectivo).
    */
   serverAccess?: ServerAccessState
   /**
