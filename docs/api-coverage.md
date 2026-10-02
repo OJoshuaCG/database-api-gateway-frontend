@@ -97,7 +97,7 @@ Credenciales portadoras para procesos automáticos. Todo detrás de `access.admi
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | v23.1 §3 | `GET /api-tokens` | ✅ | `ApiTokensPage` (`/api-tokens`), paginado |
-| v23.1 §3 | `POST /api-tokens` | ✅ | `ApiTokenFormModal` → entrega el bearer en `OneTimeSecretPanel`. Límite 10/min. La columna «Permisos» muestra los scopes **efectivos** que devolvió el servidor, nunca los pedidos: intersecta con el techo de agente |
+| v23.1 §3 | `POST /api-tokens` | ✅ | `ApiTokenFormModal` → entrega el bearer en `OneTimeSecretPanel`. Límite 10/min. La columna «Permisos» muestra los scopes **efectivos** que devolvió el servidor, nunca los pedidos: intersecta con el techo de agente. El formulario ofrece como chips los scopes `agent_allowed` del catálogo (los 7 de v30); si llega un 422 `scope_not_allowed`, manda el techo que informó el servidor |
 | v23.1 §3 | `DELETE /api-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer |
 
 ## Auditoría (`/audit-log`)
@@ -117,6 +117,9 @@ en [`audit.md`](audit.md).
 |---|---|---|---|
 | 6–10 | CRUD de `/servers` | ✅ | `ServersPage` (`/servers`) + `ServerDetailPage` (`/servers/:serverId`); borrado con `ConfirmDialog`. En el `PATCH`, re-apuntar el servidor —otro host, puerto o motor, o un `ssl_mode` más débil que uno desde `require`— exige reenviar `root_password` (422 `server.credential_required_for_rebind`, con `public_context.fields`). `ServerForm` lo anticipa con la misma regla (`server-rebind.ts`): la contraseña pasa a obligatoria en vivo con el porqué y los campos cambiados, y si el 422 llega igual la marca y la enfoca. Decide el backend |
 | 11 | `POST /{id}/test-connection` 🔌 | ✅ | `ServerDetailPage` → "Probar conexión" (muestra `dialect` + `server_version`) |
+| v30 | `POST /{id}/test-connection?credential=readonly` 🔌 | ✅ | `ReadonlyCredentialPanel` (pestaña «Información», bloque «Acceso de agentes (MCP)») → «Verificar». Corre la sonda negativa; `servers.admin` + step-up. El 422 `server.readonly_probe_failed` lista `public_context.violations` legibles para el DBA (`readonly-credential.ts`); el 409 `server.readonly_credential_missing` tiene copy propio |
+| v30 | `PUT /{id}/readonly-credential` | ✅ | `ReadonlyCredentialModal` (alta o reemplazo, `servers.admin` + step-up). La contraseña no queda en caché: la mutación usa `gcTime: 0` y el modal la resetea. Reemplazar borra la verificación |
+| v30 | `DELETE /{id}/readonly-credential` | ✅ | `ReadonlyCredentialPanel` → «Quitar» con `ConfirmDialog`. Estado del panel (`readonlyCredentialState`): sin credencial / sin verificar / verificada / vencida a los 30 días, desde `has_readonly_credential` y `readonly_verified_at` de `ServerOut` |
 | 12 | `GET /{id}/databases` 🔌 | ✅ | Tab "Bases de datos" → `ServerDatabasesPanel` (cruzado con el inventario; una base gestionada tiene las mismas acciones que en `ManagedDatabasesPage`, vía `DatabaseRowActions`, y «Adoptar» abre `AdoptDatabaseModal` en el sitio) + tab "Introspección" + selectores de los asistentes + **el selector de bases de las pantallas de permisos**: `DatabaseMultiSelect` (elegir N bases al otorgar) y `ServerDatabaseCombobox` (la BD de "Permisos efectivos" en PostgreSQL). Sustituyó a teclear el nombre a mano —lista las bases del motor en vivo, adoptadas o no— y los dos controles caen a captura manual si la introspección falla |
 | 14 | `GET .../tables` 🔌 | ✅ | `IntrospectionExplorer` |
 | 15 | `GET .../tables/{t}/schema` 🔌 | ✅ | `IntrospectionExplorer` (columnas, PK, índices, FKs) |

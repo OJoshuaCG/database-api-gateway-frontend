@@ -17,6 +17,15 @@ export const serverOutSchema = z.object({
   is_active: z.boolean(),
   notes: z.string().nullable().optional(),
   has_root_password: z.boolean(),
+  /**
+   * Credencial de SOLO LECTURA que usa el MCP para leer el catálogo del motor (api-reference-v30).
+   * Ni el usuario ni la contraseña salen nunca: solo si existe y cuándo pasó la sonda negativa.
+   * Opcional y no obligatorio: un backend anterior a v30 no los manda, y eso equivale a «sin
+   * credencial», no a una respuesta rota. La UI lee la ausencia como `false`/`null`.
+   */
+  has_readonly_credential: z.boolean().optional(),
+  /** UTC sin zona. `null` = sin verificar: el MCP no la usa hasta que la sonda pase. */
+  readonly_verified_at: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -45,5 +54,20 @@ export const connectionInfoSchema = z.object({
   ok: z.boolean(),
   dialect: z.string(),
   server_version: z.string().nullable().optional(),
+  /** Solo con `?credential=readonly`: el instante en que la sonda negativa quedó verificada. */
+  readonly_verified_at: z.string().nullable().optional(),
 })
 export type ConnectionInfo = z.infer<typeof connectionInfoSchema>
+
+/**
+ * `PUT /servers/{id}/readonly-credential` (v30). El backend lo declara `extra="forbid"`: un campo
+ * de más es 422, así que el cuerpo lleva exactamente estos dos.
+ */
+export const readonlyCredentialInSchema = z.object({
+  username: z.string().trim().min(1, 'Requerido').max(128, 'Máximo 128 caracteres'),
+  password: z.string().min(1, 'Requerido'),
+})
+export type ReadonlyCredentialIn = z.infer<typeof readonlyCredentialInSchema>
+
+/** Con qué credencial corre `test-connection`: la pseudo-root (default) o la de solo lectura. */
+export type TestConnectionCredential = 'root' | 'readonly'

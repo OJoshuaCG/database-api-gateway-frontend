@@ -380,6 +380,16 @@ export class ApiError extends Error {
    */
   readonly staleOverrides?: string[]
   /**
+   * Motivos por los que la credencial de solo lectura de un servidor NO es de solo lectura
+   * (`public_context.violations` del 422 `server.readonly_probe_failed`, api-reference-v30): el
+   * grant de más que el DBA tiene que quitar (`privilege:insert`, `grant_option`, …).
+   *
+   * Campo propio y no `violations`: aquel es el layout manual de un snapshot, viaja en `context`
+   * (solo en desarrollo) y tiene otra forma. Este viaja en `public_context`, en todo entorno, y
+   * sin él el operador sabe que la sonda falló pero no qué corregir.
+   */
+  readonly readonlyProbeViolations?: string[]
+  /**
    * Bases que quedaron a mitad de una aplicación de esta versión (409
    * `model_migration.partial_application`). Este 409 **no tiene override**: su salida es
    * reintentar el apply sobre la base que nombra, o limpiarlo con `stamp`.
@@ -495,6 +505,7 @@ export class ApiError extends Error {
     blockingDatabases?: ApiBlockingDatabase[]
     overrideAvailable?: boolean
     staleOverrides?: string[]
+    readonlyProbeViolations?: string[]
     incompleteProgress?: ApiIncompleteProgress[]
     stampPlan?: ApiMigrationStampStep[]
     renumberCompensated?: boolean
@@ -535,6 +546,7 @@ export class ApiError extends Error {
     this.blockingDatabases = args.blockingDatabases
     this.overrideAvailable = args.overrideAvailable
     this.staleOverrides = args.staleOverrides
+    this.readonlyProbeViolations = args.readonlyProbeViolations
     this.incompleteProgress = args.incompleteProgress
     this.stampPlan = args.stampPlan
     this.renumberCompensated = args.renumberCompensated
@@ -787,6 +799,24 @@ function extractStaleOverrides(publicContext: unknown): string[] | undefined {
     (field): field is string => typeof field === 'string',
   )
   return fields.length > 0 ? fields : undefined
+}
+
+/**
+ * Extrae `public_context.violations` del 422 `server.readonly_probe_failed` (api-reference-v30).
+ *
+ * Se lee SOLO con ese código: `violations` es un nombre genérico, y tomarlo de cualquier error
+ * haría que un 422 de otro módulo apareciera en pantalla como grants de más.
+ */
+function extractReadonlyProbeViolations(
+  code: string | undefined,
+  publicContext: unknown,
+): string[] | undefined {
+  if (code !== 'server.readonly_probe_failed') return undefined
+  if (!isRecord(publicContext) || !Array.isArray(publicContext.violations)) return undefined
+  const reasons = publicContext.violations.filter(
+    (reason): reason is string => typeof reason === 'string',
+  )
+  return reasons.length > 0 ? reasons : undefined
 }
 
 /**
@@ -1584,6 +1614,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         blockingDatabases: extractBlockingDatabases(d.public_context),
         overrideAvailable: extractOverrideAvailable(d.public_context),
         staleOverrides: extractStaleOverrides(d.public_context),
+        readonlyProbeViolations: extractReadonlyProbeViolations(code, d.public_context),
         incompleteProgress: extractIncompleteProgress(d.public_context),
         stampPlan: extractStampPlan(d.public_context),
         renumberCompensated: extractRenumberCompensated(d.public_context),

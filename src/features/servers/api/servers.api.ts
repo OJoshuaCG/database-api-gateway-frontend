@@ -41,12 +41,14 @@ import {
   type KnownPasswordSetOut,
   type Page,
   type PasswordChangeBatchOut,
+  type ReadonlyCredentialIn,
   type ReconcileResult,
   type ServerCreate,
   type ServerOut,
   type ServerUpdate,
   type StructureDump,
   type TableSchema,
+  type TestConnectionCredential,
 } from '@/lib/contracts'
 
 const BASE = '/servers'
@@ -72,8 +74,37 @@ export function deleteServer(id: number): Promise<string | undefined> {
 }
 
 // ── Operaciones contra el motor destino 🔌 ──────────────────────────────────
-export function testConnection(id: number): Promise<ConnectionInfo> {
-  return mutateData('POST', `${BASE}/${id}/test-connection`, connectionInfoSchema)
+/**
+ * `POST /servers/{id}/test-connection` 🔌. Con `credential='readonly'` (v30) corre la SONDA
+ * NEGATIVA de la credencial de solo lectura: exige que el motor observe que no puede escribir y,
+ * si pasa, fija `readonly_verified_at`. Esa variante pide `servers.admin` + step-up; la de root,
+ * `servers.read`. El parámetro solo viaja cuando no es el default, para no cambiar la request de
+ * siempre.
+ */
+export function testConnection(
+  id: number,
+  credential: TestConnectionCredential = 'root',
+): Promise<ConnectionInfo> {
+  return mutateData('POST', `${BASE}/${id}/test-connection`, connectionInfoSchema, {
+    query: credential === 'readonly' ? { credential } : undefined,
+  })
+}
+
+// ── Credencial de solo lectura del MCP (api-reference-v30) ──────────────────
+// `servers.admin` + step-up. Las dos responden el `ServerOut` actualizado, que nunca trae el
+// usuario ni la contraseña: solo `has_readonly_credential` y `readonly_verified_at`.
+
+/**
+ * `PUT /servers/{id}/readonly-credential` — alta o reemplazo. Reemplazarla BORRA la verificación
+ * (`readonly_verified_at: null`): una credencial nueva no hereda la observación de la anterior.
+ */
+export function setReadonlyCredential(id: number, body: ReadonlyCredentialIn): Promise<ServerOut> {
+  return mutateData('PUT', `${BASE}/${id}/readonly-credential`, serverOutSchema, { body })
+}
+
+/** `DELETE /servers/{id}/readonly-credential` — idempotente; deja el servidor fuera del MCP. */
+export function clearReadonlyCredential(id: number): Promise<ServerOut> {
+  return mutateData('DELETE', `${BASE}/${id}/readonly-credential`, serverOutSchema)
 }
 
 export function listServerDatabases(id: number, signal?: AbortSignal): Promise<string[]> {

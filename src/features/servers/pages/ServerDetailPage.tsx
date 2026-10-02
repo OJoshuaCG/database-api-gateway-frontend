@@ -22,6 +22,7 @@ import { DeleteServerDialog } from '../components/DeleteServerDialog'
 import { IntrospectionExplorer } from '../components/IntrospectionExplorer'
 import { ServerReconcilePanel } from '../components/ServerReconcilePanel'
 import { EngineUsersPanel } from '../components/EngineUsersPanel'
+import { ReadonlyCredentialPanel } from '../components/ReadonlyCredentialPanel'
 import { ServerDatabasesPanel } from '@/features/server-databases'
 
 const TABS = ['info', 'databases', 'introspection', 'users', 'reconcile'] as const
@@ -191,6 +192,7 @@ export function ServerDetailPage() {
           </CardContent>
         </Card>
       )}
+      {tab === 'info' && <ReadonlyCredentialPanel server={server} />}
       {tab === 'databases' && (
         <ServerDatabasesPanel server={server} onGoToReconcile={() => setTab('reconcile')} />
       )}
