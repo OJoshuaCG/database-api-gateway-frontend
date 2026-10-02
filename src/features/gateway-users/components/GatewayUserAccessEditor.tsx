@@ -46,6 +46,7 @@ import { GLOBAL_CEILING_HINT, roleCeilingHint, withinCeiling } from '../grant-ce
 import { useEffectiveAccess } from '../hooks/use-capability-grants'
 import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
 import { SELF_ACCESS_NOTE } from '../self-access'
+import { CapabilityGrantsSection } from './CapabilityGrantsSection'
 
 const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
   environment: 'Entorno',
@@ -610,20 +611,18 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
             </section>
           </Card>
 
-          {/* ── Capacidades puntuales (todavía no existe) ────────────────────
-              Solo el aviso, sin controles: el backend no tiene todavía cómo otorgar una capacidad
-              suelta, y un control que no hace nada promete algo que no se cumple. */}
-          <section
-            aria-labelledby={`${panelId}-puntuales`}
-            className="flex flex-col gap-1 rounded-card border border-dashed border-border px-5 py-4"
-          >
-            <h2 id={`${panelId}-puntuales`} className="text-base font-semibold text-foreground">
-              Capacidades puntuales
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Próximamente: asignar una capacidad puntual sin cambiar el rol.
-            </p>
-          </section>
+          {/* ── Capacidades puntuales ────────────────────────────────────────
+              Solo para `access_admin` (el listado es suyo) y con sus propios endpoints: no pasan
+              por «Guardar accesos». Quien no es `access_admin` no ve la sección; el panel de
+              acceso efectivo ya le avisa que las puntuales no se incluyen. */}
+          {canReadEffectiveAccess && (
+            <CapabilityGrantsSection
+              user={user}
+              isSelf={isSelf}
+              catalog={catalog}
+              isCatalogLoading={catalogQuery.isLoading}
+            />
+          )}
         </div>
 
         {/* ── Acceso efectivo ──────────────────────────────────────────────── */}

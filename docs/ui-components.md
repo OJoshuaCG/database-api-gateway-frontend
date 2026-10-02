@@ -347,10 +347,39 @@ acceso», **sin «Reintentar»** (el mismo pedido daría el mismo 403).
 (búsqueda, filtro por rol y por riesgo). Cada módulo es una tabla, pero todas comparten los mismos
 anchos (`columnWidths`), así que se leen como una sola matriz con secciones.
 
+### `CapabilityGrantsSection` («Capacidades puntuales»)
+Sección de `GatewayUserAccessEditor` (`features/gateway-users/components`) para otorgar UNA
+capacidad sobre UN entorno o servidor sin cambiar el rol (api-reference §19). Props: `user`
+(`id`, `username`, `is_active`), `isSelf`, `catalog`, `isCatalogLoading`.
+
+- **Solo `access_admin`**: el editor la monta únicamente con esa global (el listado es suyo). Con
+  otro rol no existe en el DOM y no dispara ninguna consulta; el panel de acceso efectivo ya avisa
+  que las puntuales no se incluyen.
+- **Es inmediata**: tiene sus propios endpoints y `PUT /access` no las toca, así que no pasa por
+  «Guardar accesos» ni activa la vista previa ni el aviso de salida. La cabecera lo dice.
+- **Formulario «Otorgar capacidad»**: el selector lista solo las filas del catálogo con
+  `grantable`, agrupadas por módulo (el id en mono y, si es `sensitive`, «Requiere aprobación de
+  otro admin»); tipo de destino entorno|servidor y destino de `useSelectableEnvironments` /
+  `useServerOptions`; motivo opcional (máx. 500). Se deshabilita con el motivo visible si la
+  persona es la propia cuenta (`access.self_modification_forbidden`) o está desactivada
+  (`access.grant_user_inactive`); una viva igual en la lista bloquea el envío con una pista
+  (`access.grant_duplicate` sigue siendo la verdad del servidor).
+- **Resultado**: una no sensible nace `active` («Capacidad otorgada… ya rige»); una sensible nace
+  `pending` y el mensaje dice que **todavía no concede acceso** hasta que otra persona con
+  `access_admin` la apruebe (bandeja en F4). Un error `access.*` sale en el formulario
+  (`capabilityGrantErrorMessage`, `role="alert"`) además del toast; el 403 usa `forbiddenCopy()`.
+- **Lista** (`DataTable`, tarjetas bajo `md`): vigentes por defecto (`active` + `pending`); la
+  casilla «Ver también el historial» suma rechazadas, vencidas, canceladas y revocadas. Un solo
+  `GET` sin filtro; el filtrado es del cliente. «Revocar» (activa) y «Cancelar solicitud»
+  (pendiente) conservan el texto —acción de dominio— y piden `ConfirmDialog` en rojo, un solo
+  admin, sin segundo aprobador. Con la propia cuenta van deshabilitados.
+- **Refresco**: los hooks invalidan todo `capabilityGrants.all`, así que el acceso efectivo de
+  al lado se actualiza solo tras otorgar, revocar o cancelar.
+
 `GatewayUserAccessPage` (`/gateway-users/:userId/accesos`, en `features/gateway-users`) es el
 editor de accesos de una persona, que antes era un modal: cabecera con el usuario y su rol base,
 y en dos columnas desde `lg` el formulario (`GatewayUserAccessEditor`: «Capacidades globales»,
-«Permisos por entorno o servidor» y el aviso de «Capacidades puntuales», que todavía no existen)
+«Permisos por entorno o servidor» y, solo para `access_admin`, «Capacidades puntuales»)
 y al costado «Acceso efectivo al guardar». «Guardar accesos» va en una barra fija al pie con la
 nota de sesiones; salir con cambios sin guardar pide confirmación. `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella;
 `UserIcon`, para el enlace «Mi cuenta» de la `Topbar`.

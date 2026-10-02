@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -91,7 +91,12 @@ const EFFECTIVE_FIXTURE = {
 function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<string, unknown> = {}) {
   let detailRequests = 0
   let effectiveRequests = 0
+  let grantsRequests = 0
   server.use(
+    http.get(`${API}/gateway-users/7/capability-grants`, () => {
+      grantsRequests += 1
+      return HttpResponse.json({ data: [] })
+    }),
     http.get(`${API}/gateway-users/7/effective-access`, () => {
       effectiveRequests += 1
       return HttpResponse.json({ data: EFFECTIVE_FIXTURE })
@@ -120,7 +125,11 @@ function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<stri
     ),
     http.get(`${API}/servers`, () => HttpResponse.json(pageOf([serverFixture(9, 'db-prod-01')]))),
   )
-  return { detailRequests: () => detailRequests, effectiveRequests: () => effectiveRequests }
+  return {
+    detailRequests: () => detailRequests,
+    effectiveRequests: () => effectiveRequests,
+    grantsRequests: () => grantsRequests,
+  }
 }
 
 /**
@@ -180,10 +189,9 @@ describe('GatewayUserAccessPage', () => {
       'Capacidades puntuales',
       'Acceso efectivo',
     ])
-    // El marcador de lo que viene es solo texto: ningún control que prometa algo.
-    expect(
-      screen.getByText('Próximamente: asignar una capacidad puntual sin cambiar el rol.'),
-    ).toBeInTheDocument()
+    // La sección ya es real (R11): el marcador «Próximamente» desapareció y hay un formulario.
+    expect(screen.queryByText(/Próximamente/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Guardar accesos' })).toBeInTheDocument()
   })
 
@@ -272,6 +280,32 @@ describe('GatewayUserAccessPage', () => {
     const anchor = (link.getAttribute('href') ?? '').slice(1)
     expect(document.querySelectorAll(`[id="${anchor}"]`)).toHaveLength(1)
     expect(document.getElementById(anchor)).toHaveTextContent('Producción · owner')
+  })
+
+  it('«Capacidades puntuales» es solo de access_admin: otro rol no la ve ni dispara sus consultas', async () => {
+    const officer = meFixture({ role: 'operator', global_capabilities: ['security_officer'] })
+    const { grantsRequests } = mockBackend(officer)
+    renderAt()
+    await screen.findByRole('heading', { level: 2, name: 'Acceso efectivo al guardar' })
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Capacidades puntuales' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Otorgar capacidad' })).not.toBeInTheDocument()
+    expect(grantsRequests()).toBe(0)
+  })
+
+  it('para access_admin la sección pide las capacidades de ESA persona y no depende de «Guardar accesos»', async () => {
+    const { grantsRequests } = mockBackend()
+    renderAt()
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Capacidades puntuales' }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(grantsRequests()).toBe(1))
+    expect(
+      screen.getByText(/Se aplican al instante, sin pasar por «Guardar accesos»/),
+    ).toBeVisible()
+    // Otorgar no es un cambio del formulario: no activa la vista previa ni el aviso de salida.
+    expect(screen.queryByText('Vista previa: así quedaría al guardar')).not.toBeInTheDocument()
   })
 
   it('el acceso efectivo del servidor solo se pide a quien es access_admin', async () => {
