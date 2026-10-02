@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
-import { toApiError, type ApiError } from '@/lib/api/errors'
+import { ApiError, toApiError } from '@/lib/api/errors'
+import { STEP_UP_REQUIRED_COPY, useStepUp } from '@/features/auth'
 import {
+  AUTH_STEP_UP_ERROR_CODES,
+  CAPABILITIES,
   QUERY_LIMITS,
   type EngineType,
   type QueryExecuteOut,
@@ -126,6 +129,7 @@ export function useSqlConsole(serverId: number, engine: EngineType | null): SqlC
   const [cooldownUntil, setCooldownUntil] = useState<string | null>(null)
 
   const previewMutation = usePreviewQuery(serverId)
+  const stepUp = useStepUp()
   const executeMutation = useExecuteQuery(serverId)
 
   const rateLimitCooldownMs = useCountdown(cooldownUntil)
@@ -208,6 +212,16 @@ export function useSqlConsole(serverId: number, engine: EngineType | null): SqlC
    * pantalla esté montada y hasta cinco minutos después de desmontarla.
    */
   const runPreview = useCallback(async (): Promise<PreviewSnapshot> => {
+    // El preview emite el `confirm_token`: si a la ventana de step-up le queda poco, la contraseña
+    // se pide ahora y no en el execute, con el token ya corriendo. Cancelar equivale al 403 que
+    // habría dado el servidor, así que se reporta igual.
+    if (!(await stepUp.ensureFresh(CAPABILITIES.sqlConsoleExecute))) {
+      throw new ApiError({
+        status: 403,
+        code: AUTH_STEP_UP_ERROR_CODES.required,
+        message: STEP_UP_REQUIRED_COPY.title,
+      })
+    }
     try {
       const fresh = await previewMutation.mutateAsync({ database, sql, connection })
       const next: PreviewSnapshot = { preview: fresh, fingerprint }
@@ -216,7 +230,7 @@ export function useSqlConsole(serverId: number, engine: EngineType | null): SqlC
     } finally {
       previewMutation.reset()
     }
-  }, [connection, database, fingerprint, previewMutation, sql])
+  }, [connection, database, fingerprint, previewMutation, sql, stepUp])
 
   const analyze = useCallback(async () => {
     clearTransient()
@@ -343,8 +357,8 @@ export function useSqlConsole(serverId: number, engine: EngineType | null): SqlC
    */
   const openConfirm = useCallback(() => {
     clearTransient()
-    setConfirmOpen(true)
-  }, [clearTransient])
+    stepUp.withFresh(CAPABILITIES.sqlConsoleExecute, () => setConfirmOpen(true))
+  }, [clearTransient, stepUp])
 
   const runCurrent = useCallback(async () => {
     clearTransient()

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, PageHeader, TabButton } from '@/components/ui'
-import { useCapabilityGuard } from '@/features/auth'
+import { useCapabilityGuard, useStepUp } from '@/features/auth'
 import { useDatabaseModel } from '@/features/database-models/hooks/use-database-models'
 import {
   CAPABILITIES,
@@ -60,6 +60,7 @@ export function BlueprintCollationBatchPage() {
   const [executed, setExecuted] = useState(false)
 
   const planMutation = usePlanCollationBatch(modelId)
+  const stepUp = useStepUp()
   // Registrar el lote como versión crea la versión (`blueprints.write`) y la STAMPEA en cada
   // base del blueprint (`blueprints.apply`), además de `collation.execute` (v23 §4).
   const versionGuard = useCapabilityGuard(
@@ -96,13 +97,17 @@ export function BlueprintCollationBatchPage() {
     setSearchParams(next, { replace: true })
   }
 
+  // El plan emite el `batch_token` del execute: si a la ventana de step-up le queda poco, la
+  // contraseña se pide ANTES, no en el execute con el token corriendo. Cancelar no bloquea el plan.
   const handlePlan = (body: CollationBatchCreate) => {
-    planMutation.mutate(body, {
-      onSuccess: (data) => {
-        setPlan(data)
-        setExecuted(false)
-      },
-    })
+    const send = () =>
+      planMutation.mutate(body, {
+        onSuccess: (data) => {
+          setPlan(data)
+          setExecuted(false)
+        },
+      })
+    stepUp.withFresh(CAPABILITIES.collationExecute, send, send)
   }
 
   const handleExecute = (body: CollationBatchExecuteIn) => {

@@ -6,7 +6,8 @@ import type {
   ExportPreview,
   ExportSpec,
 } from '@/lib/contracts'
-import { PAGINATION } from '@/lib/contracts'
+import { CAPABILITIES, PAGINATION } from '@/lib/contracts'
+import { useStepUp } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
 import { randomUuid } from '@/lib/utils'
 import { useCountdown } from '@/lib/utils/use-countdown'
@@ -339,6 +340,7 @@ export function useDatabaseExportWizard(options: WizardOptions): DatabaseExportW
   const cancel = useCancelDatabaseExport(jobId ?? 0)
   const download = useDownloadExportArtifact(jobId ?? 0)
   const copyContent = useCopyExportContent(jobId ?? 0)
+  const stepUp = useStepUp()
 
   /**
    * Arranca el enfriamiento tras un 429 y registra el fallo con su `X-Request-ID`, que es la única
@@ -625,13 +627,21 @@ export function useDatabaseExportWizard(options: WizardOptions): DatabaseExportW
     cancel.mutate(undefined, { onError: (error) => handleFailure(error, 'cancelar') })
   }, [cancel, handleFailure])
 
+  /*
+   * El ticket de descarga vive 60 s y es de un solo uso: si a la ventana de step-up le queda poco,
+   * la contraseña se pide ANTES de pedirlo. Copiar consume el artefacto con el mismo requisito.
+   */
   const downloadArtifact = useCallback(() => {
-    download.mutate(undefined, { onError: (error) => handleFailure(error, 'descargar') })
-  }, [download, handleFailure])
+    stepUp.withFresh(CAPABILITIES.exportsDownload, () =>
+      download.mutate(undefined, { onError: (error) => handleFailure(error, 'descargar') }),
+    )
+  }, [download, handleFailure, stepUp])
 
   const copyArtifact = useCallback(() => {
-    copyContent.mutate(undefined, { onError: (error) => handleFailure(error, 'copiar') })
-  }, [copyContent, handleFailure])
+    stepUp.withFresh(CAPABILITIES.exportsDownload, () =>
+      copyContent.mutate(undefined, { onError: (error) => handleFailure(error, 'copiar') }),
+    )
+  }, [copyContent, handleFailure, stepUp])
 
   // ── Navegación ────────────────────────────────────────────────────────────────
   /**

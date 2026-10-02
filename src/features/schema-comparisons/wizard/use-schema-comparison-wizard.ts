@@ -10,7 +10,7 @@ import {
   type SchemaObjectType,
   type ServerOut,
 } from '@/lib/contracts'
-import { useCapabilities } from '@/features/auth'
+import { useCapabilities, useStepUp } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import {
@@ -763,12 +763,36 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     return WIZARD_STAGES.findIndex((s) => s.key === stageKey)
   }, [step])
 
+  /**
+   * Los dos pasos del execute piden la vista previa con el `confirm_token` (120 s). Si a la ventana
+   * de step-up le queda poco, la contraseña se pide al ENTRAR, no en el execute con el token
+   * corriendo. Cancelar no bloquea: se entra igual, y si el servidor la exige, la pide en su
+   * momento.
+   */
+  const stepUp = useStepUp()
+  const enterStep = useCallback(
+    (target: WizardStep) => {
+      if (target !== 'executeSelect' && target !== 'executeConfirm') {
+        setStep(target)
+        return
+      }
+      const go = () => setStep(target)
+      stepUp.withFresh(CAPABILITIES.schemaDiffExecute, go, go)
+    },
+    [stepUp],
+  )
+
   const next = useCallback(() => {
+    const target = order[order.indexOf(step) + 1]
+    if (target === 'executeSelect' || target === 'executeConfirm') {
+      enterStep(target)
+      return
+    }
     setStep((current) => {
       const idx = order.indexOf(current)
       return idx >= 0 && idx < order.length - 1 ? order[idx + 1]! : current
     })
-  }, [order])
+  }, [order, step, enterStep])
 
   const back = useCallback(() => {
     if (step === 'items') {
@@ -781,7 +805,12 @@ export function useSchemaComparisonWizard(wizardOptions: WizardOptions = {}): Sc
     })
   }, [order, step])
 
-  const goToStep = useCallback((target: WizardStep) => setStep(target), [])
+  const goToStep = useCallback(
+    (target: WizardStep) => {
+      if (target !== step) enterStep(target)
+    },
+    [step, enterStep],
+  )
   const canBack = step !== 'selector' && step !== 'result'
 
   return {

@@ -10,6 +10,8 @@ import type {
   ConversionMode,
   EngineType,
 } from '@/lib/contracts'
+import { CAPABILITIES } from '@/lib/contracts'
+import { useStepUp } from '@/features/auth'
 import {
   COLLATION_CONVERSION_TERMINAL_STATUSES,
   useCollationConversion,
@@ -392,19 +394,40 @@ export function useCollationConversionWizard(
   )
 
   // ── Navegación ──────────────────────────────────────────────────────────────────
+  /**
+   * Entrar a la vista previa pide el `confirm_token` del execute (120 s). Si a la ventana de
+   * step-up le queda poco, la contraseña se pide ANTES, no en el execute con el token corriendo.
+   * Cancelar no bloquea: se entra igual, y si el servidor la exige, la pide en su momento.
+   */
+  const stepUp = useStepUp()
+  const enterPreview = useCallback(() => {
+    const go = () => setStep('preview')
+    stepUp.withFresh(CAPABILITIES.collationExecute, go, go)
+  }, [stepUp])
+
   const next = useCallback(() => {
+    if (order[order.indexOf(step) + 1] === 'preview') {
+      enterPreview()
+      return
+    }
     setStep((current) => {
       const idx = order.indexOf(current)
       return idx >= 0 && idx < order.length - 1 ? order[idx + 1]! : current
     })
-  }, [order])
+  }, [order, step, enterPreview])
   const back = useCallback(() => {
     setStep((current) => {
       const idx = order.indexOf(current)
       return idx > 0 ? order[idx - 1]! : current
     })
   }, [order])
-  const goToStep = useCallback((target: CollationConversionWizardStep) => setStep(target), [])
+  const goToStep = useCallback(
+    (target: CollationConversionWizardStep) => {
+      if (target === 'preview' && step !== 'preview') enterPreview()
+      else setStep(target)
+    },
+    [step, enterPreview],
+  )
   const canBack = order.indexOf(step) > 0 && step !== 'monitor'
 
   const replan = useCallback(() => {

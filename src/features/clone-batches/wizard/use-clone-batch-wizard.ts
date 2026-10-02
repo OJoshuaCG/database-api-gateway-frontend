@@ -9,6 +9,8 @@ import type {
   ReconcileDatabaseItem,
 } from '@/lib/contracts'
 import type { CloneObjectType } from '@/lib/contracts'
+import { CAPABILITIES } from '@/lib/contracts'
+import { useStepUp } from '@/features/auth'
 import {
   useCloneBatch,
   useCloneBatchItems,
@@ -138,19 +140,27 @@ export function useCloneBatchWizard(
   const execute = useExecuteCloneBatch(batchId ?? 0)
   const cancel = useCancelCloneBatch(batchId ?? 0)
   const retry = useRetryCloneBatch(batchId ?? 0)
+  const stepUp = useStepUp()
 
+  /*
+   * Crear el lote emite el `confirm_token` del execute: si a la ventana de step-up le queda poco,
+   * la contraseña se pide ANTES, no en el execute con el token corriendo. Cancelar no bloquea el
+   * plan; si el servidor la exige, la pide en el execute.
+   */
   const submitPlan = useCallback(() => {
     if (!createBody) return
-    createBatch.mutate(createBody, {
-      onSuccess: (batch) => {
-        setSkipped([])
-        setBatchId(batch.id)
-        setConfirmServerName('')
-        setItemsPage(1)
-        setStep('confirm')
-      },
-    })
-  }, [createBody, createBatch])
+    const send = () =>
+      createBatch.mutate(createBody, {
+        onSuccess: (batch) => {
+          setSkipped([])
+          setBatchId(batch.id)
+          setConfirmServerName('')
+          setItemsPage(1)
+          setStep('confirm')
+        },
+      })
+    stepUp.withFresh(CAPABILITIES.clonesExecute, send, send)
+  }, [createBody, createBatch, stepUp])
 
   // ── Lote en curso ───────────────────────────────────────────────────────────────
   const batch = useCloneBatch(batchId ?? 0, batchId != null)

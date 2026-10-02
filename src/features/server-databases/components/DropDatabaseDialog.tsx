@@ -10,7 +10,8 @@ import {
   Spinner,
 } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import type { DropPreviewOut, EngineType } from '@/lib/contracts'
+import { useStepUp } from '@/features/auth'
+import { CAPABILITIES, type DropPreviewOut, type EngineType } from '@/lib/contracts'
 import { useToast } from '@/lib/toast/use-toast'
 import { cn } from '@/lib/utils'
 import { useCountdown } from '@/lib/utils/use-countdown'
@@ -93,6 +94,7 @@ export function DropDatabaseDialog({
   const [cooldownLeft, setCooldownLeft] = useState(0)
 
   const previewMutation = useDropDatabasePreview(serverId)
+  const stepUp = useStepUp()
   const drop = useDropServerDatabase(serverId)
 
   const remaining = useCountdown(preview?.expires_at ?? null)
@@ -105,6 +107,17 @@ export function DropDatabaseDialog({
     drop.reset()
     const previousConnections = preview?.active_connections ?? null
 
+    // El preview emite el `confirm_token` (120 s): si a la ventana de step-up le queda poco, la
+    // contraseña se pide ANTES, no en el DELETE con el token ya corriendo. Cancelar el primer
+    // pedido cierra el diálogo, que sin preview no tiene nada que mostrar.
+    stepUp.withFresh(
+      CAPABILITIES.databasesDrop,
+      () => sendPreview(intent, previousConnections),
+      preview === null ? onClose : undefined,
+    )
+  }
+
+  const sendPreview = (intent: PreviewIntent, previousConnections: number | null) => {
     previewMutation.mutate(database, {
       onSuccess: (data) => {
         setPreview(data)

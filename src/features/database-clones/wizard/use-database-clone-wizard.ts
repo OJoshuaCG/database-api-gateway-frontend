@@ -10,6 +10,8 @@ import type {
   CloneTargetMode,
   ServerOut,
 } from '@/lib/contracts'
+import { CAPABILITIES } from '@/lib/contracts'
+import { useStepUp } from '@/features/auth'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import {
@@ -367,6 +369,16 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
   // ── Mutaciones ligadas al job actual (declaradas temprano: `resetJobScopedState` necesita
   // poder resetear su error/data al arrancar un job nuevo) ──────────────────────────
   const createClone = useCreateDatabaseClone()
+  const stepUp = useStepUp()
+  /**
+   * Entrar a la vista previa pide el `confirm_token` del execute (120 s). Si a la ventana de
+   * step-up le queda poco, la contraseña se pide ANTES, no en el execute con el token corriendo.
+   * Cancelar no bloquea: se entra igual, y si el servidor la exige, la pide en su momento.
+   */
+  const enterPreview = useCallback(() => {
+    const go = () => setStep('preview')
+    stepUp.withFresh(CAPABILITIES.clonesExecute, go, go)
+  }, [stepUp])
   const execute = useExecuteDatabaseClone(jobId ?? 0)
   const cancel = useCancelDatabaseClone(jobId ?? 0)
 
@@ -404,10 +416,11 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
         // correcto para `planMode === 'complete'`; el parcial lo define `confirmSelection`.
         resetJobScopedState()
         setJobId(summary.id)
-        setStep(plan.planMode === 'partial' ? 'selection' : 'preview')
+        if (plan.planMode === 'partial') setStep('selection')
+        else enterPreview()
       },
     })
-  }, [createBody, createClone, plan.planMode, resetJobScopedState])
+  }, [createBody, createClone, enterPreview, plan.planMode, resetJobScopedState])
 
   // ── Job (resumen + estado, polling) ────────────────────────────────────────────
   const job = useDatabaseClone(jobId ?? 0, jobId != null)
@@ -565,7 +578,7 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
   const confirmSelection = useCallback(() => {
     if (selectionKind === 'rule') {
       setFinalSelectionPlan({ kind: 'rule', structure: ruleSpec })
-      setStep('preview')
+      enterPreview()
       return
     }
     // Bloqueo por construcción: mientras `closure.isStale` sea `true`, `closure.data` todavía
@@ -574,8 +587,8 @@ export function useDatabaseCloneWizard(wizardOptions: WizardOptions = {}): Datab
     // ese instante silenciosamente excluiría del clon lo que el usuario acaba de marcar.
     if (closure.isStale) return
     setFinalSelectionPlan({ kind: 'manual', refs: closure.data?.closure ?? checkedList })
-    setStep('preview')
-  }, [selectionKind, ruleSpec, closure.data, closure.isStale, checkedList])
+    enterPreview()
+  }, [selectionKind, ruleSpec, closure.data, closure.isStale, checkedList, enterPreview])
 
   // ── Vista 4: preview + confirmación ────────────────────────────────────────────
   const preview = useClonePreview(jobId ?? 0, finalSelectionPlan, jobId != null && step === 'preview')

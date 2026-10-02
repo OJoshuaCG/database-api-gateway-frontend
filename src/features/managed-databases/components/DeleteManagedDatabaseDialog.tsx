@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ConfirmDialog, Switch } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard, useStepUp } from '@/features/auth'
 import { CAPABILITIES, type ManagedDatabaseOut } from '@/lib/contracts'
 import { useDeleteManagedDatabase } from '../hooks/use-managed-databases'
 
@@ -55,21 +55,28 @@ export function DeleteManagedDatabaseDialog({
   )
   const activeGuard = dropRemote ? dropGuard : removeGuard
   const deleteDatabase = useDeleteManagedDatabase()
+  const stepUp = useStepUp()
+
+  const submit = () => {
+    deleteDatabase.mutate(
+      {
+        id: database.id,
+        serverId: database.server_id,
+        dropRemote,
+        confirmName: dropRemote ? database.name : undefined,
+      },
+      { onSuccess: onClose },
+    )
+  }
 
   return (
     <ConfirmDialog
       open
       onClose={onClose}
       onConfirm={() => {
-        deleteDatabase.mutate(
-          {
-            id: database.id,
-            serverId: database.server_id,
-            dropRemote,
-            confirmName: dropRemote ? database.name : undefined,
-          },
-          { onSuccess: onClose },
-        )
+        // Solo `drop_remote` sube a `databases.drop`, que pide step-up; quitar del inventario no.
+        if (dropRemote) stepUp.withFresh(CAPABILITIES.databasesDrop, submit)
+        else submit()
       }}
       title={dropRemote ? 'Quitar del inventario y eliminar del motor 🔌' : 'Quitar del inventario'}
       description={
