@@ -19,6 +19,7 @@ import {
   API_TOKEN_NAME_MAX,
   API_TOKEN_NAME_MIN,
   PAGINATION,
+  PROJECT_ERROR_CODES,
   type ApiTokenCreatedOut,
   type ProjectOut,
 } from '@/lib/contracts'
@@ -83,6 +84,9 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
             const allowed = apiError.apiTokenContext?.allowed
             if (allowed?.length) setDiscoveredCeiling(allowed)
           }
+          // El proyecto elegido ya no existe: se suelta para que no se reenvíe el mismo id. El
+          // hook ya invalidó el listado, así que el selector se refresca solo.
+          if (apiError.code === PROJECT_ERROR_CODES.notFound) setProject(null)
           setFormError(apiTokenErrorMessage(apiError) ?? apiError.message)
         },
       },

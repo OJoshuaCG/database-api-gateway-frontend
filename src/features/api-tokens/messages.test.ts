@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/errors'
-import { API_TOKEN_ERROR_CODES } from '@/lib/contracts'
+import { API_TOKEN_ERROR_CODES, PROJECT_ERROR_CODES } from '@/lib/contracts'
 import { apiTokenErrorMessage, RATE_LIMIT_HINT } from './messages'
 
 function error(
@@ -43,6 +43,11 @@ describe('apiTokenErrorMessage', () => {
     expect(apiTokenErrorMessage(error(409, API_TOKEN_ERROR_CODES.alreadyRevoked))).toContain(
       'no fue esta acción la que cortó el acceso',
     )
+  })
+
+  it('avisa que el proyecto elegido ya no existe y manda a elegir otro', () => {
+    const message = apiTokenErrorMessage(error(422, PROJECT_ERROR_CODES.notFound))
+    expect(message).toBe('El proyecto elegido ya no existe. Refrescá el selector y elegí otro.')
   })
 
   it('el 429 llega sin código, así que se enruta por status', () => {

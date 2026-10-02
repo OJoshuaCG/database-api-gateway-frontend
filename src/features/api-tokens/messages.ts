@@ -1,4 +1,4 @@
-import { API_TOKEN_ERROR_CODES, API_TOKEN_MAX_TTL_DAYS } from '@/lib/contracts'
+import { API_TOKEN_ERROR_CODES, API_TOKEN_MAX_TTL_DAYS, PROJECT_ERROR_CODES } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
 
 /** Espera fija sugerida tras un 429. El backend no manda `Retry-After` (§6). */
@@ -30,6 +30,10 @@ export function apiTokenErrorMessage(error: ApiError): string | null {
         ? `Alguno de los permisos queda fuera del techo de agente. Admitidos: ${allowed.join(', ')}.`
         : 'Hay un permiso que no corresponde a ninguna capacidad conocida. Revisá la selección.'
     }
+    // 422 al emitir: el proyecto elegido se borró (o se está borrando) mientras el formulario
+    // estaba abierto. Reusa el código de `/projects`; acá es un campo inválido, no la ruta.
+    case PROJECT_ERROR_CODES.notFound:
+      return 'El proyecto elegido ya no existe. Refrescá el selector y elegí otro.'
     case API_TOKEN_ERROR_CODES.notFound:
       return 'Este token ya no existe. Refrescá el listado.'
     case API_TOKEN_ERROR_CODES.alreadyRevoked:

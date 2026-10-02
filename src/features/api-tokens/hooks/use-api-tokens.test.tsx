@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
+import { queryKeys } from '@/lib/api/query-keys'
 import { useApiTokens, useCreateApiToken, useRevokeApiToken } from './use-api-tokens'
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -69,6 +70,35 @@ describe('useCreateApiToken', () => {
     // ...y el servidor devuelve UNO: intersectó con el techo de agente. La pantalla tiene que
     // mostrar esto y nunca lo que eligió el operador.
     expect(result.current.data?.scopes).toEqual(['blueprints.read'])
+  })
+
+  it('ante un 422 project.not_found invalida los proyectos para refrescar el selector', async () => {
+    server.use(
+      http.post('http://localhost/api/v1/api-tokens', () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'El proyecto del token no existe.',
+              type: 'AppHttpException',
+              public_context: { code: 'project.not_found', project_id: 4 },
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+    const queryClient = createTestQueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateApiToken(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <AllProviders queryClient={queryClient}>{children}</AllProviders>
+      ),
+    })
+    act(() => {
+      result.current.mutate({ name: 'ci-tienda-retail', project_id: 4 })
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.projects.all })
   })
 })
 

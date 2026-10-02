@@ -3,7 +3,7 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
-import { API_TOKEN_ERROR_CODES, type ApiTokenCreate } from '@/lib/contracts'
+import { API_TOKEN_ERROR_CODES, PROJECT_ERROR_CODES, type ApiTokenCreate } from '@/lib/contracts'
 import { createApiToken, listApiTokens, revokeApiToken } from '../api/api-tokens.api'
 import { apiTokenErrorMessage } from '../messages'
 import { notifyMutationError } from '@/features/auth'
@@ -32,6 +32,9 @@ export function useApiTokens(params: QueryParams, enabled = true) {
  * Y `gcTime: 0` porque «no cachearlo» no alcanzaba: la mutación guarda su respuesta en el
  * MutationCache aunque nadie la pida, y ahí el bearer en claro sobrevivía cinco minutos al
  * formulario (que se monta condicionalmente y se desmonta al emitir).
+ *
+ * Un 422 `project.not_found` significa que el proyecto elegido se borró con el formulario abierto:
+ * se invalidan los proyectos para que el selector deje de ofrecerlo sin que nadie recargue.
  */
 export function useCreateApiToken() {
   const queryClient = useQueryClient()
@@ -42,8 +45,12 @@ export function useCreateApiToken() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.apiTokens.all })
     },
-    onError: (error) =>
-      notifyMutationError(toast, error, ...errorToast('No se pudo emitir el token', error)),
+    onError: (error) => {
+      if (toApiError(error).code === PROJECT_ERROR_CODES.notFound) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
+      }
+      notifyMutationError(toast, error, ...errorToast('No se pudo emitir el token', error))
+    },
   })
 }
 
