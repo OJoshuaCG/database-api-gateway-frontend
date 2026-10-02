@@ -13,8 +13,10 @@ otorgar privilegios, versionar esquemas y aplicarlos, comparar y clonar bases.
   contrato de `backend/docs/api-reference.md` y nunca lee ni modifica código del backend.
 - **Hay roles y capacidades.** Cada endpoint exige una capacidad; qué otorga cada rol
   (`viewer`/`operator`/`owner`) y cada global (`access_admin`/`security_officer`) sale del
-  catálogo `GET /authz/catalog`, nunca de una lista del frontend. El servidor chequea el rol
-  unión (capa 1) y, **hoy solo en cuatro rutas**, el rol por alcance del destino (capa 2): ver
+  catálogo `GET /authz/catalog`, nunca de una lista del frontend. A un rol se le pueden **sumar
+  capacidades puntuales** (`docs/capability-grants.md`). El servidor chequea el rol unión
+  (capa 1) y, **en toda ruta con destino** (declaran `require_at` desde
+  `scope-enforcement-hardening`), el rol por alcance EN ese destino (capa 2): ver
   `features/auth/authz-model.ts`. Los guards de UI son **pistas**: deshabilitá o escondé con
   `useCapabilityGuard` (motivo visible), pero toda pantalla tiene que manejar el 403
   (`isAccessForbidden` → `ForbiddenState`/`forbiddenCopy`, sin «Reintentar»).

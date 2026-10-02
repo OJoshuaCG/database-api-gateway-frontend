@@ -37,9 +37,10 @@ export function DeleteManagedDatabaseDialog({
   // `databases.write`, pero el DROP DATABASE sobre el motor pide `databases.drop`. Se
   // deshabilita el control en vez de dejar que el 403 llegue después de re-tipear el nombre.
   //
-  // Las dos variantes son de las cuatro rutas con capa 2 (`assert_scope_for_database` en el
-  // `DELETE`): el backend vuelve a mirar el rol EN ESTA base, con `databases.drop` si va
-  // `drop_remote` y `databases.write` si no. Por eso las dos guardas llevan el destino.
+  // Las dos variantes tienen capa 2, como toda ruta con destino: el `DELETE` declara
+  // `require_at` con `databases.write` en esta base y, con `drop_remote`, sube a
+  // `databases.drop` también en el destino (`assert_at`). El backend vuelve a mirar el rol EN
+  // ESTA base, así que las dos guardas llevan el destino.
   const target = {
     serverId: database.server_id,
     environmentId: database.environment_id ?? null,
