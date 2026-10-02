@@ -153,7 +153,7 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 29 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 30 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
@@ -207,6 +207,12 @@ export const CAPABILITIES = {
   catalogsWrite: 'catalogs.write',
 
   environmentsRead: 'environments.read',
+  /**
+   * Solo `security_officer`: crear, editar y borrar entornos, abrir bases a agentes y reclasificar
+   * una base. Sin nadie con `security_officer` esas escrituras quedan BLOQUEADAS (no hay
+   * fallback a `gateway.admin`).
+   */
+  environmentsWrite: 'environments.write',
 
   gatewayAdmin: 'gateway.admin',
 } as const
@@ -297,6 +303,16 @@ export const scopeReadinessSchema = z.object({
   unclassified_databases: z.number().int(),
   ready: z.boolean(),
   fallback_environment_slug: z.string().nullish(),
+  /**
+   * F-17. `true` = el entorno de un SERVIDOR se resuelve solo con las bases que el gateway tiene
+   * inventariadas: una base que existe en el motor pero nadie adoptó no cuenta para la regla del
+   * entorno más protegido, y el gateway no lista el motor mientras autoriza. Un backend anterior
+   * no lo manda: cae a `false` (no se muestra el aviso) en vez de romper la respuesta.
+   */
+  server_resolution_inventory_only: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
   servers: z
     .array(scopeReadinessServerSchema)
     .nullish()

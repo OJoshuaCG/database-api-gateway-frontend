@@ -151,6 +151,10 @@ export function AdoptDatabaseModal({
         <p className="text-xs text-muted-foreground">
           ¿No aparece el propietario? Adóptalo primero desde la pestaña Usuarios.
         </p>
+        <p className="text-xs text-muted-foreground">
+          Sin un entorno explícito, la base adoptada va al entorno activo más protegido. Cambiarlo
+          después es reclasificar y lo hace quien tiene security_officer.
+        </p>
         <Combobox<DatabaseModelOut>
           items={models.data ?? []}
           value={model}

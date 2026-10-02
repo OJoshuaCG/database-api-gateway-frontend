@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Badge, Button, Callout, ErrorState, Pagination, Spinner } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, SkippedByScopeCallout, useCapabilityGuard } from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
 import {
   batchStatusLabel,
@@ -95,9 +95,8 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
           >
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="break-all text-sm text-foreground">
-                <span className="text-muted-foreground">{row.seq}.</span>{' '}
-                {row.source_database_name} <span className="text-muted-foreground">→</span>{' '}
-                {row.target_database_name}
+                <span className="text-muted-foreground">{row.seq}.</span> {row.source_database_name}{' '}
+                <span className="text-muted-foreground">→</span> {row.target_database_name}
               </span>
               {row.error && <span className="text-xs text-error">{row.error}</span>}
             </div>
@@ -132,6 +131,9 @@ export function MonitorStep({ wizard }: { wizard: CloneBatchWizard }) {
       )}
 
       {filas.length > 0 && <DurationByDatabase batch={data} items={filas} />}
+
+      {/* Las filas omitidas siguen `pending` (no se persisten): el lote termina `partial`. */}
+      <SkippedByScopeCallout ids={wizard.skipped.map((row) => row.id)} noun="fila" />
 
       {retryCandidates.data && <RetryPanel wizard={wizard} />}
 
@@ -175,16 +177,13 @@ function RetryPanel({ wizard }: { wizard: CloneBatchWizard }) {
           }
         >
           Su destino quedó intacto, así que se pueden relanzar sin riesgo:{' '}
-          {data.retryable.map((row) => row.target_database_name).join(', ')}. Se arma un lote
-          nuevo que hay que confirmar.
+          {data.retryable.map((row) => row.target_database_name).join(', ')}. Se arma un lote nuevo
+          que hay que confirmar.
         </Callout>
       )}
 
       {data.needs_manual.length > 0 && (
-        <Callout
-          tone="danger"
-          title={`${data.needs_manual.length} bases requieren atención`}
-        >
+        <Callout tone="danger" title={`${data.needs_manual.length} bases requieren atención`}>
           <div className="flex flex-col gap-1">
             {data.needs_manual.map((row) => (
               <p key={row.id} className="text-xs">

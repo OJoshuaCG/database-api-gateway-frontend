@@ -2,13 +2,18 @@ import { useCallback, useMemo, useState } from 'react'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useReconcile } from '@/features/servers/hooks/use-reconcile'
 import type {
+  CloneBatchSkipped,
   CloneCopyIntent,
   CloneDataOnExisting,
   CloneTargetMode,
   ReconcileDatabaseItem,
 } from '@/lib/contracts'
 import type { CloneObjectType } from '@/lib/contracts'
-import { useCloneBatch, useCloneBatchItems, useCloneBatchRetryCandidates } from '../hooks/use-clone-batches'
+import {
+  useCloneBatch,
+  useCloneBatchItems,
+  useCloneBatchRetryCandidates,
+} from '../hooks/use-clone-batches'
 import {
   useCancelCloneBatch,
   useCreateCloneBatch,
@@ -51,6 +56,8 @@ export function useCloneBatchWizard(
   const [suffix, setSuffix] = useState('')
   const [confirmServerName, setConfirmServerName] = useState('')
   const [itemsPage, setItemsPage] = useState(1)
+  // Filas que la capa 2 omitió en el último `execute` / `retry-failed` (solo id + código).
+  const [skipped, setSkipped] = useState<CloneBatchSkipped[]>([])
   const itemsSize = 25
 
   const serverOptions = useServerOptions()
@@ -136,6 +143,7 @@ export function useCloneBatchWizard(
     if (!createBody) return
     createBatch.mutate(createBody, {
       onSuccess: (batch) => {
+        setSkipped([])
         setBatchId(batch.id)
         setConfirmServerName('')
         setItemsPage(1)
@@ -167,7 +175,8 @@ export function useCloneBatchWizard(
     execute.mutate(
       { confirm_server_name: confirmServerName.trim(), confirm_token: batch.data.confirm_token },
       {
-        onSuccess: () => {
+        onSuccess: (executed) => {
+          setSkipped(executed.skipped)
           if (onExecuted && batchId != null) onExecuted(batchId)
           else setStep('monitor')
         },
@@ -178,6 +187,7 @@ export function useCloneBatchWizard(
   const submitRetry = useCallback(() => {
     retry.mutate(undefined, {
       onSuccess: (nuevo) => {
+        setSkipped(nuevo.skipped)
         // El lote de reintento también tiene dirección propia: vuelve a pedir confirmación,
         // así que el operador tiene que poder volver a él si se va de la vista.
         if (onExecuted) {
@@ -200,6 +210,7 @@ export function useCloneBatchWizard(
     setSuffix('')
     setConfirmServerName('')
     setItemsPage(1)
+    setSkipped([])
     createBatch.reset()
     execute.reset()
   }, [createBatch, execute])
@@ -259,6 +270,7 @@ export function useCloneBatchWizard(
     cancel,
     retry,
     submitRetry,
+    skipped,
     reset,
   }
 }

@@ -18,7 +18,7 @@ export const queryKeys = {
   },
   /**
    * Contrato de autorización (v23). El catálogo se cachea **contra `catalog_version` de
-   * `/auth/me`**, que es exactamente para lo que el backend lo publica: son 29 filas que no se
+   * `/auth/me`**, que es exactamente para lo que el backend lo publica: son 30 filas que no se
    * mueven, y mientras el sha no cambie no hay por qué volver a pedirlas. Cuando cambia, la key
    * cambia sola y la entrada vieja queda huérfana sin necesidad de invalidar a mano.
    */

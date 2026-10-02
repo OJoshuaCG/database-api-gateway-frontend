@@ -86,7 +86,7 @@ que exija el token antes de salir dejaría a nadie poder iniciar sesión.
 
 ## 1.c Capacidades: son una PISTA de UI, no autorización
 
-Cada endpoint declara una capacidad de un vocabulario cerrado de 29 y **el servidor la exige**.
+Cada endpoint declara una capacidad de un vocabulario cerrado de 30 y **el servidor la exige**.
 `GET /auth/me` publica las efectivas del usuario para que la interfaz decida qué mostrar.
 
 **Ocultar un botón no es autorización.** Toda pantalla sigue manejando el 403 aunque el control

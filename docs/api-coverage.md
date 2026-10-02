@@ -581,7 +581,7 @@ saberlo **antes** de planificar la pantalla, no a mitad de camino.
 
 ### v23 — el contrato de autorización, y lo que cambia en la superficie
 
-Cada endpoint declara una capacidad de un vocabulario cerrado de **29** y el servidor la exige.
+Cada endpoint declara una capacidad de un vocabulario cerrado de **30** y el servidor la exige.
 Antes solo hacía falta sesión válida: quien entraba podía todo. El detalle del modelo y la decisión
 de fallar **abierto** ante datos ausentes están en [ADR-0007](adr/0007-capacidades-como-pista-de-ui.md).
 
@@ -616,6 +616,20 @@ operación futura de todo operador—; `catalogs.write` y los mutantes de `/envi
 porque toda fila que un guard lee es una frontera de privilegio; y `clones.execute` está en `owner`
 y no en `operator` pese a su nombre, porque un clon **copia datos** y meter la base de producción de
 un cliente en un entorno de desarrollo es divulgación.
+
+### scope-enforcement-hardening — lo que cambia para la SPA
+
+- **`environments.write`** (la 30.ª capacidad, solo `security_officer`, sin fallback a
+  `gateway.admin`): reclasificar una base en `ManagedDatabaseForm` (edición) deshabilita el selector
+  de entorno sin ella y explica cómo desbloquearlo (`ENVIRONMENTS_WRITE_UNBLOCK`). La pestaña
+  Entornos sigue de solo lectura, no hay CRUD ni toggle de agent-access en la SPA.
+- **Capa 2 derivada del catálogo** (`layer2CapabilityIds`): eje distinto de `global` y sin el rol
+  `viewer`. Reemplaza la lista a mano de cuatro rutas. `useCapabilityGuard` recibe `scope` donde la
+  pantalla conoce la base (migraciones, stamp, reconciliar, aprovisionar, asignar blueprint, borrar).
+- **Ítems omitidos** (`error_code: access.forbidden`, sin nombre ni entorno): `apply-all` los marca
+  «Sin permiso en esta base (#id)»; el plan del lote de collation los aparta del conjunto que se
+  reenvía; `execute` y `retry-failed` de clones traen `skipped: [{id, ok, error_code}]`.
+- **`server_resolution_inventory_only`** de `scope-readiness`: nota en el editor de accesos.
 
 ### Fuera de alcance de v23, declarado por el propio documento
 

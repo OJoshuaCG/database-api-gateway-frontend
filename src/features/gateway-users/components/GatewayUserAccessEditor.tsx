@@ -19,6 +19,7 @@ import {
   effectiveAccessRowId,
   globalCapabilityIds,
   globalCapabilityLabel,
+  SERVER_RESOLUTION_INVENTORY_NOTE,
   sortByRisk,
   summarizeLabels,
   useCapabilities,
@@ -393,14 +394,14 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                 {/*
                   La semántica que más sorprende, y por eso va escrita y no implícita: un permiso
                   de alcance ocupa el lugar del rol base dentro de ese alcance, no se suma. Pero NO
-                  se promete más de lo que el servidor cumple: hoy esa regla solo se hace cumplir
-                  en cuatro rutas, y eso lo dice la sección «Acceso efectivo al guardar».
+                  se promete más de lo que el servidor cumple: las lecturas y las capacidades
+                  globales no se recortan por alcance, y eso lo dice la sección «Acceso efectivo al guardar».
                 */}
                 <p className="text-sm text-muted-foreground">
                   Dentro de su alcance, el permiso ocupa el lugar del rol base{' '}
                   <Badge tone="neutral">{user.gateway_role}</Badge> — no se suma a él. Si hay dos
                   sobre el mismo destino rige el más restrictivo. En «Acceso efectivo al guardar» se
-                  ve qué queda y en qué operaciones se aplica hoy.
+                  ve qué queda y en qué operaciones se aplica.
                 </p>
                 {scopeCeilingHint && !blocked && (
                   <p className="text-sm text-muted-foreground">{scopeCeilingHint}</p>
@@ -453,6 +454,18 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
                     <p className="mt-1">
                       Se puede guardar igual —el backend lo acepta—, pero conviene clasificarlas
                       primero.
+                    </p>
+                  </Callout>
+                )}
+
+                {/* F-17: aplica aunque el inventario esté «listo», por eso va aparte del aviso de arriba. */}
+                {grants.length > 0 && readiness.data?.server_resolution_inventory_only && (
+                  <Callout
+                    tone="info"
+                    title="El entorno de un servidor sale solo de lo inventariado"
+                  >
+                    <p>
+                      {SERVER_RESOLUTION_INVENTORY_NOTE} Si falta alguna, adoptala para que cuente.
                     </p>
                   </Callout>
                 )}

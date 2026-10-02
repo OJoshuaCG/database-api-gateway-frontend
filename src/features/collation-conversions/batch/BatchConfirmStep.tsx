@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { Badge, Button, Input, Spinner, Switch } from '@/components/ui'
 import { ApiError } from '@/lib/api/errors'
 import type { CollationBatchExecuteIn, CollationBatchPlanOut } from '@/lib/contracts'
-import { CapabilityHint, type CapabilityGuard } from '@/features/auth'
+import {
+  CapabilityHint,
+  isSkippedByScope,
+  SkippedByScopeCallout,
+  type CapabilityGuard,
+} from '@/features/auth'
 import {
   BATCH_ITEM_LABEL,
   BATCH_ITEM_TONE,
@@ -54,18 +59,26 @@ export function BatchConfirmStep({
   const needsRetype = new Set(requiresConfirmation)
 
   /**
-   * El conjunto previsualizado, TAL CUAL vino: no se recorta ni se filtra por `ok`.
+   * El conjunto previsualizado, TAL CUAL vino: no se recorta ni se filtra por `ok` (solo se
+   * apartan las omitidas por scope, que no son parte del lote).
    *
    * El backend valida esto fail-closed y rechaza cualquier diferencia — recortarlo acá "porque
    * esas no se van a convertir igual" sería adivinar su criterio. Si aun así no coincide, el 422
    * trae los dos conjuntos y se muestran abajo, así que el desacuerdo es visible en vez de ser un
    * muro.
    */
-  const databaseIds = plan.databases.map((db) => db.managed_database_id)
+  /*
+   * Las omitidas por la capa 2 (`access.forbidden`) vienen en `databases` pero NO son parte del
+   * lote: no tienen job ni `batch_seq`, y el backend arma el conjunto que valida con las que sí.
+   * Reenviarlas haría fallar el «mismo conjunto» con un 422 que el operador no puede arreglar.
+   */
+  const skipped = plan.databases.filter(isSkippedByScope)
+  const inBatch = plan.databases.filter((db) => !isSkippedByScope(db))
+  const databaseIds = inBatch.map((db) => db.managed_database_id)
 
   const slugMatches = slug.trim() === plan.model_slug
   const retypesComplete = requiresConfirmation.every((id) => {
-    const expected = plan.databases.find((db) => db.managed_database_id === id)?.database_name
+    const expected = inBatch.find((db) => db.managed_database_id === id)?.database_name
     return !!expected && confirmations[String(id)]?.trim() === expected
   })
   const canExecute = slugMatches && retypesComplete && !isExecuting
@@ -77,7 +90,7 @@ export function BatchConfirmStep({
         <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           El blueprint tiene <strong>{plan.total_eligible}</strong> bases activas y el tope es{' '}
           <strong>{plan.max_databases}</strong>: este lote convierte solo las primeras{' '}
-          {plan.databases.length}. Las demás quedan sin convertir.
+          {inBatch.length}. Las demás quedan sin convertir.
         </div>
       )}
 
@@ -88,16 +101,17 @@ export function BatchConfirmStep({
       {plan.runs_serially && (
         <div className="rounded-md border border-border bg-surface-muted p-3 text-sm text-muted-foreground">
           Las bases se convierten <strong>una después de otra</strong>, no en paralelo. Un lote de{' '}
-          {plan.databases.length} bases con tablas grandes puede tardar horas.
+          {inBatch.length} bases con tablas grandes puede tardar horas.
         </div>
       )}
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-foreground">
-          {plan.databases.length} base{plan.databases.length === 1 ? '' : 's'} en el lote
+          {inBatch.length} base{inBatch.length === 1 ? '' : 's'} en el lote
         </h2>
+        <SkippedByScopeCallout ids={skipped.map((db) => db.managed_database_id)} noun="base" />
         <ul className="flex flex-col gap-2">
-          {plan.databases.map((db) => {
+          {inBatch.map((db) => {
             const outcome = classifyBatchItem(db)
             const id = String(db.managed_database_id)
             return (
@@ -106,7 +120,9 @@ export function BatchConfirmStep({
                 className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">#{db.batch_seq}</span>
+                  {db.batch_seq !== null && (
+                    <span className="font-mono text-xs text-muted-foreground">#{db.batch_seq}</span>
+                  )}
                   <span className="font-medium text-foreground">{batchDatabaseLabel(db)}</span>
                   <Badge tone={BATCH_ITEM_TONE[outcome]}>{BATCH_ITEM_LABEL[outcome]}</Badge>
                   {outcome === 'ok' && (
@@ -210,7 +226,7 @@ export function BatchConfirmStep({
           aria-describedby={guard?.describedBy}
         >
           {isExecuting && <Spinner />}
-          Convertir {plan.databases.length} base{plan.databases.length === 1 ? '' : 's'} 🔌
+          Convertir {inBatch.length} base{inBatch.length === 1 ? '' : 's'} 🔌
         </Button>
         <Button variant="ghost" onClick={onReplan} disabled={isExecuting}>
           Volver a planificar

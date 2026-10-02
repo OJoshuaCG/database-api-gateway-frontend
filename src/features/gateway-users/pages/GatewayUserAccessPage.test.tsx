@@ -16,6 +16,7 @@ import {
 import { ThemeProvider } from '@/lib/theme/ThemeProvider'
 import { ToastProvider } from '@/lib/toast/ToastProvider'
 import type { GatewayUserOut } from '@/lib/contracts'
+import { SERVER_RESOLUTION_INVENTORY_NOTE } from '@/features/auth'
 import { GLOBAL_CEILING_HINT } from '../grant-ceiling'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { GatewayUserAccessPage } from './GatewayUserAccessPage'
@@ -43,7 +44,7 @@ const target: GatewayUserOut = {
 /** Quien edita: operator con access_admin. No tiene security_officer ni llega a owner. */
 const ACTOR = meFixture({ role: 'operator', global_capabilities: ['access_admin'] })
 
-function mockBackend(me: Record<string, unknown> = ACTOR) {
+function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<string, unknown> = {}) {
   let detailRequests = 0
   server.use(
     http.get(`${API}/auth/me`, () => HttpResponse.json({ data: me })),
@@ -54,7 +55,13 @@ function mockBackend(me: Record<string, unknown> = ACTOR) {
     }),
     http.get(`${API}/authz/scope-readiness`, () =>
       HttpResponse.json({
-        data: { total_databases: 0, unclassified_databases: 0, ready: true, servers: [] },
+        data: {
+          total_databases: 0,
+          unclassified_databases: 0,
+          ready: true,
+          servers: [],
+          ...readiness,
+        },
       }),
     ),
     http.get(`${API}/environments`, () =>
@@ -129,6 +136,21 @@ describe('GatewayUserAccessPage', () => {
       screen.getByText('Próximamente: asignar una capacidad puntual sin cambiar el rol.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Guardar accesos' })).toBeInTheDocument()
+  })
+
+  it('F-17: avisa que el entorno de un servidor sale solo de lo inventariado', async () => {
+    mockBackend(ACTOR, { server_resolution_inventory_only: true })
+    renderAt()
+    expect(
+      await screen.findByText(SERVER_RESOLUTION_INVENTORY_NOTE, { exact: false }),
+    ).toBeVisible()
+  })
+
+  it('sin el flag (backend anterior) no muestra ese aviso', async () => {
+    mockBackend()
+    renderAt()
+    await screen.findByRole('heading', { level: 1, name: 'Accesos de mlopez' })
+    expect(screen.queryByText(SERVER_RESOLUTION_INVENTORY_NOTE, { exact: false })).toBeNull()
   })
 
   it('deshabilita la global que el actor no tiene, con el motivo a la vista', async () => {

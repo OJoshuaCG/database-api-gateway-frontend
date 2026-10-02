@@ -15,6 +15,8 @@
  *    está `describeItemRejection`.
  */
 
+import { ACCESS_FORBIDDEN_CODE } from '@/lib/contracts'
+
 /** Códigos que el backend emite para este módulo. */
 export const ENVIRONMENT_ERROR_CODES = [
   'environment.not_found',
@@ -69,13 +71,12 @@ export function environmentMessage(code: string | null | undefined): string | nu
  * que este mapa no conoce— cae en **`failed`**, nunca en `blocked`. Ante la duda, la lectura más
  * grave: decir "no se intentó" sobre algo que sí se intentó sería peor que lo contrario.
  */
-export type ItemOutcome = 'ok' | 'blocked' | 'failed'
+export type ItemOutcome = 'ok' | 'blocked' | 'failed' | 'forbidden'
 
-export function classifyItem(item: {
-  ok: boolean
-  error_code?: string | null
-}): ItemOutcome {
+export function classifyItem(item: { ok: boolean; error_code?: string | null }): ItemOutcome {
   if (item.ok) return 'ok'
+  // `access.forbidden` por ítem = la capa 2 omitió esta base: no se intentó nada y no es un fallo.
+  if (item.error_code === ACCESS_FORBIDDEN_CODE) return 'forbidden'
   return item.error_code === 'environment.destructive_blocked' ? 'blocked' : 'failed'
 }
 
@@ -83,12 +84,14 @@ export const OUTCOME_LABEL: Record<ItemOutcome, string> = {
   ok: 'Aplicada',
   blocked: 'Bloqueada',
   failed: 'Error',
+  forbidden: 'Sin permiso',
 }
 
-export const OUTCOME_TONE: Record<ItemOutcome, 'success' | 'warning' | 'error'> = {
+export const OUTCOME_TONE: Record<ItemOutcome, 'success' | 'warning' | 'error' | 'neutral'> = {
   ok: 'success',
   blocked: 'warning',
   failed: 'error',
+  forbidden: 'neutral',
 }
 
 /**
@@ -121,3 +124,12 @@ export function databaseLabel(item: {
 }): string {
   return item.database_name ?? `#${item.managed_database_id}`
 }
+
+/**
+ * Quién escribe entornos, y cómo desbloquearlo. `environments.write` es SOLO de `security_officer`
+ * (no de `access_admin` ni de ningún rol operativo) y **no hay fallback**: sin nadie con
+ * `security_officer`, crear, editar y borrar entornos, abrir bases a agentes y reclasificar una
+ * base quedan bloqueados. La salida es asignar ese acceso, y se dice donde se bloquea.
+ */
+export const ENVIRONMENTS_WRITE_UNBLOCK =
+  'Solo security_officer puede escribir entornos o reclasificar bases. Si nadie lo tiene, asigná security_officer a alguien desde Usuarios → Accesos.'

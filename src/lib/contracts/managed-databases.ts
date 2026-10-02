@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { CHARSET_PATTERN, engineTypeSchema, IDENTIFIER_PATTERN, provisionStatusSchema } from './common'
+import {
+  CHARSET_PATTERN,
+  engineTypeSchema,
+  IDENTIFIER_PATTERN,
+  provisionStatusSchema,
+} from './common'
 
 /**
  * Origen de una BD gestionada (Plan 09): `provisioned` la creó el gateway, `adopted` ya existía
@@ -163,7 +168,7 @@ export const adoptDatabaseInSchema = z
     owner_id: z.number().int().min(1, 'Selecciona un propietario'),
     model_id: z.number().int().min(1).nullable().optional(),
     model_version: z.string().max(50, 'Máximo 50 caracteres').nullable().optional(),
-    /** Entorno del destino adoptado. Si se omite, el backend usa el marcado `is_default`. */
+    /** Entorno del destino adoptado. Si se omite, el backend usa el entorno ACTIVO más protegido. */
     environment_id: z.number().int().min(1).nullable().optional(),
     charset: charsetField,
     collation: charsetField,

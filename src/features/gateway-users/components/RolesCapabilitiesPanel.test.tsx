@@ -20,9 +20,9 @@ describe('RolesCapabilitiesPanel', () => {
   it('pinta una tarjeta por rol con su cuenta, leída del catálogo', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    expect(await screen.findByText('Otorga 12 de 29')).toBeInTheDocument()
-    expect(screen.getByText('Otorga 17 de 29')).toBeInTheDocument()
-    expect(screen.getByText('Otorga 26 de 29')).toBeInTheDocument()
+    expect(await screen.findByText('Otorga 12 de 30')).toBeInTheDocument()
+    expect(screen.getByText('Otorga 17 de 30')).toBeInTheDocument()
+    expect(screen.getByText('Otorga 26 de 30')).toBeInTheDocument()
     // Una línea de intención por rol y por global, de `ROLE_PURPOSES`.
     expect(screen.getByText('Consulta sin cambiar nada.')).toBeInTheDocument()
     expect(
@@ -31,7 +31,7 @@ describe('RolesCapabilitiesPanel', () => {
     expect(screen.getByText('Administración de accesos')).toBeInTheDocument()
     expect(screen.getByText('Administra servidores, catálogos y política.')).toBeInTheDocument()
     expect(screen.getByText('Capacidades globales (se suman a cualquier rol)')).toBeInTheDocument()
-    expect(screen.getByText('29 de 29 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('30 de 30 capacidades')).toBeInTheDocument()
     // Plurales sin «(s)»: viewer no tiene ninguna destructiva.
     expect(screen.getAllByText('0 destructivas').length).toBeGreaterThan(0)
     expect(screen.queryByText(/\(s\)|\(es\)/)).not.toBeInTheDocument()
@@ -42,11 +42,11 @@ describe('RolesCapabilitiesPanel', () => {
   it('«Solo destructivas» deja solo esas y esconde los módulos vacíos', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 29')
+    await screen.findByText('Otorga 12 de 30')
     await userEvent.click(screen.getByLabelText('Solo destructivas'))
-    expect(screen.getByText('6 de 29 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('6 de 30 capacidades')).toBeInTheDocument()
     // El conteo también va en una región viva, para quien filtra sin ver la pantalla.
-    expect(screen.getByText('6 de 29 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByText('6 de 30 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
     expect(screen.queryByRole('heading', { name: 'Entornos' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()
   })
@@ -54,9 +54,9 @@ describe('RolesCapabilitiesPanel', () => {
   it('la búsqueda filtra por id', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 29')
+    await screen.findByText('Otorga 12 de 30')
     await userEvent.type(screen.getByLabelText('Buscar capacidad'), 'exports.download')
-    expect(screen.getByText('1 de 29 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('1 de 30 capacidades')).toBeInTheDocument()
     const section = screen.getByRole('heading', { name: 'Exportaciones' }).closest('section')
     if (!section) throw new Error('falta la sección')
     expect(within(section).getAllByText('exports.download').length).toBeGreaterThan(0)
@@ -65,7 +65,7 @@ describe('RolesCapabilitiesPanel', () => {
   it('elegir un rol colapsa las columnas en «¿La otorga <rol>?»', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 29')
+    await screen.findByText('Otorga 12 de 30')
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
     await userEvent.click(screen.getByRole('option', { name: 'operator' }))
     expect(
@@ -76,7 +76,7 @@ describe('RolesCapabilitiesPanel', () => {
   it('todas las secciones comparten los mismos anchos de columna (una sola matriz, sin escalera)', async () => {
     mockSession()
     const { container } = renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 29')
+    await screen.findByText('Otorga 12 de 30')
     const widthsOf = (colgroup: Element) =>
       Array.from(colgroup.querySelectorAll('col')).map((col) => (col as HTMLElement).style.width)
 
@@ -127,7 +127,7 @@ describe('RolesCapabilitiesPanel', () => {
       )
       mockSession()
       renderWithProviders(<RolesCapabilitiesPanel />)
-      await screen.findByText('Otorga 12 de 29')
+      await screen.findByText('Otorga 12 de 30')
       expect(
         screen.getAllByRole('columnheader', { name: '¿La otorga viewer?' }).length,
       ).toBeGreaterThan(0)

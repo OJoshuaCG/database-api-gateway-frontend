@@ -9,6 +9,7 @@ export {
   classifyItem,
   databaseLabel,
   describeItemRejection,
+  ENVIRONMENTS_WRITE_UNBLOCK,
   environmentMessage,
   OUTCOME_LABEL,
   OUTCOME_TONE,

@@ -12,7 +12,7 @@ import {
   Switch,
   XIcon,
 } from '@/components/ui'
-import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CapabilityHint, useCapabilityGuard, type AccessTarget } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
 import {
   CAPABILITIES,
@@ -23,6 +23,8 @@ import { useReconcilePartial, useReconcilePreview } from '../hooks/use-db-migrat
 
 interface ReconcilePartialSectionProps {
   dbId: number
+  /** Destino de la base, para resolver la capa 2 (rol del alcance EN esta base). */
+  scope?: AccessTarget
   /** Entrada de `partial_application[]` a reconciliar. Montar solo con objetivo (estado fresco). */
   entry: PartialApplicationEntry
   onClose: () => void
@@ -42,7 +44,12 @@ interface ReconcilePartialSectionProps {
  * Vive dentro de la página de migraciones y no en un diálogo: el plan de reversos es una tabla de
  * SQL que hay que leer entera antes de decidir, y apilada en un modal sobre otro no cabía.
  */
-export function ReconcilePartialSection({ dbId, entry, onClose }: ReconcilePartialSectionProps) {
+export function ReconcilePartialSection({
+  dbId,
+  scope,
+  entry,
+  onClose,
+}: ReconcilePartialSectionProps) {
   const [confirmTyped, setConfirmTyped] = useState('')
   const [forceAck, setForceAck] = useState(false)
   const [executed, setExecuted] = useState<ReconcilePartialResult | null>(null)
@@ -58,8 +65,15 @@ export function ReconcilePartialSection({ dbId, entry, onClose }: ReconcileParti
   // Reversos de mayor a menor `seq`: se deshace desde la última sentencia aplicada hacia atrás.
   const statements = plan ? [...plan.statements].sort((a, b) => b.seq - a.seq) : []
   const confirmed = confirmTyped.trim() === entry.version
-  // `reconcile-partial` va detrás de `blueprints.apply`, como aplicar y revertir.
-  const guard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'deshacer una aplicación parcial')
+  // `reconcile-partial` va detrás de `blueprints.apply` con capa 2 (`require_at`), como aplicar y
+  // revertir: se resuelve en el entorno de ESTA base.
+  const guard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'deshacer una aplicación parcial',
+    {
+      scope,
+    },
+  )
   const canExecute =
     confirmed && plan !== null && !cooldown && (!requiresForce || forceAck) && guard.allowed
 

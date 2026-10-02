@@ -18,6 +18,7 @@ export {
 } from './hooks/use-capability-guard'
 export { CapabilityHint } from './components/CapabilityHint'
 export { ASK_FOR_ACCESS, CapabilityCallout } from './components/CapabilityCallout'
+export { SkippedByScopeCallout } from './components/SkippedByScopeCallout'
 export { ForbiddenState } from './components/ForbiddenState'
 export {
   MY_ACCESS_PATH,
@@ -25,6 +26,9 @@ export {
   forbiddenCopy,
   isAccessForbidden,
   isCsrfError,
+  isSkippedByScope,
+  skippedBaseLabel,
+  SKIPPED_BY_SCOPE_REASON,
   sessionEndReason,
   type ForbiddenCopy,
   type SessionEndReason,

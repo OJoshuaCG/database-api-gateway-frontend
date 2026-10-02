@@ -36,18 +36,17 @@ describe('EffectiveAccessPanel', () => {
     expect(screen.getByText('operator · 17 capacidades')).toBeInTheDocument()
     expect(screen.getByText('Producción · viewer')).toBeInTheDocument()
     expect(screen.getByText('Permiso de entorno')).toBeInTheDocument()
-    // «Pierde 5» sin más exageraría: de las cinco, hoy solo se recorta `databases.write`.
+    // Todo lo que pierde un rol por debajo del base es de capa 2: se recorta de verdad, sin salvedad.
     const lost = screen.getByText(/Pierde 5:/)
-    expect(lost).toHaveTextContent(
-      '(hoy solo se aplica a: Crear y editar bases gestionadas (solo en borrar y aprovisionar); el resto todavía no).',
-    )
+    expect(lost).not.toHaveTextContent('no se recorta')
+    expect(lost).not.toHaveTextContent('el resto no')
     // Solo recorta: la nota es informativa, no una alerta.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    // Sin esta nota el panel prometería una restricción que hoy solo existe en cuatro rutas.
+    // Sin esta nota el panel prometería un recorte que lecturas y globales no tienen.
     expect(screen.getByText(SCOPE_ENFORCEMENT_NOTE)).toBeInTheDocument()
   })
 
-  it('un permiso que eleva avisa que hoy rige en todo el gateway fuera de las cuatro rutas', () => {
+  it('un permiso que eleva avisa que hoy rige en todo el gateway en lo que no se recorta por alcance', () => {
     renderWithProviders(
       <EffectiveAccessPanel
         mode="admin"
@@ -60,7 +59,7 @@ describe('EffectiveAccessPanel', () => {
       />,
     )
     expect(screen.getByText(/Suma 14:/)).toBeInTheDocument()
-    expect(screen.getByText(/en esas otras operaciones tiene el rol/)).toBeInTheDocument()
+    expect(screen.getByText(/en esas otras operaciones \(lecturas y capacidades globales\) tiene el rol/)).toBeInTheDocument()
     // Escalada real por encima del base: el aviso sube a `warning` (que se anuncia como alerta).
     expect(screen.getByRole('alert')).toHaveTextContent(SCOPE_ENFORCEMENT_NOTE)
     // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1), y va en rojo.
@@ -131,7 +130,7 @@ describe('EffectiveAccessPanel', () => {
     expect(screen.queryByText(SCOPE_ENFORCEMENT_NOTE)).not.toBeInTheDocument()
   })
 
-  it('con parte de lo perdido fuera de la capa 2, nombra solo lo que hoy se recorta', () => {
+  it('lo perdido de capa 2 no lleva salvedad y quitar destructivas no es una escalada', () => {
     renderWithProviders(
       <EffectiveAccessPanel
         mode="admin"
@@ -141,10 +140,10 @@ describe('EffectiveAccessPanel', () => {
         catalog={CATALOG_FIXTURE}
       />,
     )
-    // owner → operator pierde `databases.drop` y `blueprints.apply` (capa 2) y otras que no.
+    // owner → operator pierde `databases.drop`, `blueprints.apply` y otras: todas de capa 2.
     const lost = screen.getByText(/Pierde \d+:/)
-    expect(lost).toHaveTextContent(/hoy solo se aplica a: .*Borrar bases de datos/)
-    expect(lost).toHaveTextContent('; el resto todavía no).')
+    expect(lost).toHaveTextContent(/Borrar bases de datos/)
+    expect(lost).not.toHaveTextContent('el resto no')
     // Quitar destructivas es un recorte: marca neutra, no la alarma de una escalada.
     expect(screen.getByText('Quita destructivas')).toBeInTheDocument()
     expect(screen.queryByText('Suma destructivas')).not.toBeInTheDocument()

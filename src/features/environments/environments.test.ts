@@ -57,9 +57,12 @@ describe('toManagedDatabaseUpdate', () => {
   })
 
   it('desclasificar explícitamente manda null', () => {
-    const body = toManagedDatabaseUpdate({ ...values, environment_id: null }, {
-      environment_id: true,
-    })
+    const body = toManagedDatabaseUpdate(
+      { ...values, environment_id: null },
+      {
+        environment_id: true,
+      },
+    )
     expect(body).toEqual({ environment_id: null })
   })
 
@@ -219,6 +222,13 @@ describe('resolveEnvironmentState', () => {
 })
 
 // ─── Clasificación por código, nunca por prosa ─────────────────────────────── //
+
+describe('classifyItem: omitida por scope', () => {
+  it('`access.forbidden` por ítem no es un fallo ni un bloqueo: es `forbidden`', () => {
+    expect(classifyItem({ ok: false, error_code: 'access.forbidden' })).toBe('forbidden')
+    expect(classifyItem({ ok: true, error_code: 'access.forbidden' })).toBe('ok')
+  })
+})
 
 describe('classifyItem', () => {
   it('bloqueada por política no es un error', () => {

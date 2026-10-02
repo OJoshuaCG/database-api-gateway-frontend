@@ -104,7 +104,7 @@ export function useCapabilities(): Capabilities {
  * Catálogo completo de capacidades (§2), para la pantalla de administración de accesos.
  *
  * Se cachea **contra `catalog_version`** de `/auth/me`, que es exactamente para lo que el backend
- * lo publica: son 29 filas que no se mueven entre despliegues. Cuando el sha cambia, cambia la
+ * lo publica: son 30 filas que no se mueven entre despliegues. Cuando el sha cambia, cambia la
  * query key y la entrada vieja queda huérfana sola — no hace falta invalidar a mano.
  *
  * `enabled` espera a tener la versión: pedirlo con `null` y volver a pedirlo con el sha real

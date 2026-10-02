@@ -2,6 +2,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
+  CAPABILITIES,
   CAPABILITY_ESCALATIONS,
   IDENTIFIER_PATTERN,
   type DatabaseModelOut,
@@ -15,7 +16,7 @@ import { Button, Combobox, Input, Textarea, RadioCardGroup } from '@/components/
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
-import { useSelectableEnvironments } from '@/features/environments'
+import { ENVIRONMENTS_WRITE_UNBLOCK, useSelectableEnvironments } from '@/features/environments'
 import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import {
   CharsetCollationSelector,
@@ -69,8 +70,8 @@ function buildSchema(mode: 'create' | 'edit') {
     model_id: z.number().int().min(1).nullable(),
     initialState: z.enum(['vacia', 'ultima', 'version']),
     targetVersion: z.string(),
-    // REQUERIDO en el alta a propósito: el backend asigna `development` si no se manda, así que
-    // un campo vacío *significa* development — la misma mentira que se corrigió con
+    // REQUERIDO en el alta a propósito: sin `environment_id` el backend asigna el entorno ACTIVO más
+    // protegido (ya no `development`), y un campo vacío *significaría* eso — la misma mentira que se corrigió con
     // `model_version`. Una elección explícita cuesta un click y elimina toda la clase de fallo
     // "nadie notó que se fue por default". En `edit` es nullable porque `null` desclasifica.
     environment_id:
@@ -166,6 +167,11 @@ export function ManagedDatabaseForm({
     CAPABILITY_ESCALATIONS.createWithApplyMigrations,
     'crear la base ya migrada',
   )
+  // Reclasificar (cambiar `environment_id` de una base existente) pide `environments.write`, que es
+  // SOLO de `security_officer` y alcanza por sí sola: no hace falta `databases.write`. Se deshabilita
+  // el selector en edición para no llevar al usuario a un 403 al guardar. En el alta no aplica.
+  const reclassifyGuard = useCapabilityGuard(CAPABILITIES.environmentsWrite, 'reclasificar la base')
+  const reclassifyBlocked = mode === 'edit' && !reclassifyGuard.allowed
   const selectableEnvironments = environments.selectable
 
   const {
@@ -308,9 +314,10 @@ export function ManagedDatabaseForm({
             required={mode === 'create'}
             isLoading={environments.isLoading}
             placeholder="Selecciona un entorno"
+            disabled={reclassifyBlocked}
             hint={
               mode === 'create'
-                ? 'Obligatorio: no hay default silencioso. Un entorno puede bloquear las migraciones destructivas.'
+                ? 'Elegilo explícitamente: sin entorno, la base va al entorno activo más protegido. Un entorno puede bloquear las migraciones destructivas.'
                 : 'Reclasificar cambia si el servidor acepta migraciones destructivas en esta base.'
             }
             error={fieldState.error?.message}
@@ -323,6 +330,13 @@ export function ManagedDatabaseForm({
           />
         )}
       />
+
+      {reclassifyBlocked && (
+        <>
+          <CapabilityHint guard={reclassifyGuard} />
+          <p className="text-xs text-muted-foreground">{ENVIRONMENTS_WRITE_UNBLOCK}</p>
+        </>
+      )}
 
       {/*
         ESTADO INICIAL. Reemplaza al viejo `Input` «Versión del modelo», que era texto libre y

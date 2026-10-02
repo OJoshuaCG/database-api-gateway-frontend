@@ -10,6 +10,7 @@ import {
   ErrorState,
   Spinner,
 } from '@/components/ui'
+import { ENVIRONMENTS_WRITE_UNBLOCK } from '../messages'
 import { useEnvironmentOptions } from '../hooks/use-environment-options'
 
 /**
@@ -40,6 +41,8 @@ export function EnvironmentsPanel() {
           fijo: se administra por API a propósito, no desde acá. Ojo, esto no tiene nada que ver con
           el <code>APP_ENV</code> del propio gateway que muestra <code>/health</code>.
         </CardDescription>
+        {/* Quién escribe y cómo desbloquearlo: la API los pide a `environments.write`. */}
+        <p className="text-sm text-muted-foreground">{ENVIRONMENTS_WRITE_UNBLOCK}</p>
       </CardHeader>
       <CardContent>
         {environments.isLoading && <Spinner />}

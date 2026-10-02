@@ -289,13 +289,7 @@ export const collationBatchCreateSchema = z.object({
   objects: collationBatchObjectsSchema.optional().default('all'),
   include_database_default: z.boolean().optional().default(true),
   environment_id: z.number().int().nullable().optional(),
-  max_databases: z
-    .number()
-    .int()
-    .min(1, 'Mínimo 1')
-    .max(100, 'Máximo 100')
-    .optional()
-    .default(10),
+  max_databases: z.number().int().min(1, 'Mínimo 1').max(100, 'Máximo 100').optional().default(10),
 })
 export type CollationBatchCreate = z.infer<typeof collationBatchCreateSchema>
 
@@ -307,9 +301,14 @@ export type CollationBatchCreate = z.infer<typeof collationBatchCreateSchema>
  */
 export const collationBatchDatabaseOutSchema = z.object({
   managed_database_id: z.number().int(),
-  server_id: z.number().int(),
-  database_name: z.string(),
-  batch_seq: z.number().int(),
+  /**
+   * `null` en una BD que la capa 2 omitió (`error_code: 'access.forbidden'`): el backend manda
+   * SOLO `{managed_database_id, ok: false, error_code}` para no filtrar el nombre ni la ubicación
+   * de lo que el actor no puede tocar. Un `z.string()` a secas tiraría el plan entero.
+   */
+  server_id: z.number().int().nullable(),
+  database_name: z.string().nullable(),
+  batch_seq: z.number().int().nullable(),
   job_id: z.number().int().nullable(),
   ok: z.boolean(),
   error: z.string().nullable(),

@@ -26,7 +26,13 @@ export function useExecuteCloneBatch(batchId: number) {
     mutationFn: (body) => executeCloneBatch(batchId, body),
     onSuccess: (batch) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.cloneBatches.detail(batchId) })
-      toast.success('Lote encolado', `Se clonarán ${batch.total} bases, de a una por vez.`)
+      const omitidas = batch.skipped.length
+      toast.success(
+        'Lote encolado',
+        `Se clonarán ${batch.total} bases, de a una por vez.${
+          omitidas > 0 ? ` ${omitidas} fila(s) omitida(s) por falta de permiso.` : ''
+        }`,
+      )
     },
   })
 }
@@ -60,7 +66,11 @@ export function useRetryCloneBatch(batchId: number) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.cloneBatches.all })
       toast.success(
         'Lote de reintento creado',
-        `${batch.total} bases. Revisalo y confirmalo para que arranque.`,
+        `${batch.total} bases. Revisalo y confirmalo para que arranque.${
+          batch.skipped.length > 0
+            ? ` ${batch.skipped.length} fila(s) omitida(s) por falta de permiso.`
+            : ''
+        }`,
       )
     },
   })

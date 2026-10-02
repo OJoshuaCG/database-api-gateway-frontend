@@ -1,4 +1,5 @@
 import { Badge, Callout, ErrorState, Input, Spinner } from '@/components/ui'
+import { SkippedByScopeCallout } from '@/features/auth'
 import { itemStatusLabel, itemStatusTone } from '../logic'
 import type { CloneBatchWizard } from '../use-clone-batch-wizard'
 
@@ -39,6 +40,9 @@ export function ConfirmStep({ wizard }: { wizard: CloneBatchWizard }) {
           <strong className="text-foreground">{wizard.targetServerName}</strong>, de a una por vez.
         </p>
       </div>
+
+      {/* Tras un «reintentar»: filas que el nuevo lote dejó afuera por falta de permiso. */}
+      <SkippedByScopeCallout ids={wizard.skipped.map((row) => row.id)} noun="fila" />
 
       {bloqueadas.length > 0 && (
         <Callout tone="warning" title={`${bloqueadas.length} bases no se van a clonar`}>

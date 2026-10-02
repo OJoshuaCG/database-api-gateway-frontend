@@ -7,8 +7,9 @@ import {
   diffCapabilities,
   effectiveRoleAt,
   globalCapabilityIds,
-  isEnforcedByScopeToday,
-  LAYER2_CAPABILITIES,
+  isEnforcedByScope,
+  layer2CapabilityIds,
+  lostEnforcementNote,
   mostProtectedEnvironmentId,
   resolveEffectiveAccess,
   roleCapabilityIds,
@@ -51,6 +52,7 @@ describe('derivación de roles y globales desde el catálogo', () => {
     expect(globalCapabilityIds(catalog, 'security_officer')).toEqual([
       'servers.admin',
       'catalogs.write',
+      'environments.write',
       'gateway.admin',
     ])
     expect(catalogRoles(catalog)).toEqual(['viewer', 'operator', 'owner'])
@@ -267,31 +269,55 @@ describe('resolveEffectiveAccess', () => {
   })
 })
 
-describe('LAYER2_CAPABILITIES', () => {
+describe('capacidades con capa 2 (derivadas del catálogo)', () => {
   /*
-   * Copia a mano de las llamadas a `assert_scope_for_database` en
-   * `app/routes/v1/managed_databases.py` (backend 463dc4d). Es la fuente de verdad del test: si el
-   * backend suma una ruta con capa 2, esta tabla se actualiza leyendo el backend, no la constante.
+   * Copia a mano del conjunto que el backend recorta por alcance (backend `scope-enforcement-hardening`,
+   * `capability_matrix()`: eje distinto de `global` y sin el rol `viewer`). Es la fuente de verdad del
+   * test: si el catálogo cambia, esta lista se actualiza leyendo el backend, no la función.
    */
-  const ROUTES_WITH_LAYER2: Record<string, readonly string[]> = {
-    'DELETE /managed-databases/{id}': ['databases.drop', 'databases.write'], // drop_remote o no
-    'POST /managed-databases/{id}/provision': ['databases.write'],
-    'POST /managed-databases/{id}/migrations/apply': ['blueprints.apply'],
-    'POST /managed-databases/{id}/migrations/rollback': ['blueprints.apply'],
-  }
+  const BACKEND_LAYER2 = [
+    'engine_users.write',
+    'engine_users.drop',
+    'engine_users.secrets',
+    'databases.write',
+    'databases.drop',
+    'blueprints.write',
+    'blueprints.apply',
+    'blueprints.captures',
+    'schema_diff.execute',
+    'clones.execute',
+    'collation.execute',
+    'exports.execute',
+    'exports.download',
+    'sql_console.execute',
+  ]
 
-  it('son exactamente las que hoy exige `assert_scope_for_database` en el backend', () => {
-    const expected = [...new Set(Object.values(ROUTES_WITH_LAYER2).flat())].sort()
-    expect(Object.keys(ROUTES_WITH_LAYER2)).toHaveLength(4)
-    expect([...LAYER2_CAPABILITIES].sort()).toEqual(expected)
-    for (const id of LAYER2_CAPABILITIES) {
-      expect(catalog.some((row) => row.id === id)).toBe(true)
-    }
+  it('coinciden con el conjunto por alcance que el backend recorta', () => {
+    expect([...layer2CapabilityIds(catalog)].sort()).toEqual([...BACKEND_LAYER2].sort())
   })
 
-  it('el resto de las capacidades por alcance todavía no se recorta', () => {
-    expect(isEnforcedByScopeToday('databases.drop')).toBe(true)
-    expect(isEnforcedByScopeToday('engine_users.drop')).toBe(false)
-    expect(isEnforcedByScopeToday('exports.execute')).toBe(false)
+  it('las lecturas por alcance y las globales no se recortan', () => {
+    expect(isEnforcedByScope('databases.drop', catalog)).toBe(true)
+    expect(isEnforcedByScope('engine_users.drop', catalog)).toBe(true)
+    expect(isEnforcedByScope('exports.execute', catalog)).toBe(true)
+    expect(isEnforcedByScope('databases.read', catalog)).toBe(false)
+    expect(isEnforcedByScope('environments.write', catalog)).toBe(false)
+    expect(isEnforcedByScope('servers.admin', catalog)).toBe(false)
+  })
+
+  it('un rol nuevo en el catálogo se refleja sin tocar la lista', () => {
+    const extra = { ...catalog[0]!, id: 'x.run', scope_axis: 'server', roles: ['owner'] }
+    expect(isEnforcedByScope('x.run', [...catalog, extra])).toBe(true)
+  })
+
+  it('lostEnforcementNote calla si todo lo perdido se recorta y avisa si no', () => {
+    const labels = (ids: readonly string[]) => [...ids]
+    expect(lostEnforcementNote(['databases.drop'], labels, catalog)).toBe('')
+    expect(lostEnforcementNote(['servers.admin'], labels, catalog)).toBe(
+      ' (no se recorta por alcance)',
+    )
+    expect(lostEnforcementNote(['databases.drop', 'servers.admin'], labels, catalog)).toBe(
+      ' (por alcance solo se recortan: databases.drop; el resto no)',
+    )
   })
 })

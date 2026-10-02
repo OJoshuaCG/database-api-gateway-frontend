@@ -56,8 +56,8 @@ const PROVENANCE: Record<string, { label: string; tone: BadgeTone }> = {
  * respecto del base, los cruces entre permisos y las capacidades globales.
  *
  * Todo sale de `resolveEffectiveAccess`, el espejo puro de `app/core/scope.py`. Lleva SIEMPRE la
- * nota de que hoy el recorte por alcance solo se hace cumplir en cuatro rutas: sin ella, el panel
- * prometería una restricción que en la mayoría de las operaciones todavía no existe.
+ * nota de dónde se aplica el recorte por alcance: sin ella, el panel prometería una restricción
+ * que las lecturas y las capacidades globales no tienen.
  */
 export function EffectiveAccessPanel({
   baseRole,
@@ -219,16 +219,16 @@ export function EffectiveAccessPanel({
 
       {grants.length > 0 && (
         // `warning` solo cuando un permiso ELEVA por encima del base: ahí el rol más alto rige en
-        // todo el gateway fuera de las cuatro rutas, y eso es una escalada real. Si los permisos
+        // todo el gateway en lo que no se recorta por alcance, y eso es una escalada real. Si los permisos
         // solo recortan, la nota es informativa.
         <Callout
           tone={access.unionRole !== baseRole ? 'warning' : 'info'}
-          title="Dónde se aplica hoy cada permiso por alcance"
+          title="Dónde se aplica cada permiso por alcance"
         >
           <p>{SCOPE_ENFORCEMENT_NOTE}</p>
           {access.unionRole !== baseRole && (
             <p>
-              Por eso, hasta entonces, en esas otras operaciones{' '}
+              Por eso, en esas otras operaciones (lecturas y capacidades globales){' '}
               {mode === 'self' ? 'tenés' : 'tiene'} el rol <strong>{access.unionRole}</strong> en
               todo el gateway, no solo en el{' '}
               {grants
@@ -271,7 +271,7 @@ function DiffLine({
       {diff.lost.length > 0 && (
         <span className="text-muted-foreground">
           Pierde {diff.lost.length}: {summarizeLabels(label(diff.lost))}
-          {lostEnforcementNote(diff.lost, label)}.
+          {lostEnforcementNote(diff.lost, label, catalog)}.
         </span>
       )}
     </span>

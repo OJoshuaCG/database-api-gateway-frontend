@@ -17,10 +17,10 @@ import { DESTRUCTIVE_CAPABILITIES, type CapabilityDescriptor } from '@/lib/contr
  * - una base sin entorno (o un destino desconocido) cuenta como el entorno MÁS PROTEGIDO;
  * - las capacidades globales (`access_admin`, `security_officer`) no se recortan por alcance.
  *
- * Y una diferencia que hay que decir siempre que se muestre esto: **hoy el gateway aplica esa
- * restricción solo en cuatro rutas** (borrar una base, aprovisionar, aplicar y revertir
- * versiones). En el resto rige el rol unión —el más alto en cualquier alcance—. Ver
- * `SCOPE_ENFORCEMENT_NOTE`.
+ * Y una diferencia que hay que decir siempre que se muestre esto: **el gateway aplica esa
+ * restricción en toda operación sobre una base o un servidor concreto** (capa 2: las capacidades
+ * por alcance que el rol `viewer` no tiene). Las lecturas y las capacidades globales NO se recortan
+ * por alcance: ahí rige el rol unión. Ver `SCOPE_ENFORCEMENT_NOTE` e `isEnforcedByScope`.
  */
 
 /** Cadena monotónica de roles: cada uno incluye al anterior (`_ROLE_RANK` del backend). */
@@ -72,34 +72,35 @@ export function highestRole(roles: readonly string[]): string {
 }
 
 /**
- * Nota honesta sobre dónde se hace cumplir hoy la restricción por alcance. Toda vista que muestre
- * acceso por alcance la tiene que llevar: sin ella, la pantalla promete una restricción que en la
- * mayoría de las operaciones no existe todavía.
+ * Nota honesta sobre dónde se hace cumplir la restricción por alcance. Toda vista que muestre
+ * acceso por alcance la tiene que llevar: sin ella, la pantalla promete un recorte que las
+ * lecturas y las capacidades globales no tienen.
  */
 export const SCOPE_ENFORCEMENT_NOTE =
-  'Hoy el gateway aplica esta restricción por alcance en borrar bases, aprovisionar, aplicar y revertir versiones; en el resto de las operaciones rige el rol más alto que tenga en cualquier alcance. Se completa en una próxima versión.'
+  'El gateway aplica esta restricción por alcance en toda operación que escribe, ejecuta o descarga sobre una base o un servidor concreto. Las lecturas y las capacidades globales (administración, política) no se recortan por alcance: ahí rige el rol más alto que tenga en cualquier alcance.'
 
 /**
- * Las capacidades que el backend HOY vuelve a exigir en el destino (capa 2), y por lo tanto las
- * únicas que un permiso por alcance de verdad recorta. Espejo de las llamadas a
- * `assert_scope_for_database` en `app/routes/v1/managed_databases.py`:
- *
- * - `DELETE /managed-databases/{id}` → `databases.drop` (con `drop_remote`) o `databases.write`;
- * - `POST /managed-databases/{id}/provision` → `databases.write`;
- * - `POST .../migrations/apply` y `.../migrations/rollback` → `blueprints.apply`.
- *
- * Ojo: `databases.write` se recorta solo en esas dos rutas; crear o editar una base todavía mira el
- * rol unión. Cuando `scope-enforcement-hardening` extienda la capa 2, esta lista crece con él.
+ * F-17 (`server_resolution_inventory_only` de scope-readiness): el entorno de un servidor se
+ * resuelve solo con las bases inventariadas. Va escrito donde se otorgan permisos por alcance.
  */
-export const LAYER2_CAPABILITIES = [
-  'databases.write',
-  'databases.drop',
-  'blueprints.apply',
-] as const
+export const SERVER_RESOLUTION_INVENTORY_NOTE =
+  'Las bases que el gateway no tiene inventariadas no cuentan para resolver el entorno de un servidor.'
 
-/** ¿El backend hoy recorta esta capacidad por alcance? Ver `LAYER2_CAPABILITIES`. */
-export function isEnforcedByScopeToday(id: string): boolean {
-  return (LAYER2_CAPABILITIES as readonly string[]).includes(id)
+/**
+ * Las capacidades que el backend vuelve a exigir en el destino (capa 2): **las de eje por alcance
+ * que el rol `viewer` no tiene**. Se derivan del catálogo y no de una lista: cada ruta con destino
+ * declara `require_at` y el viewer es el piso que rige sin permisos por alcance, así que lo único
+ * que un permiso por alcance puede recortar son las capacidades por encima de ese piso.
+ */
+export function layer2CapabilityIds(catalog: readonly CapabilityDescriptor[]): string[] {
+  return catalog
+    .filter((row) => row.scope_axis !== 'global' && !row.roles.includes('viewer'))
+    .map((row) => row.id)
+}
+
+/** ¿Esta capacidad se recorta por alcance? Ver `layer2CapabilityIds`. */
+export function isEnforcedByScope(id: string, catalog: readonly CapabilityDescriptor[]): boolean {
+  return layer2CapabilityIds(catalog).includes(id)
 }
 
 // ── Derivación desde el catálogo ───────────────────────────────────────────────
@@ -444,25 +445,20 @@ export function globalCapabilityLabel(id: string): string {
 }
 
 /**
- * Qué parte de lo que un permiso QUITA se hace cumplir hoy, para decirlo junto a «Pierde N».
- * Sin esto, «pierde 5» promete un recorte que en la mayoría de las operaciones todavía no existe
- * (F-37). `databases.write` se recorta solo en dos de sus rutas, y se aclara.
+ * Qué parte de lo que un permiso QUITA se recorta de verdad por alcance, para decirlo junto a
+ * «Pierde N»: las lecturas y las globales no tienen destino, así que no se recortan.
  *
- * Devuelve el sufijo (con espacio inicial) o `''` si todo lo perdido ya se aplica.
+ * Devuelve el sufijo (con espacio inicial) o `''` si todo lo perdido se aplica por alcance.
  */
 export function lostEnforcementNote(
   lost: readonly string[],
   labels: (ids: readonly string[]) => string[],
+  catalog: readonly CapabilityDescriptor[],
 ): string {
-  const enforced = lost.filter(isEnforcedByScopeToday)
+  const enforced = lost.filter((id) => isEnforcedByScope(id, catalog))
   if (enforced.length === lost.length) return ''
-  if (enforced.length === 0) return ' (hoy todavía no se aplica a ninguna)'
-  const named = enforced.map((id) => {
-    const [label] = labels([id])
-    const text = label ?? id
-    return id === 'databases.write' ? `${text} (solo en borrar y aprovisionar)` : text
-  })
-  return ` (hoy solo se aplica a: ${summarizeLabels(named)}; el resto todavía no)`
+  if (enforced.length === 0) return ' (no se recorta por alcance)'
+  return ` (por alcance solo se recortan: ${summarizeLabels(labels(enforced))}; el resto no)`
 }
 
 /**

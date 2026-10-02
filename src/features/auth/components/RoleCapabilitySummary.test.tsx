@@ -7,7 +7,7 @@ import { RoleCapabilitySummary } from './RoleCapabilitySummary'
 describe('RoleCapabilitySummary', () => {
   it('dice cuántas otorga y nombra primero lo destructivo que NO incluye', () => {
     renderWithProviders(<RoleCapabilitySummary role="operator" catalog={CATALOG_FIXTURE} />)
-    const text = screen.getByText(/Otorga 17 de 29/).textContent ?? ''
+    const text = screen.getByText(/Otorga 17 de 30/).textContent ?? ''
     expect(text).toContain('No incluye:')
     // Lo que no se deshace va primero: borrar usuarios del motor y bases son de `owner`.
     expect(text).toContain('Borrar usuarios del motor')
@@ -19,10 +19,8 @@ describe('RoleCapabilitySummary', () => {
     renderWithProviders(
       <RoleCapabilitySummary role="viewer" compareTo="operator" catalog={CATALOG_FIXTURE} />,
     )
-    // Misma salvedad que el panel: de lo perdido, hoy solo se recorta `databases.write`.
-    expect(screen.getByText(/Respecto de operator pierde 5/)).toHaveTextContent(
-      '(solo en borrar y aprovisionar); el resto todavía no).',
-    )
+    // Todo lo perdido es de capa 2: se recorta de verdad y no lleva salvedad.
+    expect(screen.getByText(/Respecto de operator pierde 5/)).not.toHaveTextContent('no se recorta')
     // Operator tiene `collation.execute`, que reescribe tablas en el motor y no se deshace: bajar a
     // viewer QUITA una capacidad destructiva, y eso tiene que verse sin depender del color.
     expect(screen.getByText('Quita destructivas')).toBeInTheDocument()

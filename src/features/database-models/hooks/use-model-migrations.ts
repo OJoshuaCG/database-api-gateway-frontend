@@ -217,12 +217,15 @@ export function useApplyAllMigrations(modelId: number) {
         // cuáles necesitan acción.
         const blocked = result.results.filter((r) => classifyItem(r) === 'blocked').length
         const failed = result.results.filter((r) => classifyItem(r) === 'failed').length
+        // Omitidas por la capa 2 (`access.forbidden`): ni se intentaron ni son un fallo.
+        const forbidden = result.results.filter((r) => classifyItem(r) === 'forbidden').length
         // `matched_databases` y no `total_databases`: el primero refleja los filtros del lote
         // (p. ej. acotado a un entorno), así que "3 de 40" deja de leerse como "sobraron 37".
         const scope = `${result.processed} de ${result.matched_databases || result.total_databases} BD(s)`
         const detail = [
-          `${result.results.length - blocked - failed} aplicada(s)`,
+          `${result.results.length - blocked - failed - forbidden} aplicada(s)`,
           blocked ? `${blocked} bloqueada(s) por política` : null,
+          forbidden ? `${forbidden} sin permiso (omitida(s))` : null,
           failed ? `${failed} con error` : null,
         ]
           .filter(Boolean)
@@ -230,7 +233,7 @@ export function useApplyAllMigrations(modelId: number) {
 
         if (failed > 0) {
           toast.error(`Aplicación masiva con ${failed} fallo(s)`, `${scope} — ${detail}`)
-        } else if (blocked > 0) {
+        } else if (blocked > 0 || forbidden > 0) {
           // Ni éxito limpio ni error: el lote corrió y la política frenó parte. `warning` es el
           // tono correcto — en esta app el rojo significa "está roto", y un rechazo por política
           // es el sistema funcionando. No hay atajo para esta variante, así que va por `push`.

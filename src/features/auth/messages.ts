@@ -134,3 +134,21 @@ export function isAccessForbidden(error: unknown): boolean {
   const apiError = error instanceof ApiError ? error : toApiError(error)
   return apiError.status === 403 && apiError.code === ACCESS_FORBIDDEN_CODE
 }
+
+/**
+ * Una base que un lote omitió por falta de alcance (`error_code: access.forbidden`). El backend
+ * devuelve SOLO el id —ni nombre, ni servidor, ni entorno— para no filtrar lo que el actor no
+ * puede tocar, así que el id es todo lo que hay para mostrar.
+ */
+export function skippedBaseLabel(id: number): string {
+  return `Sin permiso en esta base (#${id})`
+}
+
+/** ¿Es un ítem de lote omitido por la capa 2? Solo `ok: false` con el código de autorización. */
+export function isSkippedByScope(item: { ok: boolean; error_code?: string | null }): boolean {
+  return !item.ok && item.error_code === ACCESS_FORBIDDEN_CODE
+}
+
+/** El motivo de un ítem omitido: no se intentó nada, y la salida es pedir el acceso. */
+export const SKIPPED_BY_SCOPE_REASON =
+  'No se intentó: tu acceso no alcanza el entorno de este destino.'

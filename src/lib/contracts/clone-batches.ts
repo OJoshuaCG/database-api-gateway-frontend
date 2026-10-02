@@ -97,6 +97,18 @@ export const cloneBatchExecuteInSchema = z.object({
 export type CloneBatchExecuteIn = z.infer<typeof cloneBatchExecuteInSchema>
 
 // ── Salida ─────────────────────────────────────────────────────────────────────
+/**
+ * Una fila que la capa 2 omitió en `execute` / `retry-failed`: SOLO el `id` de la fila (el mismo
+ * que lista `/items`) y el código. Sin nombre de base, de servidor ni de entorno. No se persiste
+ * ni entra en `counts` ni en `total`.
+ */
+export const cloneBatchSkippedSchema = z.object({
+  id: z.number().int(),
+  ok: z.boolean(),
+  error_code: z.string(),
+})
+export type CloneBatchSkipped = z.infer<typeof cloneBatchSkippedSchema>
+
 export const cloneBatchOutSchema = z.object({
   id: z.number().int(),
   source_server_id: z.number().int(),
@@ -120,6 +132,14 @@ export const cloneBatchOutSchema = z.object({
   expires_at: z.string(),
   started_at: z.string().nullish(),
   finished_at: z.string().nullish(),
+  /**
+   * Solo en `execute` y `retry-failed`: las filas omitidas por falta de alcance en su origen o
+   * destino. El resto de los endpoints no lo manda (de ahí el `default([])`).
+   */
+  skipped: z
+    .array(cloneBatchSkippedSchema)
+    .nullish()
+    .transform((value) => value ?? []),
 })
 export type CloneBatchOut = z.infer<typeof cloneBatchOutSchema>
 
@@ -135,7 +155,9 @@ export const cloneBatchItemOutSchema = z.object({
   clone_job_id: z.number().int().nullish(),
   status: cloneBatchItemStatusSchema.nullish(),
   phase: z.string().nullish(),
-  progress: z.object({ phase: z.string(), tables: z.record(z.string(), z.number().int()) }).nullish(),
+  progress: z
+    .object({ phase: z.string(), tables: z.record(z.string(), z.number().int()) })
+    .nullish(),
   error: z.string().nullish(),
   /** Código estable del motivo, para mapearlo a nuestro texto en vez de parsear la prosa. */
   error_code: z.string().nullish(),

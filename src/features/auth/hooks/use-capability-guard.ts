@@ -26,9 +26,10 @@ export interface CapabilityGuard {
 export interface CapabilityGuardOptions {
   /**
    * El destino concreto, para resolver el rol por alcance con la misma regla que
-   * `app/core/scope.py`. **Hoy solo cambia algo en las cuatro rutas donde el backend aplica la
-   * capa 2** (borrar una base, aprovisionar, aplicar y revertir versiones); en las demás el
-   * servidor mira el rol unión y pasar `scope` haría la pista más estricta que el servidor.
+   * `app/core/scope.py`. Cambia algo en toda capacidad de capa 2 (`layer2CapabilityIds`): todas
+   * las rutas con destino hacen `require_at`. Pasalo cuando la pantalla CONOCE el destino
+   * (una base gestionada: servidor + entorno). Con una lectura o una capacidad global no cambia
+   * nada, y sin destino conocido —un alta cuyo entorno se elige después— no se pasa.
    */
   scope?: AccessTarget
 }

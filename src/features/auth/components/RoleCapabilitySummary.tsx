@@ -91,7 +91,7 @@ export function RoleCapabilitySummary({
         {diff.lost.length > 0 && (
           <span>
             Respecto de {compareTo} pierde {diff.lost.length}: {summarizeLabels(labels(diff.lost))}
-            {lostEnforcementNote(diff.lost, labels)}.
+            {lostEnforcementNote(diff.lost, labels, catalog)}.
           </span>
         )}
         {link}

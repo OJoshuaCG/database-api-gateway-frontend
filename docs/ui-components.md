@@ -284,7 +284,7 @@ las de riesgo). «Destructiva» sale de `DESTRUCTIVE_CAPABILITIES` (`lib/contrac
 el catálogo no publica esa marca. La leyenda es `CAPABILITY_FLAG_LEGEND`, para una `StatusLegend`.
 
 ### `RoleCapabilitySummary`
-Una línea bajo un selector de rol: «Otorga 17 de 29. No incluye: …». Props: `role`, `catalog`,
+Una línea bajo un selector de rol: «Otorga 17 de 30. No incluye: …». Props: `role`, `catalog`,
 `isLoading?`, `compareTo?` (pasa a decir qué suma o pierde respecto de ése, con las mismas marcas,
 colores y salvedad de «qué se aplica hoy» que `EffectiveAccessPanel`), `linkToMatrix?` (enlace a
 `/gateway-users?tab=roles`). Reemplaza a las descripciones de rol escritas a mano, que llegaron a

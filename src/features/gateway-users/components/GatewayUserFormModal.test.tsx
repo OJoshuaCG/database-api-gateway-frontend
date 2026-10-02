@@ -41,7 +41,7 @@ beforeEach(() => mockActor('owner'))
 describe('GatewayUserFormModal — rol base', () => {
   it('resume qué otorga el rol elegido desde el catálogo, sin descripciones escritas a mano', async () => {
     renderWithProviders(<GatewayUserFormModal open onClose={() => undefined} />)
-    expect(await screen.findByText(/Otorga 12 de 29/)).toBeInTheDocument()
+    expect(await screen.findByText(/Otorga 12 de 30/)).toBeInTheDocument()
     // La frase vieja prometía que se podía «acotar o ampliar»: hoy no se cumple en todas las rutas.
     expect(screen.queryByText(/acotar o ampliar/)).not.toBeInTheDocument()
   })

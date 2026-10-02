@@ -107,7 +107,9 @@ describe('BatchConfirmStep', () => {
     // Silenciarlo haría creer que se convirtió el blueprint entero.
     setup()
     expect(screen.getByText(/5/)).toBeInTheDocument()
-    expect(screen.getByText(/quedan sin convertir|Las demás quedan sin convertir/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/quedan sin convertir|Las demás quedan sin convertir/i),
+    ).toBeInTheDocument()
   })
 
   it('avisa que el lote corre en serie', () => {
@@ -180,5 +182,43 @@ describe('BatchConfirmStep', () => {
     )
     expect(screen.getByText(/Planificadas: 55, 56/)).toBeInTheDocument()
     expect(screen.getByText(/Enviadas: 55/)).toBeInTheDocument()
+  })
+
+  it('las omitidas por scope salen del lote: sin nombre, avisadas por id y NO reenviadas', async () => {
+    // El backend las devuelve como `{managed_database_id, ok:false, error_code}` y las deja fuera
+    // del conjunto que valida; reenviarlas daría un 422 que el operador no puede arreglar.
+    const user = userEvent.setup()
+    const onExecute = vi.fn()
+    const forbidden = {
+      managed_database_id: 77,
+      server_id: null,
+      database_name: null,
+      batch_seq: null,
+      job_id: null,
+      ok: false,
+      error: null,
+      error_code: 'access.forbidden',
+      tables_to_convert: 0,
+      objects_to_recreate: 0,
+      include_database_default: true,
+      missing_tables: [],
+      warnings: [],
+      confirm_token: null,
+    }
+    renderWithProviders(
+      <BatchConfirmStep
+        plan={{ ...PLAN, databases: [...PLAN.databases, forbidden] }}
+        isExecuting={false}
+        executeError={null}
+        onExecute={onExecute}
+        onReplan={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('1 base omitida por falta de permiso')).toBeInTheDocument()
+    expect(screen.getByText(/#77/)).toBeInTheDocument()
+    expect(screen.queryByText('Error')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText(/identificador del blueprint/i), 'tienda')
+    await user.click(screen.getByRole('button', { name: /convertir 2 bases/i }))
+    expect(onExecute.mock.calls[0]?.[0]).toMatchObject({ database_ids: [55, 56] })
   })
 })

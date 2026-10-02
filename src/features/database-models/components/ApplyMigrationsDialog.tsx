@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CapabilityHint, useCapabilities, useCapabilityGuard } from '@/features/auth'
+import {
+  CapabilityHint,
+  SKIPPED_BY_SCOPE_REASON,
+  skippedBaseLabel,
+  useCapabilities,
+  useCapabilityGuard,
+} from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
 import {
   Badge,
@@ -356,14 +362,14 @@ export function ApplyMigrationsDialog({
  * pliegue: con 2 errores entre 28 filas OK, los dos que importan quedaban enterrados. Errores,
  * después bloqueadas, después OK.
  */
-const OUTCOME_ORDER = { failed: 0, blocked: 1, ok: 2 } as const
+const OUTCOME_ORDER = { failed: 0, blocked: 1, forbidden: 2, ok: 3 } as const
 
 function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun: boolean }) {
   const canSeeCaptures = useCapabilities().can(CAPABILITIES.blueprintsCaptures)
   const items = [...result.results].sort(
     (a, b) => OUTCOME_ORDER[classifyItem(a)] - OUTCOME_ORDER[classifyItem(b)],
   )
-  const counts = { ok: 0, blocked: 0, failed: 0 }
+  const counts = { ok: 0, blocked: 0, failed: 0, forbidden: 0 }
   for (const item of result.results) counts[classifyItem(item)] += 1
 
   return (
@@ -387,6 +393,9 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
           <Badge tone="warning">{counts.blocked} bloqueada(s) por política</Badge>
         )}
         {counts.failed > 0 && <Badge tone="error">{counts.failed} con error</Badge>}
+        {counts.forbidden > 0 && (
+          <Badge tone="neutral">{counts.forbidden} sin permiso (omitida(s))</Badge>
+        )}
       </p>
       <ul className="flex max-h-64 flex-col divide-y divide-border overflow-auto rounded-lg border border-border">
         {items.map((item) => {
@@ -405,7 +414,9 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
                     React renderiza `null` como vacío sin que TypeScript avise (`ReactNode` lo
                     acepta). Una fila bloqueada o fallada SIN nombre es inaccionable.
                   */}
-                  {databaseLabel(item)}
+                  {outcome === 'forbidden'
+                    ? skippedBaseLabel(item.managed_database_id)
+                    : databaseLabel(item)}
                 </span>
                 <span className="flex items-center gap-1">
                   {item.environment_slug && (
@@ -472,6 +483,10 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
               */}
               {outcome === 'blocked' && (
                 <span className="text-xs text-warning">{describeItemRejection(item)}</span>
+              )}
+              {/* Omitida por la capa 2: el backend no manda nombre ni entorno, solo el id. */}
+              {outcome === 'forbidden' && (
+                <span className="text-xs text-muted-foreground">{SKIPPED_BY_SCOPE_REASON}</span>
               )}
               {/*
                 Rechazo por CAPTURA sin revisar. Llega como ítem de una respuesta 200 —el guard

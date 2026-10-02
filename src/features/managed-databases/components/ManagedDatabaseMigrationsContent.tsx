@@ -209,15 +209,13 @@ export function ManagedDatabaseMigrationsContent({
   const hasModel = modelId > 0
 
   /*
-   * Qué exige cada acción, verificado contra `app/routes/v1/managed_databases.py`:
+   * Qué exige cada acción, verificado contra `app/routes/v1/managed_databases.py` (todas con
+   * `require_at`, es decir, con capa 2 desde `scope-enforcement-hardening`): el backend vuelve a
+   * mirar el rol EN ESTA base, así que cada guarda resuelve el alcance con el destino conocido.
    *
-   * - aplicar (también el dry-run, que es el mismo endpoint con `dry_run=true`, y el reintento con
-   *   `force`) y revertir → `blueprints.apply` **con capa 2**: el backend vuelve a mirar el rol EN
-   *   ESTA base, así que la guarda resuelve el alcance;
-   * - marcar versión (stamp) y reconciliar una parcial → `blueprints.apply` **sin capa 2**: rige el
-   *   rol unión, y pasarle el destino haría la pista más estricta que el servidor;
-   * - aprovisionar → `databases.write` con capa 2;
-   * - asignar blueprint (editar la base) → `databases.write` sin capa 2.
+   * - aplicar (también el dry-run y el reintento con `force`), revertir, marcar versión (stamp) y
+   *   reconciliar una parcial → `blueprints.apply`;
+   * - aprovisionar y asignar blueprint (editar la base) → `databases.write`.
    */
   const target = db.data
     ? { serverId: db.data.server_id, environmentId: db.data.environment_id ?? null }
@@ -225,11 +223,19 @@ export function ManagedDatabaseMigrationsContent({
   const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones', {
     scope: target,
   })
-  const stampGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'marcar versiones con stamp')
+  const stampGuard = useCapabilityGuard(
+    CAPABILITIES.blueprintsApply,
+    'marcar versiones con stamp',
+    {
+      scope: target,
+    },
+  )
   const provisionGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'aprovisionar la base', {
     scope: target,
   })
-  const assignGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'asignar un blueprint')
+  const assignGuard = useCapabilityGuard(CAPABILITIES.databasesWrite, 'asignar un blueprint', {
+    scope: target,
+  })
   // UN aviso para toda la pantalla; cada control deshabilitado lo referencia por este id.
   const accessNoticeId = useId()
 
@@ -948,6 +954,7 @@ export function ManagedDatabaseMigrationsContent({
                 <ReconcilePartialSection
                   key={reconcileEntry.version}
                   dbId={databaseId}
+                  scope={target}
                   entry={reconcileEntry}
                   onClose={closeReconcile}
                 />
