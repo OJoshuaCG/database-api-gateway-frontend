@@ -4,6 +4,7 @@ import {
   AUTH_PASSWORD_ERROR_CODES,
   AUTH_SESSION_ERROR_CODES,
   GATEWAY_USER_ERROR_CODES,
+  SCOPE_HAS_GRANTS_CODE,
 } from '@/lib/contracts'
 import { ApiError, toApiError } from '@/lib/api/errors'
 
@@ -227,4 +228,44 @@ export function passwordChangedMessage(revoked: number): string {
   if (revoked === 0) return 'Tu contraseña cambió. No había otras sesiones abiertas.'
   if (revoked === 1) return 'Tu contraseña cambió. Se cerró 1 sesión en otro lugar.'
   return `Tu contraseña cambió. Se cerraron ${revoked} sesiones en otros lugares.`
+}
+
+/** Destino de un alcance: lo que se intentó borrar y bloquea `access.scope_has_grants`. */
+export type GrantScopeTarget = 'environment' | 'server'
+
+const SCOPE_TARGET_LABEL: Record<GrantScopeTarget, string> = {
+  environment: 'este entorno',
+  server: 'este servidor',
+}
+
+const SCOPE_HAS_GRANTS_FIX = 'Quitáselos primero desde la página de accesos de cada usuario.'
+
+/**
+ * Copy del 409 `access.scope_has_grants` al borrar un entorno o un servidor, o `null` si el error
+ * es otro.
+ *
+ * Vive en `auth` y no en cada feature porque lo comparten entornos y servidores, y la salida es la
+ * misma en los dos: los accesos se quitan desde la página de accesos de cada usuario. El backend
+ * rechaza en vez de borrar en cascada a propósito: quitar accesos es una decisión de quien los
+ * administra, no un efecto colateral de ordenar el inventario.
+ *
+ * Los conteos salen de `public_context`; una parte en cero se omite, y si no llega ninguno (o los
+ * dos son cero) se dice lo mismo sin números en vez de inventarlos.
+ */
+export function scopeHasGrantsMessage(error: ApiError, target: GrantScopeTarget): string | null {
+  if (error.code !== SCOPE_HAS_GRANTS_CODE) return null
+  const roles = error.gatewayUserContext?.accessGrantCount ?? 0
+  const puntuales = error.gatewayUserContext?.capabilityGrantCount ?? 0
+  const where = SCOPE_TARGET_LABEL[target]
+
+  const parts: string[] = []
+  if (roles > 0) parts.push(`${roles} ${roles === 1 ? 'permiso' : 'permisos'} por alcance`)
+  if (puntuales > 0) {
+    parts.push(`${puntuales} ${puntuales === 1 ? 'capacidad puntual' : 'capacidades puntuales'}`)
+  }
+  if (parts.length === 0) {
+    return `No se puede borrar: todavía hay accesos que apuntan a ${where}. ${SCOPE_HAS_GRANTS_FIX}`
+  }
+  const verb = roles + puntuales === 1 ? 'apunta' : 'apuntan'
+  return `No se puede borrar: ${parts.join(' y ')} todavía ${verb} a ${where}. ${SCOPE_HAS_GRANTS_FIX}`
 }

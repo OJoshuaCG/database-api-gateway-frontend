@@ -1106,6 +1106,18 @@ export interface ApiTokenErrorContext {
 export interface GatewayUserErrorContext {
   readonly allowed?: string[]
   readonly minLength?: number
+  /** `access.scope_has_grants`: roles por alcance que todavía apuntan al destino borrado. */
+  readonly accessGrantCount?: number
+  /** `access.scope_has_grants`: capacidades puntuales vivas (`pending`/`active`) sobre él. */
+  readonly capabilityGrantCount?: number
+  /** `access.grant_scope_not_found` (422 de `PUT /access`): los alcances que ya no existen. */
+  readonly missingScopes?: ApiMissingScope[]
+}
+
+/** Un alcance de `public_context.missing_scopes`. Se descarta entero si le falta algún campo. */
+export interface ApiMissingScope {
+  readonly scopeType: string
+  readonly scopeId: number
 }
 
 export interface EnvironmentErrorContext {
@@ -1292,7 +1304,23 @@ function extractGatewayUserContext(
   return {
     allowed: stringList(publicContext.allowed),
     minLength: finiteNumber(publicContext.min_length),
+    accessGrantCount: finiteNumber(publicContext.access_grant_count),
+    capabilityGrantCount: finiteNumber(publicContext.capability_grant_count),
+    missingScopes: extractMissingScopes(publicContext.missing_scopes),
   }
+}
+
+function extractMissingScopes(value: unknown): ApiMissingScope[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const scopes = value.flatMap((row): ApiMissingScope[] => {
+    if (!isRecord(row)) return []
+    const { scope_type: scopeType, scope_id: scopeId } = row
+    if (typeof scopeType !== 'string' || typeof scopeId !== 'number' || !Number.isFinite(scopeId)) {
+      return []
+    }
+    return [{ scopeType, scopeId }]
+  })
+  return scopes.length ? scopes : undefined
 }
 
 function extractEnvironmentContext(

@@ -30,10 +30,12 @@ export {
   isAccessForbidden,
   isCsrfError,
   isSkippedByScope,
+  scopeHasGrantsMessage,
   skippedBaseLabel,
   SKIPPED_BY_SCOPE_REASON,
   sessionEndReason,
   type ForbiddenCopy,
+  type GrantScopeTarget,
   type SessionEndReason,
 } from './messages'
 export { notifyMutationError } from './notify-mutation-error'

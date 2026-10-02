@@ -6,6 +6,7 @@ import {
   forbiddenCopy,
   isAccessForbidden,
   isCsrfError,
+  scopeHasGrantsMessage,
   sessionEndReason,
 } from './messages'
 
@@ -90,5 +91,41 @@ describe('forbiddenCopy / isAccessForbidden', () => {
     expect(isAccessForbidden(error(403))).toBe(false)
     expect(isAccessForbidden(error(401, 'access.forbidden'))).toBe(false)
     expect(isAccessForbidden(null)).toBe(false)
+  })
+})
+
+describe('scopeHasGrantsMessage', () => {
+  function scopeError(accessGrantCount?: number, capabilityGrantCount?: number) {
+    return new ApiError({
+      status: 409,
+      message: 'mensaje del backend',
+      code: 'access.scope_has_grants',
+      gatewayUserContext: { accessGrantCount, capabilityGrantCount },
+    })
+  }
+
+  it('nombra los dos conteos y a dónde apuntan', () => {
+    expect(scopeHasGrantsMessage(scopeError(2, 3), 'environment')).toBe(
+      'No se puede borrar: 2 permisos por alcance y 3 capacidades puntuales todavía apuntan a este entorno. Quitáselos primero desde la página de accesos de cada usuario.',
+    )
+  })
+
+  it('pluraliza en singular y omite la parte en cero', () => {
+    expect(scopeHasGrantsMessage(scopeError(1, 0), 'server')).toBe(
+      'No se puede borrar: 1 permiso por alcance todavía apunta a este servidor. Quitáselos primero desde la página de accesos de cada usuario.',
+    )
+    expect(scopeHasGrantsMessage(scopeError(0, 1), 'server')).toContain(
+      ': 1 capacidad puntual todavía apunta a este servidor.',
+    )
+  })
+
+  it('sin conteos dice lo mismo sin inventar números', () => {
+    const message = scopeHasGrantsMessage(scopeError(), 'server')
+    expect(message).toContain('todavía hay accesos que apuntan a este servidor')
+    expect(message).not.toMatch(/\d/)
+  })
+
+  it('no reclama otros códigos', () => {
+    expect(scopeHasGrantsMessage(error(409, 'environment.has_databases'), 'environment')).toBeNull()
   })
 })

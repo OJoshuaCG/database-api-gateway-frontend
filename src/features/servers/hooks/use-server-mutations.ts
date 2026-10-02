@@ -5,7 +5,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import type { ServerCreate, ServerUpdate } from '@/lib/contracts'
 import { createServer, deleteServer, testConnection, updateServer } from '../api/servers.api'
 import { serverRebindErrorMessage } from '../server-rebind'
-import { notifyMutationError } from '@/features/auth'
+import { notifyMutationError, scopeHasGrantsMessage } from '@/features/auth'
 
 export function useCreateServer() {
   const queryClient = useQueryClient()
@@ -51,7 +51,15 @@ export function useDeleteServer() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
       toast.success('Servidor eliminado del inventario')
     },
-    onError: (error) => notifyMutationError(toast, error, 'No se pudo eliminar el servidor'),
+    onError: (error) => {
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo eliminar el servidor',
+        scopeHasGrantsMessage(apiError, 'server') ?? apiError.message,
+      )
+    },
   })
 }
 

@@ -81,9 +81,33 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
         error,
         'Hay un valor no admitido en los accesos: revisá las capacidades globales y el tipo de alcance de cada permiso.',
       )
+    case GATEWAY_USER_ERROR_CODES.grantScopeNotFound:
+      return grantScopeNotFoundMessage(error)
     default:
       return null
   }
+}
+
+const SCOPE_TYPE_LABEL: Record<string, string> = {
+  environment: 'el entorno',
+  server: 'el servidor',
+}
+
+/**
+ * 422 `access.grant_scope_not_found` de `PUT /access`: algún permiso apunta a un entorno o
+ * servidor que se borró mientras la pantalla estaba abierta. No se escribió nada, y la única salida
+ * es recargar para que el selector deje de ofrecer ese destino. Si viene `missing_scopes`, se
+ * nombran los ids; un `scope_type` desconocido cae en «el destino» en vez de romper.
+ */
+function grantScopeNotFoundMessage(error: ApiError): string {
+  const base =
+    'Algún entorno o servidor de los permisos ya no existe, así que no se guardó nada. Recargá la página y volvé a elegir el destino.'
+  const missing = error.gatewayUserContext?.missingScopes
+  if (!missing?.length) return base
+  const names = missing.map(
+    ({ scopeType, scopeId }) => `${SCOPE_TYPE_LABEL[scopeType] ?? 'el destino'} #${scopeId}`,
+  )
+  return `${base} Ya no existe: ${names.join(', ')}.`
 }
 
 /**

@@ -19,6 +19,28 @@ function error(
 }
 
 describe('gatewayUserErrorMessage', () => {
+  it('el 422 `grant_scope_not_found` de PUT /access manda a recargar y nombra lo que falta', () => {
+    const message = gatewayUserErrorMessage(
+      error(422, GATEWAY_USER_ERROR_CODES.grantScopeNotFound, {
+        gatewayUserContext: {
+          missingScopes: [
+            { scopeType: 'environment', scopeId: 3 },
+            { scopeType: 'server', scopeId: 9 },
+          ],
+        },
+      }),
+    )
+    expect(message).toContain('ya no existe')
+    expect(message).toContain('Recargá la página')
+    expect(message).toContain('el entorno #3, el servidor #9')
+  })
+
+  it('el 422 `grant_scope_not_found` sin `missing_scopes` sigue siendo accionable', () => {
+    const message = gatewayUserErrorMessage(error(422, GATEWAY_USER_ERROR_CODES.grantScopeNotFound))
+    expect(message).toContain('Recargá la página')
+    expect(message).not.toContain('#')
+  })
+
   it('distingue el 404 del 422 aunque compartan el MISMO código', () => {
     // Es la trampa del §2.9: `gateway_user.not_found` llega con dos status y significan cosas
     // distintas. Enrutar solo por `code` mostraría el mensaje equivocado en uno de los dos casos.

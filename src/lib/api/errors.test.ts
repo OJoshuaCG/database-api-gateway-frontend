@@ -86,9 +86,9 @@ describe('normalizeApiError', () => {
 
 describe('isOutcomeUncertain (la operación puede seguir en curso)', () => {
   it('un 504 es incierto, venga del backend o de un proxy', () => {
-    expect(normalizeApiError(504, { detail: { msg: 'timeout del motor' } }).isOutcomeUncertain).toBe(
-      true,
-    )
+    expect(
+      normalizeApiError(504, { detail: { msg: 'timeout del motor' } }).isOutcomeUncertain,
+    ).toBe(true)
     // Cuerpo HTML de nginx/Traefik: el cliente no lo puede parsear y llega como `{}`.
     expect(normalizeApiError(504, {}).isOutcomeUncertain).toBe(true)
   })
@@ -547,5 +547,45 @@ describe('guardContext (guards de alcance y protección)', () => {
       },
     })
     expect(error.guardContext).toBeUndefined()
+  })
+})
+
+describe('gatewayUserContext de los accesos que apuntan a un destino', () => {
+  it('lee los dos conteos del 409 `access.scope_has_grants`', () => {
+    const error = normalizeApiError(409, {
+      detail: {
+        msg: 'El servidor tiene accesos otorgados.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'access.scope_has_grants',
+          access_grant_count: 2,
+          capability_grant_count: 0,
+        },
+      },
+    })
+    expect(error.code).toBe('access.scope_has_grants')
+    expect(error.gatewayUserContext?.accessGrantCount).toBe(2)
+    expect(error.gatewayUserContext?.capabilityGrantCount).toBe(0)
+  })
+
+  it('lee `missing_scopes` del 422 y descarta solo la fila malformada', () => {
+    const error = normalizeApiError(422, {
+      detail: {
+        msg: 'Algún entorno o servidor de los alcances indicados no existe.',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'access.grant_scope_not_found',
+          missing_scopes: [
+            { scope_type: 'environment', scope_id: 3 },
+            { scope_type: 'server' },
+            { scope_type: 'server', scope_id: 9 },
+          ],
+        },
+      },
+    })
+    expect(error.gatewayUserContext?.missingScopes).toEqual([
+      { scopeType: 'environment', scopeId: 3 },
+      { scopeType: 'server', scopeId: 9 },
+    ])
   })
 })

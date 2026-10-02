@@ -317,4 +317,10 @@ export const GATEWAY_USER_ERROR_CODES = {
   weakPassword: 'gateway_user.weak_password',
   selfModificationForbidden: 'access.self_modification_forbidden',
   grantCeilingExceeded: 'access.grant_ceiling_exceeded',
+  /**
+   * 422 de `PUT /access`: algún `scope_grants[]` apunta a un entorno o servidor que ya no existe
+   * (`public_context.missing_scopes`). Es el mismo código que el 404 de las capacidades puntuales,
+   * pero acá el alcance es un campo del payload y no se escribe nada.
+   */
+  grantScopeNotFound: 'access.grant_scope_not_found',
 } as const

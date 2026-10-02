@@ -193,3 +193,11 @@ export const CAPABILITY_GRANT_ERROR_CODES = {
   grantNotFound: 'access.grant_not_found',
   grantNotPending: 'access.grant_not_pending',
 } as const
+
+/**
+ * 409 de `DELETE /environments/{id}` y `DELETE /servers/{id}`: todavía hay accesos que apuntan a
+ * ese destino. `public_context` trae `access_grant_count` (roles por alcance) y
+ * `capability_grant_count` (puntuales `pending`/`active`). Va aparte de
+ * `CAPABILITY_GRANT_ERROR_CODES` porque no lo emite ninguna operación sobre capacidades puntuales.
+ */
+export const SCOPE_HAS_GRANTS_CODE = 'access.scope_has_grants'

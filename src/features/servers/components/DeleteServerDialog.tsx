@@ -1,6 +1,10 @@
-import { ConfirmDialog } from '@/components/ui'
+import { Callout, ConfirmDialog } from '@/components/ui'
+import { scopeHasGrantsMessage } from '@/features/auth'
+import { toApiError } from '@/lib/api/errors'
 import type { ServerOut } from '@/lib/contracts'
 import { useDeleteServer } from '../hooks/use-server-mutations'
+
+const BLOCKED_ID = 'delete-server-blocked'
 
 interface DeleteServerDialogProps {
   /** `null` = cerrado. Se monta con el servidor para que el diálogo nazca con su nombre. */
@@ -28,14 +32,26 @@ export function DeleteServerDialog({ server, onClose, onDeleted }: DeleteServerD
   const remove = useDeleteServer()
   if (!server) return null
 
+  // El 409 `access.scope_has_grants` no se arregla reintentando: hay que quitar los accesos desde
+  // la página de cada usuario. Por eso se queda a la vista en el diálogo (el toast se va solo) y
+  // deshabilita «Eliminar» hasta cerrarlo.
+  const blocked = remove.error ? scopeHasGrantsMessage(toApiError(remove.error), 'server') : null
+
+  // El diálogo queda montado entre servidores (devuelve `null`, no se desmonta), así que el error
+  // de un intento se limpia al cerrar: si no, el siguiente servidor nacería bloqueado.
+  const close = () => {
+    remove.reset()
+    onClose()
+  }
+
   return (
     <ConfirmDialog
       open
-      onClose={onClose}
+      onClose={close}
       onConfirm={() =>
         remove.mutate(server.id, {
           onSuccess: () => {
-            onClose()
+            close()
             onDeleted?.()
           },
         })
@@ -44,6 +60,14 @@ export function DeleteServerDialog({ server, onClose, onDeleted }: DeleteServerD
       description={`Se eliminará «${server.name}» del inventario del gateway. Los objetos del motor destino no se modifican.`}
       confirmLabel="Eliminar"
       isLoading={remove.isPending}
-    />
+      confirmDisabled={blocked !== null}
+      confirmDescribedBy={blocked ? BLOCKED_ID : undefined}
+    >
+      {blocked && (
+        <Callout id={BLOCKED_ID} tone="warning" title="Todavía hay accesos sobre este servidor">
+          {blocked}
+        </Callout>
+      )}
+    </ConfirmDialog>
   )
 }
