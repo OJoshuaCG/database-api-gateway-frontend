@@ -594,7 +594,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
         'Por rol',
         'Rol por alcance',
         'Global',
-        'Puntual',
+        'Capacidad puntual',
       ])
       expect(provenanceLabel('otra')).toBe('otra')
     })

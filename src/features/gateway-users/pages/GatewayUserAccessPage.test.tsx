@@ -244,7 +244,7 @@ describe('GatewayUserAccessPage', () => {
     // Sin cambios: solo el servidor, rotulado por fuente; ninguna vista previa.
     expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
     expect(screen.getByText('Por rol')).toBeInTheDocument()
-    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('Capacidad puntual')).toBeInTheDocument()
     expect(
       screen.getByRole('button', {
         name: 'Ver capacidades de Crear y editar bases gestionadas · db-prod-01',

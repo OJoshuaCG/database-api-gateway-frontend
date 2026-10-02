@@ -293,7 +293,7 @@ describe('EffectiveAccessPanel — lo que rige hoy según el servidor', () => {
     expect(screen.getByText('Por rol')).toBeInTheDocument()
     expect(screen.getByText('Rol por alcance')).toBeInTheDocument()
     expect(screen.getByText('Global')).toBeInTheDocument()
-    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('Capacidad puntual')).toBeInTheDocument()
     expect(screen.getByText('viewer · 1 capacidades')).toBeInTheDocument()
     expect(screen.getByText('Producción · viewer')).toBeInTheDocument()
     expect(
@@ -390,7 +390,7 @@ describe('EffectiveAccessPanel — lo que rige hoy según el servidor', () => {
 })
 
 describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntuales', () => {
-  it('una puntual activa suma una fila «Puntual» con su lectura implícita', () => {
+  it('una puntual activa suma una fila «Capacidad puntual» con su lectura implícita', () => {
     renderWithProviders(
       <EffectiveAccessPanel
         mode="admin"
@@ -409,7 +409,7 @@ describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntua
         catalog={GRANTS_CATALOG_FIXTURE}
       />,
     )
-    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('Capacidad puntual')).toBeInTheDocument()
     expect(screen.getByText('Ejecutar SQL ad-hoc contra un motor · db-01')).toBeInTheDocument()
     expect(
       screen.getByText(/Trae implícita la lectura: Ver el historial de la consola SQL/),
@@ -429,7 +429,7 @@ describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntua
         catalog={GRANTS_CATALOG_FIXTURE}
       />,
     )
-    expect(screen.queryByText('Puntual')).not.toBeInTheDocument()
+    expect(screen.queryByText('Capacidad puntual')).not.toBeInTheDocument()
     expect(
       screen.getByText(/Tenés 1 solicitud de capacidad puntual pendiente de aprobación/),
     ).toHaveTextContent('No conceden nada hasta que otra persona las apruebe')
@@ -446,6 +446,6 @@ describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntua
         catalog={CATALOG_FIXTURE}
       />,
     )
-    expect(screen.queryByText('Puntual')).not.toBeInTheDocument()
+    expect(screen.queryByText('Capacidad puntual')).not.toBeInTheDocument()
   })
 })

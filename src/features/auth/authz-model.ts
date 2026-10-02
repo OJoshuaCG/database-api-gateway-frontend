@@ -538,10 +538,10 @@ const PROVENANCE_LABELS: Record<string, string> = {
   role: 'Por rol',
   scoped_role: 'Rol por alcance',
   global: 'Global',
-  capability_grant: 'Puntual',
+  capability_grant: 'Capacidad puntual',
 }
 
-/** Etiqueta de la fuente: «Por rol», «Rol por alcance», «Global», «Puntual». */
+/** Etiqueta de la fuente: «Por rol», «Rol por alcance», «Global», «Capacidad puntual». */
 export function provenanceLabel(source: string): string {
   return PROVENANCE_LABELS[source] ?? source
 }

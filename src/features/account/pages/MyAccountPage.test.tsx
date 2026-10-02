@@ -85,7 +85,7 @@ describe('MyAccountPage — «Mi acceso»', () => {
     expect(
       await screen.findByText('Crear y editar bases gestionadas · db-prod-01'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Puntual')).toBeInTheDocument()
+    expect(screen.getByText('Capacidad puntual')).toBeInTheDocument()
     // La pendiente no es una fila de acceso: solo una línea que dice que todavía no concede nada.
     expect(screen.queryByText(/Descargar los datos exportados en claro ·/)).not.toBeInTheDocument()
     expect(screen.getByText(/Tenés 1 solicitud de capacidad puntual pendiente/)).toHaveTextContent(
