@@ -36,7 +36,7 @@ describe('MyAccountPage — «Mi acceso»', () => {
       }),
     )
     renderWithProviders(<MyAccountPage />, { route: '/mi-cuenta' })
-    expect(await screen.findByText('operator · 17 capacidades')).toBeInTheDocument()
+    expect(await screen.findByText('operator · 16 capacidades')).toBeInTheDocument()
     expect(await screen.findByText('Producción · viewer')).toBeInTheDocument()
     expect(screen.getByText(SCOPE_ENFORCEMENT_NOTE)).toBeInTheDocument()
     // Es de solo lectura: nada para guardar.

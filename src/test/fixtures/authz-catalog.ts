@@ -1,9 +1,9 @@
 import type { z } from 'zod'
 import { capabilityDescriptorSchema, type CapabilityDescriptor } from '@/lib/contracts'
 /**
- * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (backend 463dc4d, HEAD de
- * `main` al escribir esto; `app/services/capability_catalog.py` no cambió desde 0b43532, donde se
- * generó: `capability_matrix()`), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
+ * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (generado en 0b43532 con
+ * `capability_matrix()` y alineado con c5edee5 del backend, donde `collation.execute` pasó a ser
+ * solo de `owner` y destructiva), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
  * del catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
  */
 const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
@@ -264,7 +264,7 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     requires_step_up: true,
     agent_allowed: false,
     scope_axis: 'environment',
-    roles: ['operator', 'owner'],
+    roles: ['owner'],
     global_capabilities: [],
   },
   {
@@ -403,15 +403,16 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
  * El catálogo ya parseado por el contrato, como lo ve la app. Las filas no traen `grantable`,
  * `sensitive`, `implies` ni `destructive` (este fixture es el de un backend anterior a las
  * capacidades puntuales), así que salen con los defaults seguros: nada otorgable, nada sensible,
- * nada implícito, nada destructivo.
+ * nada implícito, y `destructive: null` (sin la marca, `isDestructive` cae a la lista del frontend).
  */
 export const CATALOG_FIXTURE: CapabilityDescriptor[] = CATALOG_RAW.map((row) =>
   capabilityDescriptorSchema.parse(row),
 )
 
 /**
- * Las que `capability_catalog.py` marca `destructive=True`. No sale de una regla sobre los otros
- * campos (`collation.execute` es irreversible y NO está), así que se copia tal cual del backend.
+ * Las siete que `capability_catalog.py` marca `destructive=True` (desde c5edee5 incluye
+ * `collation.execute`). No sale de una regla sobre los otros campos, así que se copia tal cual
+ * del backend.
  */
 export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
   'databases.drop',
@@ -419,6 +420,7 @@ export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
   'blueprints.apply',
   'schema_diff.execute',
   'clones.execute',
+  'collation.execute',
   'sql_console.execute',
 ]
 
@@ -428,7 +430,7 @@ export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
  * global; `is_sensitive`: divulga o es de nivel `drop`; `IMPLIED_READ`: la lectura de nivel viewer
  * del mismo módulo para lo otorgable que muta o divulga), y `destructive` según
  * `DESTRUCTIVE_CAPABILITY_IDS`. Los espejos de `authz-model` se prueban contra esto, no contra el
- * fixture viejo, donde nada es otorgable ni destructivo.
+ * fixture viejo, donde nada es otorgable y la marca destructiva no viene.
  */
 export const GRANTS_CATALOG_FIXTURE: CapabilityDescriptor[] = (() => {
   const viewerReads = new Map<string, string>()

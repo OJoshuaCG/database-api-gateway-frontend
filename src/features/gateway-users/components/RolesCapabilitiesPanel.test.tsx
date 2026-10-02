@@ -21,7 +21,8 @@ describe('RolesCapabilitiesPanel', () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
     expect(await screen.findByText('Otorga 12 de 30')).toBeInTheDocument()
-    expect(screen.getByText('Otorga 17 de 30')).toBeInTheDocument()
+    // operator: 16, sin `collation.execute` desde que es solo de `owner` (backend c5edee5).
+    expect(screen.getByText('Otorga 16 de 30')).toBeInTheDocument()
     expect(screen.getByText('Otorga 26 de 30')).toBeInTheDocument()
     // Una línea de intención por rol y por global, de `ROLE_PURPOSES`.
     expect(screen.getByText('Consulta sin cambiar nada.')).toBeInTheDocument()
@@ -34,6 +35,9 @@ describe('RolesCapabilitiesPanel', () => {
     expect(screen.getByText('30 de 30 capacidades')).toBeInTheDocument()
     // Plurales sin «(s)»: viewer no tiene ninguna destructiva.
     expect(screen.getAllByText('0 destructivas').length).toBeGreaterThan(0)
+    // Las siete destructivas son de owner; operator ya no tiene ninguna (tenía `collation.execute`).
+    expect(screen.getByText('7 destructivas')).toBeInTheDocument()
+    expect(screen.queryByText('1 destructiva')).not.toBeInTheDocument()
     expect(screen.queryByText(/\(s\)|\(es\)/)).not.toBeInTheDocument()
     // Una sección por módulo, con su encabezado.
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()

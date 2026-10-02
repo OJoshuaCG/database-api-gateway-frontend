@@ -6,6 +6,7 @@ import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
 import {
   CATALOG_FIXTURE,
+  GRANTS_CATALOG_FIXTURE,
   environmentFixture,
   meFixture,
   pageOf,
@@ -14,7 +15,7 @@ import { CAPABILITIES } from '@/lib/contracts'
 import type { AccessTarget } from '../authz-model'
 import { CapabilityHint } from '../components/CapabilityHint'
 import { useCapabilities } from './use-capabilities'
-import { useCapabilityGuard } from './use-capability-guard'
+import { capabilityHint, useCapabilityGuard } from './use-capability-guard'
 import { useSession } from './use-session'
 
 const API = 'http://localhost/api/v1'
@@ -93,6 +94,18 @@ describe('useCapabilityGuard', () => {
     expect(button).toHaveAccessibleDescription(hint.textContent ?? '')
   })
 
+  it('si lo que falta es otorgable, el motivo dice que se puede otorgar suelta', async () => {
+    mockSession(meFixture({ role: 'operator' }), {
+      catalog: () => HttpResponse.json({ data: GRANTS_CATALOG_FIXTURE }),
+    })
+    renderWithProviders(<ApplyButton />)
+    expect(
+      await screen.findByText(
+        /Se puede otorgar sola, como capacidad puntual, sin cambiar tu rol\.$/,
+      ),
+    ).toHaveTextContent(/^Tu acceso no permite aplicar versiones/)
+  })
+
   it('un owner lo tiene habilitado y sin motivo', async () => {
     mockSession(meFixture({ role: 'owner' }))
     renderWithProviders(<ApplyButton />)
@@ -165,5 +178,25 @@ describe('useCapabilityGuard', () => {
     renderWithProviders(<ApplyButton />)
     await screen.findByText('sesión cargada')
     expect(screen.getByRole('button', { name: 'Aplicar' })).toBeEnabled()
+  })
+})
+
+describe('capabilityHint', () => {
+  it('sin catálogo, o con una que no es otorgable, no promete nada', () => {
+    const base =
+      'Tu acceso no permite x (requiere blueprints.apply). Pedíselo a quien administra los accesos.'
+    expect(capabilityHint('x', ['blueprints.apply'])).toBe(base)
+    // El fixture viejo no trae `grantable`: nada es otorgable.
+    expect(capabilityHint('x', ['blueprints.apply'], CATALOG_FIXTURE)).not.toContain('otorgar')
+    // `catalogs.write` es de eje global: nunca es otorgable como capacidad puntual.
+    expect(
+      capabilityHint('x', ['blueprints.apply', 'catalogs.write'], GRANTS_CATALOG_FIXTURE),
+    ).not.toContain('otorgar')
+  })
+
+  it('con varias otorgables, en plural', () => {
+    expect(
+      capabilityHint('x', ['blueprints.write', 'blueprints.apply'], GRANTS_CATALOG_FIXTURE),
+    ).toMatch(/Se pueden otorgar solas, como capacidades puntuales, sin cambiar tu rol\.$/)
   })
 })

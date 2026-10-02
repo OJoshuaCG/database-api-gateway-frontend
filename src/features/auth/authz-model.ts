@@ -143,9 +143,15 @@ export function catalogGlobalCapabilities(catalog: readonly CapabilityDescriptor
   return [...new Set(catalog.flatMap((row) => row.global_capabilities))].sort()
 }
 
-/** ¿Borra o cambia algo en un motor real? Lista del frontend: el backend no publica la marca. */
+/**
+ * ¿Borra o cambia algo en un motor real? Decide la marca `destructive` del catálogo; solo cuando
+ * el backend no la publica (`null`) se cae a la lista del frontend.
+ */
 export function isDestructive(capability: CapabilityDescriptor): boolean {
-  return (DESTRUCTIVE_CAPABILITIES as readonly string[]).includes(capability.id)
+  return (
+    capability.destructive ??
+    (DESTRUCTIVE_CAPABILITIES as readonly string[]).includes(capability.id)
+  )
 }
 
 /** ¿El alcance la puede recortar? Las de eje `global` no tienen destino: rigen en todo el gateway. */

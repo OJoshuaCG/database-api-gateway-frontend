@@ -3,15 +3,15 @@ import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
-import { CATALOG_FIXTURE, meFixture } from '@/test/fixtures/authz-catalog'
+import { CATALOG_FIXTURE, GRANTS_CATALOG_FIXTURE, meFixture } from '@/test/fixtures/authz-catalog'
 import { CapabilityCallout } from './CapabilityCallout'
 
 const API = 'http://localhost/api/v1'
 
-function mockCatalog() {
+function mockCatalog(catalog = CATALOG_FIXTURE) {
   server.use(
     http.get(`${API}/auth/me`, () => HttpResponse.json({ data: meFixture({ role: 'viewer' }) })),
-    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: CATALOG_FIXTURE })),
+    http.get(`${API}/authz/catalog`, () => HttpResponse.json({ data: catalog })),
   )
 }
 
@@ -39,6 +39,22 @@ describe('CapabilityCallout', () => {
     const callout = document.getElementById('aviso')
     expect(callout).not.toBeNull()
     expect(callout).toHaveTextContent(/Pedíselo a quien administra los accesos\.$/)
+  })
+
+  it('si todo lo que falta es otorgable, dice que se puede otorgar suelta', async () => {
+    mockCatalog(GRANTS_CATALOG_FIXTURE)
+    renderWithProviders(
+      <CapabilityCallout
+        id="aviso"
+        canDo="ver los blueprints"
+        cannotDo="eliminarlos"
+        missing={['blueprints.apply']}
+      />,
+    )
+    await screen.findByText(/«Aplicar y revertir versiones sobre bases reales»/)
+    expect(document.getElementById('aviso')).toHaveTextContent(
+      /Pedíselo a quien administra los accesos\. Se puede otorgar sola, como capacidad puntual, sin cambiar tu rol\.$/,
+    )
   })
 
   it('no pinta nada cuando no falta nada', () => {

@@ -51,7 +51,28 @@ export function capabilityHint(
   catalog?: readonly CapabilityDescriptor[],
 ): string {
   const named = missing.map((id) => capabilityName(id, catalog)).join(' y ')
-  return `Tu acceso no permite ${action} (requiere ${named}). Pedíselo a quien administra los accesos.`
+  const base = `Tu acceso no permite ${action} (requiere ${named}). Pedíselo a quien administra los accesos.`
+  const note = grantableNote(missing, catalog)
+  return note ? `${base} ${note}` : base
+}
+
+/**
+ * «Se puede otorgar sola»: cuando TODO lo que falta es otorgable como capacidad puntual
+ * (`grantable` del catálogo). Le dice a quien la pide que no hace falta subirle el rol —que
+ * arrastraría todo lo demás del rol— sino otorgarle esa capacidad suelta (`capability-grants.md`).
+ * Sin catálogo, o con una que no es otorgable, no dice nada: prometerlo sería inventar.
+ */
+export function grantableNote(
+  missing: readonly string[],
+  catalog?: readonly CapabilityDescriptor[],
+): string | undefined {
+  const unique = [...new Set(missing)]
+  if (!catalog || unique.length === 0) return undefined
+  const grantable = unique.every((id) => catalog.find((row) => row.id === id)?.grantable === true)
+  if (!grantable) return undefined
+  return unique.length === 1
+    ? 'Se puede otorgar sola, como capacidad puntual, sin cambiar tu rol.'
+    : 'Se pueden otorgar solas, como capacidades puntuales, sin cambiar tu rol.'
 }
 
 /**

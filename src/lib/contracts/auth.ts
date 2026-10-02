@@ -166,12 +166,15 @@ export const capabilityDescriptorSchema = z.object({
   /**
    * Destruye o cambia de forma irreversible datos o estructura del tercero. NO es un tercer eje:
    * es un subconjunto de `mutates` (en el backend, destructiva ⇒ solo `owner` y con step-up).
-   * Con default `false` para un backend viejo que no manda la columna. Todavía no lo lee la UI.
+   *
+   * `null` = el backend no manda la columna (uno viejo). Se conserva la AUSENCIA en vez de caer a
+   * `false` porque no es lo mismo «no es destructiva» que «no sé»: `isDestructive` lee esta marca
+   * cuando viene y, si no, cae a `DESTRUCTIVE_CAPABILITIES`.
    */
   destructive: z
     .boolean()
     .nullish()
-    .transform((value) => value ?? false),
+    .transform((value) => value ?? null),
   /**
    * Predicados de las capacidades puntuales. Con default seguro para un backend viejo: sin la
    * columna, nada es otorgable (no se ofrece), nada es sensible y no implica lecturas.
@@ -281,14 +284,13 @@ export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES]
 /**
  * Las capacidades que **borran o cambian algo en un motor real y no se deshacen**. Dos borran
  * (`*.drop`) y cinco ejecutan DDL, SQL o una copia sobre el motor —un clon puede vaciar el destino
- * con `clean_mode`—. Lo que solo toca el inventario o la configuración del gateway queda fuera: eso
- * es «modifica», no «destructiva».
+ * con `clean_mode`, y una conversión de collation reescribe tablas enteras—. Lo que solo toca el
+ * inventario o la configuración del gateway queda fuera: eso es «modifica», no «destructiva».
  *
- * El catálogo ya publica `destructive`, pero esta lista lo SUPERA a propósito en
- * `collation.execute`: reescribe tablas enteras y no se deshace, aunque el backend no la marca
- * porque hoy la tiene operator (y su invariante prohíbe destructivas fuera de owner). Mostrarla
- * como destructiva es lo honesto con quien la usa; si pasa a owner, esta lista puede derivarse del
- * catálogo.
+ * **Es solo el RESPALDO de un backend que no publica la marca.** La fuente es la columna
+ * `destructive` del catálogo, y `isDestructive` la lee cuando viene. Desde que `collation.execute`
+ * pasó a ser solo de `owner` (v23 §5) el backend la marca también, así que las dos coinciden: son
+ * las siete de `capability_catalog.py`. Esta lista solo decide con un catálogo sin la columna.
  */
 export const DESTRUCTIVE_CAPABILITIES = [
   CAPABILITIES.databasesDrop,
@@ -303,12 +305,14 @@ export const DESTRUCTIVE_CAPABILITIES = [
 /**
  * Los endpoints donde un PARÁMETRO, o una segunda capacidad, sube el requisito (§4 y §6.6).
  *
- * Son siete. Cuatro dependen de un parámetro (encender la captura, sembrar datos, los dos
- * `drop_remote`), uno de un flag del alta (`apply_migrations`) y dos son acciones que crean una
- * versión de blueprint DESDE OTRO MÓDULO y por eso exigen `blueprints.write` además de la propia
- * (adoptar un diff, registrar un lote de collation como versión). Son los que la UI tiene que
- * reflejar deshabilitando el control concreto, porque el usuario ya está en la pantalla y el 403
- * llegaría recién al enviar — después de haber llenado el formulario.
+ * Son ocho. Cinco dependen de un parámetro (encender la captura, sembrar datos, los dos
+ * `drop_remote` y el `provision` de reasignar el dueño), uno de un flag del alta
+ * (`apply_migrations`) y dos son acciones que crean una versión de blueprint DESDE OTRO MÓDULO y
+ * por eso exigen `blueprints.write` además de la propia (adoptar un diff, registrar un lote de
+ * collation como versión; este último, además, la STAMPEA en cada base, así que suma
+ * `blueprints.apply`). Son los que la UI tiene que reflejar deshabilitando el control concreto,
+ * porque el usuario ya está en la pantalla y el 403 llegaría recién al enviar — después de haber
+ * llenado el formulario.
  *
  * **Apagar la captura no pide nada extra: solo encenderla.** Modelarlo al revés dejaría a un
  * operador sin poder desactivar algo que sí puede desactivar.
@@ -326,9 +330,18 @@ export const CAPABILITY_ESCALATIONS = {
   createWithApplyMigrations: CAPABILITIES.blueprintsApply,
   /** `POST /schema-comparisons/{id}/adopt`: además de `schema_diff.execute`. */
   schemaDiffAdopt: CAPABILITIES.blueprintsWrite,
-  /** `POST .../collation-batches/{id}/blueprint-version`: además de `collation.execute`. */
-  collationBlueprintVersion: CAPABILITIES.blueprintsWrite,
-} as const
+  /**
+   * `provision=true` en `POST /managed-databases/{id}/reassign-owner`, EN la base: entregar el
+   * control del motor (`ALTER DATABASE … OWNER TO`, o el re-GRANT de `ALL PRIVILEGES`) equivale a
+   * poder borrarla. Sin `provision` basta `databases.write`.
+   */
+  reassignOwnerProvision: CAPABILITIES.databasesDrop,
+  /**
+   * `POST .../collation-batches/{id}/blueprint-version`: además de `collation.execute`, crear la
+   * versión (`blueprints.write`) y stampearla en cada base del blueprint (`blueprints.apply`).
+   */
+  collationBlueprintVersion: [CAPABILITIES.blueprintsWrite, CAPABILITIES.blueprintsApply],
+} as const satisfies Record<string, Capability | readonly Capability[]>
 
 // ── Alcance por destino (§8) ───────────────────────────────────────────────────
 /** Una fila por servidor de `GET /authz/scope-readiness`. */

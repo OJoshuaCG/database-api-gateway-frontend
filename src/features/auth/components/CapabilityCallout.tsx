@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Callout } from '@/components/ui'
 import { useCapabilityCatalog } from '../hooks/use-capabilities'
-import { capabilityName } from '../hooks/use-capability-guard'
+import { capabilityName, grantableNote } from '../hooks/use-capability-guard'
 
 /** Cierre fijo de todo aviso de acceso: la única salida real es pedirlo. */
 export const ASK_FOR_ACCESS = 'Pedíselo a quien administra los accesos.'
@@ -70,6 +70,8 @@ export function CapabilityCallout({
     )
   }
 
+  const note = grantableNote(unique, catalog.data)
+
   return (
     <Callout
       id={id}
@@ -86,6 +88,7 @@ export function CapabilityCallout({
           </span>
         ))}
         . {ASK_FOR_ACCESS}
+        {note && ` ${note}`}
       </p>
       {children}
     </Callout>

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveAccessSchema } from '@/lib/contracts'
-import { CATALOG_FIXTURE, GRANTS_CATALOG_FIXTURE } from '@/test/fixtures/authz-catalog'
+import { DESTRUCTIVE_CAPABILITIES, effectiveAccessSchema } from '@/lib/contracts'
+import {
+  CATALOG_FIXTURE,
+  DESTRUCTIVE_CAPABILITY_IDS,
+  GRANTS_CATALOG_FIXTURE,
+} from '@/test/fixtures/authz-catalog'
 import {
   capabilitiesAt,
   capabilityGrantsFromServer,
@@ -17,6 +21,7 @@ import {
   diffCapabilities,
   effectiveRoleAt,
   globalCapabilityIds,
+  isDestructive,
   isEnforcedByScope,
   layer2CapabilityIds,
   lostEnforcementNote,
@@ -48,7 +53,8 @@ describe('derivación de roles y globales desde el catálogo', () => {
     const operator = roleCapabilityIds(catalog, 'operator')
     const owner = roleCapabilityIds(catalog, 'owner')
     expect(viewer).toHaveLength(12)
-    expect(operator).toHaveLength(17)
+    // 16: desde que `collation.execute` es solo de `owner` (backend c5edee5).
+    expect(operator).toHaveLength(16)
     expect(owner).toHaveLength(26)
     expect(viewer.every((id) => operator.includes(id))).toBe(true)
     expect(operator.every((id) => owner.includes(id))).toBe(true)
@@ -228,12 +234,34 @@ describe('capacidades por destino', () => {
   })
 })
 
+describe('isDestructive', () => {
+  it('con la marca del catálogo decide la marca: son las siete del backend', () => {
+    const ids = GRANTS_CATALOG_FIXTURE.filter(isDestructive).map((row) => row.id)
+    expect([...ids].sort()).toEqual([...DESTRUCTIVE_CAPABILITY_IDS].sort())
+    expect(ids).toContain('collation.execute')
+  })
+
+  it('la marca gana sobre la lista del frontend, en los dos sentidos', () => {
+    const drop = GRANTS_CATALOG_FIXTURE.find((row) => row.id === 'databases.drop')!
+    const write = GRANTS_CATALOG_FIXTURE.find((row) => row.id === 'databases.write')!
+    expect(isDestructive({ ...drop, destructive: false })).toBe(false)
+    expect(isDestructive({ ...write, destructive: true })).toBe(true)
+  })
+
+  it('sin la marca (backend viejo) cae a la lista del frontend, que coincide con el backend', () => {
+    expect(CATALOG_FIXTURE.every((row) => row.destructive === null)).toBe(true)
+    const ids = CATALOG_FIXTURE.filter(isDestructive).map((row) => row.id)
+    expect([...ids].sort()).toEqual([...DESTRUCTIVE_CAPABILITIES].sort())
+    expect([...DESTRUCTIVE_CAPABILITIES].sort()).toEqual([...DESTRUCTIVE_CAPABILITY_IDS].sort())
+  })
+})
+
 describe('resolveEffectiveAccess', () => {
   it('sin permisos: solo el base, sin cruces', () => {
     const resolved = resolveEffectiveAccess(input())
     expect(resolved.grants).toEqual([])
     expect(resolved.overlaps).toEqual([])
-    expect(resolved.baseCapabilities).toHaveLength(17)
+    expect(resolved.baseCapabilities).toHaveLength(16)
   })
 
   it('un permiso más bajo que el base dice qué pierde ahí', () => {
@@ -245,7 +273,6 @@ describe('resolveEffectiveAccess', () => {
       'engine_users.write',
       'databases.write',
       'blueprints.write',
-      'collation.execute',
       'exports.execute',
     ])
   })

@@ -168,7 +168,7 @@ describe('compatibilidad con un backend anterior', () => {
     expect(parsed).toMatchObject({ grantable: true, sensitive: true, implies: ['databases.read'] })
   })
 
-  it('sin la columna destructive (backend viejo) la fila sale como no destructiva', () => {
+  it('sin la columna destructive (backend viejo) la marca sale null: «no sé», no «no es»', () => {
     const parsed = capabilityDescriptorSchema.parse({
       id: 'databases.drop',
       module: 'databases',
@@ -177,10 +177,10 @@ describe('compatibilidad con un backend anterior', () => {
       mutates: true,
       discloses: false,
     })
-    expect(parsed.destructive).toBe(false)
+    expect(parsed.destructive).toBeNull()
   })
 
-  it('conserva destructive cuando el backend lo manda, y null cae al default', () => {
+  it('conserva destructive cuando el backend lo manda, false incluido, y null sigue siendo null', () => {
     const base = {
       id: 'databases.drop',
       module: 'databases',
@@ -190,6 +190,9 @@ describe('compatibilidad con un backend anterior', () => {
       discloses: false,
     }
     expect(capabilityDescriptorSchema.parse({ ...base, destructive: true }).destructive).toBe(true)
-    expect(capabilityDescriptorSchema.parse({ ...base, destructive: null }).destructive).toBe(false)
+    expect(capabilityDescriptorSchema.parse({ ...base, destructive: false }).destructive).toBe(
+      false,
+    )
+    expect(capabilityDescriptorSchema.parse({ ...base, destructive: null }).destructive).toBeNull()
   })
 })

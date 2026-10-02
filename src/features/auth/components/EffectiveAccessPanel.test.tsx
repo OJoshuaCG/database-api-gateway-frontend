@@ -43,11 +43,11 @@ describe('EffectiveAccessPanel', () => {
       />,
     )
     // El título no repite la procedencia: ya la dice el badge de al lado.
-    expect(screen.getByText('operator · 17 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('operator · 16 capacidades')).toBeInTheDocument()
     expect(screen.getByText('Producción · viewer')).toBeInTheDocument()
     expect(screen.getByText('Permiso de entorno')).toBeInTheDocument()
     // Todo lo que pierde un rol por debajo del base es de capa 2: se recorta de verdad, sin salvedad.
-    const lost = screen.getByText(/Pierde 5:/)
+    const lost = screen.getByText(/Pierde 4:/)
     expect(lost).not.toHaveTextContent('no se recorta')
     expect(lost).not.toHaveTextContent('el resto no')
     // Solo recorta: la nota es informativa, no una alerta.
@@ -69,7 +69,11 @@ describe('EffectiveAccessPanel', () => {
       />,
     )
     expect(screen.getByText(/Suma 14:/)).toBeInTheDocument()
-    expect(screen.getByText(/en esas otras operaciones \(lecturas y capacidades globales\) tiene el rol/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /en esas otras operaciones \(lecturas y capacidades globales\) tiene el rol/,
+      ),
+    ).toBeInTheDocument()
     // Escalada real por encima del base: el aviso sube a `warning` (que se anuncia como alerta).
     expect(screen.getByRole('alert')).toHaveTextContent(SCOPE_ENFORCEMENT_NOTE)
     // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1), y va en rojo.
@@ -300,7 +304,9 @@ describe('EffectiveAccessPanel — lo que rige hoy según el servidor', () => {
       screen.getByText('Aplicar y revertir versiones sobre bases reales · Producción'),
     ).toBeInTheDocument()
     // La lectura implícita se nombra en la fila, y no como una capacidad más que alguien le dio.
-    expect(screen.getByText(/Trae implícita la lectura: Ver blueprints y sus versiones/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Trae implícita la lectura: Ver blueprints y sus versiones/),
+    ).toBeInTheDocument()
     // Sin cambios: ninguna vista previa ni título extra.
     expect(screen.queryByText('Vista previa: así quedaría al guardar')).not.toBeInTheDocument()
     expect(screen.queryByText('Rige hoy')).not.toBeInTheDocument()
@@ -424,7 +430,12 @@ describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntua
         globalCapabilities={[]}
         grants={[]}
         capabilityGrants={[
-          { capability: 'exports.download', scopeType: 'environment', scopeId: 3, status: 'pending' },
+          {
+            capability: 'exports.download',
+            scopeType: 'environment',
+            scopeId: 3,
+            status: 'pending',
+          },
         ]}
         catalog={GRANTS_CATALOG_FIXTURE}
       />,
@@ -442,7 +453,9 @@ describe('EffectiveAccessPanel — cálculo del navegador con capacidades puntua
         baseRole="viewer"
         globalCapabilities={[]}
         grants={[]}
-        capabilityGrants={[{ capability: 'blueprints.apply', scopeType: 'environment', scopeId: 3 }]}
+        capabilityGrants={[
+          { capability: 'blueprints.apply', scopeType: 'environment', scopeId: 3 },
+        ]}
         catalog={CATALOG_FIXTURE}
       />,
     )
