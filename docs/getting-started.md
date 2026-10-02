@@ -21,8 +21,28 @@ cp .env.example .env
 pnpm dev            # http://localhost:5173
 ```
 
-Inicia sesión con las credenciales de administrador sembradas por el backend
-(`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
+Inicia sesión con la cuenta que siembra el backend (`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
+
+**Esa cuenta no opera.** En una instalación nueva nace como `viewer` + `access_admin`: puede
+consultar y administrar accesos, pero no crear ni borrar bases, ni configurar servidores. Su
+trabajo es repartir las funciones durante la **ventana de arranque** (72 h desde el primer
+arranque, `ACCESS_BOOTSTRAP_WINDOW_HOURS` en el backend), en la que sus elevaciones se aplican sin
+segundo aprobador. Un banner en todas las páginas lo recuerda mientras está abierta.
+
+1. Entrar como `ADMIN_USERNAME`.
+2. En «Usuarios del gateway», crear un usuario y, en su página de accesos, darle la global
+   `security_officer` (servidores, catálogos, entornos, cifrado y auditoría).
+3. Crear un usuario con rol `owner` (opera bases, migraciones, exportaciones y la consola SQL).
+4. Crear el **segundo** usuario con la global `access_admin` y entregarle su invitación.
+5. Cuando esa persona acepta la invitación, la ventana se cierra para siempre; desde entonces
+   toda elevación queda pendiente y la aprueba el otro `access_admin`.
+
+Si la ventana vence antes del paso 5, toda elevación (incluido crear el segundo `access_admin`)
+queda pendiente sin nadie que pueda aprobarla. La salida es del lado del servidor: arrancar una
+vez con `ADMIN_RECOVERY=1`, que reabre la ventana con plazo nuevo, y quitar el flag después (ver
+`backend/docs/features/authentication.md`). Una instalación actualizada desde una versión anterior
+conserva su cuenta sembrada original. El modelo completo está en
+[`authorization.md`](authorization.md).
 
 ## Variables de entorno
 

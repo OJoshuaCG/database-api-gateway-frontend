@@ -109,7 +109,7 @@ boundaries usan `react-error-boundary` (API funcional).
 
 - **Tipado del contrato — Zod manual.** El backend solo expone OpenAPI si
   `DOCS_ENABLED=true` y no es accesible de forma fiable, así que se modelan los schemas a
-  mano en `lib/contracts` desde `api-reference.md`. Zod es la **única fuente de verdad**:
+  mano en `lib/contracts` desde `backend/docs/api-reference.md`. Zod es la **única fuente de verdad**:
   los tipos se infieren con `z.infer` y los mismos schemas **validan en runtime** la
   respuesta (envelope `ApiResponse[T]`), detectando desincronizaciones con el backend.
 - **Autenticación por cookie de sesión httpOnly.** El backend emite una cookie firmada;
@@ -118,6 +118,10 @@ boundaries usan `react-error-boundary` (API funcional).
   dispara un handler global que invalida la sesión y `ProtectedRoute` redirige a `/login`.
   El login usa `suppressAuthHandler` para que un `401` (credenciales inválidas) no se trate
   como expiración de sesión.
+- **Autorización: roles y capacidades.** Cada endpoint exige una capacidad del catálogo
+  (`GET /authz/catalog`); la UI la usa como pista (`useCapabilityGuard`) y siempre maneja el 403.
+  Las escrituras llevan header CSRF y lo sensible pide step-up (confirmar la contraseña). Ver
+  [`docs/authorization.md`](docs/authorization.md) y [`docs/security.md`](docs/security.md).
 - **Sin streaming.** La API no expone SSE/WebSocket. Las operaciones que tocan el motor
   destino (marcadas 🔌: `test-connection`, aprovisionamiento, introspección) son
   request/response normales que pueden tardar y devolver `502`/`504`; se manejan como

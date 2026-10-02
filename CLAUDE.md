@@ -19,7 +19,8 @@ otorgar privilegios, versionar esquemas y aplicarlos, comparar y clonar bases.
   `scope-enforcement-hardening`), el rol por alcance EN ese destino (capa 2): ver
   `features/auth/authz-model.ts`. Los guards de UI son **pistas**: deshabilitá o escondé con
   `useCapabilityGuard` (motivo visible), pero toda pantalla tiene que manejar el 403
-  (`isAccessForbidden` → `ForbiddenState`/`forbiddenCopy`, sin «Reintentar»).
+  (`isAccessForbidden` → `ForbiddenState`/`forbiddenCopy`, sin «Reintentar»). El modelo
+  completo está en `docs/authorization.md`.
 - Muchas acciones **tocan un motor de BD real** y son irreversibles. Se marcan con 🔌 en la UI.
   Trátalas con la seriedad que merecen: confirmación explícita, nada de reintentos automáticos.
 
@@ -88,8 +89,11 @@ qué cambió de verdad (`git diff --ignore-cr-at-eol -- <archivo>`) y no arrastr
 `architecture.md` (capas y carpetas) · `data-flow.md` (recorrido de una request) ·
 `api-coverage.md` (endpoint → pantalla) · `sql-console.md` (consola SQL: identidad de
 ejecución y ciclo del `confirm_token`) · `database-export.md` (exportación de bases: los dos
-conjuntos, la matriz de compatibilidad y el artefacto de un solo uso) · `capability-grants.md` (capacidades puntuales: quién otorga,
-segundo aprobador de las sensibles, vencimiento a 7 días y acceso efectivo) · `ui-components.md` ·
+conjuntos, la matriz de compatibilidad y el artefacto de un solo uso) · `authorization.md`
+(**punto de entrada a permisos**: roles, globales, capa 1/capa 2, step-up, ventana de arranque y
+códigos de error) · `capability-grants.md` (capacidades puntuales: quién otorga, segundo aprobador
+de las sensibles, vencimiento a 7 días y acceso efectivo) · `separation-of-duties.md` (reglas,
+override de emergencia, banner y reporte) · `audit.md` (pantalla de auditoría) · `ui-components.md` ·
 `theming.md` · `testing.md` · `security.md` · `deployment.md` · `adr/` (el *porqué* de las
 decisiones).
 

@@ -2,6 +2,14 @@
 
 **Estado:** Aceptada
 
+> **Actualización (2026-10-02).** La decisión sigue vigente: el frontend no gestiona ningún token
+> y la sesión vive en una cookie httpOnly. Cambió el contexto del backend que describe la sección
+> siguiente: ya no hay un administrador único sino **varios usuarios** con roles y capacidades
+> ([`authorization.md`](../authorization.md)); la sesión es **del lado del servidor** (la cookie
+> lleva solo el identificador) y vence por dos relojes, absoluto e inactividad, en lugar de
+> `SESSION_MAX_AGE`; todo método no seguro con sesión exige el header **CSRF**; y lo sensible pide
+> **step-up**. Los detalles están en [`security.md`](../security.md) §1, §1.b y §1.d.
+
 ## Contexto
 
 El backend implementa **administrador único** con una **cookie de sesión httpOnly

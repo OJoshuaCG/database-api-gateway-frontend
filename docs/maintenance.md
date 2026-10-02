@@ -101,10 +101,13 @@ Supongamos que el backend añade `GET /servers/{id}/replicas`.
      no se escribe a mano: `notifyMutationError(toast, error, 'No se pudo …', descripción?)`
      muestra el copy compartido con el enlace «Ver mi acceso» ante un 403 de acceso y el título
      del hook ante cualquier otro error;
-   - solo pasá `scope` a la guarda en las rutas donde el backend aplica la capa 2
-     (`assert_scope`). Con `scope` la guarda falla **cerrado** mientras no puede resolver el
-     destino (catálogo o entornos sin cargar o caídos) y lo dice en `guard.unresolved`; solo un
-     backend sin `catalog_version` falla abierto.
+   - pasá `scope` a la guarda cuando la pantalla **conoce el destino** (servidor y entorno de la
+     base) y la capacidad es de capa 2. Toda ruta con destino aplica la capa 2 (`require_at`), y
+     cuáles capacidades se recortan por alcance no se listan a mano: las deriva
+     `layer2CapabilityIds(catalog)` (eje distinto de `global` y fuera del rol `viewer`). Con
+     `scope` la guarda falla **cerrado** mientras no puede resolver el destino (catálogo o
+     entornos sin cargar o caídos) y lo dice en `guard.unresolved`; solo un backend sin
+     `catalog_version` falla abierto. Ver [`authorization.md`](authorization.md) §2.
 
 7. **Test** — añade al menos un test del hook con MSW (mira
    `features/servers/hooks/use-servers.test.tsx` como plantilla).

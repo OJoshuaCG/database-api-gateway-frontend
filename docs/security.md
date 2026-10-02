@@ -102,8 +102,10 @@ que exija el token antes de salir dejaría a nadie poder iniciar sesión.
 
 ## 1.c Capacidades: son una PISTA de UI, no autorización
 
-Cada endpoint declara una capacidad de un vocabulario cerrado de 30 y **el servidor la exige**.
-`GET /auth/me` publica las efectivas del usuario para que la interfaz decida qué mostrar.
+Cada endpoint declara una capacidad de un vocabulario cerrado de 32 y **el servidor la exige**.
+`GET /auth/me` publica las efectivas del usuario para que la interfaz decida qué mostrar. El modelo
+completo (roles, globales, capa 1 y capa 2, segundo aprobador, separación de deberes) está en
+[`authorization.md`](authorization.md).
 
 **Ocultar un botón no es autorización.** Toda pantalla sigue manejando el 403 aunque el control
 esté deshabilitado. El detalle completo —incluida la decisión de que la ausencia de datos falle
@@ -152,8 +154,8 @@ Cómo lo atiende la SPA:
 - **Fallos.** Contraseña incorrecta es `400 auth.step_up_failed` —no un 401, así que no cierra la
   sesión— y el diálogo dice cuántos intentos quedan (`attempts_remaining`). Al quinto seguido el
   servidor revoca la sesión: `401 auth.session_step_up_failed`, que sigue el camino normal de 401 y
-  llega al login con su motivo. El 429 (5/min) pide esperar. Si la sesión muere con el diálogo
-  abierto, el diálogo se cierra solo.
+  llega al login con su motivo. El 429 (5/min por usuario + IP) pide esperar. Si la sesión muere
+  con el diálogo abierto, el diálogo se cierra solo.
 - **El `sid` no rota**, así que el token CSRF de los requests en vuelo sigue valiendo.
 - `step_up_enforced: false` (servidor con `STEP_UP_ENFORCED=False`, o uno anterior que no lo
   publica) apaga el preflight. Los agentes nunca reciben este 403.
@@ -228,12 +230,14 @@ Es presencia frente al teclado, no un segundo factor: la contraseña es la misma
 
 ## 8. Límites de tasa: qué hay y por qué el frontend no puede reintentar
 
-Los límites son **por sesión**, salvo el login, que va por IP porque todavía no hay sesión.
+Los límites son **por sesión**, salvo el login, que todavía no tiene sesión y combina tres ejes:
+IP, IP + usuario y usuario solo (este último frena un ataque distribuido entre muchas IP).
 Estos son los que están en las rutas:
 
 | Endpoint | Límite |
 |---|---|
-| `POST /auth/login` | 5/min (por IP) |
+| `POST /auth/login` | 20/min por IP · **5/min por IP + usuario** · 20/hora por usuario |
+| `POST /auth/step-up` | 5/min por usuario + IP |
 | `POST /gateway-users/invite/accept` | 10/min |
 | `POST /servers/{id}/users/reveal-password` | **3/min** |
 | `POST /database-exports/{id}/download-ticket` | 10/min |

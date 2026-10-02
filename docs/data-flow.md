@@ -92,7 +92,8 @@ LoginPage (RHF + zodResolver(loginInSchema))     features/auth/pages/LoginPage.t
 - En éxito: `useLogin.onSuccess` hace `setQueryData(queryKeys.auth.me(), admin)` (siembra
   la sesión, evita un refetch) y `LoginPage` navega a `from` (la ruta que se intentó
   visitar) o a `/servers`.
-- **429** (rate limit, 5/min) → `ApiError` con mensaje claro mostrado en el formulario.
+- **429** (rate limit: 20/min por IP, 5/min por IP + usuario y 20/hora por usuario; ver
+  [`security.md`](security.md) §8) → `ApiError` con mensaje claro mostrado en el formulario.
 
 ---
 

@@ -280,11 +280,11 @@ espejo de `app/core/scope.py` del backend.
 ### `CapabilityFlags`
 Marcas de una capacidad, siempre icono + texto visible: Destructiva, Modifica, Divulga datos,
 Pedirá reautenticación, Usable por agentes, Solo lectura. Props: `capability`, `compact?` (solo
-las de riesgo). «Destructiva» sale de `DESTRUCTIVE_CAPABILITIES` (`lib/contracts/auth.ts`), porque
-el catálogo no publica esa marca. La leyenda es `CAPABILITY_FLAG_LEGEND`, para una `StatusLegend`.
+las de riesgo). «Destructiva» sale de la columna `destructive` del catálogo (`isDestructive`); solo
+si el backend no la publica cae a `DESTRUCTIVE_CAPABILITIES` (`lib/contracts/auth.ts`). La leyenda es `CAPABILITY_FLAG_LEGEND`, para una `StatusLegend`.
 
 ### `RoleCapabilitySummary`
-Una línea bajo un selector de rol: «Otorga 17 de 30. No incluye: …». Props: `role`, `catalog`,
+Una línea bajo un selector de rol: «Otorga 16 de 32. No incluye: …». Props: `role`, `catalog`,
 `isLoading?`, `compareTo?` (pasa a decir qué suma o pierde respecto de ése, con las mismas marcas,
 colores y salvedad de «qué se aplica hoy» que `EffectiveAccessPanel`), `linkToMatrix?` (enlace a
 `/gateway-users?tab=roles`). Reemplaza a las descripciones de rol escritas a mano, que llegaron a

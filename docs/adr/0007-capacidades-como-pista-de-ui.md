@@ -5,7 +5,7 @@
 ## Contexto
 
 `api-reference-v23` convirtió la autorización del gateway en un vocabulario cerrado de 29
-capacidades. Cada endpoint declara la suya y el servidor la exige; `GET /auth/me` publica las
+capacidades (hoy son 32; el modelo vigente está en [`authorization.md`](../authorization.md)). Cada endpoint declara la suya y el servidor la exige; `GET /auth/me` publica las
 **efectivas** del usuario para que la interfaz decida qué mostrar.
 
 Eso abre una pregunta que el contrato deja explícitamente en manos del cliente: **qué hace la SPA

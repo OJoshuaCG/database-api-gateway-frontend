@@ -32,7 +32,8 @@ Se evalúa sobre el **estado resultante**, no sobre el payload. Las capacidades 
   `ACCESS_FOUR_EYES=False` se aplica en el acto y se audita `access.elevation_unapproved`.
 - **Al leer**: una cuenta que viola una regla sin excepción viva pierde las capacidades de
   `security_officer` (falla cerrado). `owner` y `access_admin` se conservan.
-- **Herencia**: las combinaciones que ya existían (el admin sembrado, por ejemplo) quedan
+- **Herencia**: las combinaciones que ya existían (por ejemplo, el admin sembrado por una versión
+  anterior; desde C4 la siembra es `viewer` + `access_admin` y no combina nada) quedan
   `grandfathered`, sin vencimiento, y siguen funcionando.
 
 ## Qué hace la UI
