@@ -44,6 +44,7 @@ dice cuál se cumplió en `public_context.code`:
 | `auth.session_idle` | 60 min sin requests |
 | `auth.session_logout` | se cerró en otra pestaña |
 | `auth.session_password_change` · `auth.session_role_change` · `auth.session_admin_revoked` | revocada |
+| `auth.session_access_admin_revoked` | un `access_admin` cerró **todas** sus sesiones (v29 §11.6): «Un administrador de accesos cerró tu sesión. Volvé a iniciar sesión.» |
 | `auth.session_unknown` · `auth.session_missing` | no hay sesión: login normal |
 
 **El absoluto es el que sorprende**, porque echa al usuario *mientras está trabajando*. Sin
@@ -55,6 +56,12 @@ propósito, para no mostrarle «tu sesión terminó» a alguien que nunca entró
 `SessionsPanel` (pestaña «Mis sesiones» de «Mi cuenta», `/mi-cuenta?tab=sesiones`) lista las sesiones vivas y permite
 cerrar las demás. `sid_prefix` es un **prefijo** y nunca el identificador completo: ese
 identificador *es* la credencial de sesión.
+
+**Cerrar las sesiones de otra persona** (v29 §11.5–11.6) es de `access_admin`: la sección «Sesiones
+activas» de `/gateway-users/:userId/accesos` (`GatewayUserSessionsSection`) las lista —sin `sid` ni
+prefijo, porque se cierran todas juntas— y «Cerrar todas las sesiones» las corta con step-up. No toca
+la contraseña ni el acceso: ante una contraseña comprometida va junto con desactivar la cuenta. Sobre
+la propia cuenta el botón va deshabilitado y remite a «Mi cuenta» (el backend responde 409).
 
 `ChangePasswordPanel` (pestaña «Contraseña», `/mi-cuenta?tab=contrasena`) cambia la contraseña
 propia con `POST /auth/password`, que **exige la actual**: es lo que separa «tengo la cookie» de

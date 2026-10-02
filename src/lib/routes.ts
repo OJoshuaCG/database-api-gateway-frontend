@@ -72,3 +72,10 @@ export const ACCESS_REQUEST_PARAM = 'solicitud'
 export function accessRequestPath(requestId: number): string {
   return `${GATEWAY_USERS_PATH}?tab=pending&${ACCESS_REQUEST_PARAM}=${requestId}`
 }
+
+/**
+ * Auditoría (`GET /audit-log`, v29 §11.3). Los filtros viven en la URL, así que un enlace a una
+ * búsqueda —«todo lo de este request», `?request_id=`— se comparte tal cual. `?entrada=` abre el
+ * detalle de una fila (`GET /audit-log/{id}`).
+ */
+export const AUDIT_LOG_PATH = '/audit-log'

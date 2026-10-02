@@ -101,6 +101,7 @@ const GatewayUserAccessPage = lazyPage(
   'GatewayUserAccessPage',
 )
 const ApiTokensPage = lazyPage(() => import('@/features/api-tokens'), 'ApiTokensPage')
+const AuditLogPage = lazyPage(() => import('@/features/audit-log'), 'AuditLogPage')
 const MyAccountPage = lazyPage(() => import('@/features/account'), 'MyAccountPage')
 const AcceptInvitationPage = lazyPage(
   () => import('@/features/gateway-users'),
@@ -202,6 +203,8 @@ export const router = createBrowserRouter([
           // `useBlocker` del data router para avisar de cambios sin guardar al salir.
           { path: 'gateway-users/:userId/accesos', element: <GatewayUserAccessPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
+          // Lectura de la auditoría (v29 §11.3): solo `policy.admin` (`security_officer`).
+          { path: 'audit-log', element: <AuditLogPage /> },
           { path: 'admin', element: <AdminPage /> },
           // Autoservicio de la propia sesión: «Mi acceso», «Mis sesiones» (que antes era una
           // pestaña de Administración; `/admin?tab=sessions` redirige acá) y «Contraseña».

@@ -235,6 +235,17 @@ export const queryKeys = {
     all: ['gateway-users'] as const,
     list: (params: QueryParams) => ['gateway-users', 'list', params] as const,
     detail: (id: number) => ['gateway-users', 'detail', id] as const,
+    /** Sesiones vivas de OTRA persona (v29 §11.5), vistas por quien administra accesos. */
+    sessions: (id: number) => ['gateway-users', id, 'sessions'] as const,
+  },
+  /**
+   * Auditoría (v29 §11.3). De solo lectura: nada en la SPA la invalida, se refresca a mano o al
+   * cambiar los filtros (que son parte de la key).
+   */
+  auditLog: {
+    all: ['audit-log'] as const,
+    list: (params: QueryParams) => ['audit-log', 'list', params] as const,
+    detail: (id: number) => ['audit-log', 'detail', id] as const,
   },
   /**
    * Capacidades puntuales (api-reference §19). Todo cuelga de `all` para que una mutación pueda

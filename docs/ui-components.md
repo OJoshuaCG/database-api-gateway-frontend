@@ -384,6 +384,20 @@ capacidad sobre UN entorno o servidor sin cambiar el rol (api-reference §19). P
 - **Refresco**: los hooks invalidan todo `capabilityGrants.all`, así que el acceso efectivo de
   al lado se actualiza solo tras otorgar, revocar o cancelar.
 
+### `GatewayUserSessionsSection` («Sesiones activas»)
+Sección de `GatewayUserAccessEditor` (`features/gateway-users/components`) con las sesiones vivas de
+otra persona (v29 §11.5–11.6). Props: `user` (`id`, `username`), `isSelf`.
+
+- **Solo `access_admin`**, igual que «Capacidades puntuales»: con otro rol no se monta ni se pide.
+- **Lista** (`DataTable`, tarjetas bajo `md`, sin búsqueda): iniciada, última actividad, vencimiento
+  absoluto e IP, en hora local con `formatUtcDateTime` (el backend manda UTC sin zona). Sin `sid`.
+- **«Cerrar todas las sesiones»** (`danger-soft`, texto: acción de dominio) abre un `ConfirmDialog`
+  en rojo que aclara que no cambia la contraseña ni el acceso. Step-up lo resuelve el cliente. El
+  toast lleva la cantidad (`revoked`, también 0) y la lista se refresca. Inmediata: no pasa por
+  «Guardar accesos».
+- **Propia cuenta**: botón deshabilitado con el motivo visible (`aria-describedby`) y enlace a
+  «Mi cuenta» → «Sesiones» (`MY_SESSIONS_PATH`), que conserva la sesión actual.
+
 ### `PendingCapabilityGrantsCard` («Solicitudes pendientes»)
 Pestaña `?tab=pending` de `GatewayUsersPage` (`features/gateway-users/components`), sin props: la
 monta la página solo para `access_admin` (con otro rol la pestaña no se ofrece y la bandeja no se
@@ -420,10 +434,30 @@ Las piezas de la separación de deberes (v29 §8; flujo en
 `GatewayUserAccessPage` (`/gateway-users/:userId/accesos`, en `features/gateway-users`) es el
 editor de accesos de una persona, que antes era un modal: cabecera con el usuario y su rol base,
 y en dos columnas desde `lg` el formulario (`GatewayUserAccessEditor`: «Capacidades globales»,
-«Permisos por entorno o servidor» y, solo para `access_admin`, «Capacidades puntuales»)
+«Permisos por entorno o servidor» y, solo para `access_admin`, «Capacidades puntuales» y «Sesiones activas»)
 y al costado «Acceso efectivo al guardar». «Guardar accesos» va en una barra fija al pie con la
 nota de sesiones; salir con cambios sin guardar pide confirmación. `CheckIcon` y `KeyIcon` se sumaron a `icons.tsx` para ella;
 `UserIcon`, para el enlace «Mi cuenta» de la `Topbar`.
+
+## Auditoría (en `src/features/audit-log/components/`)
+
+Piezas de `AuditLogPage` (`/audit-log`, solo `policy.admin`). Flujo y criterios en
+[`audit.md`](audit.md).
+
+### `AuditFilterBar`
+Barra de filtros. Props: `filters` (los de la URL), `onApply(filters)`, `onClear()`. Edita un
+**borrador** local y lo entrega al aplicar; quien la monta le pone `key` con la URL serializada
+para que se reinicie cuando la URL cambia desde afuera (sin `setState` en efectos). Presets de
+`action` como botones `aria-pressed` que aplican al toque; «Tipo de actor» y «Estado» son
+`<select>` nativos; «Desde»/«Hasta» son `datetime-local` en hora local que viajan en UTC. Un rango
+invertido marca el error en «Hasta» y deshabilita «Aplicar filtros».
+
+### `AuditEntryDetailModal`
+Detalle de una entrada (`Modal` `lg`, montado condicionalmente con `key`). Props: `entryId`,
+`placeholder?` (la fila de la página), `onClose`, `onFilterRequest(requestId)`. Campos en una
+`<dl>` de dos columnas desde `sm`; `detail_json` con `JSON.stringify(…, null, 2)` en un `<pre>`
+monoespaciado con `max-h-96` y scroll propio, dentro de un `<details open>` plegable. No es SQL:
+por eso no usa `CodeBlock`.
 
 ## Layout (en `src/components/layout/`)
 

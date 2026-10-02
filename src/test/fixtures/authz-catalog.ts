@@ -417,7 +417,7 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     id: 'policy.admin',
     module: 'policy',
     level: 'admin',
-    label: 'Administrar la política del gateway: rotación del cifrado',
+    label: 'Administrar la política del gateway: rotación del cifrado y lectura de la auditoría',
     mutates: true,
     discloses: false,
     requires_step_up: true,

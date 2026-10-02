@@ -15,6 +15,7 @@ profundidad. Rutas de código (`src/...`) relativas a `frontend/`.
 | [`sql-console.md`](sql-console.md) | Flujo de la Consola SQL: identidad de ejecución, ciclo de vida del `confirm_token` y por qué un rechazo del motor no es un error. | …vas a tocar `/sql-console` o el contrato v6. |
 | [`database-export.md`](database-export.md) | Flujo de la exportación de bases: los dos conjuntos (estructura/datos), el evaluador de la matriz de compatibilidad y por qué el artefacto es de un solo uso. | …vas a tocar `/database-exports` o el contrato v10. |
 | [`capability-grants.md`](capability-grants.md) | Flujo de las capacidades puntuales: quién otorga, sensibles con segundo aprobador, vencimiento a 7 días, revocación y acceso efectivo. | …vas a tocar `/capability-grants`, la sección «Capacidades puntuales» o la bandeja de pendientes. |
+| [`audit.md`](audit.md) | Pantalla de auditoría: quién la lee y por qué, filtros en la URL, fechas UTC ↔ local, cómo se nombra cada actor y el detalle. | …vas a tocar `/audit-log` o el contrato v29 §11. |
 | [`ui-components.md`](ui-components.md) | Catálogo de los componentes de `components/ui` y cómo usarlos. | …vas a construir o modificar una vista/formulario. |
 | [`theming.md`](theming.md) | Tokens de color, tema claro/oscuro, cómo cambiar o añadir un color, accesibilidad. | …vas a tocar estilos o el sistema de temas. |
 | [`testing.md`](testing.md) | Stack de tests (Vitest + RTL + MSW), utilidades y cómo escribir un test. | …vas a escribir o arreglar tests. |

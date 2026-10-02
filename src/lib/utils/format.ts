@@ -58,6 +58,21 @@ export function formatDateTime(iso: string | null | undefined): string {
   }).format(date)
 }
 
+/** ¿Trae zona horaria (`Z` u offset `±hh:mm`)? */
+const HAS_TIMEZONE = /(?:[zZ]|[+-]\d{2}:?\d{2})$/
+
+/**
+ * Fecha-hora del backend en UTC **sin zona** (`2026-10-02T17:04:11`), en hora local legible.
+ *
+ * `new Date()` de una fecha-hora ISO sin zona la interpreta en hora LOCAL: en Buenos Aires la
+ * auditoría diría que algo pasó tres horas después de cuando pasó. Se le agrega la `Z` antes de
+ * leerla; si ya trae zona se respeta. Mismo criterio que `parseUtcInstant` del step-up.
+ */
+export function formatUtcDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return formatDateTime(HAS_TIMEZONE.test(iso) ? iso : `${iso}Z`)
+}
+
 /** Fecha relativa corta (p. ej. "hace 3 h"); cae a fecha absoluta si es muy antigua. */
 export function formatRelative(iso: string | null | undefined): string {
   if (!iso) return '—'

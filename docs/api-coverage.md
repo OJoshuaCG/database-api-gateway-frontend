@@ -81,6 +81,8 @@ de aceptación acepta en el campo tanto el token como el enlace entero pegado.
 | v29 §9.4 | `POST /access-requests/{id}/approve` | ✅ | «Aprobar» de la bandeja de elevaciones, con `ConfirmDialog` (primario), el cambio a la vista y motivo opcional (`useApproveAccessRequest`). Step-up. 404/409 (`request_not_pending`, `request_stale`, `sod_conflict`, `self_approval_forbidden`…) tras una carrera: el motivo queda en el diálogo, la confirmación se deshabilita y la bandeja se refresca. Al aplicar se refrescan listado, acceso efectivo y reporte de separación |
 | v29 §9.4 | `POST /access-requests/{id}/reject` | ✅ | «Rechazar» de la bandeja de elevaciones, `ConfirmDialog` en rojo y motivo opcional (`useRejectAccessRequest`). Deshabilitado junto con «Aprobar» cuando `can_decide` es `false` |
 | v29 §9.4 | `POST /access-requests/{id}/cancel` | ✅ | «Cancelar» de la bandeja, **solo en las filas que pidió quien mira** (`requested_by.id` = sesión; el servidor lo confirma con 409 `access.request_not_requester`). Sin step-up. Motivo opcional (`useCancelAccessRequest`) |
+| v29 §11.5 | `GET /gateway-users/{id}/sessions` | ✅ | `GatewayUserSessionsSection` (sección «Sesiones activas» de `/gateway-users/:userId/accesos`, `useGatewayUserSessions`). Solo `access_admin`: con otro rol la sección no se monta y no se pide. `DataTable` (tarjetas bajo `md`) con iniciada, última actividad, vencimiento absoluto e IP, en hora local (`formatUtcDateTime`: llegan en UTC sin zona). Sin `sid` ni prefijo: la revocación las cierra todas. 403 → `ForbiddenState` |
+| v29 §11.6 | `POST /gateway-users/{id}/sessions/revoke` | ✅ | «Cerrar todas las sesiones» de `GatewayUserSessionsSection` (`useRevokeGatewayUserSessions`), con `ConfirmDialog` en rojo. Step-up (lo resuelve el cliente). El toast dice cuántas cerró (`revoked`, también 0) y la lista se refresca. En la **propia cuenta** va deshabilitado con el motivo visible y enlace a «Mi cuenta» → «Sesiones» (409 `access.self_modification_forbidden`; lo propio es `revoke-others`). La persona afectada vuelve al login con `401 auth.session_access_admin_revoked`, que tiene su propio texto (`sessionEndReason`) |
 
 **Defectos de contrato conocidos, tratados en la UI** (§2.8): `notes` se acepta y **nunca se
 devuelve**, así que el formulario lo trata como *solo escritura* —empieza vacío y solo se envía si
@@ -97,6 +99,17 @@ Credenciales portadoras para procesos automáticos. Todo detrás de `access.admi
 | v23.1 §3 | `GET /api-tokens` | ✅ | `ApiTokensPage` (`/api-tokens`), paginado |
 | v23.1 §3 | `POST /api-tokens` | ✅ | `ApiTokenFormModal` → entrega el bearer en `OneTimeSecretPanel`. Límite 10/min. La columna «Permisos» muestra los scopes **efectivos** que devolvió el servidor, nunca los pedidos: intersecta con el techo de agente |
 | v23.1 §3 | `DELETE /api-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer |
+
+## Auditoría (`/audit-log`)
+
+Lectura del rastro de `audit_log` (v29 §11). Solo `policy.admin`, que tiene solo `security_officer`:
+lee el rastro quien **no** hace los cambios de acceso. Sin step-up (son `GET`). Flujo y criterios
+en [`audit.md`](audit.md).
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| v29 §11.3 | `GET /audit-log` | ✅ | `AuditLogPage` (`/audit-log`, entrada «Auditoría» del `Sidebar` con `anyOf: [policy.admin]`; `useAuditLog`). Paginado, las más nuevas primero. Filtros en la URL con los nombres del backend (`action` exacta o prefijo con `*` y presets, `actor_type`, `admin_username`, `status`, `request_id`, `from`/`to`; `admin_id`, `api_token_id`, `target_type`, `target_id` y `server_id` solo por URL). Las fechas se eligen en hora local y viajan en UTC con `Z`. `from >= to` se avisa sin pedir; el `422 audit.invalid_range` tiene copy propio. Sin la capacidad o ante un 403: `ForbiddenState` sin «Reintentar» |
+| v29 §11.4 | `GET /audit-log/{id}` | ✅ | `AuditEntryDetailModal` (`useAuditLogEntry`), abierto por `?entrada=<id>` (enlace directo; con la fila de la página como `placeholderData`). `detail_json` (`unknown().nullable()`) se muestra con sangría en un `<details>` plegable; si es `null`, `detail` tal cual. «Ver todo el request» filtra por su `request_id`. `404 audit.not_found` con copy propio y sin «Reintentar» |
 
 ## Servidores
 

@@ -178,6 +178,21 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    // Lee el rastro quien NO hace los cambios de acceso: `policy.admin` es solo de
+    // `security_officer`, así que un `access_admin` a secas no la ve (v29 §11.2).
+    to: '/audit-log',
+    label: 'Auditoría',
+    anyOf: [CAPABILITIES.policyAdmin],
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <rect x="5" y="3" width="14" height="18" rx="2" strokeWidth="1.6" />
+        <path d="M9 8h6M9 12h6M9 16h3" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="16.5" cy="16.5" r="2.5" strokeWidth="1.6" />
+        <path d="M18.3 18.3L20 20" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin',
     label: 'Administración',
     icon: (

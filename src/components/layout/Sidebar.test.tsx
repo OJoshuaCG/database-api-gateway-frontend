@@ -58,4 +58,23 @@ describe('Sidebar — entradas según capacidades', () => {
     )
     expect(screen.queryByRole('link', { name: 'Tokens de agente' })).not.toBeInTheDocument()
   })
+
+  it('«Auditoría» solo con `policy.admin` (security_officer): lee el rastro quien no cambia accesos', async () => {
+    mockMe(meFixture({ role: 'viewer', global_capabilities: ['security_officer'] }))
+    renderWithProviders(<Sidebar />)
+    expect(await screen.findByRole('link', { name: 'Auditoría' })).toHaveAttribute(
+      'href',
+      '/audit-log',
+    )
+  })
+
+  it('access_admin sin security_officer no ve «Auditoría»', async () => {
+    mockMe(meFixture({ role: 'owner', global_capabilities: ['access_admin'] }))
+    renderWithProviders(<Sidebar />)
+    // Hasta que llega la sesión falla abierto y muestra todo: se espera a que la esconda.
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Auditoría' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('link', { name: 'Usuarios del gateway' })).toBeInTheDocument()
+  })
 })
