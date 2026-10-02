@@ -12,10 +12,10 @@ import {
   FullPageSpinner,
   PageHeader,
 } from '@/components/ui'
-import { forbiddenCopy } from '@/features/auth'
+import { CapabilityHint, forbiddenCopy, useCapabilityGuard } from '@/features/auth'
 import { ApiError } from '@/lib/api/errors'
 import { formatDateTime } from '@/lib/utils'
-import type { MigrationSelectResultItem } from '@/lib/contracts'
+import { CAPABILITIES, type MigrationSelectResultItem } from '@/lib/contracts'
 import { useManagedDatabase } from '../hooks/use-managed-databases'
 import { usePurgeSelectResults, useSelectResults } from '../hooks/use-db-migrations'
 
@@ -35,6 +35,14 @@ export function SelectResultsPage() {
   const db = useManagedDatabase(databaseId, validId)
   const results = useSelectResults(databaseId, version, validId)
   const purge = usePurgeSelectResults(databaseId, version)
+  // Purgar pide `blueprints.captures` EN esta base (v23 §4.1), la misma que leer las filas: es
+  // la custodia de esos datos de negocio, no una edición del blueprint. Quien llegó a verlas ya
+  // la tiene; la guarda queda por si el acceso cambió con la pantalla abierta.
+  const purgeGuard = useCapabilityGuard(CAPABILITIES.blueprintsCaptures, 'purgar los resultados', {
+    scope: db.data
+      ? { serverId: db.data.server_id, environmentId: db.data.environment_id ?? null }
+      : undefined,
+  })
 
   if (!validId) {
     return <ErrorState error={new Error('Identificador de base de datos o versión inválido.')} />
@@ -99,13 +107,17 @@ export function SelectResultsPage() {
           title={`Resultados capturados · ${data.version}`}
           description="Filas de los SELECT capturados en la corrida más reciente de esta versión sobre esta BD. Es una foto de solo lectura, sin paginar ni buscar (§1)."
           actions={
-            <Button
-              variant="danger"
-              onClick={() => setPurgeOpen(true)}
-              disabled={data.items.length === 0}
-            >
-              Purgar ahora
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                variant="danger"
+                onClick={() => setPurgeOpen(true)}
+                disabled={data.items.length === 0 || !purgeGuard.allowed}
+                aria-describedby={purgeGuard.describedBy}
+              >
+                Purgar ahora
+              </Button>
+              <CapabilityHint guard={purgeGuard} className="max-w-xs text-right" />
+            </div>
           }
         />
         <div className="mt-1 flex flex-wrap items-center gap-2">

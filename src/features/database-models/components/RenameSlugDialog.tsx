@@ -228,9 +228,16 @@ export function RenameSlugDialog(props: RenameSlugDialogProps) {
   const planPending =
     mode === 'rename-slug' ? renamePlanMutation.isPending : migratePlanMutation.isPending
 
-  // Escribe en bases ajenas: el requisito es `blueprints.write`. Se deshabilita el control en vez
+  // Ejecutar reescribe la contabilidad de Alembic DENTRO de bases ajenas, la misma clase de
+  // escritura que un stamp: pide `blueprints.apply` (v23 §4.1), no `write`, que es solo autoría.
+  // El `/plan` no escribe nada y sigue en `write`, así que un `operator` puede pedirlo y leerlo;
+  // lo que se le deshabilita es ejecutar, con el motivo a la vista desde el primer paso en vez
   // de dejar que el 403 llegue después de leer el plan entero y marcar el reconocimiento.
-  const guard = useCapabilityGuard(CAPABILITIES.blueprintsWrite, copy.guardAction)
+  //
+  // Sin `scope`: el backend evalúa la capa 2 en el entorno MÁS PROTEGIDO de las bases del
+  // blueprint (`require_at(target=model)`), un destino que la pantalla no conoce. Igual que el
+  // resto de las acciones de blueprint, la pista mira la capa 1 y el 403 cubre el resto.
+  const guard = useCapabilityGuard(CAPABILITIES.blueprintsApply, copy.guardAction)
 
   // La vigencia sale SIEMPRE de `expires_at`: el TTL empieza a correr en el servidor y no viaja en
   // la respuesta, así que una constante local mentiría por el tiempo de red.

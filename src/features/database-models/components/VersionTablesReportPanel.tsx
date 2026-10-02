@@ -90,8 +90,9 @@ export function VersionTablesReportPanel({ modelId }: VersionTablesReportPanelPr
   const [actualizando, setActualizando] = useState(false)
 
   const informe = useVersionTablesReport(modelId, pedido)
-  // Escribe en bases ajenas: mismo requisito que el renombrado de slug. Se deshabilita el botón en
-  // vez de dejar que el 403 llegue tras leer el plan entero.
+  // Mismo criterio que el renombrado de slug: abrir el asistente pide `blueprints.write`, lo que
+  // exige su `/plan`, que no escribe nada. Ejecutar sube a `blueprints.apply` (v23 §4.1) y lo
+  // deshabilita el propio asistente con su motivo.
   const guardFormato = useCapabilityGuard(
     CAPABILITIES.blueprintsWrite,
     'actualizar el formato de las tablas de versión',

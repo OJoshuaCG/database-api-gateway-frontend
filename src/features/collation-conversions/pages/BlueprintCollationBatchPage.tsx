@@ -60,8 +60,10 @@ export function BlueprintCollationBatchPage() {
   const [executed, setExecuted] = useState(false)
 
   const planMutation = usePlanCollationBatch(modelId)
+  // Registrar el lote como versión crea la versión (`blueprints.write`) y la STAMPEA en cada
+  // base del blueprint (`blueprints.apply`), además de `collation.execute` (v23 §4).
   const versionGuard = useCapabilityGuard(
-    [CAPABILITIES.collationExecute, CAPABILITY_ESCALATIONS.collationBlueprintVersion],
+    [CAPABILITIES.collationExecute, ...CAPABILITY_ESCALATIONS.collationBlueprintVersion],
     'registrar el lote como versión del blueprint',
   )
   // Planificar, ejecutar y cancelar el lote: `collation.execute` (`collation_batches.py`).
@@ -168,9 +170,7 @@ export function BlueprintCollationBatchPage() {
               isCreating={versionMutation.isPending}
               createError={versionMutation.error}
               result={versionResult}
-              onCreate={(name) =>
-                versionMutation.mutate({ name }, { onSuccess: setVersionResult })
-              }
+              onCreate={(name) => versionMutation.mutate({ name }, { onSuccess: setVersionResult })}
               guard={versionGuard}
             />
           }

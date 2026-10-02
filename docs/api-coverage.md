@@ -593,7 +593,7 @@ Cada endpoint declara una capacidad de un vocabulario cerrado de **30** y el ser
 Antes solo hacía falta sesión válida: quien entraba podía todo. El detalle del modelo y la decisión
 de fallar **abierto** ante datos ausentes están en [ADR-0007](adr/0007-capacidades-como-pista-de-ui.md).
 
-**Los cinco controles donde un PARÁMETRO sube el requisito (§4)**, todos deshabilitados en la UI con
+**Los controles donde un PARÁMETRO sube el requisito (§4)**, todos deshabilitados en la UI con
 `useCapabilityGuard` para que la restricción se vea antes de llenar el formulario y no después:
 
 | Control | Dónde | Pide además |
@@ -602,6 +602,7 @@ de fallar **abierto** ante datos ausentes están en [ADR-0007](adr/0007-capacida
 | `capture_selects: true` al crear o editar una versión | `ModelMigrationForm` | `blueprints.captures` |
 | `drop_remote=true` al borrar una BD gestionada | `DeleteManagedDatabaseDialog` | `databases.drop` |
 | `drop_remote=true` al borrar un usuario del motor | `DeleteServerUserDialog` | `engine_users.drop` |
+| `provision=true` al reasignar el dueño («Aplicar en el motor») | `ReassignOwnerModal` | `databases.drop` en la base |
 
 El mismo `engine_users.drop` protege además el «Eliminar del motor 🔌» de la tabla de usuarios del
 servidor y de la ficha del usuario (`DeleteEngineUserDialog`). Ahí no es un parámetro —ese diálogo
@@ -613,10 +614,28 @@ el `drop_remote` del listado se cubrió uno solo de los dos caminos que borran d
 captura encendida tiene que poder apagarla aunque no pueda volver a encenderla. Modelarlo al revés
 dejaría a un operador sin poder desactivar algo que sí puede desactivar.
 
-Y dos endpoints exigen **dos capacidades siempre**, porque crean una versión de blueprint desde otro
-módulo: `POST /schema-comparisons/{id}/adopt` y
-`POST /database-models/{id}/collation-conversions/{batch}/blueprint-version` piden
-`blueprints.write` además de la propia.
+Y dos endpoints exigen **varias capacidades siempre**, porque crean una versión de blueprint desde
+otro módulo: `POST /schema-comparisons/{id}/adopt` pide `blueprints.write` además de la propia, y
+`POST /database-models/{id}/collation-conversions/{batch}/blueprint-version` pide
+`collation.execute` + `blueprints.write` + `blueprints.apply`, porque además STAMPEA la versión en
+cada base (`BlueprintCollationBatchPage`).
+
+**`blueprints.write` es solo autoría (§4.1).** Lo que escribe en las bases de terceros pide
+`blueprints.apply` (solo `owner`, otorgable suelta):
+
+| Acción | Dónde | Pide | Pista en la UI |
+|---|---|---|---|
+| Ejecutar el renombrado del slug / la migración de formato | `RenameSlugDialog` | `blueprints.apply` | Sin `scope`: el backend decide en el entorno más protegido de las bases del blueprint. Los `/plan` siguen en `write`: el `operator` abre el asistente y lee el plan, y el botón de ejecutar va deshabilitado con el motivo desde el primer paso |
+| Eliminar el blueprint | `DeleteDatabaseModelDialog`, cabecera de `BlueprintMigrationsPage`, filas de `BlueprintsPanel` (se esconde y lo explica un `CapabilityCallout`) | `blueprints.apply` | El 409 `database_model.in_use` se pinta en el diálogo (no en un toast) con un texto fijo que nombra las bases (`model-in-use.ts`, hasta cinco y «y N más») y deja la confirmación deshabilitada |
+| Purgar los resultados capturados | `SelectResultsPage` | `blueprints.captures` en la base | — |
+
+Las capacidades que el catálogo marca `grantable` dicen en el motivo que **se pueden otorgar
+sueltas** como capacidad puntual (`grantableNote`, en `capabilityHint` y `CapabilityCallout`).
+
+**`collation.execute` es solo `owner` y destructiva (§5).** Los guards de collation ya pedían esa
+capacidad, así que la UI no cambia: es el catálogo el que la saca del `operator`. `isDestructive`
+lee ahora la marca `destructive` del catálogo y solo cae a `DESTRUCTIVE_CAPABILITIES` con un backend
+que no la publica; las dos coinciden en siete.
 
 **Tres asignaciones de rol que sorprenden y son deliberadas:** `servers.admin` **no** lo tiene
 `owner` —editar un servidor puede re-apuntar un `server_id` a otro host, o sea redirigir cada

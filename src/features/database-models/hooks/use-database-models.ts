@@ -19,6 +19,8 @@ import {
   updateDatabaseModel,
 } from '../api/database-models.api'
 import { notifyMutationError } from '@/features/auth'
+import { toApiError } from '@/lib/api/errors'
+import { modelInUseText } from '../model-in-use'
 
 export function useDatabaseModels(params: QueryParams) {
   return useQuery({
@@ -115,6 +117,11 @@ export function useUpdateDatabaseModel(id: number) {
   })
 }
 
+/**
+ * Borrado de un blueprint. El 409 `database_model.in_use` NO va a un toast: lo pinta
+ * `DeleteDatabaseModelDialog` en el propio diálogo, con las bases que lo usan, porque es una
+ * lista que hay que leer para resolverlo y un toast se va solo.
+ */
 export function useDeleteDatabaseModel() {
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -124,7 +131,10 @@ export function useDeleteDatabaseModel() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.databaseModels.all })
       toast.success('Blueprint eliminado')
     },
-    onError: (error) => notifyMutationError(toast, error, 'No se pudo eliminar el blueprint'),
+    onError: (error) => {
+      if (modelInUseText(toApiError(error)) !== null) return
+      notifyMutationError(toast, error, 'No se pudo eliminar el blueprint')
+    },
   })
 }
 

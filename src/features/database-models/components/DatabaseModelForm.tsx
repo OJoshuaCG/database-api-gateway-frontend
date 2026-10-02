@@ -161,8 +161,10 @@ export function DatabaseModelForm({
   const nameTaken = taken && (takenFields.length === 0 || takenFields.includes('name'))
   const slugTaken = taken && (takenFields.length === 0 || takenFields.includes('slug'))
 
-  // El asistente escribe en bases ajenas: el requisito es `blueprints.write`. Se deshabilita el
-  // control acá en vez de dejar que el 403 llegue tras leer el plan entero (v23 §4).
+  // Abrir el asistente pide `blueprints.write`: es lo que exige su primer paso, el `/plan`, que
+  // no escribe nada. Ejecutar el renombrado sube a `blueprints.apply` (v23 §4.1) y lo deshabilita
+  // el propio asistente con su motivo: un `operator` puede ver qué se renombraría y pedírselo a
+  // quien puede ejecutarlo.
   const renameGuard = useCapabilityGuard(
     CAPABILITIES.blueprintsWrite,
     'renombrar el slug de un blueprint',

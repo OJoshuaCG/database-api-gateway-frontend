@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Button, Combobox, Modal, Switch } from '@/components/ui'
-import type { ManagedDatabaseOut, ServerUserOut } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import {
+  CAPABILITIES,
+  CAPABILITY_ESCALATIONS,
+  type ManagedDatabaseOut,
+  type ServerUserOut,
+} from '@/lib/contracts'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useReassignOwner } from '../hooks/use-managed-databases'
 
@@ -17,6 +23,27 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
   const owners = useServerUserOptions(database.server_id)
   const reassign = useReassignOwner(database.id)
 
+  /*
+   * Las dos variantes tienen capa 2 EN esta base (`require_at` + `assert_at`), así que las dos
+   * guardas llevan el destino. Solo inventario pide `databases.write`; `provision=true` SUBE a
+   * `databases.drop` (v23 §4): en PostgreSQL el dueño de una base puede hacerle `DROP DATABASE`
+   * y en MySQL/MariaDB el re-GRANT le da `ALL PRIVILEGES`, así que entregarla equivale a poder
+   * borrarla. Sin ella el switch queda apagado y deshabilitado con el motivo a la vista: el
+   * cambio de inventario sigue disponible.
+   */
+  const target = { serverId: database.server_id, environmentId: database.environment_id ?? null }
+  const writeGuard = useCapabilityGuard(
+    CAPABILITIES.databasesWrite,
+    'reasignar el propietario de esta base',
+    { scope: target },
+  )
+  const provisionGuard = useCapabilityGuard(
+    [CAPABILITIES.databasesWrite, CAPABILITY_ESCALATIONS.reassignOwnerProvision],
+    'aplicar el cambio de propietario en el motor',
+    { scope: target },
+  )
+  const activeGuard = provision ? provisionGuard : writeGuard
+
   const candidates = (owners.data ?? []).filter((user) => user.id !== database.owner_id)
 
   return (
@@ -26,21 +53,26 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
       title="Reasignar propietario"
       description={`Base de datos «${database.name}»`}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={reassign.isPending}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => {
-              if (!owner) return
-              reassign.mutate({ body: { owner_id: owner.id }, provision }, { onSuccess: onClose })
-            }}
-            disabled={!owner}
-            isLoading={reassign.isPending}
-          >
-            Reasignar
-          </Button>
-        </>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={reassign.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (!owner) return
+                reassign.mutate({ body: { owner_id: owner.id }, provision }, { onSuccess: onClose })
+              }}
+              disabled={!owner || !activeGuard.allowed}
+              aria-describedby={activeGuard.describedBy}
+              isLoading={reassign.isPending}
+            >
+              Reasignar
+            </Button>
+          </div>
+          {/* El motivo del `provision` va en el hint del switch; acá, solo el de reasignar. */}
+          {!provision && <CapabilityHint guard={writeGuard} />}
+        </div>
       }
     >
       <div className="flex flex-col gap-4">
@@ -58,8 +90,11 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
         <Switch
           checked={provision}
           onCheckedChange={setProvision}
+          // Deshabilitado solo para ENCENDERLO: si quedara encendido con el acceso recién
+          // perdido, apagarlo tiene que seguir siendo posible.
+          disabled={!provision && !provisionGuard.allowed}
           label="Aplicar en el motor 🔌"
-          hint="Revoca/otorga privilegios (o ALTER OWNER en PostgreSQL)."
+          hint={provisionGuard.hint ?? 'Revoca/otorga privilegios (o ALTER OWNER en PostgreSQL).'}
         />
       </div>
     </Modal>

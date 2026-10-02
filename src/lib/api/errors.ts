@@ -1164,8 +1164,17 @@ export interface DatabaseModelErrorContext {
   readonly currentSlug?: string
   /** `slug_in_use`: el que se intentó poner. */
   readonly requestedSlug?: string
-  /** `slug_in_use`: cuántas bases quedarían huérfanas. Es el dato que justifica el bloqueo. */
+  /**
+   * `slug_in_use`: cuántas bases quedarían huérfanas. `in_use`: cuántas lo referencian. Es el
+   * dato que justifica el bloqueo en los dos.
+   */
   readonly managedDatabaseCount?: number
+  /**
+   * `in_use` (409 de `DELETE /database-models/{id}`): las bases gestionadas que lo referencian.
+   * Forma propia (`id` + `name`), NO la `blocking_databases` de las versiones
+   * (`managed_database_id` + `reason`): por eso no sale por `ApiError.blockingDatabases`.
+   */
+  readonly inUseDatabases?: ApiModelInUseDatabase[]
   /** `slug_rename_conflict` / `slug_rename_failed`: la tabla destino. */
   readonly newTable?: string
   /** `slug_rename_failed`: la tabla de origen. */
@@ -1185,6 +1194,12 @@ export interface DatabaseModelErrorContext {
   readonly failed?: ApiRenameSlugDatabase
   /** 🔴 `slug_rename_failed`: quedaron con el nombre NUEVO. Reparación MANUAL. */
   readonly notCompensated?: ApiRenameSlugDatabase[]
+}
+
+/** Una base que impide borrar el blueprint (`public_context.blocking_databases` de `in_use`). */
+export interface ApiModelInUseDatabase {
+  id: number
+  name: string
 }
 
 /**
@@ -1375,6 +1390,21 @@ function renameSlugDatabaseList(value: unknown): ApiRenameSlugDatabase[] | undef
   return rows.length > 0 ? rows : undefined
 }
 
+/** Las filas `{id, name}` del 409 `database_model.in_use`; se descarta la que no las trae. */
+function modelInUseDatabaseList(value: unknown): ApiModelInUseDatabase[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const rows = value.flatMap((row): ApiModelInUseDatabase[] =>
+    isRecord(row) &&
+    typeof row.id === 'number' &&
+    Number.isFinite(row.id) &&
+    typeof row.name === 'string' &&
+    row.name !== ''
+      ? [{ id: row.id, name: row.name }]
+      : [],
+  )
+  return rows.length > 0 ? rows : undefined
+}
+
 function extractDatabaseModelContext(
   code: string | undefined,
   publicContext: unknown,
@@ -1394,6 +1424,10 @@ function extractDatabaseModelContext(
     // `failed` viaja como objeto suelto, no como lista: es UNA base, la que rompió la cadena.
     failed: toRenameSlugDatabase(publicContext.failed)[0],
     notCompensated: renameSlugDatabaseList(publicContext.not_compensated),
+    inUseDatabases:
+      code === 'database_model.in_use'
+        ? modelInUseDatabaseList(publicContext.blocking_databases)
+        : undefined,
   }
 
   return Object.values(context).some((value) => value !== undefined) ? context : undefined

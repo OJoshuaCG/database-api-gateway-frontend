@@ -452,6 +452,8 @@ export type RenameSlugIn = z.infer<typeof renameSlugInSchema>
  *   NO se modificó. Es una pantalla de incidente, sin botón de reintentar.
  */
 export const DATABASE_MODEL_ERROR_CODES = {
+  /** `DELETE /database-models/{id}` mientras alguna base gestionada lo referencia. */
+  inUse: 'database_model.in_use',
   slugInUse: 'database_model.slug_in_use',
   nameOrSlugTaken: 'database_model.name_or_slug_taken',
   slugRenameConflict: 'database_model.slug_rename_conflict',

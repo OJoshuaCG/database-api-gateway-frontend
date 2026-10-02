@@ -12,8 +12,9 @@ import {
   PencilIcon,
   TrashIcon,
 } from '@/components/ui'
+import { CapabilityCallout, useCapabilityGuard } from '@/features/auth'
 import { formatDateTime } from '@/lib/utils'
-import type { DatabaseModelOut } from '@/lib/contracts'
+import { CAPABILITIES, type DatabaseModelOut } from '@/lib/contracts'
 import { useDatabaseModels } from '../hooks/use-database-models'
 import { DatabaseModelFormModal } from './DatabaseModelFormModal'
 import { DeleteDatabaseModelDialog } from './DeleteDatabaseModelDialog'
@@ -44,6 +45,10 @@ export function BlueprintsPanel() {
   const [databasesTarget, setDatabasesTarget] = useState<DatabaseModelOut | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useDatabaseModels({ page, size })
+  // Eliminar un blueprint pide `blueprints.apply` (v23 §4.1). Es una acción repetida en filas:
+  // sin la capacidad se esconde de cada fila y la explica UNA vez el aviso sobre la tabla.
+  const deleteGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'eliminar blueprints')
+  const canDelete = deleteGuard.allowed
 
   const columns = useMemo<ColumnDef<DatabaseModelOut>[]>(
     () => [
@@ -122,18 +127,20 @@ export function BlueprintsPanel() {
                 setFormOpen(true)
               }}
             />
-            <IconButton
-              label="Eliminar"
-              icon={<TrashIcon />}
-              variant="danger-soft"
-              size="icon-sm"
-              onClick={() => setDeleteTarget(row.original)}
-            />
+            {canDelete && (
+              <IconButton
+                label="Eliminar"
+                icon={<TrashIcon />}
+                variant="danger-soft"
+                size="icon-sm"
+                onClick={() => setDeleteTarget(row.original)}
+              />
+            )}
           </div>
         ),
       },
     ],
-    [navigate],
+    [navigate, canDelete],
   )
 
   return (
@@ -156,6 +163,13 @@ export function BlueprintsPanel() {
           </Button>
         </div>
       </div>
+
+      <CapabilityCallout
+        canDo="ver los blueprints"
+        cannotDo="eliminarlos"
+        missing={deleteGuard.missing}
+        unresolved={deleteGuard.unresolved}
+      />
 
       {isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />

@@ -151,9 +151,12 @@ export function BlueprintMigrationsPage() {
   // El apply masivo es `blueprints.apply` (solo `owner`): sin ella, «Aplicar…» va deshabilitado
   // con el motivo y la tabla de estado esconde «Aplicar aquí» de cada fila.
   const applyGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'aplicar versiones')
-  // Crear una versión, editar y eliminar el blueprint: `blueprints.write`
-  // (`model_migrations.py` / `database_models.py`), por rol unión.
+  // Crear una versión y editar el blueprint: `blueprints.write` (`model_migrations.py` /
+  // `database_models.py`), por rol unión.
   const writeGuard = useCapabilityGuard(CAPABILITIES.blueprintsWrite, 'editar el blueprint')
+  // Eliminar el blueprint se lleva todas sus versiones y su `down_sql`: `blueprints.apply`
+  // (v23 §4.1), no `write`. Sin destino, como en el backend (`SCOPE_EXEMPT`).
+  const deleteGuard = useCapabilityGuard(CAPABILITIES.blueprintsApply, 'eliminar el blueprint')
   const accessNoticeId = useId()
   const describedByAccess = (guard: { allowed: boolean }) =>
     guard.allowed ? undefined : accessNoticeId
@@ -377,8 +380,8 @@ export function BlueprintMigrationsPage() {
               <Button
                 variant="danger-soft"
                 onClick={() => setDeleteOpen(true)}
-                disabled={!writeGuard.allowed}
-                aria-describedby={describedByAccess(writeGuard)}
+                disabled={!deleteGuard.allowed}
+                aria-describedby={describedByAccess(deleteGuard)}
               >
                 Eliminar
               </Button>
@@ -401,10 +404,11 @@ export function BlueprintMigrationsPage() {
           cannotDo={joinWithNi(
             [
               !applyGuard.allowed && 'aplicarlas',
-              !writeGuard.allowed && 'crear versiones ni editar o eliminar el blueprint',
+              !writeGuard.allowed && 'crear versiones ni editar el blueprint',
+              !deleteGuard.allowed && 'eliminarlo',
             ].filter((part): part is string => Boolean(part)),
           )}
-          missing={[...applyGuard.missing, ...writeGuard.missing]}
+          missing={[...applyGuard.missing, ...writeGuard.missing, ...deleteGuard.missing]}
         />
       </div>
 
