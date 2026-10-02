@@ -27,8 +27,10 @@ import {
 } from '@/lib/contracts'
 import { gatewayUserAccessPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/utils'
+import { PendingCapabilityGrantsCard } from '../components/PendingCapabilityGrantsCard'
 import { GatewayUserFormModal } from '../components/GatewayUserFormModal'
 import { RolesCapabilitiesPanel } from '../components/RolesCapabilitiesPanel'
+import { usePendingCapabilityGrants } from '../hooks/use-capability-grants'
 import { useGatewayUsers, useReissueGatewayUserInvite } from '../hooks/use-gateway-users'
 import { buildInviteLink } from '../invite-link'
 import { isOwnAccount, SELF_ACCESS_NOTE } from '../self-access'
@@ -42,7 +44,7 @@ interface PendingInvite {
   reissued: boolean
 }
 
-const TABS = ['users', 'roles'] as const
+const TABS = ['users', 'pending', 'roles'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -58,6 +60,10 @@ export function GatewayUsersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const canAdmin = useCapabilities().can(CAPABILITIES.gatewayAdmin)
   const defaultTab: Tab = canAdmin ? 'users' : 'roles'
+  // La bandeja es solo de `access_admin` (un `security_officer` también tiene `gateway.admin` y
+  // recibiría un 403 seguro). Se pide aun fuera de su pestaña: el recuento de la pestaña es lo que
+  // la hace descubrible. Sin sesión cargada no se pide (`can()` falla abierto).
+  const isAccessAdmin = useCapabilities().globalCapabilities.includes('access_admin')
   const tabParam = searchParams.get('tab')
   const tab: Tab = isTab(tabParam) ? tabParam : defaultTab
   const setTab = (next: Tab) => {
@@ -70,6 +76,7 @@ export function GatewayUsersPage() {
   }
 
   const { admin } = useSession()
+  const pendingCount = usePendingCapabilityGrants(admin !== null && isAccessAdmin).data?.length
   const [page, setPage] = useState(1)
   const [size, setSize] = useState<number>(PAGINATION.defaultSize)
   const [formOpen, setFormOpen] = useState(false)
@@ -248,6 +255,16 @@ export function GatewayUsersPage() {
             Usuarios
           </TabButton>
         )}
+        {isAccessAdmin && (
+          <TabButton active={tab === 'pending'} onClick={() => setTab('pending')}>
+            Solicitudes pendientes
+            {pendingCount ? (
+              <span className="ml-2 inline-flex">
+                <Badge tone="warning">{pendingCount}</Badge>
+              </span>
+            ) : null}
+          </TabButton>
+        )}
         <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>
           Roles y capacidades
         </TabButton>
@@ -255,6 +272,12 @@ export function GatewayUsersPage() {
 
       {tab === 'roles' ? (
         <RolesCapabilitiesPanel />
+      ) : tab === 'pending' ? (
+        isAccessAdmin ? (
+          <PendingCapabilityGrantsCard />
+        ) : admin !== null ? (
+          <ForbiddenState title="No tenés acceso a las solicitudes pendientes" />
+        ) : null
       ) : forbidden ? (
         <ForbiddenState title="No tenés acceso a Usuarios del gateway" />
       ) : isError ? (

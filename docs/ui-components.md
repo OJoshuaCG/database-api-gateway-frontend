@@ -366,7 +366,7 @@ capacidad sobre UN entorno o servidor sin cambiar el rol (api-reference §19). P
   (`access.grant_duplicate` sigue siendo la verdad del servidor).
 - **Resultado**: una no sensible nace `active` («Capacidad otorgada… ya rige»); una sensible nace
   `pending` y el mensaje dice que **todavía no concede acceso** hasta que otra persona con
-  `access_admin` la apruebe (bandeja en F4). Un error `access.*` sale en el formulario
+  `access_admin` la apruebe (bandeja: `PendingCapabilityGrantsCard`). Un error `access.*` sale en el formulario
   (`capabilityGrantErrorMessage`, `role="alert"`) además del toast; el 403 usa `forbiddenCopy()`.
 - **Lista** (`DataTable`, tarjetas bajo `md`): vigentes por defecto (`active` + `pending`); la
   casilla «Ver también el historial» suma rechazadas, vencidas, canceladas y revocadas. Un solo
@@ -375,6 +375,22 @@ capacidad sobre UN entorno o servidor sin cambiar el rol (api-reference §19). P
   admin, sin segundo aprobador. Con la propia cuenta van deshabilitados.
 - **Refresco**: los hooks invalidan todo `capabilityGrants.all`, así que el acceso efectivo de
   al lado se actualiza solo tras otorgar, revocar o cancelar.
+
+### `PendingCapabilityGrantsCard` («Solicitudes pendientes»)
+Pestaña `?tab=pending` de `GatewayUsersPage` (`features/gateway-users/components`), sin props: la
+monta la página solo para `access_admin` (con otro rol la pestaña no se ofrece y la bandeja no se
+pide; un enlace directo muestra `ForbiddenState`). La pestaña lleva el recuento en una insignia y se pide aun fuera de ella para que sea descubrible. Flujo en
+[`capability-grants.md`](capability-grants.md).
+
+- **Fila** (`DataTable`, tarjetas bajo `md`): persona, capacidad (etiqueta, id en mono y lectura
+  implícita), alcance, quién la pidió con fecha y motivo, y vencimiento.
+- **«Aprobar» / «Rechazar»** conservan el texto (acción de dominio) y su nombre accesible dice qué y
+  de quién. Con `can_decide: false` los dos van deshabilitados y el `blocked_reason` se muestra
+  debajo, enlazado por `aria-describedby`; un código que la UI no conoce cae en un copy genérico
+  para no dejar un botón mudo.
+- **Diálogo** (`ConfirmDialog`): motivo opcional (máx. 500). Aprobar es primario; rechazar, rojo,
+  por ser la confirmación final. Un 404/409 se queda en el diálogo (`role="alert"`) con la
+  confirmación deshabilitada; los hooks refrescan la bandeja y la fila desaparece sola.
 
 `GatewayUserAccessPage` (`/gateway-users/:userId/accesos`, en `features/gateway-users`) es el
 editor de accesos de una persona, que antes era un modal: cabecera con el usuario y su rol base,

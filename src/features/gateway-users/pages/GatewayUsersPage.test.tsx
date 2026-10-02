@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
@@ -162,5 +163,75 @@ describe('GatewayUsersPage — estados de la cuenta', () => {
     for (const badge of screen.getAllByText('Invitación pendiente')) {
       expect(badge).not.toHaveAttribute('title')
     }
+  })
+})
+
+describe('GatewayUsersPage — bandeja de solicitudes pendientes', () => {
+  const pendingRow = {
+    id: 12,
+    user_id: 7,
+    username: 'mlopez',
+    capability: 'databases.drop',
+    scope_type: 'server',
+    scope_id: 9,
+    scope_name: 'db-prod-01',
+    status: 'pending',
+    sensitive: true,
+    requested_by: { id: 2, username: 'otra-admin' },
+    requested_at: '2026-10-01T18:00:00Z',
+    expires_at: '2026-10-08T18:00:00Z',
+    implies: [],
+    can_decide: true,
+    blocked_reason: null,
+  }
+
+  function mockAs(globals: string[], pending: unknown[] = [pendingRow]) {
+    let pendingRequests = 0
+    server.use(
+      http.get('http://localhost/api/v1/auth/me', () =>
+        HttpResponse.json({
+          data: { ...meFixture({ role: 'owner', global_capabilities: globals }), id: 1 },
+        }),
+      ),
+      http.get('http://localhost/api/v1/authz/catalog', () =>
+        HttpResponse.json({ data: CATALOG_FIXTURE }),
+      ),
+      http.get('http://localhost/api/v1/gateway-users', () =>
+        HttpResponse.json({ data: [], pagination }),
+      ),
+      http.get('http://localhost/api/v1/capability-grants/pending', () => {
+        pendingRequests += 1
+        return HttpResponse.json({ data: pending })
+      }),
+    )
+    return () => pendingRequests
+  }
+
+  it('access_admin ve la pestaña con el recuento y abre la bandeja', async () => {
+    mockAs(['access_admin'])
+    renderWithProviders(<GatewayUsersPage />)
+
+    const tab = await screen.findByRole('tab', { name: /Solicitudes pendientes/ })
+    await waitFor(() => expect(tab).toHaveTextContent('Solicitudes pendientes1'))
+    await userEvent.click(tab)
+    expect(await screen.findAllByText('mlopez')).not.toHaveLength(0)
+    expect(screen.getByRole('heading', { name: 'Solicitudes pendientes' })).toBeInTheDocument()
+  })
+
+  it('sin access_admin no hay pestaña ni se pide la bandeja', async () => {
+    const requests = mockAs(['security_officer'])
+    renderWithProviders(<GatewayUsersPage />)
+
+    await screen.findByRole('tab', { name: 'Usuarios' })
+    expect(screen.queryByRole('tab', { name: /Solicitudes pendientes/ })).not.toBeInTheDocument()
+    expect(requests()).toBe(0)
+  })
+
+  it('sin access_admin, `?tab=pending` muestra el estado de acceso', async () => {
+    mockAs([])
+    renderWithProviders(<GatewayUsersPage />, { route: '/gateway-users?tab=pending' })
+    expect(
+      await screen.findByText('No tenés acceso a las solicitudes pendientes'),
+    ).toBeInTheDocument()
   })
 })

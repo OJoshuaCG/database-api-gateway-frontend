@@ -86,7 +86,8 @@ qué cambió de verdad (`git diff --ignore-cr-at-eol -- <archivo>`) y no arrastr
 `architecture.md` (capas y carpetas) · `data-flow.md` (recorrido de una request) ·
 `api-coverage.md` (endpoint → pantalla) · `sql-console.md` (consola SQL: identidad de
 ejecución y ciclo del `confirm_token`) · `database-export.md` (exportación de bases: los dos
-conjuntos, la matriz de compatibilidad y el artefacto de un solo uso) · `ui-components.md` ·
+conjuntos, la matriz de compatibilidad y el artefacto de un solo uso) · `capability-grants.md` (capacidades puntuales: quién otorga,
+segundo aprobador de las sensibles, vencimiento a 7 días y acceso efectivo) · `ui-components.md` ·
 `theming.md` · `testing.md` · `security.md` · `deployment.md` · `adr/` (el *porqué* de las
 decisiones).
 

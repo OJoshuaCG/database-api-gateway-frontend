@@ -106,7 +106,7 @@ interface CapabilityGrantsSectionProps {
  * una página cuya barra inferior guarda «el estado completo», lo contrario es lo que se asumiría.
  *
  * Una capacidad sensible no se concede al crearla: queda `pending` hasta que OTRA persona con
- * `access_admin` la apruebe (bandeja, F4). La UI lo dice antes de enviar y después de enviar,
+ * `access_admin` la apruebe (bandeja: `PendingCapabilityGrantsCard`). La UI lo dice antes de enviar y después de enviar,
  * porque «Capacidad otorgada» sobre algo que todavía no rige sería mentir.
  */
 export function CapabilityGrantsSection({
