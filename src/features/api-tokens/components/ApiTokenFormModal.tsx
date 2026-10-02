@@ -10,6 +10,7 @@ import {
   XIcon,
 } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
+import { useCapabilityCatalog } from '@/features/auth'
 import { useProjects } from '@/features/projects/hooks/use-projects'
 import {
   API_TOKEN_DEFAULT_SCOPE,
@@ -44,11 +45,20 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   /**
-   * Techo de agente, descubierto a partir de un 422 `scope_not_allowed`. Es la única vía para
-   * conocerlo hoy: el catálogo de capacidades vive en v23, que este frontend todavía no consume.
-   * Cuando llega, sus valores pasan a ofrecerse como opciones de un clic.
+   * Techo de agente que informó un 422 `scope_not_allowed`. Manda sobre el del catálogo porque es
+   * la respuesta del servidor a ESTE pedido: si el catálogo en caché quedó viejo, este no.
    */
   const [discoveredCeiling, setDiscoveredCeiling] = useState<string[] | null>(null)
+  /**
+   * Techo de agente según el catálogo (`agent_allowed`, `GET /authz/catalog`). Se ofrece desde el
+   * principio, así nadie tiene que adivinar un scope ni provocar el 422 para conocerlos. El campo
+   * libre se conserva: con un backend que no publica el catálogo es la única forma de pedir uno.
+   */
+  const catalog = useCapabilityCatalog()
+  const catalogCeiling = (catalog.data ?? [])
+    .filter((capability) => capability.agent_allowed)
+    .map((capability) => capability.id)
+  const offeredScopes = discoveredCeiling ?? (catalogCeiling.length > 0 ? catalogCeiling : null)
 
   const nameTooShort = name.trim().length > 0 && name.trim().length < API_TOKEN_NAME_MIN
   const ttlNumber = Number(ttlDays)
@@ -196,13 +206,20 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
             </Button>
           </div>
 
-          {discoveredCeiling && (
-            <Callout tone="info" title="Techo de agente informado por el servidor">
+          {offeredScopes && (
+            <Callout
+              tone="info"
+              title={
+                discoveredCeiling
+                  ? 'Techo de agente informado por el servidor'
+                  : 'Permisos disponibles para agentes'
+              }
+            >
               <p className="mb-2">
                 Estos son los permisos que el servidor admite. Tocá uno para añadirlo:
               </p>
               <div className="flex flex-wrap gap-2">
-                {discoveredCeiling.map((scope) => (
+                {offeredScopes.map((scope) => (
                   <Button
                     key={scope}
                     type="button"
