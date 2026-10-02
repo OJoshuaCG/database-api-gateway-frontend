@@ -61,6 +61,7 @@ import { useReplaceGatewayUserAccess } from '../hooks/use-gateway-users'
 import { gatewayUserErrorMessage } from '../messages'
 import { SELF_ACCESS_NOTE } from '../self-access'
 import { CapabilityGrantsSection } from './CapabilityGrantsSection'
+import { GatewayUserSessionsSection } from './GatewayUserSessionsSection'
 import { SecondApproverBadge } from './SecondApproverBadge'
 import { SodConflictList, SodConflictPanel } from './SodConflictPanel'
 
@@ -786,6 +787,11 @@ export function GatewayUserAccessEditor({ user, isSelf = false }: GatewayUserAcc
               isCatalogLoading={catalogQuery.isLoading}
             />
           )}
+
+          {/* ── Sesiones activas ─────────────────────────────────────────────
+              También `access.admin` y también inmediata (v29 §11.5–11.6): cerrar sesiones no pasa
+              por «Guardar accesos». */}
+          {canReadEffectiveAccess && <GatewayUserSessionsSection user={user} isSelf={isSelf} />}
         </div>
 
         {/* ── Acceso efectivo ──────────────────────────────────────────────── */}

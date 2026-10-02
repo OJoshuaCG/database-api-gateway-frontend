@@ -53,6 +53,12 @@ const SESSION_END_COPY: Record<string, { title: string; detail: string }> = {
     title: 'Tu sesión fue revocada',
     detail: 'Un administrador la cerró, o se desactivó la cuenta.',
   },
+  // Distinto de `adminRevoked`: acá fue una decisión puntual de quien administra accesos, no un
+  // efecto secundario de desactivar la cuenta. Nombrarlo evita que la persona lo lea como un bug.
+  [AUTH_SESSION_ERROR_CODES.accessAdminRevoked]: {
+    title: 'Un administrador cerró tu sesión',
+    detail: 'Un administrador de accesos cerró tu sesión. Volvé a iniciar sesión.',
+  },
   [AUTH_SESSION_ERROR_CODES.stepUpFailed]: {
     title: 'Se cerró la sesión por seguridad',
     detail: 'La contraseña se confirmó mal cinco veces seguidas. Volvé a entrar para continuar.',
@@ -122,6 +128,9 @@ export const MY_ACCESS_PATH = '/mi-cuenta'
 
 /** La sección «Contraseña» de «Mi cuenta»: el único lugar donde alguien cambia la suya. */
 export const MY_PASSWORD_PATH = '/mi-cuenta?tab=contrasena'
+
+/** «Mi cuenta» → «Sesiones»: donde alguien cierra las suyas (`revoke-others` conserva la actual). */
+export const MY_SESSIONS_PATH = '/mi-cuenta?tab=sesiones'
 
 export interface ForbiddenCopy {
   title: string

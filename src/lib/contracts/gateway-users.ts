@@ -341,3 +341,27 @@ export const GATEWAY_USER_ERROR_CODES = {
   /** 422: el `sod_override` no cumple los límites (v29 §8.3). */
   sodOverrideInvalid: 'access.sod_override_invalid',
 } as const
+
+// ── Sesiones de otra persona (v29 §11.5–11.6) ──────────────────────────────────
+/**
+ * Una sesión VIVA de otra persona, vista por quien administra accesos
+ * (`GET /gateway-users/{id}/sessions`, `access.admin`).
+ *
+ * **Sin `sid` ni prefijo**, a diferencia de `SessionInfo` (las propias): el `sid` es la credencial
+ * de sesión y la revocación administrativa cierra TODAS, así que no hace falta distinguirlas.
+ * Fechas en UTC **sin zona**: se muestran con `formatUtcDateTime`. `expires_at` es el vencimiento
+ * ABSOLUTO; la sesión puede caer antes por inactividad.
+ */
+export const gatewayUserSessionSchema = z.object({
+  created_at: z.string(),
+  last_seen_at: z.string(),
+  expires_at: z.string(),
+  ip: z.string().nullish(),
+})
+export type GatewayUserSession = z.infer<typeof gatewayUserSessionSchema>
+
+/** `POST /gateway-users/{id}/sessions/revoke` → `{revoked: N}`; `N` puede ser 0. */
+export const gatewayUserSessionsRevokedSchema = z.object({
+  revoked: z.number().int().nonnegative(),
+})
+export type GatewayUserSessionsRevoked = z.infer<typeof gatewayUserSessionsRevokedSchema>

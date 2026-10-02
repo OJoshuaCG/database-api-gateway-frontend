@@ -1,9 +1,11 @@
-import { fetchData, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
+import { fetchData, fetchList, fetchPage, mutateData, type QueryParams } from '@/lib/api/client'
 import {
   acceptInviteOutSchema,
   gatewayUserCreatedWriteOutSchema,
   gatewayUserInviteOutSchema,
   gatewayUserOutSchema,
+  gatewayUserSessionSchema,
+  gatewayUserSessionsRevokedSchema,
   gatewayUserWriteOutSchema,
   type AcceptInviteIn,
   type AcceptInviteOut,
@@ -12,6 +14,8 @@ import {
   type GatewayUserCreatedWriteOut,
   type GatewayUserInviteOut,
   type GatewayUserOut,
+  type GatewayUserSession,
+  type GatewayUserSessionsRevoked,
   type GatewayUserUpdate,
   type GatewayUserWriteOut,
   type Page,
@@ -96,4 +100,24 @@ export function replaceGatewayUserAccess(
  */
 export function reissueGatewayUserInvite(id: number): Promise<GatewayUserInviteOut> {
   return mutateData('POST', `${BASE}/${id}/invite`, gatewayUserInviteOutSchema, {})
+}
+
+/**
+ * `GET /gateway-users/{id}/sessions` — sesiones VIVAS de otra persona (v29 §11.5), la más reciente
+ * primero. `access.admin`; sin `sid` (es la credencial) porque la revocación las cierra todas.
+ */
+export function listGatewayUserSessions(
+  id: number,
+  signal?: AbortSignal,
+): Promise<GatewayUserSession[]> {
+  return fetchList(`${BASE}/${id}/sessions`, gatewayUserSessionSchema, { signal })
+}
+
+/**
+ * `POST /gateway-users/{id}/sessions/revoke` — cierra TODAS las sesiones vivas de OTRA persona
+ * (v29 §11.6). Pide step-up: el 403 `access.step_up_required` lo resuelve el cliente. Sobre uno
+ * mismo responde 409 `access.self_modification_forbidden` (lo propio es «Mi cuenta»).
+ */
+export function revokeGatewayUserSessions(id: number): Promise<GatewayUserSessionsRevoked> {
+  return mutateData('POST', `${BASE}/${id}/sessions/revoke`, gatewayUserSessionsRevokedSchema, {})
 }

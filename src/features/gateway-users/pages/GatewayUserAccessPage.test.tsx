@@ -95,7 +95,21 @@ function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<stri
   let detailRequests = 0
   let effectiveRequests = 0
   let grantsRequests = 0
+  let sessionsRequests = 0
   server.use(
+    http.get(`${API}/gateway-users/7/sessions`, () => {
+      sessionsRequests += 1
+      return HttpResponse.json({
+        data: [
+          {
+            created_at: '2026-10-02T15:00:00',
+            last_seen_at: '2026-10-02T15:40:12',
+            expires_at: '2026-10-03T03:00:00',
+            ip: '10.0.0.7',
+          },
+        ],
+      })
+    }),
     http.get(`${API}/gateway-users/7/capability-grants`, () => {
       grantsRequests += 1
       return HttpResponse.json({ data: [] })
@@ -132,6 +146,7 @@ function mockBackend(me: Record<string, unknown> = ACTOR, readiness: Record<stri
     detailRequests: () => detailRequests,
     effectiveRequests: () => effectiveRequests,
     grantsRequests: () => grantsRequests,
+    sessionsRequests: () => sessionsRequests,
   }
 }
 
@@ -190,6 +205,7 @@ describe('GatewayUserAccessPage', () => {
       'Capacidades globales',
       'Permisos por entorno o servidor',
       'Capacidades puntuales',
+      'Sesiones activas',
       'Acceso efectivo',
     ])
     // La sección ya es real (R11): el marcador «Próximamente» desapareció y hay un formulario.
@@ -445,6 +461,12 @@ describe('GatewayUserAccessPage', () => {
     expect(screen.queryByRole('button', { name: 'Guardar accesos' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Añadir permiso' })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Administración de accesos' })).toBeDisabled()
+    // Sus sesiones se listan, pero cerrarlas desde acá sería el 409: el motivo apunta a Mi cuenta.
+    expect(await screen.findByRole('button', { name: 'Cerrar todas las sesiones' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Mi cuenta' })).toHaveAttribute(
+      'href',
+      '/mi-cuenta?tab=sesiones',
+    )
     expect(screen.getByRole('link', { name: 'Volver al listado' })).toHaveAttribute(
       'href',
       '/gateway-users',
@@ -463,6 +485,7 @@ describe('GatewayUserAccessPage', () => {
     )
     expect(screen.queryByRole('button', { name: /Reintentar/ })).not.toBeInTheDocument()
     expect(backend.detailRequests()).toBe(0)
+    expect(backend.sessionsRequests()).toBe(0)
   })
 })
 

@@ -513,6 +513,8 @@ export const AUTH_SESSION_ERROR_CODES = {
   passwordChange: 'auth.session_password_change',
   roleChange: 'auth.session_role_change',
   adminRevoked: 'auth.session_admin_revoked',
+  /** Un `access_admin` cerró TODAS tus sesiones (`POST /gateway-users/{id}/sessions/revoke`, v29 §11.6). */
+  accessAdminRevoked: 'auth.session_access_admin_revoked',
   unknown: 'auth.session_unknown',
   missing: 'auth.session_missing',
   /** Quinto fallo seguido de `POST /auth/step-up`: el servidor revocó la sesión. */

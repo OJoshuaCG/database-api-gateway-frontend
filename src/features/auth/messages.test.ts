@@ -38,6 +38,16 @@ describe('sessionEndReason', () => {
     expect(reason?.detail).toContain('rol')
   })
 
+  it('explica el cierre de sesiones por un administrador de accesos con su propio texto', () => {
+    const reason = sessionEndReason(error(401, AUTH_SESSION_ERROR_CODES.accessAdminRevoked))
+    const generic = sessionEndReason(error(401, AUTH_SESSION_ERROR_CODES.adminRevoked))
+    expect(reason?.code).toBe('auth.session_access_admin_revoked')
+    expect(reason?.detail).toBe(
+      'Un administrador de accesos cerró tu sesión. Volvé a iniciar sesión.',
+    )
+    expect(reason?.title).not.toBe(generic?.title)
+  })
+
   it('devuelve null para «no hay sesión», que es el login normal', () => {
     // Un cartel de «tu sesión terminó» en la primera visita de alguien que nunca entró es ruido
     // que entrena a ignorar el cartel cuando sí importa.

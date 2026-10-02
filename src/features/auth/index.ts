@@ -28,6 +28,7 @@ export {
   CSRF_ERROR_TITLE,
   MY_ACCESS_PATH,
   MY_PASSWORD_PATH,
+  MY_SESSIONS_PATH,
   csrfErrorCopy,
   forbiddenCopy,
   isAccessForbidden,

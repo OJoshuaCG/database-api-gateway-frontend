@@ -16,8 +16,10 @@ import {
   acceptGatewayUserInvite,
   createGatewayUser,
   getGatewayUser,
+  listGatewayUserSessions,
   listGatewayUsers,
   reissueGatewayUserInvite,
+  revokeGatewayUserSessions,
   replaceGatewayUserAccess,
   updateGatewayUser,
 } from '../api/gateway-users.api'
@@ -196,5 +198,49 @@ export function useAcceptGatewayUserInvite() {
     mutationFn: (body: AcceptInviteIn) => acceptGatewayUserInvite(body),
     // Las variables llevan el token de invitación y la contraseña nueva en claro.
     gcTime: 0,
+  })
+}
+
+/**
+ * Sesiones vivas de OTRA persona (v29 §11.5). `enabled` lo apaga quien no tiene `access.admin`:
+ * un `security_officer` sin `access_admin` recibiría un 403 seguro.
+ */
+export function useGatewayUserSessions(id: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.gatewayUsers.sessions(id),
+    queryFn: ({ signal }) => listGatewayUserSessions(id, signal),
+    enabled,
+  })
+}
+
+/**
+ * Cierra TODAS las sesiones vivas de otra persona (v29 §11.6). El step-up lo resuelve el cliente
+ * (reenvía tras la contraseña). El toast lleva la cantidad que devolvió el servidor, también con 0:
+ * «no había ninguna abierta» es un resultado, no un error. Tras un 404/409 también se refresca, porque
+ * la lista en pantalla ya no corresponde.
+ */
+export function useRevokeGatewayUserSessions(id: number, username: string) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  const refresh = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.gatewayUsers.sessions(id) })
+  return useMutation({
+    mutationFn: () => revokeGatewayUserSessions(id),
+    onSuccess: ({ revoked }) => {
+      refresh()
+      toast.success(
+        revoked === 0
+          ? `${username} no tenía sesiones abiertas`
+          : revoked === 1
+            ? `Se cerró 1 sesión de ${username}`
+            : `Se cerraron ${revoked} sesiones de ${username}`,
+        revoked === 0 ? undefined : 'Va a tener que volver a iniciar sesión.',
+      )
+    },
+    onError: (error) => {
+      const status = toApiError(error).status
+      if (status === 404 || status === 409) refresh()
+      notifyMutationError(toast, error, ...errorToast('No se pudieron cerrar las sesiones', error))
+    },
   })
 }
