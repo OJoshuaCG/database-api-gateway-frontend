@@ -5,6 +5,7 @@ import {
   passwordChangeOutSchema,
   scopeReadinessSchema,
   sessionInfoSchema,
+  stepUpOutSchema,
   type AdminOut,
   type CapabilityDescriptor,
   type LoginIn,
@@ -12,6 +13,7 @@ import {
   type PasswordChangeOut,
   type ScopeReadiness,
   type SessionInfo,
+  type StepUpOut,
 } from '@/lib/contracts'
 
 /** `GET /auth/me` — administrador autenticado. */
@@ -77,4 +79,19 @@ export function revokeOtherSessions(): Promise<string | undefined> {
  */
 export function changeOwnPassword(body: PasswordChangeIn): Promise<PasswordChangeOut> {
   return mutateData('POST', '/auth/password', passwordChangeOutSchema, { body })
+}
+
+/**
+ * `POST /auth/step-up` — confirma la contraseña propia y abre la ventana de step-up de ESTA sesión.
+ *
+ * `suppressStepUp` porque es justamente el endpoint que resuelve ese 403: no puede depender de sí
+ * mismo. El 401 NO se suprime: el del quinto fallo (`auth.session_step_up_failed`) es una sesión
+ * revocada de verdad y tiene que llevar al login como cualquier otro. La contraseña incorrecta es
+ * un 400, así que no cierra nada.
+ */
+export function confirmStepUp(password: string): Promise<StepUpOut> {
+  return mutateData('POST', '/auth/step-up', stepUpOutSchema, {
+    body: { password },
+    suppressStepUp: true,
+  })
 }

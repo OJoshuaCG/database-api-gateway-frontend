@@ -1,6 +1,8 @@
 export { LoginPage } from './pages/LoginPage'
 export { ProtectedRoute } from './components/ProtectedRoute'
 export { SessionProvider } from './SessionProvider'
+export { StepUpProvider } from './StepUpProvider'
+export { useStepUp, type StepUpContextValue } from './hooks/use-step-up'
 export { SessionsPanel } from './components/SessionsPanel'
 export { ChangePasswordPanel } from './components/ChangePasswordPanel'
 export { useSession } from './hooks/use-session'
@@ -29,11 +31,13 @@ export {
   forbiddenCopy,
   isAccessForbidden,
   isCsrfError,
+  isStepUpRequired,
   isSkippedByScope,
   scopeHasGrantsMessage,
   skippedBaseLabel,
   SKIPPED_BY_SCOPE_REASON,
   sessionEndReason,
+  STEP_UP_REQUIRED_COPY,
   type ForbiddenCopy,
   type GrantScopeTarget,
   type SessionEndReason,

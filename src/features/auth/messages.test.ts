@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/errors'
-import { AUTH_CSRF_ERROR_CODES, AUTH_SESSION_ERROR_CODES } from '@/lib/contracts'
+import {
+  AUTH_CSRF_ERROR_CODES,
+  AUTH_SESSION_ERROR_CODES,
+  AUTH_STEP_UP_ERROR_CODES,
+} from '@/lib/contracts'
 import {
   csrfErrorCopy,
   forbiddenCopy,
   isAccessForbidden,
   isCsrfError,
+  isStepUpRequired,
   scopeHasGrantsMessage,
   sessionEndReason,
+  stepUpErrorMessage,
 } from './messages'
 
 function error(status: number, code?: string) {
@@ -127,5 +133,37 @@ describe('scopeHasGrantsMessage', () => {
 
   it('no reclama otros códigos', () => {
     expect(scopeHasGrantsMessage(error(409, 'environment.has_databases'), 'environment')).toBeNull()
+  })
+})
+
+describe('step-up', () => {
+  it('explica el cierre por el quinto fallo de contraseña', () => {
+    const reason = sessionEndReason(error(401, AUTH_SESSION_ERROR_CODES.stepUpFailed))
+    expect(reason?.title).toContain('seguridad')
+    expect(reason?.detail).toContain('cinco veces')
+  })
+
+  it('reconoce el 403 de step-up y no lo confunde con el de acceso', () => {
+    const stepUp = error(403, AUTH_STEP_UP_ERROR_CODES.required)
+    expect(isStepUpRequired(stepUp)).toBe(true)
+    expect(isAccessForbidden(stepUp)).toBe(false)
+    expect(isStepUpRequired(error(403, 'access.forbidden'))).toBe(false)
+  })
+
+  it('dice cuántos intentos quedan ante una contraseña incorrecta', () => {
+    const failed = (left?: number) =>
+      new ApiError({
+        status: 400,
+        message: 'x',
+        code: AUTH_STEP_UP_ERROR_CODES.failed,
+        attemptsRemaining: left,
+      })
+    expect(stepUpErrorMessage(failed(3))).toContain('Te quedan 3 intentos')
+    expect(stepUpErrorMessage(failed(1))).toContain('último intento')
+    expect(stepUpErrorMessage(failed())).toBe('La contraseña no es correcta.')
+  })
+
+  it('pide esperar ante el 429', () => {
+    expect(stepUpErrorMessage(error(429))).toContain('Esperá un minuto')
   })
 })

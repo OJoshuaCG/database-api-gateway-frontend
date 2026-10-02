@@ -6,6 +6,7 @@ import {
   paginatedEnvelope,
   type Page,
 } from '@/lib/contracts/common'
+import { AUTH_STEP_UP_ERROR_CODES } from '@/lib/contracts/auth'
 import { networkError, normalizeApiError, ApiError } from './errors'
 import { CSRF_HEADER, readCsrfToken } from './csrf'
 
@@ -31,6 +32,57 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler
 }
 
+// ── Step-up: 403 `access.step_up_required` ──────────────────────────────────
+/**
+ * Pide la contraseña y resuelve `true` si el servidor abrió la ventana de step-up, `false` si la
+ * persona canceló (o no hay quien pregunte). Recibe el 403 por si quien pregunta quiere leer su
+ * `step_up_ttl_seconds`. Lo registra `StepUpProvider`.
+ */
+type StepUpHandler = (error: ApiError) => Promise<boolean>
+let stepUpHandler: StepUpHandler | null = null
+
+/**
+ * El pedido de contraseña EN CURSO, compartido. Una pantalla que dispara varias requests a la vez
+ * (un lote, una vista previa más su conteo) recibe varios 403 casi juntos: sin esto, cada uno
+ * abriría su propio diálogo y la persona tendría que tipear la contraseña N veces.
+ */
+let pendingStepUp: Promise<boolean> | null = null
+
+/**
+ * Cuántas veces se abrió la ventana desde que arrancó la app. Una request que salió ANTES de que
+ * se confirmara la contraseña y vuelve con 403 después no tiene por qué volver a preguntar: la
+ * ventana que le faltaba ya existe, y basta con reenviarla.
+ */
+let stepUpGeneration = 0
+
+/** Registra quién pide la contraseña ante un 403 `access.step_up_required`. */
+export function setStepUpHandler(handler: StepUpHandler | null): void {
+  stepUpHandler = handler
+}
+
+/**
+ * Abre (o se suma a) el pedido de contraseña. Un handler que rechaza cuenta como «canceló»: lo
+ * único que el llamador puede hacer con eso es devolver el 403 original, que es lo correcto.
+ */
+function requestStepUp(error: ApiError): Promise<boolean> {
+  const handler = stepUpHandler
+  if (!handler) return Promise.resolve(false)
+  pendingStepUp ??= handler(error)
+    .then((ok) => {
+      if (ok) stepUpGeneration += 1
+      return ok
+    })
+    .catch(() => false)
+    .finally(() => {
+      pendingStepUp = null
+    })
+  return pendingStepUp
+}
+
+function isStepUpRequired(error: ApiError): boolean {
+  return error.status === 403 && error.code === AUTH_STEP_UP_ERROR_CODES.required
+}
+
 // ── Tipos de petición ───────────────────────────────────────────────────────
 export type QueryValue = string | number | boolean | null | undefined | number[]
 export type QueryParams = Record<string, QueryValue>
@@ -42,6 +94,12 @@ interface RequestOptions {
   signal?: AbortSignal
   /** No dispara el handler global de 401 (p. ej. login: el 401 es "credenciales inválidas"). */
   suppressAuthHandler?: boolean
+  /**
+   * No pide la contraseña ante un 403 `access.step_up_required`: lo devuelve tal cual. Para el
+   * propio `POST /auth/step-up`, que no puede depender de sí mismo, y para quien quiera decidir
+   * por su cuenta qué hacer con ese 403.
+   */
+  suppressStepUp?: boolean
   /**
    * Fuerza o suprime el header `X-CSRF-Token` (v23 §7.1). Omitido = **automático**: se manda en
    * todo método no seguro y en ninguno seguro.
@@ -104,12 +162,39 @@ function buildUrl(path: string, query?: QueryParams): string {
 }
 
 /**
- * Fetch + manejo de errores compartido por `apiRequest` (JSON) y `fetchBlob` (descarga de
- * archivo): adjunta la cookie de sesión, y ante `!response.ok` parsea el `detail` estándar
+ * Fetch + manejo de errores compartido por `apiRequest` (JSON), `fetchBlob` (descarga de archivo)
+ * y `fetchText`: adjunta la cookie de sesión, y ante `!response.ok` parsea el `detail` estándar
  * de `AppHttpException` y lo normaliza a `ApiError` con el `X-Request-ID` de la respuesta.
  * Devuelve el `Response` crudo en éxito — cada llamador decide cómo leer el cuerpo.
+ *
+ * **Step-up.** Ante un 403 `access.step_up_required` pide la contraseña (`requestStepUp`) y, si se
+ * confirmó, reenvía el request **una sola vez**. Es seguro porque el servidor emite ese 403 antes
+ * de cualquier efecto: ni ejecuta, ni consume el artefacto de `.../content`. Si la persona cancela,
+ * sale el 403 original; si el reenvío vuelve a dar 403, sale ése, sin un segundo pedido (un bucle
+ * de contraseñas sería peor que el error).
  */
 async function runRequest(
+  method: HttpMethod,
+  path: string,
+  options: RequestOptions,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
+  const generation = stepUpGeneration
+  try {
+    return await sendRequest(method, path, options, extraHeaders)
+  } catch (error) {
+    if (!(error instanceof ApiError) || !isStepUpRequired(error) || options.suppressStepUp) {
+      throw error
+    }
+    // Si otra request ya consiguió la ventana mientras ésta viajaba, no se vuelve a preguntar.
+    const confirmed = stepUpGeneration !== generation || (await requestStepUp(error))
+    if (!confirmed) throw error
+    return sendRequest(method, path, options, extraHeaders)
+  }
+}
+
+/** Un envío, sin reintentos. El token CSRF se relee en cada uno (ver abajo). */
+async function sendRequest(
   method: HttpMethod,
   path: string,
   options: RequestOptions,

@@ -37,9 +37,9 @@ export interface Capabilities {
   /** Capacidades globales (`access_admin`, `security_officer`). */
   globalCapabilities: string[]
   /**
-   * ¿Esta capacidad va a pedir reautenticación? **Se publica pero TODAVÍA NO SE EXIGE** (§1/§6):
-   * sirve solo para poder avisar antes de mandar la operación. No construyas un flujo que dependa
-   * de que el servidor rechace por step-up, porque hoy no lo hace.
+   * ¿Esta capacidad pide reautenticación (step-up) para este actor? El servidor la exige y
+   * `runRequest` atiende su 403 solo; esto sirve para avisar en la UI. Para preguntar antes de
+   * abrir una confirmación, `useStepUp().ensureFresh`, que además mira cuánto le queda a la ventana.
    */
   requiresStepUp: (capability: Capability) => boolean
 }

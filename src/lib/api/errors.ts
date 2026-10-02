@@ -458,6 +458,13 @@ export class ApiError extends Error {
   readonly collationContext?: CollationErrorContext
   /** Contexto de los guards de alcance y protección; ver `GuardErrorContext`. */
   readonly guardContext?: GuardErrorContext
+  /**
+   * `public_context.attempts_remaining` del 400 `auth.step_up_failed`: cuántas contraseñas
+   * incorrectas más tolera la sesión antes de que el servidor la revoque.
+   */
+  readonly attemptsRemaining?: number
+  /** `public_context.step_up_ttl_seconds` del 403 `access.step_up_required`. */
+  readonly stepUpTtlSeconds?: number
   /** `X-Request-ID` de la respuesta, para soporte. Presente en toda respuesta del backend. */
   readonly requestId?: string
   /**
@@ -502,6 +509,8 @@ export class ApiError extends Error {
     databaseModelContext?: DatabaseModelErrorContext
     collationContext?: CollationErrorContext
     guardContext?: GuardErrorContext
+    attemptsRemaining?: number
+    stepUpTtlSeconds?: number
     requestId?: string
     unrecognizedBody?: boolean
   }) {
@@ -540,6 +549,8 @@ export class ApiError extends Error {
     this.databaseModelContext = args.databaseModelContext
     this.collationContext = args.collationContext
     this.guardContext = args.guardContext
+    this.attemptsRemaining = args.attemptsRemaining
+    this.stepUpTtlSeconds = args.stepUpTtlSeconds
     this.requestId = args.requestId
     this.unrecognizedBody = args.unrecognizedBody
   }
@@ -1463,6 +1474,21 @@ function extractDatabaseExportContext(
   return Object.values(context).some((value) => value !== undefined) ? context : undefined
 }
 
+/**
+ * Los dos números del step-up. Se leen sin mirar el `code` porque `lib/api` no conoce los códigos
+ * de ningún módulo (viven en `lib/contracts`): son claves que ningún otro error publica.
+ */
+function extractStepUpContext(publicContext: unknown): {
+  attemptsRemaining?: number
+  stepUpTtlSeconds?: number
+} {
+  if (!isRecord(publicContext)) return {}
+  return {
+    attemptsRemaining: finiteNumber(publicContext.attempts_remaining),
+    stepUpTtlSeconds: finiteNumber(publicContext.step_up_ttl_seconds),
+  }
+}
+
 /** Construye un `ApiError` a partir del status, el cuerpo parseado y el `X-Request-ID`. */
 export function normalizeApiError(status: number, body: unknown, requestId?: string): ApiError {
   const fallback = FALLBACK_BY_STATUS[status] ?? `Error inesperado (HTTP ${status}).`
@@ -1512,6 +1538,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         databaseModelContext: extractDatabaseModelContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
         guardContext: extractGuardContext(code, d.context, d.public_context),
+        ...extractStepUpContext(d.public_context),
         requestId,
       })
     }

@@ -1,6 +1,13 @@
 import { toApiError } from '@/lib/api/errors'
 import type { ToastContextValue } from '@/lib/toast/toast-context'
-import { CSRF_ERROR_TITLE, csrfErrorCopy, forbiddenCopy, isAccessForbidden } from './messages'
+import {
+  CSRF_ERROR_TITLE,
+  STEP_UP_REQUIRED_COPY,
+  csrfErrorCopy,
+  forbiddenCopy,
+  isAccessForbidden,
+  isStepUpRequired,
+} from './messages'
 
 /**
  * El toast de una mutación que falló. **Único punto** donde un 403 `access.forbidden` se convierte
@@ -16,6 +23,8 @@ import { CSRF_ERROR_TITLE, csrfErrorCopy, forbiddenCopy, isAccessForbidden } fro
  *   propio copy (`csrfErrorCopy`), que manda a recargar. Mismo status que el de acceso, otra causa:
  *   es un fallo del cliente y no de permisos, así que ni «Ver mi acceso» ni el título del hook
  *   sirven. Se registra en consola, porque en una SPA sana no debería pasar;
+ * - un 403 `access.step_up_required` (la persona canceló el pedido de contraseña) dice que no se
+ *   ejecutó nada y que alcanza con volver a intentarlo, en vez de un «No se pudo…» que suena a fallo;
  * - cualquier otro error, el título del hook y la descripción que traiga (o el `msg` del backend).
  *
  * `toast` va por parámetro y no con `useToast()` adentro: se llama desde `onError`, fuera del render.
@@ -34,6 +43,14 @@ export function notifyMutationError(
       description: copy.body,
       action: { label: copy.actionLabel, href: copy.actionTo },
       duration: 10_000,
+    })
+    return
+  }
+  if (isStepUpRequired(error)) {
+    toast.push({
+      variant: 'error',
+      title: STEP_UP_REQUIRED_COPY.title,
+      description: STEP_UP_REQUIRED_COPY.body,
     })
     return
   }

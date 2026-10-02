@@ -342,6 +342,14 @@ trae su propio `hintId`. `ForbiddenState` (`title?`) es el estado de página par
 `access.forbidden`, en lugar de `ErrorState`: el copy de `forbiddenCopy()` y el enlace «Ver mi
 acceso», **sin «Reintentar»** (el mismo pedido daría el mismo 403).
 
+### `StepUpDialog` y `StepUpProvider`
+El pedido de contraseña del step-up (`POST /auth/step-up`, ver [`security.md`](security.md) §1.d).
+Nadie lo monta a mano: `StepUpProvider` (en `providers.tsx`, bajo `SessionProvider`) lo abre ante
+un 403 `access.step_up_required` o desde `useStepUp()`. Para preguntar **antes** de pedir un
+`confirm_token`, `useStepUp().withFresh(cap, acción, alCancelar?)`, que ejecuta la acción en el mismo
+tick si la ventana tiene margen, o `ensureFresh(cap)` (`Promise<boolean>`) en código async. Sin
+proveedor (tests de un componente suelto) los dos siguen de largo.
+
 `RolesCapabilitiesPanel` (en `features/gateway-users`) es la pestaña «Roles y capacidades» de
 `/gateway-users`: una tarjeta por rol y por global, y la matriz por módulo con `DataTable`
 (búsqueda, filtro por rol y por riesgo). Cada módulo es una tabla, pero todas comparten los mismos

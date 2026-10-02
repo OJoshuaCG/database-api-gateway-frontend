@@ -111,6 +111,46 @@ mirando solo `mutates` pinta como inofensivas a `exports.download`, `engine_user
 `blueprints.captures`, `clones.execute` y `sql_console.execute`: ninguna destruye nada y **todas
 divulgan**.
 
+## 1.d Step-up: confirmar la contraseña para lo sensible
+
+Las capacidades con `requires_step_up` (las del actor en `/auth/me` → `step_up_capabilities`)
+exigen haber confirmado la contraseña en los últimos 5 minutos. La ventana es **de la sesión, por
+tiempo y no deslizante**: la abre el login y la renueva `POST /auth/step-up`. Sin ella el servidor
+responde `403 access.step_up_required` en todo método no seguro y en los GET que divulgan
+(`.../content`, `.../download`, `select-results`). Ese 403 sale **antes** de cualquier efecto.
+
+Cómo lo atiende la SPA:
+
+- **Reactivo, en un solo punto.** `runRequest` (`client.ts`), por donde pasa toda request incluidas
+  las descargas, ante ese 403 llama al handler que registra `StepUpProvider` (`setStepUpHandler`),
+  que abre `StepUpDialog`. Si se confirma, **reenvía el request una vez**; si se cancela, sale el 403
+  original; si el reenvío vuelve a dar 403, sale ése, sin un segundo pedido. Varios 403 en paralelo
+  comparten **un** diálogo, y una request que salió antes de confirmar y vuelve con 403 después se
+  reenvía sin volver a preguntar. `suppressStepUp` lo apaga por request (lo usa el propio
+  `/auth/step-up`).
+- **Preflight antes de un `confirm_token`.** Un token de confirmación vive 120 s: si la contraseña
+  se pidiera en el execute, el pedido se comería el tiempo del token y el reenvío terminaría en 410.
+  Por eso `useStepUp().ensureFresh(cap)` / `withFresh(cap, acción)` pregunta **antes** de pedir el
+  preview cuando `step_up_enforced` es `true`, la capacidad está en `step_up_capabilities` y a la
+  ventana le quedan menos de 60 s. Está en: borrar una base del motor (preview del drop y el
+  `drop_remote` del inventario), la consola SQL (cada preview y reabrir la confirmación), descargar
+  o copiar una exportación, entrar a la vista previa de un clon, crear un lote de clones, entrar a
+  la vista previa de una conversión de collation, planificar un lote de collation y entrar a los
+  pasos de ejecución de una comparación de esquemas. Cancelar el preflight no bloquea el flujo: si
+  el servidor la exige, la pide en su momento.
+- **`step_up_expires_at` es UTC sin zona.** Se lee con `parseUtcInstant` (`features/auth/step-up.ts`),
+  nunca con `new Date()` a secas, que lo tomaría como hora local.
+- **Fallos.** Contraseña incorrecta es `400 auth.step_up_failed` —no un 401, así que no cierra la
+  sesión— y el diálogo dice cuántos intentos quedan (`attempts_remaining`). Al quinto seguido el
+  servidor revoca la sesión: `401 auth.session_step_up_failed`, que sigue el camino normal de 401 y
+  llega al login con su motivo. El 429 (5/min) pide esperar. Si la sesión muere con el diálogo
+  abierto, el diálogo se cierra solo.
+- **El `sid` no rota**, así que el token CSRF de los requests en vuelo sigue valiendo.
+- `step_up_enforced: false` (servidor con `STEP_UP_ENFORCED=False`, o uno anterior que no lo
+  publica) apaga el preflight. Los agentes nunca reciben este 403.
+
+Es presencia frente al teclado, no un segundo factor: la contraseña es la misma del login.
+
 ## 2. Almacenamiento en el cliente
 
 - **No se guardan credenciales ni tokens** en `localStorage` ni `sessionStorage` (serían
@@ -228,4 +268,5 @@ están en el checklist de [`deployment.md`](deployment.md):
 | Fuga de credenciales | El cliente nunca recibe ni loguea credenciales; solo `has_*` booleanos. |
 | Borrados/operaciones destructivas en el motor | Doble confirmación (`confirm_name`/`confirm_username`/`confirm_version`/`confirm_grantee`). |
 | Secretos expuestos | `VITE_*` solo contiene URLs públicas; prohibido poner secretos ahí. |
+| Sesión robada usada para lo sensible | Step-up: las capacidades con `requires_step_up` piden la contraseña de nuevo cada 5 min (§1.d). |
 | CSRF | Token `HMAC(SESSION_SECRET, sid)` en el header `X-CSRF-Token`, exigido por el backend en todo método no seguro de una sesión de admin (§7.1 de la API v23). Se lee de la cookie `__Host-gw_csrf` / `gw_csrf`, que es host-only: exige mismo origen (§7). Además, cookie de sesión `same_site=lax` y validación de `Origin`. |

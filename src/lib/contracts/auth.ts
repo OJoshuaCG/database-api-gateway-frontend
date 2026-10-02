@@ -73,15 +73,30 @@ export const adminOutSchema = z.object({
     .nullish()
     .transform((value) => value ?? []),
   /**
-   * Capacidades que van a pedir reautenticación. **Se publican y todavía NO se exigen** (§1/§6):
-   * el mecanismo de step-up es una fase posterior. No construir ningún flujo que dependa de que el
-   * servidor rechace por falta de step-up, porque hoy no lo hace — sirve solo para poder avisar
-   * antes de mandar la operación.
+   * Capacidades del actor que piden reautenticación (step-up). El servidor las **exige**: con la
+   * ventana cerrada responde `403 access.step_up_required` en todo método no seguro y en los GET
+   * que divulgan. La SPA lo atiende sola en `runRequest` (pide la contraseña y reenvía una vez), y
+   * con esta lista además pregunta ANTES de abrir una confirmación (`useStepUp().ensureFresh`).
    */
   step_up_capabilities: z
     .array(z.string())
     .nullish()
     .transform((value) => value ?? []),
+  /**
+   * `false` = el servidor corre con `STEP_UP_ENFORCED=False` y la SPA no debe pedir contraseña.
+   * Un backend anterior al step-up no lo manda y tampoco lo exigía: cae a `false`, el lado que no
+   * pide nada. Si igual llegara un 403 `access.step_up_required`, el cliente lo atiende.
+   */
+  step_up_enforced: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  /**
+   * Fin de la ventana de step-up de ESTA sesión, en UTC **sin zona** (`2026-10-02T12:05:00`).
+   * Puede estar en el pasado; `null` = sin ventana. Se lee con `parseUtcInstant`, nunca con
+   * `new Date()` a secas: sin la `Z`, el navegador lo interpretaría en hora local.
+   */
+  step_up_expires_at: z.string().nullish(),
   /**
    * Capacidades puntuales VIVAS (`pending` | `active`) de la propia persona, y solo las suyas. Las
    * activas ya están sumadas en `capabilities`; las pendientes no conceden nada todavía.
@@ -105,6 +120,18 @@ export const loginInSchema = z.object({
   password: z.string().min(1, 'Requerido'),
 })
 export type LoginIn = z.infer<typeof loginInSchema>
+
+// ── Step-up (`POST /auth/step-up`) ─────────────────────────────────────────────
+/**
+ * `StepUpOut` — la ventana nueva. El `sid` NO rota, así que el token CSRF de los requests en vuelo
+ * sigue valiendo y no hay nada más que refrescar.
+ */
+export const stepUpOutSchema = z.object({
+  /** UTC sin zona, igual que `AdminOut.step_up_expires_at`. */
+  step_up_expires_at: z.string(),
+  step_up_ttl_seconds: z.number().int().positive(),
+})
+export type StepUpOut = z.infer<typeof stepUpOutSchema>
 
 // ── Cambio de la contraseña propia (`POST /auth/password`) ─────────────────────
 /**
@@ -427,6 +454,21 @@ export const AUTH_SESSION_ERROR_CODES = {
   adminRevoked: 'auth.session_admin_revoked',
   unknown: 'auth.session_unknown',
   missing: 'auth.session_missing',
+  /** Quinto fallo seguido de `POST /auth/step-up`: el servidor revocó la sesión. */
+  stepUpFailed: 'auth.session_step_up_failed',
+} as const
+
+/**
+ * Códigos del step-up.
+ *
+ * - `required` (403, cualquier ruta con una capacidad `requires_step_up`): la ventana está cerrada.
+ *   Sale antes de cualquier efecto, así que reenviar el request una vez es seguro.
+ * - `failed` (400, `POST /auth/step-up`): contraseña incorrecta, con `attempts_remaining`. Es 400 y
+ *   NO 401 a propósito: un 401 dispararía el cierre de sesión global, y la sesión sigue viva.
+ */
+export const AUTH_STEP_UP_ERROR_CODES = {
+  required: 'access.step_up_required',
+  failed: 'auth.step_up_failed',
 } as const
 
 /**

@@ -3,6 +3,7 @@ import {
   AUTH_CSRF_ERROR_CODES,
   AUTH_PASSWORD_ERROR_CODES,
   AUTH_SESSION_ERROR_CODES,
+  AUTH_STEP_UP_ERROR_CODES,
   GATEWAY_USER_ERROR_CODES,
   SCOPE_HAS_GRANTS_CODE,
 } from '@/lib/contracts'
@@ -51,6 +52,10 @@ const SESSION_END_COPY: Record<string, { title: string; detail: string }> = {
   [AUTH_SESSION_ERROR_CODES.adminRevoked]: {
     title: 'Tu sesión fue revocada',
     detail: 'Un administrador la cerró, o se desactivó la cuenta.',
+  },
+  [AUTH_SESSION_ERROR_CODES.stepUpFailed]: {
+    title: 'Se cerró la sesión por seguridad',
+    detail: 'La contraseña se confirmó mal cinco veces seguidas. Volvé a entrar para continuar.',
   },
   // `unknown` y `missing` son «no hay sesión»: el login normal, sin nada que explicar. No se
   // mapean a propósito — mostrar un aviso ahí convertiría el arranque limpio de la app en un
@@ -171,6 +176,52 @@ export function isSkippedByScope(item: { ok: boolean; error_code?: string | null
 /** El motivo de un ítem omitido: no se intentó nada, y la salida es pedir el acceso. */
 export const SKIPPED_BY_SCOPE_REASON =
   'No se intentó: tu acceso no alcanza el entorno de este destino.'
+
+// ── Step-up: confirmar la contraseña (`POST /auth/step-up`) ──────────────────
+
+/** El porqué del pedido, en una línea. La ventana dura `STEP_UP_TTL_SECONDS` (300 s). */
+export const STEP_UP_EXPLANATION =
+  'Por seguridad, confirmá tu contraseña para continuar. Vale 5 minutos.'
+
+/**
+ * ¿Es el 403 de «falta confirmar la contraseña»? Solo llega hasta una pantalla cuando la persona
+ * canceló el pedido (o el reenvío volvió a darlo): en el resto de los casos `runRequest` lo resuelve.
+ */
+export function isStepUpRequired(error: unknown): boolean {
+  if (error === null || error === undefined) return false
+  const apiError = error instanceof ApiError ? error : toApiError(error)
+  return apiError.status === 403 && apiError.code === AUTH_STEP_UP_ERROR_CODES.required
+}
+
+/** Copy del 403 `access.step_up_required` que llegó a la pantalla: no se ejecutó nada. */
+export const STEP_UP_REQUIRED_COPY = {
+  title: 'Falta confirmar tu contraseña',
+  body: 'La acción no se ejecutó. Volvé a intentarla y confirmá tu contraseña cuando se te pida.',
+} as const
+
+/**
+ * Traduce un error de `POST /auth/step-up` al mensaje del diálogo.
+ *
+ * El 401 (`auth.session_step_up_failed`, o cualquier sesión muerta) no llega con sentido acá: lo
+ * atiende el handler global y el diálogo se cierra con él.
+ */
+export function stepUpErrorMessage(error: ApiError): string {
+  if (error.status === 429) {
+    return 'Hiciste demasiados intentos. Esperá un minuto y volvé a probar.'
+  }
+  if (error.code === AUTH_STEP_UP_ERROR_CODES.failed) {
+    // `attempts_remaining` = 5 − fallos seguidos: con 1, el próximo error ya revoca la sesión.
+    const left = error.attemptsRemaining
+    if (left === undefined) return 'La contraseña no es correcta.'
+    if (left <= 1) {
+      return 'La contraseña no es correcta. Es tu último intento: si fallás, se cierra la sesión.'
+    }
+    return `La contraseña no es correcta. Te quedan ${left} intentos; si fallan todos, se cierra la sesión.`
+  }
+  const csrf = csrfErrorCopy(error)
+  if (csrf) return csrf
+  return error.message
+}
 
 // ── Cambio de la contraseña propia (`POST /auth/password`) ────────────────────
 
