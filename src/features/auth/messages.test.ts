@@ -68,6 +68,12 @@ describe('csrfErrorCopy', () => {
     expect(csrfErrorCopy(error(403, 'access.forbidden'))).toBeNull()
     expect(isCsrfError(error(403, 'access.forbidden'))).toBe(false)
   })
+
+  it('isCsrfError acepta cualquier valor, como isAccessForbidden', () => {
+    expect(isCsrfError(null)).toBe(false)
+    expect(isCsrfError(undefined)).toBe(false)
+    expect(isCsrfError(new Error('red caída'))).toBe(false)
+  })
 })
 
 describe('forbiddenCopy / isAccessForbidden', () => {

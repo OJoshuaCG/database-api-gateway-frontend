@@ -43,7 +43,7 @@ import {
   quickActions,
   soleUsableDatabase,
 } from '../logic'
-import { QUERY_ACTION_HINTS, isSystemFailure, suggestsProvidedMode } from '../messages'
+import { isSystemFailure, queryErrorHint, suggestsProvidedMode } from '../messages'
 
 /**
  * Consola SQL: ejecutar SQL ad-hoc con el usuario del motor que se elija (api-reference-v6).
@@ -493,7 +493,7 @@ function ServerSqlConsole({ server, tab, executeGuard, onGoToConsole }: ServerSq
           {sqlConsole.error && sqlConsole.errorAction && (
             <ConsoleError
               message={sqlConsole.error.message}
-              hint={QUERY_ACTION_HINTS[sqlConsole.errorAction]}
+              hint={queryErrorHint(sqlConsole.errorAction, sqlConsole.error)}
               requestId={sqlConsole.error.requestId}
               isSystem={isSystemFailure(sqlConsole.errorAction)}
               onSwitchToProvided={

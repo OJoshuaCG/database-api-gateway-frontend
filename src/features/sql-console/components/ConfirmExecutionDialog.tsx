@@ -7,7 +7,7 @@ import { cn, engineLabel, formatInteger } from '@/lib/utils'
 import { formatCountdown } from '@/lib/utils/countdown'
 import { useCountdown } from '@/lib/utils/use-countdown'
 import { dangerCopy, dryRunCannotRevertDdl, estimatedRowsTotal } from '../logic'
-import { isSystemFailure, QUERY_ACTION_HINTS, type QueryErrorAction } from '../messages'
+import { isSystemFailure, queryErrorHint, type QueryErrorAction } from '../messages'
 
 export interface ConfirmExecutionDialogProps {
   open: boolean
@@ -279,7 +279,7 @@ function ConfirmExecutionDialogBody({
             <p className={cn('text-sm', errorIsSystemic ? 'text-error' : 'text-foreground')}>
               {error.message}
             </p>
-            <p className="text-xs text-muted-foreground">{QUERY_ACTION_HINTS[errorAction]}</p>
+            <p className="text-xs text-muted-foreground">{queryErrorHint(errorAction, error)}</p>
             {/* El `X-Request-ID` es lo único con lo que soporte puede rastrear el fallo. */}
             {errorIsSystemic && error.requestId && (
               <p className="text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 import type { ApiError } from '@/lib/api/errors'
-import { forbiddenCopy, isAccessForbidden } from '@/features/auth/messages'
+import { csrfErrorCopy, forbiddenCopy, isAccessForbidden } from '@/features/auth/messages'
 
 /**
  * Clasificación de los errores del módulo a una ACCIÓN de recuperación concreta (§4.2, §4.5).
@@ -42,11 +42,13 @@ export function classifyCreateError(error: ApiError): CreateErrorInfo {
     return {
       field: null,
       terminal: true,
-      // `access.forbidden` es el acceso de la PERSONA en el gateway; un 403 sin ese código
-      // viene del motor, y ahí sí es la credencial del gateway la que no alcanza.
+      // `access.forbidden` es el acceso de la PERSONA en el gateway; un 403 de CSRF es un fallo
+      // del cliente que se arregla recargando; cualquier otro 403 viene del motor, y ahí sí es la
+      // credencial del gateway la que no alcanza.
       hint: isAccessForbidden(error)
         ? forbiddenCopy().body
-        : 'La credencial del gateway no tiene permisos para crear bases en este servidor.',
+        : (csrfErrorCopy(error) ??
+          'La credencial del gateway no tiene permisos para crear bases en este servidor.'),
     }
   }
   if (error.status === 429) {
@@ -120,6 +122,8 @@ export type DropErrorAction =
   | 'terminal'
   /** 403 `access.forbidden`: el acceso de la persona en el gateway no incluye borrar acá. */
   | 'forbidden'
+  /** 403 de CSRF: fallo del cliente, no de permisos. La salida es recargar la página. */
+  | 'csrf'
   /** Límite de 3/min alcanzado: espera visible, jamás reintento automático. */
   | 'rateLimited'
   /** ⚠️ El borrado PUDO ejecutarse: solo se ofrece comprobar estado. */
@@ -133,6 +137,7 @@ export function classifyDropError(error: ApiError): DropErrorAction {
   if (error.status === 410) return 'expiredToken'
   if (error.status === 429) return 'rateLimited'
   if (isAccessForbidden(error)) return 'forbidden'
+  if (csrfErrorCopy(error)) return 'csrf'
   if (error.status === 403) return 'terminal'
   if (error.status === 404) return 'alreadyGone'
   // `isOutcomeUncertain` cubre el 504 y la página de un proxy; el 502 del backend se suma acá
@@ -160,11 +165,18 @@ export const DROP_ACTION_HINTS: Partial<Record<DropErrorAction, string>> = {
     'PostgreSQL rechazó el borrado porque hay sesiones abiertas contra la base. Volvé a comprobar y marcá «terminar las conexiones activas».',
   alreadyGone: 'La base de datos ya no existía en el servidor.',
   forbidden: forbiddenCopy().body,
+  // Sin entrada para `csrf`: su texto depende del código (token u origen), así que se resuelve
+  // con `dropErrorHint`, que recibe el error.
   rateLimited: 'Alcanzaste el límite de 3 borrados por minuto. Esperá antes de reintentar.',
   uncertain:
     'No se recibió respuesta del servidor. El borrado PUDO haberse ejecutado: no se reintenta automáticamente. Comprobá el estado de la lista de bases.',
   checkStatus:
     'Comprobá el estado de la lista de bases: es la única forma fiable de saber si la base sigue ahí.',
+}
+
+/** Texto de apoyo de un error de borrado: el de CSRF depende del código; el resto, de la acción. */
+export function dropErrorHint(action: DropErrorAction, error: ApiError): string | undefined {
+  return action === 'csrf' ? (csrfErrorCopy(error) ?? undefined) : DROP_ACTION_HINTS[action]
 }
 
 /** Etiqueta del botón de recuperación; `null` cuando la acción no ofrece ninguno. */
@@ -176,6 +188,7 @@ export const DROP_ACTION_LABELS: Record<DropErrorAction, string | null> = {
   alreadyGone: null,
   terminal: null,
   forbidden: null,
+  csrf: null,
   rateLimited: null,
   uncertain: 'Comprobar estado',
   checkStatus: 'Comprobar estado',

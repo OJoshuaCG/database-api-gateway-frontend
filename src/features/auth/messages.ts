@@ -89,9 +89,22 @@ export function csrfErrorCopy(error: ApiError): string | null {
   }
 }
 
-/** ¿Este error es un rechazo de CSRF? Para decidir si conviene registrar el bug en consola. */
-export function isCsrfError(error: ApiError): boolean {
-  return csrfErrorCopy(error) !== null
+/**
+ * Título del aviso de un rechazo de CSRF. Dice qué pasó sin hablar de permisos: un 403 de CSRF
+ * comparte status con `access.forbidden`, pero confundirlos manda a la persona a pedir un acceso
+ * que ya tiene, cuando la salida real es recargar la página.
+ */
+export const CSRF_ERROR_TITLE = 'La solicitud no pasó la verificación de seguridad'
+
+/**
+ * ¿Este error es un rechazo de CSRF? Acepta `unknown` como `isAccessForbidden`, para usarse igual
+ * desde un `onError`. Se reconoce por el código, que es lo único que lo distingue del 403 de
+ * autorización.
+ */
+export function isCsrfError(error: unknown): boolean {
+  if (error === null || error === undefined) return false
+  const apiError = error instanceof ApiError ? error : toApiError(error)
+  return csrfErrorCopy(apiError) !== null
 }
 
 // ── 403 de autorización (§3) ───────────────────────────────────────────────────

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, type ApiReason } from '@/lib/api/errors'
+import { csrfErrorCopy } from '@/features/auth/messages'
+import { AUTH_CSRF_ERROR_CODES } from '@/lib/contracts'
 import {
   QUERY_ACTION_HINTS,
   classifyQueryError,
   isAutoRecoverable,
   isSystemFailure,
+  queryErrorHint,
   reasonLink,
   suggestsProvidedMode,
 } from './messages'
@@ -207,5 +210,29 @@ describe('classifyQueryError — 403 de acceso', () => {
     expect(classifyQueryError(forbidden)).toBe('forbidden')
     expect(isSystemFailure('forbidden')).toBe(false)
     expect(QUERY_ACTION_HINTS.forbidden).toContain('Mi acceso')
+  })
+})
+
+describe('classifyQueryError — 403 de CSRF', () => {
+  it('no se confunde con la política de la consola ni con el acceso', () => {
+    for (const code of Object.values(AUTH_CSRF_ERROR_CODES)) {
+      const error = new ApiError({ status: 403, message: 'x', code })
+      expect(classifyQueryError(error)).toBe('csrf')
+    }
+    expect(isSystemFailure('csrf')).toBe(false)
+    expect(isAutoRecoverable('csrf')).toBe(false)
+    expect(suggestsProvidedMode('csrf')).toBe(false)
+  })
+
+  it('la pista sale del copy de CSRF según el código', () => {
+    const token = new ApiError({ status: 403, message: 'x', code: AUTH_CSRF_ERROR_CODES.missing })
+    const origin = new ApiError({
+      status: 403,
+      message: 'x',
+      code: AUTH_CSRF_ERROR_CODES.originRejected,
+    })
+    expect(queryErrorHint('csrf', token)).toBe(csrfErrorCopy(token))
+    expect(queryErrorHint('csrf', origin)).toBe(csrfErrorCopy(origin))
+    expect(queryErrorHint('blockedByPolicy', token)).toBe(QUERY_ACTION_HINTS.blockedByPolicy)
   })
 })

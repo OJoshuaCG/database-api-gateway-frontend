@@ -21,6 +21,7 @@ export { ASK_FOR_ACCESS, CapabilityCallout } from './components/CapabilityCallou
 export { SkippedByScopeCallout } from './components/SkippedByScopeCallout'
 export { ForbiddenState } from './components/ForbiddenState'
 export {
+  CSRF_ERROR_TITLE,
   MY_ACCESS_PATH,
   csrfErrorCopy,
   forbiddenCopy,

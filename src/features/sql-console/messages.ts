@@ -1,6 +1,6 @@
 import { type ApiError } from '@/lib/api/errors'
 import { ACCESS_FORBIDDEN_CODE } from '@/lib/contracts'
-import { forbiddenCopy } from '@/features/auth/messages'
+import { csrfErrorCopy, forbiddenCopy } from '@/features/auth/messages'
 
 /**
  * Clasificación de errores de la Consola SQL y mapeo de los códigos de motivo a la pantalla
@@ -19,6 +19,11 @@ export type QueryErrorAction =
    * consola —esa sí tiene un módulo alternativo al que mandar—, es el acceso de la persona.
    */
   | 'forbidden'
+  /**
+   * 403 de CSRF: fallo del cliente, ni de acceso ni de política. Sin este caso caía en
+   * `blockedByPolicy` y la pantalla culpaba a la política de la consola. Se sale recargando.
+   */
+  | 'csrf'
   /** 403 de política: no se reintenta nunca, se enlaza al módulo correcto. */
   | 'blockedByPolicy'
   /** 403 por escribir sobre una BD de sistema — el preview no lo detecta, solo el execute. */
@@ -50,6 +55,7 @@ export function classifyQueryError(error: ApiError): QueryErrorAction {
 
   if (error.status === 403) {
     if (error.code === ACCESS_FORBIDDEN_CODE) return 'forbidden'
+    if (csrfErrorCopy(error)) return 'csrf'
     const isSystemDatabase = error.reasons?.some((reason) => reason.code === SYSTEM_DATABASE_CODE)
     return isSystemDatabase ? 'systemDatabase' : 'blockedByPolicy'
   }
@@ -99,6 +105,8 @@ export function suggestsProvidedMode(action: QueryErrorAction): boolean {
  */
 export const QUERY_ACTION_HINTS: Record<QueryErrorAction, string> = {
   forbidden: forbiddenCopy().body,
+  // Respaldo genérico: la pista real depende del código (token u origen) y la da `queryErrorHint`.
+  csrf: 'Recargá la página e intentá de nuevo.',
   retryPreview:
     'La confirmación caducó o dejó de corresponder. Se vuelve a clasificar la consulta y se pide la confirmación otra vez.',
   blockedByPolicy:
@@ -121,6 +129,12 @@ export const QUERY_ACTION_HINTS: Record<QueryErrorAction, string> = {
   engineUnreachable:
     'No se pudo llegar al servidor de base de datos destino, o la operación excedió el tiempo de espera.',
   terminal: 'Volvé a intentarlo. Si persiste, pasale el identificador de la petición a soporte.',
+}
+
+/** Pista de un error de la consola: la de CSRF depende del código; el resto, de la acción. */
+export function queryErrorHint(action: QueryErrorAction, error: ApiError): string {
+  if (action === 'csrf') return csrfErrorCopy(error) ?? QUERY_ACTION_HINTS.csrf
+  return QUERY_ACTION_HINTS[action]
 }
 
 // ── Motivos → módulo del gateway que sí hace esa operación (§8.1, §10.3) ──────

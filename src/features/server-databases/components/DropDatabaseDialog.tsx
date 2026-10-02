@@ -22,8 +22,8 @@ import { engineCopy, engineLabel, formatCountdown, shouldPreselectForceDisconnec
 import {
   classifyDropError,
   classifyPreviewError,
-  DROP_ACTION_HINTS,
   DROP_ACTION_LABELS,
+  dropErrorHint,
   isAuditFailure,
   PREVIEW_ACTION_HINTS,
   type DropErrorAction,
@@ -148,6 +148,7 @@ export function DropDatabaseDialog({
   const previewAction = previewError ? classifyPreviewError(previewError) : null
   const dropError = drop.isError ? toApiError(drop.error) : null
   const dropAction = dropError ? classifyDropError(dropError) : null
+  const dropHint = dropError && dropAction ? dropErrorHint(dropAction, dropError) : undefined
 
   const nameMatches = typedName === database
   const canDrop =
@@ -504,9 +505,7 @@ export function DropDatabaseDialog({
                     ? 'La base de datos ya no existía en el servidor.'
                     : dropError.message}
                 </p>
-                {DROP_ACTION_HINTS[dropAction] && (
-                  <p className="text-xs text-muted-foreground">{DROP_ACTION_HINTS[dropAction]}</p>
-                )}
+                {dropHint && <p className="text-xs text-muted-foreground">{dropHint}</p>}
                 <SupportCode requestId={dropError.requestId} />
                 {isRecoverableDropAction(dropAction) && (
                   <div>
