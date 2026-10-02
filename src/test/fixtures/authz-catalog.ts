@@ -1,11 +1,12 @@
-import type { CapabilityDescriptor } from '@/lib/contracts'
+import type { z } from 'zod'
+import { capabilityDescriptorSchema, type CapabilityDescriptor } from '@/lib/contracts'
 /**
  * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (backend 463dc4d, HEAD de
  * `main` al escribir esto; `app/services/capability_catalog.py` no cambió desde 0b43532, donde se
  * generó: `capability_matrix()`), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
  * del catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
  */
-export const CATALOG_FIXTURE: CapabilityDescriptor[] = [
+const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
   {
     id: 'self.read',
     module: 'self',
@@ -397,6 +398,15 @@ export const CATALOG_FIXTURE: CapabilityDescriptor[] = [
     global_capabilities: ['access_admin', 'security_officer'],
   },
 ]
+
+/**
+ * El catálogo ya parseado por el contrato, como lo ve la app. Las filas no traen `grantable`,
+ * `sensitive` ni `implies` (este fixture es el de un backend anterior a las capacidades puntuales),
+ * así que salen con los defaults seguros: nada otorgable, nada sensible, nada implícito.
+ */
+export const CATALOG_FIXTURE: CapabilityDescriptor[] = CATALOG_RAW.map((row) =>
+  capabilityDescriptorSchema.parse(row),
+)
 
 /** Capacidades de un rol según el fixture: lo que el backend mandaría en `/auth/me`. */
 export function fixtureRoleCapabilities(role: string): string[] {

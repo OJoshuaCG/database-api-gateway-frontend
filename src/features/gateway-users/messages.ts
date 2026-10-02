@@ -1,4 +1,4 @@
-import { GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
+import { CAPABILITY_GRANT_ERROR_CODES, GATEWAY_USER_ERROR_CODES } from '@/lib/contracts'
 import type { ApiError } from '@/lib/api/errors'
 import { SELF_ACCESS_NOTE } from './self-access'
 
@@ -84,6 +84,59 @@ export function gatewayUserErrorMessage(error: ApiError): string | null {
     default:
       return null
   }
+}
+
+/**
+ * Copy fijo de cada código de las capacidades puntuales, en voseo. Un solo mapa para dos usos: el
+ * error de una mutación (`capabilityGrantErrorMessage`) y el `blocked_reason` de la bandeja de
+ * pendientes (`capabilityGrantBlockedMessage`), que llega como el mismo código `access.*` pero
+ * sin ser un error HTTP.
+ *
+ * `grantCeilingExceeded` queda fuera a propósito: su texto depende del `msg` del backend y lo
+ * arma `gatewayUserErrorMessage`.
+ */
+const CAPABILITY_GRANT_COPY: Record<string, string> = {
+  [CAPABILITY_GRANT_ERROR_CODES.selfModificationForbidden]:
+    'No podés otorgarte ni quitarte capacidades a vos mismo. Pedile a otra persona con `access_admin` que lo haga.',
+  [CAPABILITY_GRANT_ERROR_CODES.selfApprovalForbidden]:
+    'No podés aprobar una capacidad que pediste vos. La decide otra persona con `access_admin`.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantUserInactive]:
+    'Esta cuenta está desactivada, así que no puede recibir capacidades. Reactivala primero.',
+  [CAPABILITY_GRANT_ERROR_CODES.capabilityNotGrantable]:
+    'Esa capacidad no se puede otorgar de forma puntual. Elegí otra o cambiá el rol de la persona.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantScopeNotFound]:
+    'El entorno o servidor elegido ya no existe. Refrescá la pantalla y elegí otro.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantDuplicate]:
+    'Esa persona ya tiene esa capacidad sobre ese destino, activa o pendiente de aprobación.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantNotFound]:
+    'Esa capacidad ya no existe. Refrescá la lista para ver el estado actual.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantNotPending]:
+    'Esa solicitud ya no está pendiente: otra persona la decidió, venció o se canceló. Refrescá la lista.',
+}
+
+/**
+ * Mensaje para un error de las operaciones sobre capacidades puntuales (alta, revocación,
+ * aprobación, rechazo, listado). Cubre los nueve códigos y, si no lo reconoce, cae al copy general
+ * del módulo; `null` deja que el llamador use `apiError.message`.
+ */
+export function capabilityGrantErrorMessage(error: ApiError): string | null {
+  const own = error.code ? CAPABILITY_GRANT_COPY[error.code] : undefined
+  return own ?? gatewayUserErrorMessage(error)
+}
+
+/**
+ * Por qué una solicitud pendiente no se puede decidir, a partir del `blocked_reason` de la bandeja
+ * (un código `access.*`). `null` si no hay motivo; un código desconocido devuelve el genérico para
+ * no dejar un botón deshabilitado sin explicación.
+ */
+export function capabilityGrantBlockedMessage(code: string | null | undefined): string | null {
+  if (!code) return null
+  // Sin `msg` del backend no hay detalle de qué se excedió: va solo el texto de respaldo.
+  if (code === CAPABILITY_GRANT_ERROR_CODES.grantCeilingExceeded) return GRANT_CEILING_FALLBACK
+  return (
+    CAPABILITY_GRANT_COPY[code] ??
+    'No podés decidir esta solicitud ahora. Consultá con otra persona con `access_admin`.'
+  )
 }
 
 /** Suma el `allowed[]` del backend al mensaje cuando viene; si no, deja el genérico. */

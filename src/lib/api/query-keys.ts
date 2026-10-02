@@ -235,6 +235,20 @@ export const queryKeys = {
     detail: (id: number) => ['gateway-users', 'detail', id] as const,
   },
   /**
+   * Capacidades puntuales (api-reference §19). Todo cuelga de `all` para que una mutación pueda
+   * invalidar de un golpe la lista de la persona, su acceso efectivo y la bandeja de pendientes:
+   * aprobar o revocar cambia las tres a la vez.
+   */
+  capabilityGrants: {
+    all: ['capability-grants'] as const,
+    /** Historial de una persona; `status` (opcional) es el filtro de servidor. */
+    byUser: (userId: number, status?: string) =>
+      ['capability-grants', 'user', userId, status ?? null] as const,
+    pending: () => ['capability-grants', 'pending'] as const,
+    /** Acceso efectivo con procedencia (`GET /gateway-users/{id}/effective-access`). */
+    effective: (userId: number) => ['capability-grants', 'effective', userId] as const,
+  },
+  /**
    * Tokens de agente (§3). El secreto del alta NO se cachea en ningún lado: viaja una sola vez y
    * vive en el estado local de la vista de entrega hasta que el operador la cierra.
    */

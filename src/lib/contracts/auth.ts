@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { myCapabilityGrantSchema } from './capability-grants'
 
 /**
  * Autenticación y contrato de autorización (api-reference-v23).
@@ -81,6 +82,15 @@ export const adminOutSchema = z.object({
     .array(z.string())
     .nullish()
     .transform((value) => value ?? []),
+  /**
+   * Capacidades puntuales VIVAS (`pending` | `active`) de la propia persona, y solo las suyas. Las
+   * activas ya están sumadas en `capabilities`; las pendientes no conceden nada todavía.
+   * Nullish con default: un backend anterior a las capacidades puntuales no lo manda.
+   */
+  capability_grants: z
+    .array(myCapabilityGrantSchema)
+    .nullish()
+    .transform((value) => value ?? []),
   /** El login ANTERIOR al actual (§7.4). El actual es el que está en curso. */
   previous_login_at: z.string().nullish(),
   last_failed_at: z.string().nullish(),
@@ -128,6 +138,24 @@ export const capabilityDescriptorSchema = z.object({
     .nullish()
     .transform((value) => value ?? []),
   global_capabilities: z
+    .array(z.string())
+    .nullish()
+    .transform((value) => value ?? []),
+  /**
+   * Predicados de las capacidades puntuales. Con default seguro para un backend viejo: sin la
+   * columna, nada es otorgable (no se ofrece), nada es sensible y no implica lecturas.
+   */
+  grantable: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  /** Exige un segundo aprobador al otorgarla de forma puntual. */
+  sensitive: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  /** Lecturas que trae implícitas cuando se otorga de forma puntual. */
+  implies: z
     .array(z.string())
     .nullish()
     .transform((value) => value ?? []),

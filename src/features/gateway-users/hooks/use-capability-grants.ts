@@ -1,0 +1,190 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/api/query-keys'
+import { toApiError } from '@/lib/api/errors'
+import { useToast } from '@/lib/toast/use-toast'
+import { notifyMutationError, useSession } from '@/features/auth'
+import type {
+  CapabilityGrant,
+  CapabilityGrantCreate,
+  CapabilityGrantDecision,
+  CapabilityGrantStatus,
+} from '@/lib/contracts'
+import {
+  approveCapabilityGrant,
+  createCapabilityGrant,
+  getEffectiveAccess,
+  listCapabilityGrants,
+  listPendingCapabilityGrants,
+  rejectCapabilityGrant,
+  revokeCapabilityGrant,
+} from '../api/capability-grants.api'
+import { capabilityGrantErrorMessage } from '../messages'
+
+/** Título + detalle de un error, con el copy de las capacidades puntuales cuando lo reconoce. */
+function errorToast(title: string, error: unknown): [string, string] {
+  const apiError = toApiError(error)
+  return [title, capabilityGrantErrorMessage(apiError) ?? apiError.message]
+}
+
+/** Etiqueta corta del destino para los toasts: «servidor 3» si el nombre no vino. */
+function targetLabel(grant: CapabilityGrant): string {
+  return grant.scope_name ?? `${grant.scope_type} ${grant.scope_id}`
+}
+
+/**
+ * Qué refrescar tras cualquier cambio de capacidades puntuales.
+ *
+ * Se invalida TODO `capabilityGrants.all` y no cada clave por separado: aprobar, revocar o crear
+ * mueve a la vez la lista de la persona, su acceso efectivo y la bandeja de pendientes, y olvidar
+ * una de las tres deja a la pantalla contradiciéndose. `/auth/me` solo se refresca si la persona
+ * afectada ES la de la sesión: sus `capabilities` y `capability_grants` cambian, y de ahí cuelgan
+ * los guards de toda la UI. Con la sesión todavía sin cargar se refresca igual, que es el lado
+ * seguro (un refetch de más es barato; un guard desactualizado no).
+ */
+function useRefreshAfterGrantChange() {
+  const queryClient = useQueryClient()
+  const { admin } = useSession()
+  const sessionUserId = admin?.id ?? null
+  return (granteeId: number) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.all })
+    if (sessionUserId === null || sessionUserId === granteeId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.auth.me() })
+    }
+  }
+}
+
+/**
+ * Tras un 404/409 la copia local está vieja (otra persona ya cerró la capacidad): se refrescan las
+ * consultas para que la UI deje de ofrecer una acción que ya no existe.
+ */
+function useRefreshStale() {
+  const queryClient = useQueryClient()
+  return (error: unknown) => {
+    const status = toApiError(error).status
+    if (status === 404 || status === 409) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.all })
+    }
+  }
+}
+
+/**
+ * Historial de capacidades puntuales de una persona. `enabled` lo apaga quien no es `access_admin`:
+ * el listado es solo para ese rol y pedirlo sería un 403 seguro.
+ */
+export function useCapabilityGrants(
+  userId: number,
+  options: { status?: CapabilityGrantStatus; enabled?: boolean } = {},
+) {
+  const { status, enabled = true } = options
+  return useQuery({
+    queryKey: queryKeys.capabilityGrants.byUser(userId, status),
+    queryFn: ({ signal }) => listCapabilityGrants(userId, status, signal),
+    enabled,
+  })
+}
+
+/** Acceso efectivo de otra persona, con procedencia. Solo `access_admin`. */
+export function useEffectiveAccess(userId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.capabilityGrants.effective(userId),
+    queryFn: ({ signal }) => getEffectiveAccess(userId, signal),
+    enabled,
+  })
+}
+
+/** Bandeja de solicitudes pendientes (todas las personas). Solo `access_admin`. */
+export function usePendingCapabilityGrants(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.capabilityGrants.pending(),
+    queryFn: ({ signal }) => listPendingCapabilityGrants(signal),
+    enabled,
+  })
+}
+
+/**
+ * Alta. El toast distingue los dos desenlaces porque significan cosas distintas: `active` ya rige,
+ * `pending` todavía no concede nada hasta que otra persona la apruebe.
+ */
+export function useCreateCapabilityGrant(userId: number) {
+  const toast = useToast()
+  const refresh = useRefreshAfterGrantChange()
+  return useMutation({
+    mutationFn: (body: CapabilityGrantCreate) => createCapabilityGrant(userId, body),
+    onSuccess: (grant) => {
+      refresh(userId)
+      if (grant.status === 'pending') {
+        toast.success(
+          'Solicitud enviada',
+          `Falta que otra persona con access_admin apruebe «${grant.capability}» en ${targetLabel(grant)}.`,
+        )
+      } else {
+        toast.success('Capacidad otorgada', `${grant.capability} en ${targetLabel(grant)}.`)
+      }
+    },
+    onError: (error) =>
+      notifyMutationError(toast, error, ...errorToast('No se pudo otorgar la capacidad', error)),
+  })
+}
+
+/** Revocación (activa) o cancelación (pendiente). El backend decide cuál según el estado. */
+export function useRevokeCapabilityGrant(userId: number) {
+  const toast = useToast()
+  const refresh = useRefreshAfterGrantChange()
+  const refreshStale = useRefreshStale()
+  return useMutation({
+    mutationFn: (grantId: number) => revokeCapabilityGrant(userId, grantId),
+    onSuccess: (grant) => {
+      refresh(userId)
+      toast.success(
+        grant.status === 'cancelled' ? 'Solicitud cancelada' : 'Capacidad revocada',
+        `${grant.capability} en ${targetLabel(grant)}.`,
+      )
+    },
+    onError: (error) => {
+      refreshStale(error)
+      notifyMutationError(toast, error, ...errorToast('No se pudo revocar la capacidad', error))
+    },
+  })
+}
+
+/**
+ * Aprobar o rechazar una solicitud pendiente. El `userId` de la persona afectada no se conoce
+ * antes de la llamada (la bandeja junta a todas), así que el refresco de `/auth/me` se decide con
+ * el `user_id` de la respuesta. Un 404/409 (la decidió otra persona, venció o se canceló) refresca
+ * la bandeja para que la fila desaparezca en vez de seguir ofreciendo botones.
+ */
+function useDecideCapabilityGrant(
+  decide: (grantId: number, body: CapabilityGrantDecision) => Promise<CapabilityGrant>,
+  copy: { success: string; failure: string },
+) {
+  const toast = useToast()
+  const refresh = useRefreshAfterGrantChange()
+  const refreshStale = useRefreshStale()
+  return useMutation({
+    mutationFn: ({ grantId, reason }: { grantId: number; reason?: string }) =>
+      // Sin motivo se manda `{}`: el campo es opcional y una cadena vacía no es un motivo.
+      decide(grantId, reason?.trim() ? { reason: reason.trim() } : {}),
+    onSuccess: (grant) => {
+      refresh(grant.user_id)
+      toast.success(copy.success, `${grant.capability} en ${targetLabel(grant)}.`)
+    },
+    onError: (error) => {
+      refreshStale(error)
+      notifyMutationError(toast, error, ...errorToast(copy.failure, error))
+    },
+  })
+}
+
+export function useApproveCapabilityGrant() {
+  return useDecideCapabilityGrant(approveCapabilityGrant, {
+    success: 'Capacidad aprobada',
+    failure: 'No se pudo aprobar la solicitud',
+  })
+}
+
+export function useRejectCapabilityGrant() {
+  return useDecideCapabilityGrant(rejectCapabilityGrant, {
+    success: 'Solicitud rechazada',
+    failure: 'No se pudo rechazar la solicitud',
+  })
+}
