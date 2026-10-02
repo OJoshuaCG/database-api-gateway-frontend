@@ -2,6 +2,8 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Badge, Button, Input, Modal, Switch } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { useChangeEngineUserPasswordAllHosts } from '../hooks/use-engine-users'
 
 interface RotatePasswordAllHostsModalProps {
@@ -38,6 +40,11 @@ export function RotatePasswordAllHostsModal({
   username,
 }: RotatePasswordAllHostsModalProps) {
   const rotateAll = useChangeEngineUserPasswordAllHosts(serverId)
+  const guard = useCapabilityGuard(
+    CAPABILITIES.engineUsersCredentials,
+    'cambiar contraseñas del motor',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -52,6 +59,7 @@ export function RotatePasswordAllHostsModal({
   const confirmMatches = watch('confirm_username') === username
 
   const submit = handleSubmit((values) => {
+    if (!guard.allowed) return
     rotateAll.mutate({
       username,
       new_password: values.new_password,
@@ -161,6 +169,7 @@ export function RotatePasswordAllHostsModal({
               />
             )}
           />
+          <CapabilityHint guard={guard} />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={onClose} disabled={rotateAll.isPending}>
               Cancelar
@@ -169,7 +178,8 @@ export function RotatePasswordAllHostsModal({
               type="submit"
               variant="danger"
               isLoading={rotateAll.isPending}
-              disabled={!confirmMatches}
+              disabled={!confirmMatches || !guard.allowed}
+              aria-describedby={guard.describedBy}
             >
               Rotar en todos los hosts 🔌
             </Button>

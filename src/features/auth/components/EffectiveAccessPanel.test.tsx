@@ -68,7 +68,7 @@ describe('EffectiveAccessPanel', () => {
         catalog={CATALOG_FIXTURE}
       />,
     )
-    expect(screen.getByText(/Suma 14:/)).toBeInTheDocument()
+    expect(screen.getByText(/Suma 15:/)).toBeInTheDocument()
     expect(
       screen.getByText(
         /en esas otras operaciones \(lecturas y capacidades globales\) tiene el rol/,
@@ -78,7 +78,7 @@ describe('EffectiveAccessPanel', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(SCOPE_ENFORCEMENT_NOTE)
     // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1), y va en rojo.
     expect(screen.getByText('Suma destructivas')).toBeInTheDocument()
-    expect(screen.getByText(/Suma 14:/)).toHaveClass('text-error')
+    expect(screen.getByText(/Suma 15:/)).toHaveClass('text-error')
   })
 
   it('el cruce entorno × servidor dice que rige el más restrictivo', () => {

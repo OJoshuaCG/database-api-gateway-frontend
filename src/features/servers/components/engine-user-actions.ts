@@ -94,16 +94,24 @@ export const ACTION_CAPABILITY: Record<IdentityActionId | UsernameActionId, Capa
   adopt: CAPABILITIES.engineUsersWrite,
   viewGrants: CAPABILITIES.engineUsersRead,
   reveal: CAPABILITIES.engineUsersSecrets,
-  rotatePassword: CAPABILITIES.engineUsersWrite,
+  /*
+   * Las cuatro que SIEMPRE ponen una contraseña elegida por quien actúa piden
+   * `engine_users.credentials`, no `write`: quien la elige la conoce (rotar es `PATCH .../password`,
+   * recrear es `CREATE USER` con contraseña, definir la conocida y rotar en todos los hosts).
+   */
+  rotatePassword: CAPABILITIES.engineUsersCredentials,
+  // Editar es `write`; poner una contraseña nueva sube a `credentials`, y eso lo guarda el form.
   edit: CAPABILITIES.engineUsersWrite,
   // Quitar del inventario es `write`; con `drop_remote` sube a `drop`, y eso lo guarda el diálogo.
   removeFromInventory: CAPABILITIES.engineUsersWrite,
   dropFromEngine: CAPABILITIES.engineUsersDrop,
-  recreate: CAPABILITIES.engineUsersWrite,
+  recreate: CAPABILITIES.engineUsersCredentials,
+  // Agregar un host copiando el hash y adoptar sin contraseña son `write`; la variante con
+  // contraseña elegida sube a `credentials` y la deshabilita el propio diálogo.
   addHost: CAPABILITIES.engineUsersWrite,
   adoptAllHosts: CAPABILITIES.engineUsersWrite,
-  definePassword: CAPABILITIES.engineUsersWrite,
-  rotateAllHosts: CAPABILITIES.engineUsersWrite,
+  definePassword: CAPABILITIES.engineUsersCredentials,
+  rotateAllHosts: CAPABILITIES.engineUsersCredentials,
 }
 
 /** Predicado de capacidades (`useCapabilities().can`). Sin él no se filtra nada. */
@@ -117,6 +125,9 @@ const ALLOW_ALL: CanPredicate = () => true
 export function engineUserAccessNote(can: CanPredicate): string | null {
   const missing: string[] = []
   if (!can(CAPABILITIES.engineUsersWrite)) missing.push('crearlos, adoptarlos ni cambiarlos')
+  // Solo si `write` sí está: sin él, «cambiarlos» ya cubre elegir la contraseña.
+  else if (!can(CAPABILITIES.engineUsersCredentials))
+    missing.push('elegir ni definir sus contraseñas')
   if (!can(CAPABILITIES.engineUsersSecrets)) missing.push('revelar sus contraseñas')
   if (!can(CAPABILITIES.engineUsersDrop)) missing.push('borrarlos del motor')
   if (missing.length === 0) return null

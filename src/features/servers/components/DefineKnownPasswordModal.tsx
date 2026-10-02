@@ -4,7 +4,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Badge, Button, Combobox, Input, Modal, Switch } from '@/components/ui'
 import type { BadgeTone } from '@/components/ui'
-import type { DefinePasswordScope, KnownPasswordSetStatus } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import {
+  CAPABILITIES,
+  type DefinePasswordScope,
+  type KnownPasswordSetStatus,
+} from '@/lib/contracts'
 import { useDefineKnownPassword } from '../hooks/use-engine-users'
 
 interface DefineKnownPasswordModalProps {
@@ -57,6 +62,13 @@ export function DefineKnownPasswordModal({
   const [host, setHost] = useState<string | null>(defaultHost ?? hostOptions[0] ?? null)
   const [hostSubmitAttempted, setHostSubmitAttempted] = useState(false)
   const define = useDefineKnownPassword(serverId)
+  // Definir la conocida también es elegir qué credencial guarda el gateway (y luego revela):
+  // `engine_users.credentials` aunque no toque el motor.
+  const guard = useCapabilityGuard(
+    CAPABILITIES.engineUsersCredentials,
+    'definir contraseñas de usuarios del motor',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -68,6 +80,7 @@ export function DefineKnownPasswordModal({
   })
 
   const submit = handleSubmit((values) => {
+    if (!guard.allowed) return
     if (supportsHosts && scope === 'host' && !host) {
       setHostSubmitAttempted(true)
       return
@@ -87,7 +100,7 @@ export function DefineKnownPasswordModal({
     : []
 
   const resendWithOverwrite = () => {
-    if (!define.variables) return
+    if (!define.variables || !guard.allowed) return
     define.mutate({ ...define.variables, overwrite: true })
   }
 
@@ -152,6 +165,7 @@ export function DefineKnownPasswordModal({
                   variant="danger"
                   isLoading={define.isPending}
                   onClick={resendWithOverwrite}
+                  disabled={!guard.allowed}
                 >
                   Sobrescribir {conflicts.length} identidad(es)
                 </Button>
@@ -227,11 +241,17 @@ export function DefineKnownPasswordModal({
             )}
           />
           {warningBox}
+          <CapabilityHint guard={guard} />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={onClose} disabled={define.isPending}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={define.isPending}>
+            <Button
+              type="submit"
+              isLoading={define.isPending}
+              disabled={!guard.allowed}
+              aria-describedby={guard.describedBy}
+            >
               Guardar contraseña
             </Button>
           </div>

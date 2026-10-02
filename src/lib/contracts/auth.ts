@@ -160,9 +160,11 @@ export type PasswordChangeOut = z.infer<typeof passwordChangeOutSchema>
  * Una fila del catálogo (`GET /authz/catalog`, detrás de `self.read` = cualquier sesión).
  *
  * ⚠️ **`mutates` y `discloses` son ejes INDEPENDIENTES**, y agrupar por «peligrosidad» mirando
- * solo `mutates` es el error que este contrato invita a cometer: `exports.download`,
- * `engine_users.secrets`, `blueprints.captures`, `clones.execute` y `sql_console.execute` no
- * destruyen nada y **divulgan**. Una pantalla que las pinte como inofensivas está mintiendo.
+ * solo `mutates` es el error que este contrato invita a cometer. Divulgan seis:
+ * `exports.download`, `engine_users.secrets`, `engine_users.credentials`, `blueprints.captures`,
+ * `clones.execute` y `sql_console.execute`. Las tres primeras y `blueprints.captures` no destruyen
+ * nada (`credentials` muta, pero no es destructiva) y aun así exponen datos o credenciales. Una
+ * pantalla que las pinte como inofensivas está mintiendo.
  */
 export const capabilityDescriptorSchema = z.object({
   id: z.string(),
@@ -242,12 +244,13 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 30 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 31 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
- * 🔓 marca las que **divulgan** (`discloses: true`). Es un eje INDEPENDIENTE de `mutates`: ninguna
- * de esas cinco destruye nada, y todas exponen datos o credenciales.
+ * 🔓 marca las seis que **divulgan** (`discloses: true`). Es un eje INDEPENDIENTE de `mutates` y de
+ * `destructive`: todas exponen datos o credenciales, destruyan algo (`clones.execute`,
+ * `sql_console.execute`) o no.
  */
 export const CAPABILITIES = {
   selfRead: 'self.read',
@@ -261,6 +264,13 @@ export const CAPABILITIES = {
   engineUsersDrop: 'engine_users.drop',
   /** 🔓 */
   engineUsersSecrets: 'engine_users.secrets',
+  /**
+   * 🔓 — ELEGIR la contraseña de una cuenta del motor (crearla con contraseña, rotarla, definir la
+   * conocida). Quien la elige la sabe y entra al motor por fuera del gateway, así que divulga igual
+   * que revelarla: solo `owner`, con step-up, y sensible si se otorga suelta. `write` conserva todo
+   * lo que no pone una contraseña elegida por el actor.
+   */
+  engineUsersCredentials: 'engine_users.credentials',
 
   databasesRead: 'databases.read',
   databasesWrite: 'databases.write',
@@ -332,8 +342,9 @@ export const DESTRUCTIVE_CAPABILITIES = [
 /**
  * Los endpoints donde un PARÁMETRO, o una segunda capacidad, sube el requisito (§4 y §6.6).
  *
- * Son ocho. Cinco dependen de un parámetro (encender la captura, sembrar datos, los dos
- * `drop_remote` y el `provision` de reasignar el dueño), uno de un flag del alta
+ * Son once. Cinco dependen de un parámetro (encender la captura, sembrar datos, los dos
+ * `drop_remote` y el `provision` de reasignar el dueño), tres de que el payload traiga una
+ * contraseña elegida por el actor (`engine_users.credentials`), uno de un flag del alta
  * (`apply_migrations`) y dos son acciones que crean una versión de blueprint DESDE OTRO MÓDULO y
  * por eso exigen `blueprints.write` además de la propia (adoptar un diff, registrar un lote de
  * collation como versión; este último, además, la STAMPEA en cada base, así que suma
@@ -353,6 +364,18 @@ export const CAPABILITY_ESCALATIONS = {
   dropManagedDatabaseRemote: CAPABILITIES.databasesDrop,
   /** `drop_remote=true` en `DELETE /server-users/{id}`. */
   dropServerUserRemote: CAPABILITIES.engineUsersDrop,
+  /**
+   * `password` en `POST /server-users` o `PATCH /server-users/{id}`, con o sin `provision`. Sin
+   * contraseña el alta o la edición del inventario siguen en `engine_users.write`.
+   */
+  serverUserPassword: CAPABILITIES.engineUsersCredentials,
+  /** `known_password` en `POST /servers/{id}/users/adopt-all-hosts`. Adoptar sin ella es `write`. */
+  adoptAllHostsKnownPassword: CAPABILITIES.engineUsersCredentials,
+  /**
+   * `reuse_password: false` (con `new_password`) en `POST /servers/{id}/users/add-host`. Copiar el
+   * hash de la cuenta origen no elige ninguna contraseña y sigue en `write`.
+   */
+  addHostNewPassword: CAPABILITIES.engineUsersCredentials,
   /** `apply_migrations=true` en `POST /managed-databases`: el alta pasa a ejecutar migraciones. */
   createWithApplyMigrations: CAPABILITIES.blueprintsApply,
   /** `POST /schema-comparisons/{id}/adopt`: además de `schema_diff.execute`. */

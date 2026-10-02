@@ -3,7 +3,8 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Combobox, Input, Modal, Switch, Textarea } from '@/components/ui'
-import { HOST_PATTERN } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITY_ESCALATIONS, HOST_PATTERN } from '@/lib/contracts'
 import { useAddEngineUserHost } from '../hooks/use-engine-users'
 
 interface AddEngineUserHostModalProps {
@@ -56,6 +57,16 @@ export function AddEngineUserHostModal({
   )
   const [sourceSubmitAttempted, setSourceSubmitAttempted] = useState(false)
   const addHost = useAddEngineUserHost(serverId)
+  /*
+   * Copiar el hash de la cuenta origen es `write`; elegir una contraseña nueva
+   * (`reuse_password: false`) sube a `engine_users.credentials`. Sin ella el interruptor queda fijo
+   * en «reutilizar», con el motivo, y agregar el host sigue disponible.
+   */
+  const passwordGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.addHostNewPassword,
+    'elegir una contraseña nueva para el host',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -74,7 +85,8 @@ export function AddEngineUserHostModal({
     },
   })
 
-  const reusePassword = watch('reuse_password')
+  // Sin la capacidad se reutiliza siempre, aunque el valor del formulario dijera otra cosa.
+  const reusePassword = watch('reuse_password') || !passwordGuard.allowed
   const copyGrants = watch('copy_grants')
 
   const submit = handleSubmit((values) => {
@@ -82,13 +94,14 @@ export function AddEngineUserHostModal({
       setSourceSubmitAttempted(true)
       return
     }
+    const reuse = values.reuse_password || !passwordGuard.allowed
     addHost.mutate(
       {
         username,
         source_host: sourceHost,
         new_host: values.new_host.trim(),
-        reuse_password: values.reuse_password,
-        new_password: values.reuse_password ? null : values.new_password,
+        reuse_password: reuse,
+        new_password: reuse ? null : values.new_password,
         copy_grants: values.copy_grants,
         adopt: values.adopt,
         notes: values.notes.trim() ? values.notes.trim() : null,
@@ -132,10 +145,14 @@ export function AddEngineUserHostModal({
           name="reuse_password"
           render={({ field }) => (
             <Switch
-              checked={field.value}
+              checked={field.value || !passwordGuard.allowed}
               onCheckedChange={field.onChange}
+              disabled={!passwordGuard.allowed}
               label="Reutilizar la contraseña de la cuenta origen"
-              hint="Copia el hash del motor (SHOW CREATE USER); el gateway nunca ve la contraseña en claro."
+              hint={
+                passwordGuard.hint ??
+                'Copia el hash del motor (SHOW CREATE USER); el gateway nunca ve la contraseña en claro.'
+              }
             />
           )}
         />

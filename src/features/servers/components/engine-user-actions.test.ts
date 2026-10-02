@@ -204,7 +204,31 @@ describe('acciones según capacidades', () => {
     const actions = ids(identityActions(identity(), operator))
     expect(actions).not.toContain('reveal')
     expect(actions).not.toContain('dropFromEngine')
-    expect(actions).toContain('rotatePassword')
+    expect(actions).toContain('edit')
+  })
+
+  it('sin `engine_users.credentials` no ofrece nada que siempre ponga una contraseña elegida', () => {
+    expect(ids(identityActions(identity(), operator))).not.toContain('rotatePassword')
+    expect(ids(identityActions(identity({ status: 'orphan' }), operator))).not.toContain('recreate')
+    const batch = ids(
+      usernameActions(
+        user([identity(), identity({ host: 'localhost', status: 'unmanaged' })]),
+        true,
+        operator,
+      ),
+    )
+    expect(batch).not.toContain('definePassword')
+    expect(batch).not.toContain('rotateAllHosts')
+    // Las que tienen un camino sin contraseña siguen: el diálogo deshabilita solo ese campo.
+    expect(batch).toEqual(['addHost', 'adoptAllHosts'])
+    expect(ids(identityActions(identity({ status: 'unmanaged' }), operator))).toContain('adopt')
+  })
+
+  it('con `engine_users.credentials` (owner) las ofrece todas', () => {
+    expect(ids(identityActions(identity(), () => true))).toContain('rotatePassword')
+    expect(
+      ids(usernameActions(user([identity(), identity({ host: 'localhost' })]), true, () => true)),
+    ).toEqual(expect.arrayContaining(['definePassword', 'rotateAllHosts']))
   })
 
   it('un lector solo ve los permisos efectivos', () => {
@@ -215,7 +239,7 @@ describe('acciones según capacidades', () => {
 
   it('el aviso único nombra lo que falta, con voseo', () => {
     expect(engineUserAccessNote(operator)).toBe(
-      'Con tu acceso podés ver estos usuarios, pero no revelar sus contraseñas ni borrarlos del motor. Pedíselo a quien administra los accesos.',
+      'Con tu acceso podés ver estos usuarios, pero no elegir ni definir sus contraseñas, revelar sus contraseñas ni borrarlos del motor. Pedíselo a quien administra los accesos.',
     )
     expect(engineUserAccessNote(() => true)).toBeNull()
   })

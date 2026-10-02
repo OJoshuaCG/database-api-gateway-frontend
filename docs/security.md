@@ -108,8 +108,10 @@ por fuerza bruta de 403. **No intentes parsear qué faltó.**
 
 ⚠️ **`mutates` y `discloses` son ejes independientes.** Agrupar capacidades por «peligrosidad»
 mirando solo `mutates` pinta como inofensivas a `exports.download`, `engine_users.secrets`,
-`blueprints.captures`, `clones.execute` y `sql_console.execute`: ninguna destruye nada y **todas
-divulgan**.
+`engine_users.credentials`, `blueprints.captures`, `clones.execute` y `sql_console.execute`:
+**todas divulgan**. `engine_users.credentials` es elegir la contraseña de una cuenta del motor
+(crearla, rotarla, definir la conocida): quien la elige la conoce, así que divulga igual que
+revelarla.
 
 ## 1.d Step-up: confirmar la contraseña para lo sensible
 

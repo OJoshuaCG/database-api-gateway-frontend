@@ -118,7 +118,7 @@ describe('GatewayUsersPage — sin acceso', () => {
         'true',
       ),
     )
-    expect(await screen.findByText('Otorga 12 de 30')).toBeInTheDocument()
+    expect(await screen.findByText('Otorga 12 de 31')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Nuevo usuario' })).not.toBeInTheDocument()
     // Ni se ofrece la pestaña (como «Cifrado» en Administración) ni se pide el listado.
     expect(screen.queryByRole('tab', { name: 'Usuarios' })).not.toBeInTheDocument()

@@ -55,7 +55,8 @@ describe('derivación de roles y globales desde el catálogo', () => {
     expect(viewer).toHaveLength(12)
     // 16: desde que `collation.execute` es solo de `owner` (backend c5edee5).
     expect(operator).toHaveLength(16)
-    expect(owner).toHaveLength(26)
+    // 27: `engine_users.credentials` es solo de `owner` (elegir una contraseña divulga).
+    expect(owner).toHaveLength(27)
     expect(viewer.every((id) => operator.includes(id))).toBe(true)
     expect(operator.every((id) => owner.includes(id))).toBe(true)
     // `owner` NO tiene las tres de política: van en las globales.
@@ -316,6 +317,7 @@ describe('capacidades con capa 2 (derivadas del catálogo)', () => {
     'engine_users.write',
     'engine_users.drop',
     'engine_users.secrets',
+    'engine_users.credentials',
     'databases.write',
     'databases.drop',
     'blueprints.write',
@@ -397,6 +399,27 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
     expect(expandGrant(HISTORY, grantsCatalog)).toEqual([HISTORY])
     // Con un catálogo anterior (sin `implies`) solo queda la propia.
     expect(expandGrant(EXEC_SQL, CATALOG_FIXTURE)).toEqual([EXEC_SQL])
+  })
+
+  it('las sensibles son las ocho de `_SENSITIVE_POLICY`, con `engine_users.credentials`', () => {
+    const sensitive = grantsCatalog.filter((row) => row.sensitive).map((row) => row.id)
+    expect([...sensitive].sort()).toEqual(
+      [
+        'engine_users.secrets',
+        'engine_users.credentials',
+        'blueprints.captures',
+        'clones.execute',
+        'exports.download',
+        'sql_console.execute',
+        'engine_users.drop',
+        'databases.drop',
+      ].sort(),
+    )
+    // Elegir una contraseña trae la lectura de los usuarios del motor, y nada más.
+    expect(expandGrant('engine_users.credentials', grantsCatalog)).toEqual([
+      'engine_users.credentials',
+      'engine_users.read',
+    ])
   })
 
   it('test_r5a: suma a un rol por alcance restrictivo, solo en su alcance', () => {

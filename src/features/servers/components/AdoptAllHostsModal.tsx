@@ -3,7 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Badge, Button, Input, Modal, Textarea } from '@/components/ui'
 import type { BadgeTone } from '@/components/ui'
-import type { BatchAdoptStatus } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
+import { CAPABILITY_ESCALATIONS, type BatchAdoptStatus } from '@/lib/contracts'
 import { useAdoptAllHosts } from '../hooks/use-engine-users'
 
 interface AdoptAllHostsModalProps {
@@ -40,6 +41,16 @@ export function AdoptAllHostsModal({
   supportsHosts,
 }: AdoptAllHostsModalProps) {
   const adoptAll = useAdoptAllHosts(serverId)
+  /*
+   * Adoptar es `write`; guardar `known_password` en la misma llamada sube a
+   * `engine_users.credentials`. Sin ella solo se deshabilita ese campo, con el motivo: la adopción
+   * sin contraseña sigue disponible.
+   */
+  const passwordGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.adoptAllHostsKnownPassword,
+    'guardar una contraseña conocida al adoptar',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -52,7 +63,8 @@ export function AdoptAllHostsModal({
   const submit = handleSubmit((values) => {
     adoptAll.mutate({
       username,
-      known_password: values.known_password.trim() ? values.known_password : undefined,
+      known_password:
+        passwordGuard.allowed && values.known_password.trim() ? values.known_password : undefined,
       notes: values.notes.trim() ? values.notes.trim() : null,
     })
   })
@@ -118,7 +130,11 @@ export function AdoptAllHostsModal({
             label="Contraseña conocida (opcional)"
             type="password"
             autoComplete="new-password"
-            hint="Si la indicás, se cifra y guarda en TODAS las identidades sin ejecutar ALTER USER — el motor no se toca y el gateway no verifica que sea la vigente."
+            hint={
+              passwordGuard.hint ??
+              'Si la indicás, se cifra y guarda en TODAS las identidades sin ejecutar ALTER USER — el motor no se toca y el gateway no verifica que sea la vigente.'
+            }
+            disabled={!passwordGuard.allowed}
             error={errors.known_password?.message}
             {...register('known_password')}
           />

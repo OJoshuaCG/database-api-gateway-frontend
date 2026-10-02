@@ -2,6 +2,8 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Input, Modal, Switch } from '@/components/ui'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES } from '@/lib/contracts'
 import { useChangeEngineUserPassword } from '../hooks/use-engine-users'
 
 interface ChangeEngineUserPasswordModalProps {
@@ -32,6 +34,12 @@ export function ChangeEngineUserPasswordModal({
   alreadyAdopted,
 }: ChangeEngineUserPasswordModalProps) {
   const changePassword = useChangeEngineUserPassword(serverId)
+  // Rotar es elegir la contraseña nueva: `engine_users.credentials` en el servidor, no `write`.
+  const guard = useCapabilityGuard(
+    CAPABILITIES.engineUsersCredentials,
+    'cambiar contraseñas del motor',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -43,6 +51,7 @@ export function ChangeEngineUserPasswordModal({
   })
 
   const submit = handleSubmit((values) => {
+    if (!guard.allowed) return
     changePassword.mutate(
       {
         username,
@@ -85,6 +94,7 @@ export function ChangeEngineUserPasswordModal({
             )}
           />
         )}
+        <CapabilityHint guard={guard} />
         <div className="flex justify-end gap-2 pt-2">
           <Button
             type="button"
@@ -94,7 +104,12 @@ export function ChangeEngineUserPasswordModal({
           >
             Cancelar
           </Button>
-          <Button type="submit" isLoading={changePassword.isPending}>
+          <Button
+            type="submit"
+            isLoading={changePassword.isPending}
+            disabled={!guard.allowed}
+            aria-describedby={guard.describedBy}
+          >
             Cambiar contraseña 🔌
           </Button>
         </div>

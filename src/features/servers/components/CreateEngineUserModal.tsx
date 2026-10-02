@@ -2,7 +2,8 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Input, Modal, Switch, Textarea } from '@/components/ui'
-import { HOST_PATTERN, IDENTIFIER_PATTERN } from '@/lib/contracts'
+import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
+import { CAPABILITIES, HOST_PATTERN, IDENTIFIER_PATTERN } from '@/lib/contracts'
 import { useCreateEngineUser } from '../hooks/use-engine-users'
 
 interface CreateEngineUserModalProps {
@@ -40,6 +41,13 @@ export function CreateEngineUserModal({
   prefill,
 }: CreateEngineUserModalProps) {
   const create = useCreateEngineUser(serverId)
+  // `CREATE USER` siempre lleva una contraseña elegida acá: es `engine_users.credentials`, EN el
+  // servidor (capa 2), no `write`.
+  const guard = useCapabilityGuard(
+    CAPABILITIES.engineUsersCredentials,
+    prefill ? 'recrear usuarios en el motor' : 'crear usuarios en el motor',
+    { scope: { serverId, environmentId: null } },
+  )
   const {
     register,
     handleSubmit,
@@ -57,6 +65,7 @@ export function CreateEngineUserModal({
   })
 
   const submit = handleSubmit((values) => {
+    if (!guard.allowed) return
     create.mutate(
       {
         username: values.username.trim(),
@@ -128,11 +137,17 @@ export function CreateEngineUserModal({
           />
         )}
         <Textarea label="Notas (opcional)" rows={2} {...register('notes')} />
+        <CapabilityHint guard={guard} />
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose} disabled={create.isPending}>
             Cancelar
           </Button>
-          <Button type="submit" isLoading={create.isPending}>
+          <Button
+            type="submit"
+            isLoading={create.isPending}
+            disabled={!guard.allowed}
+            aria-describedby={guard.describedBy}
+          >
             {prefill ? 'Recrear usuario 🔌' : 'Crear usuario 🔌'}
           </Button>
         </div>

@@ -21,9 +21,10 @@ describe('scope-readiness: F-17', () => {
 })
 
 describe('capacidades', () => {
-  it('incluye environments.write (30 en total)', () => {
+  it('incluye environments.write y engine_users.credentials (31 en total)', () => {
     expect(CAPABILITIES.environmentsWrite).toBe('environments.write')
-    expect(Object.keys(CAPABILITIES)).toHaveLength(30)
+    expect(CAPABILITIES.engineUsersCredentials).toBe('engine_users.credentials')
+    expect(Object.keys(CAPABILITIES)).toHaveLength(31)
   })
 })
 

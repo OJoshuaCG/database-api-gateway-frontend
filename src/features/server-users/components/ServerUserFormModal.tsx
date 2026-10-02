@@ -76,6 +76,7 @@ export function ServerUserFormModal({
         readonlyIdentity={
           user ? { username: user.username, host: user.host ?? null, serverName } : undefined
         }
+        serverId={user?.server_id}
         isSubmitting={isSubmitting}
         onSubmit={handleSubmit}
         onCancel={onClose}

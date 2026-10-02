@@ -20,10 +20,11 @@ describe('RolesCapabilitiesPanel', () => {
   it('pinta una tarjeta por rol con su cuenta, leída del catálogo', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    expect(await screen.findByText('Otorga 12 de 30')).toBeInTheDocument()
+    expect(await screen.findByText('Otorga 12 de 31')).toBeInTheDocument()
     // operator: 16, sin `collation.execute` desde que es solo de `owner` (backend c5edee5).
-    expect(screen.getByText('Otorga 16 de 30')).toBeInTheDocument()
-    expect(screen.getByText('Otorga 26 de 30')).toBeInTheDocument()
+    expect(screen.getByText('Otorga 16 de 31')).toBeInTheDocument()
+    // owner: 27, con `engine_users.credentials` (elegir una contraseña del motor divulga).
+    expect(screen.getByText('Otorga 27 de 31')).toBeInTheDocument()
     // Una línea de intención por rol y por global, de `ROLE_PURPOSES`.
     expect(screen.getByText('Consulta sin cambiar nada.')).toBeInTheDocument()
     expect(
@@ -32,7 +33,7 @@ describe('RolesCapabilitiesPanel', () => {
     expect(screen.getByText('Administración de accesos')).toBeInTheDocument()
     expect(screen.getByText('Administra servidores, catálogos y política.')).toBeInTheDocument()
     expect(screen.getByText('Capacidades globales (se suman a cualquier rol)')).toBeInTheDocument()
-    expect(screen.getByText('30 de 30 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('31 de 31 capacidades')).toBeInTheDocument()
     // Plurales sin «(s)»: viewer no tiene ninguna destructiva.
     expect(screen.getAllByText('0 destructivas').length).toBeGreaterThan(0)
     // Las siete destructivas son de owner; operator ya no tiene ninguna (tenía `collation.execute`).
@@ -46,11 +47,11 @@ describe('RolesCapabilitiesPanel', () => {
   it('«Solo destructivas» deja solo esas y esconde los módulos vacíos', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 30')
+    await screen.findByText('Otorga 12 de 31')
     await userEvent.click(screen.getByLabelText('Solo destructivas'))
-    expect(screen.getByText('7 de 30 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('7 de 31 capacidades')).toBeInTheDocument()
     // El conteo también va en una región viva, para quien filtra sin ver la pantalla.
-    expect(screen.getByText('7 de 30 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByText('7 de 31 capacidades coinciden')).toHaveAttribute('aria-live', 'polite')
     expect(screen.queryByRole('heading', { name: 'Entornos' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Consola SQL' })).toBeInTheDocument()
     // Un clon puede vaciar el destino (clean_mode), así que su ejecución también es destructiva.
@@ -60,9 +61,9 @@ describe('RolesCapabilitiesPanel', () => {
   it('la búsqueda filtra por id', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 30')
+    await screen.findByText('Otorga 12 de 31')
     await userEvent.type(screen.getByLabelText('Buscar capacidad'), 'exports.download')
-    expect(screen.getByText('1 de 30 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('1 de 31 capacidades')).toBeInTheDocument()
     const section = screen.getByRole('heading', { name: 'Exportaciones' }).closest('section')
     if (!section) throw new Error('falta la sección')
     expect(within(section).getAllByText('exports.download').length).toBeGreaterThan(0)
@@ -71,7 +72,7 @@ describe('RolesCapabilitiesPanel', () => {
   it('elegir un rol colapsa las columnas en «¿La otorga <rol>?»', async () => {
     mockSession()
     renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 30')
+    await screen.findByText('Otorga 12 de 31')
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))
     await userEvent.click(screen.getByRole('option', { name: 'operator' }))
     expect(
@@ -82,7 +83,7 @@ describe('RolesCapabilitiesPanel', () => {
   it('todas las secciones comparten los mismos anchos de columna (una sola matriz, sin escalera)', async () => {
     mockSession()
     const { container } = renderWithProviders(<RolesCapabilitiesPanel />)
-    await screen.findByText('Otorga 12 de 30')
+    await screen.findByText('Otorga 12 de 31')
     const widthsOf = (colgroup: Element) =>
       Array.from(colgroup.querySelectorAll('col')).map((col) => (col as HTMLElement).style.width)
 
@@ -133,7 +134,7 @@ describe('RolesCapabilitiesPanel', () => {
       )
       mockSession()
       renderWithProviders(<RolesCapabilitiesPanel />)
-      await screen.findByText('Otorga 12 de 30')
+      await screen.findByText('Otorga 12 de 31')
       expect(
         screen.getAllByRole('columnheader', { name: '¿La otorga viewer?' }).length,
       ).toBeGreaterThan(0)

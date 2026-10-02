@@ -42,7 +42,14 @@ export function EngineUsersPanel({ serverId }: { serverId: number; engine: Engin
   const { data, isLoading, isError, error, refetch, isFetching } = useGroupedEngineUsers(serverId)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const { can } = useCapabilities()
-  const createGuard = useCapabilityGuard(CAPABILITIES.engineUsersWrite, 'crear usuarios del motor')
+  // «Crear usuario» acá es `CREATE USER` con contraseña (`POST /servers/{id}/users`): pide
+  // `engine_users.credentials` EN este servidor, no `write`. El alta de inventario sin contraseña
+  // vive en «Usuarios y permisos».
+  const createGuard = useCapabilityGuard(
+    CAPABILITIES.engineUsersCredentials,
+    'crear usuarios en el motor',
+    { scope: { serverId, environmentId: null } },
+  )
   const accessNote = engineUserAccessNote(can)
   const actions = useEngineUserDialogs({
     serverId,

@@ -2,6 +2,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
+  CAPABILITY_ESCALATIONS,
   HOST_PATTERN,
   IDENTIFIER_PATTERN,
   type EngineType,
@@ -13,6 +14,7 @@ import {
   type ServerUserUpdate,
 } from '@/lib/contracts'
 import { Button, Checkbox, Combobox, Input, Switch, Textarea } from '@/components/ui'
+import { useCapabilityGuard } from '@/features/auth'
 import { PrivilegeMultiSelect, grantLevelsForEngine } from '@/features/privileges'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import {
@@ -177,6 +179,11 @@ interface ServerUserFormProps {
   defaultValues?: Partial<ServerUserFormValues>
   /** En edición se muestran como solo lectura. */
   readonlyIdentity?: { username: string; host: string | null; serverName?: string }
+  /**
+   * Servidor del usuario en edición, para resolver la capacidad de la contraseña EN él (capa 2).
+   * En el alta sale del servidor elegido en el formulario.
+   */
+  serverId?: number
   isSubmitting?: boolean
   /** `engine` es el del servidor elegido en el Combobox (null si aún no hay selección). */
   onSubmit: (values: ServerUserFormValues, engine: EngineType | null) => void
@@ -187,6 +194,7 @@ export function ServerUserForm({
   mode,
   defaultValues,
   readonlyIdentity,
+  serverId: editServerId,
   isSubmitting,
   onSubmit,
   onCancel,
@@ -216,12 +224,31 @@ export function ServerUserForm({
   const isPg = engine === 'postgresql'
   const levelOptions = grantLevelsForEngine(engine)
 
+  /*
+   * Una contraseña en el body sube el alta o la edición de `engine_users.write` a
+   * `engine_users.credentials` (quien la elige la conoce). Sin ella se deshabilitan la contraseña y
+   * «Aprovisionar», que la exige, con el motivo; el alta o la edición sin contraseña siguen
+   * disponibles. Se resuelve EN el servidor: sin servidor elegido todavía, solo la capa 1.
+   */
+  const targetServerId = mode === 'create' ? serverId : editServerId
+  const passwordGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.serverUserPassword,
+    mode === 'create' ? 'crear usuarios con contraseña' : 'cambiar la contraseña',
+    targetServerId ? { scope: { serverId: targetServerId, environmentId: null } } : {},
+  )
+  const passwordBlocked = !passwordGuard.allowed
+
+  // Sin la capacidad no viaja ninguna contraseña ni se aprovisiona, aunque el valor dijera otra cosa.
+  const submit = (values: ServerUserFormValues) =>
+    onSubmit(
+      passwordBlocked
+        ? { ...values, password: '', provision: false, grant_enabled: false }
+        : values,
+      engine,
+    )
+
   return (
-    <form
-      onSubmit={handleSubmit((values) => onSubmit(values, engine))}
-      className="flex flex-col gap-4"
-      noValidate
-    >
+    <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-4" noValidate>
       {mode === 'create' ? (
         <>
           <Controller
@@ -295,14 +322,16 @@ export function ServerUserForm({
         label="Contraseña"
         type="password"
         autoComplete="new-password"
-        required={provision}
+        required={provision && !passwordBlocked}
         hint={
-          mode === 'edit'
+          passwordGuard.hint ??
+          (mode === 'edit'
             ? 'Dejala en blanco para no cambiarla. Con aprovisionar, ejecuta ALTER USER.'
-            : 'Obligatoria si aprovisionás en el motor.'
+            : 'Obligatoria si aprovisionás en el motor.')
         }
         error={errors.password?.message}
         {...register('password')}
+        disabled={passwordBlocked}
       />
 
       <Controller
@@ -310,19 +339,22 @@ export function ServerUserForm({
         name="provision"
         render={({ field }) => (
           <Switch
-            checked={field.value}
+            checked={field.value && !passwordBlocked}
             onCheckedChange={field.onChange}
+            disabled={passwordBlocked}
             label="Aprovisionar en el motor 🔌"
             hint={
-              mode === 'create'
-                ? 'Ejecuta CREATE USER en el servidor destino.'
-                : 'Ejecuta ALTER USER si cambiás la contraseña.'
+              passwordBlocked
+                ? 'Aprovisionar exige una contraseña, y tu acceso no permite elegirla.'
+                : mode === 'create'
+                  ? 'Ejecuta CREATE USER en el servidor destino.'
+                  : 'Ejecuta ALTER USER si cambiás la contraseña.'
             }
           />
         )}
       />
 
-      {mode === 'create' && provision && (
+      {mode === 'create' && provision && !passwordBlocked && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
           <Controller
             control={control}

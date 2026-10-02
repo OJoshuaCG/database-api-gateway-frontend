@@ -36,7 +36,8 @@ Otorgar (POST) ──┬─ no sensible ─────────────�
    (`CapabilityGrantsSection`). Es inmediato: no pasa por «Guardar accesos» y `PUT /access` no las
    toca.
 2. **Sensible = segundo aprobador.** `databases.drop`, `engine_users.drop`, `engine_users.secrets`,
-   `blueprints.captures`, `clones.execute`, `exports.download` y `sql_console.execute` nacen
+   `engine_users.credentials`, `blueprints.captures`, `clones.execute`, `exports.download` y
+   `sql_console.execute` nacen
    `pending`: **no conceden nada** hasta que OTRA persona con `access_admin` (ni quien la pidió ni
    la persona destino) la apruebe. La UI avisa antes y después de enviar; «Capacidad otorgada» sobre
    algo que no rige sería mentir.

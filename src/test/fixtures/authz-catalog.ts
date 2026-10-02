@@ -3,7 +3,8 @@ import { capabilityDescriptorSchema, type CapabilityDescriptor } from '@/lib/con
 /**
  * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (generado en 0b43532 con
  * `capability_matrix()` y alineado con c5edee5 del backend, donde `collation.execute` pasó a ser
- * solo de `owner` y destructiva), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
+ * solo de `owner` y destructiva, y con la llegada de `engine_users.credentials`: solo `owner`,
+ * divulga, con step-up y, otorgada suelta, sensible), para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva
  * del catálogo real. Si el backend cambia un rol, este archivo se regenera desde ahí.
  */
 const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
@@ -91,6 +92,19 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     level: 'secrets',
     label: 'Revelar contraseñas de usuarios del motor',
     mutates: false,
+    discloses: true,
+    requires_step_up: true,
+    agent_allowed: false,
+    scope_axis: 'server',
+    roles: ['owner'],
+    global_capabilities: [],
+  },
+  {
+    id: 'engine_users.credentials',
+    module: 'engine_users',
+    level: 'credentials',
+    label: 'Elegir o definir contraseñas de usuarios del motor',
+    mutates: true,
     discloses: true,
     requires_step_up: true,
     agent_allowed: false,
