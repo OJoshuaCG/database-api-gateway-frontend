@@ -181,6 +181,31 @@ export const capabilityGrantCreateSchema = z.object({
 })
 export type CapabilityGrantCreate = z.infer<typeof capabilityGrantCreateSchema>
 
+/** Tope de destinos por alta masiva: el mismo que valida el backend. */
+export const CAPABILITY_GRANT_BULK_MAX = 100
+
+/**
+ * `POST /gateway-users/{id}/capability-grants/bulk`: la MISMA capacidad sobre varios destinos del
+ * mismo tipo, todo o nada. El backend deduplica `scope_ids`; el mínimo y el máximo se validan acá
+ * para no mandar un 422 genérico.
+ */
+export const capabilityGrantBulkCreateSchema = z.object({
+  capability: z.string().min(1),
+  scope_type: scopeTypeSchema,
+  scope_ids: z.array(z.number().int().min(1)).min(1).max(CAPABILITY_GRANT_BULK_MAX),
+  reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
+  sod_override: sodOverrideInSchema.optional(),
+})
+export type CapabilityGrantBulkCreate = z.infer<typeof capabilityGrantBulkCreateSchema>
+
+/** 201 del alta masiva: todas las filas nacieron con el mismo estado (`pending` si es sensible). */
+export const capabilityGrantBulkResultSchema = z.object({
+  count: z.number().int(),
+  pending: z.boolean(),
+  grants: z.array(capabilityGrantSchema),
+})
+export type CapabilityGrantBulkResult = z.infer<typeof capabilityGrantBulkResultSchema>
+
 /** Cuerpo de aprobar o rechazar: el motivo es opcional. */
 export const capabilityGrantDecisionSchema = z.object({
   reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
@@ -208,6 +233,11 @@ export const CAPABILITY_GRANT_ERROR_CODES = {
   /** 409 del alta; también un `blocked_reason` de la bandeja (v29 §9.6). */
   notAssignable: 'access.not_assignable',
   grantDuplicate: 'access.grant_duplicate',
+  /**
+   * 409 del alta masiva: no se otorgó nada. `public_context.failures` lista `{scope_id, code,
+   * message}` de CADA destino que falló (ver `ApiGrantBulkFailure`).
+   */
+  grantBulkFailed: 'access.grant_bulk_failed',
   grantNotFound: 'access.grant_not_found',
   grantNotPending: 'access.grant_not_pending',
   /** 409 del alta y de `approve`; también el `blocked_reason` de una pendiente (v29 §8.2). */

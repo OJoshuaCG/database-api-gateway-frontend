@@ -1,9 +1,12 @@
 import { fetchData, fetchList, mutateData } from '@/lib/api/client'
 import {
+  capabilityGrantBulkResultSchema,
   capabilityGrantSchema,
   effectiveAccessSchema,
   pendingCapabilityGrantSchema,
   type CapabilityGrant,
+  type CapabilityGrantBulkCreate,
+  type CapabilityGrantBulkResult,
   type CapabilityGrantCreate,
   type CapabilityGrantDecision,
   type CapabilityGrantStatus,
@@ -39,6 +42,23 @@ export function createCapabilityGrant(
   return mutateData('POST', `${USERS}/${userId}/capability-grants`, capabilityGrantSchema, {
     body,
   })
+}
+
+/**
+ * `POST /gateway-users/{id}/capability-grants/bulk` → 201. La misma capacidad sobre varios
+ * destinos, todo o nada: un 409 `access.grant_bulk_failed` no deja ninguna fila y nombra cada
+ * destino que falló (`ApiError.gatewayUserContext.grantBulkFailures`).
+ */
+export function createCapabilityGrantsBulk(
+  userId: number,
+  body: CapabilityGrantBulkCreate,
+): Promise<CapabilityGrantBulkResult> {
+  return mutateData(
+    'POST',
+    `${USERS}/${userId}/capability-grants/bulk`,
+    capabilityGrantBulkResultSchema,
+    { body },
+  )
 }
 
 /**

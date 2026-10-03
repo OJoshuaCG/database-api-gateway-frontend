@@ -5,6 +5,7 @@ import { useToast } from '@/lib/toast/use-toast'
 import { notifyMutationError, useSession } from '@/features/auth'
 import type {
   CapabilityGrant,
+  CapabilityGrantBulkCreate,
   CapabilityGrantCreate,
   CapabilityGrantDecision,
   CapabilityGrantStatus,
@@ -12,6 +13,7 @@ import type {
 import {
   approveCapabilityGrant,
   createCapabilityGrant,
+  createCapabilityGrantsBulk,
   getEffectiveAccess,
   listCapabilityGrants,
   listPendingCapabilityGrants,
@@ -125,6 +127,38 @@ export function useCreateCapabilityGrant(userId: number) {
     },
     onError: (error) =>
       notifyMutationError(toast, error, ...errorToast('No se pudo otorgar la capacidad', error)),
+  })
+}
+
+/**
+ * Alta masiva: una capacidad sobre varios destinos, todo o nada. Todas las filas nacen con el
+ * mismo estado, así que un solo toast alcanza. El 409 `access.grant_bulk_failed` no deja nada
+ * creado; el detalle por destino lo muestra el formulario (`grantBulkFailures`).
+ */
+export function useCreateCapabilityGrantsBulk(userId: number) {
+  const toast = useToast()
+  const refresh = useRefreshAfterGrantChange()
+  return useMutation({
+    mutationFn: (body: CapabilityGrantBulkCreate) => createCapabilityGrantsBulk(userId, body),
+    onSuccess: (result) => {
+      refresh(userId)
+      const capability = result.grants[0]?.capability ?? ''
+      const targets = `${result.count} destino${result.count === 1 ? '' : 's'}`
+      if (result.pending) {
+        toast.success(
+          'Solicitudes enviadas',
+          `Falta que otra persona con access_admin apruebe «${capability}» en ${targets}.`,
+        )
+      } else {
+        toast.success('Capacidades otorgadas', `${capability} en ${targets}.`)
+      }
+    },
+    onError: (error) =>
+      notifyMutationError(
+        toast,
+        error,
+        ...errorToast('No se pudieron otorgar las capacidades', error),
+      ),
   })
 }
 

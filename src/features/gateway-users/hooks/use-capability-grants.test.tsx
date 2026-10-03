@@ -7,11 +7,13 @@ import { server } from '@/test/server'
 import { meFixture } from '@/test/fixtures/authz-catalog'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
 import { queryKeys } from '@/lib/api/query-keys'
+import { toApiError } from '@/lib/api/errors'
 import { useSession } from '@/features/auth'
 import {
   useApproveCapabilityGrant,
   useCapabilityGrants,
   useCreateCapabilityGrant,
+  useCreateCapabilityGrantsBulk,
   useEffectiveAccess,
   usePendingCapabilityGrants,
   useRejectCapabilityGrant,
@@ -155,6 +157,81 @@ describe('mutaciones', () => {
     expect(body).toEqual({ capability: 'databases.drop', scope_type: 'server', scope_id: 3 })
     expect(invalidated(spy)).toContain(JSON.stringify(queryKeys.capabilityGrants.all))
     expect(invalidated(spy)).toContain(JSON.stringify(queryKeys.auth.me()))
+  })
+
+  it('el alta masiva manda scope_ids al endpoint /bulk e invalida las capacidades', async () => {
+    let body: unknown = null
+    server.use(
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              count: 2,
+              pending: false,
+              grants: [grantFixture, { ...grantFixture, id: 6, scope_id: 4 }],
+            },
+          },
+          { status: 201 },
+        )
+      }),
+    )
+    const { wrapper, spy } = setup(1)
+    const { result } = renderHook(() => useCreateCapabilityGrantsBulk(7), { wrapper })
+    act(() => {
+      result.current.mutate({
+        capability: 'databases.drop',
+        scope_type: 'server',
+        scope_ids: [3, 4],
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(body).toEqual({
+      capability: 'databases.drop',
+      scope_type: 'server',
+      scope_ids: [3, 4],
+    })
+    expect(result.current.data?.count).toBe(2)
+    expect(invalidated(spy)).toContain(JSON.stringify(queryKeys.capabilityGrants.all))
+  })
+
+  it('un 409 del lote expone cada destino fallido en gatewayUserContext', async () => {
+    server.use(
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'No se otorgó nada.',
+              type: 'AppHttpException',
+              public_context: {
+                code: 'access.grant_bulk_failed',
+                failures: [
+                  { scope_id: 3, code: 'access.grant_duplicate', message: 'Duplicada.' },
+                  { scope_id: 99, code: 'access.grant_scope_not_found', message: 'No existe.' },
+                ],
+              },
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    const { wrapper } = setup(1)
+    const { result } = renderHook(() => useCreateCapabilityGrantsBulk(7), { wrapper })
+    act(() => {
+      result.current.mutate({
+        capability: 'databases.drop',
+        scope_type: 'server',
+        scope_ids: [3, 99],
+      })
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    const error = toApiError(result.current.error)
+    expect(error.code).toBe('access.grant_bulk_failed')
+    expect(error.gatewayUserContext?.grantBulkFailures?.map((f) => [f.scopeId, f.code])).toEqual([
+      [3, 'access.grant_duplicate'],
+      [99, 'access.grant_scope_not_found'],
+    ])
   })
 
   it('no refresca /auth/me cuando la persona afectada no es la de la sesión', async () => {

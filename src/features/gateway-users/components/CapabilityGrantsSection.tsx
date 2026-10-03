@@ -11,6 +11,7 @@ import {
   ConfirmDialog,
   DataTable,
   ErrorState,
+  MultiCombobox,
   Textarea,
   type BadgeTone,
 } from '@/components/ui'
@@ -24,13 +25,14 @@ import {
 } from '@/features/auth'
 import { useSelectableEnvironments } from '@/features/environments'
 import { useServerOptions } from '@/features/servers/hooks/use-server-options'
-import { toApiError } from '@/lib/api/errors'
+import { toApiError, type ApiGrantBulkFailure } from '@/lib/api/errors'
 import {
+  CAPABILITY_GRANT_BULK_MAX,
   CAPABILITY_GRANT_ERROR_CODES,
   SCOPE_TYPES,
   type CapabilityDescriptor,
   type CapabilityGrant,
-  type CapabilityGrantCreate,
+  type CapabilityGrantBulkCreate,
   type GatewayUserOut,
   type ScopeType,
   type SodOverrideIn,
@@ -38,7 +40,7 @@ import {
 import { formatDateTime } from '@/lib/utils/format'
 import {
   useCapabilityGrants,
-  useCreateCapabilityGrant,
+  useCreateCapabilityGrantsBulk,
   useRevokeCapabilityGrant,
 } from '../hooks/use-capability-grants'
 import { isSensitiveCapability } from '../assignment-policy'
@@ -50,11 +52,12 @@ import { SodConflictPanel } from './SodConflictPanel'
 const REASON_MAX = 500
 
 /**
- * Un 409 `access.sod_conflict` del alta: la persona es oficial de seguridad y la capacidad es
- * exclusiva de owner. Guarda el cuerpo que se intentó, que es lo que reenvía la excepción.
+ * Un destino del alta masiva con `access.sod_conflict`: la persona es oficial de seguridad y la
+ * capacidad es exclusiva de owner. Guarda el cuerpo que se intentó, que es lo que reenvía la
+ * excepción (sobre TODOS los destinos del lote).
  */
 interface SodBlock {
-  body: CapabilityGrantCreate
+  body: CapabilityGrantBulkCreate
   conflicts: SodConflict[]
   reasonMinLength?: number
   maxHours?: number
@@ -87,6 +90,19 @@ const STATUS_BADGES: Record<string, { label: string; tone: BadgeTone }> = {
   expired: { label: 'Vencida', tone: 'neutral' },
   cancelled: { label: 'Cancelada', tone: 'neutral' },
   revoked: { label: 'Revocada', tone: 'neutral' },
+}
+
+/** Texto de un destino que falló en el alta masiva: copy propio si lo hay, si no el del backend. */
+function bulkFailureText(failure: ApiGrantBulkFailure): string {
+  const known =
+    failure.code === CAPABILITY_GRANT_ERROR_CODES.grantDuplicate ||
+    failure.code === CAPABILITY_GRANT_ERROR_CODES.grantScopeNotFound
+  return (
+    (known ? capabilityGrantBlockedMessage(failure.code) : null) ??
+    failure.message ??
+    failure.code ??
+    'No se puede otorgar este destino.'
+  )
 }
 
 /** «Viva» = rige o está esperando decisión; el resto es historial. */
@@ -136,20 +152,20 @@ export function CapabilityGrantsSection({
   const headingId = `${ids}-titulo`
   const formHeadingId = `${ids}-form`
   const blockedId = `${ids}-bloqueo`
-  const duplicateId = `${ids}-duplicada`
+  const duplicateId = `${ids}-duplicadas`
   const errorId = `${ids}-error`
   const detailId = `${ids}-detalle`
 
   const [showHistory, setShowHistory] = useState(false)
   const [capabilityId, setCapabilityId] = useState<string | null>(null)
   const [scopeType, setScopeType] = useState<ScopeType>('environment')
-  const [scopeId, setScopeId] = useState(0)
+  const [scopeIds, setScopeIds] = useState<number[]>([])
   const [reason, setReason] = useState('')
   const [toRevoke, setToRevoke] = useState<CapabilityGrant | null>(null)
   const [sodBlock, setSodBlock] = useState<SodBlock | null>(null)
 
   const grantsQuery = useCapabilityGrants(user.id)
-  const create = useCreateCapabilityGrant(user.id)
+  const create = useCreateCapabilityGrantsBulk(user.id)
   const revoke = useRevokeCapabilityGrant(user.id)
   const environments = useSelectableEnvironments()
   const servers = useServerOptions()
@@ -175,7 +191,29 @@ export function CapabilityGrantsSection({
     scopeType === 'environment'
       ? environments.selectable.map((env) => ({ id: env.id, label: env.name }))
       : (servers.data ?? []).map((server) => ({ id: server.id, label: server.name }))
-  const target = targets.find((option) => option.id === scopeId) ?? null
+
+  // Destinos que ya tienen esta capacidad VIVA (activa o pendiente): no se ofrecen. Es una pista
+  // con la lista que ya está en pantalla; el `UNIQUE` del backend sigue siendo la verdad (el lote
+  // entero responde 409 `access.grant_bulk_failed` con `access.grant_duplicate` por destino).
+  const liveTargetIds = useMemo(
+    () =>
+      new Set(
+        capabilityId
+          ? live
+              .filter(
+                (grant) => grant.capability === capabilityId && grant.scope_type === scopeType,
+              )
+              .map((grant) => grant.scope_id)
+          : [],
+      ),
+    [live, capabilityId, scopeType],
+  )
+  const available = targets.filter((option) => !liveTargetIds.has(option.id))
+  const alreadyGranted = targets.length - available.length
+  // Lo elegido que dejó de ser ofrecible (cambió la capacidad) se descarta sin tocar el estado.
+  const selectedTargets = available.filter((option) => scopeIds.includes(option.id))
+  const selectedIds = selectedTargets.map((option) => option.id)
+  const tooMany = selectedIds.length > CAPABILITY_GRANT_BULK_MAX
 
   // Los dos bloqueos son del DESTINO de la operación y el backend los rechaza antes que cualquier
   // otro chequeo: se explican acá, con el copy de siempre, en vez de dejar llegar a un 409.
@@ -185,23 +223,11 @@ export function CapabilityGrantsSection({
       ? capabilityGrantBlockedMessage(CAPABILITY_GRANT_ERROR_CODES.grantUserInactive)
       : null
 
-  // Pista del lado del cliente con la lista que ya está en pantalla; el `UNIQUE` del backend sigue
-  // siendo la verdad (409 `access.grant_duplicate`).
-  const duplicate =
-    capabilityId && scopeId >= 1
-      ? live.find(
-          (grant) =>
-            grant.capability === capabilityId &&
-            grant.scope_type === scopeType &&
-            grant.scope_id === scopeId,
-        )
-      : undefined
-
   const canSubmit =
     selected !== null &&
-    scopeId >= 1 &&
+    selectedIds.length >= 1 &&
+    !tooMany &&
     blockedReason === null &&
-    duplicate === undefined &&
     reason.length <= REASON_MAX
 
   // Un cambio de cualquier campo descarta el resultado o el error anterior: ya no hablan de lo que
@@ -213,6 +239,15 @@ export function CapabilityGrantsSection({
 
   // Con el rechazo de separación de deberes a la vista, el error vive en su panel: ahí está el
   // botón que lo resuelve (o lo vuelve a intentar).
+  const bulkFailures =
+    (create.isError && toApiError(create.error).gatewayUserContext?.grantBulkFailures) || []
+  const sodFailures = bulkFailures.filter(
+    (failure) => failure.code === CAPABILITY_GRANT_ERROR_CODES.sodConflict,
+  )
+  // Los destinos con conflicto de separación de deberes tienen su panel; el resto, su lista.
+  const listedFailures = sodBlock
+    ? bulkFailures.filter((f) => !sodFailures.includes(f))
+    : bulkFailures
   const createErrorMessage = (() => {
     if (!create.isError) return null
     // El 403 usa el copy compartido (el toast ya dice lo mismo): el aviso del formulario queda
@@ -221,31 +256,34 @@ export function CapabilityGrantsSection({
     const apiError = toApiError(create.error)
     return capabilityGrantErrorMessage(apiError) ?? apiError.message
   })()
-  const sodRejectedAgain =
-    create.isError && toApiError(create.error).code === CAPABILITY_GRANT_ERROR_CODES.sodConflict
+  const sodRejectedAgain = sodFailures.length > 0
   const formError = sodBlock ? null : createErrorMessage
   const overrideError = sodBlock && !sodRejectedAgain ? createErrorMessage : null
 
-  const send = (body: CapabilityGrantCreate) => {
+  const send = (body: CapabilityGrantBulkCreate) => {
     create.mutate(body, {
       onSuccess: () => {
         // Se limpia lo que se eligió pero se deja el tipo de destino: otorgar varias seguidas
         // sobre el mismo tipo es lo habitual.
         setCapabilityId(null)
-        setScopeId(0)
+        setScopeIds([])
         setReason('')
         setSodBlock(null)
       },
       onError: (error) => {
-        const apiError = toApiError(error)
-        if (apiError.code !== CAPABILITY_GRANT_ERROR_CODES.sodConflict) return
+        const failures = toApiError(error).gatewayUserContext?.grantBulkFailures ?? []
+        const sod = failures.filter((f) => f.code === CAPABILITY_GRANT_ERROR_CODES.sodConflict)
+        if (sod.length === 0) return
         const { sod_override: _override, ...plain } = body
-        const context = apiError.gatewayUserContext
+        // Un conflicto por destino: se juntan las reglas sin repetir la misma fuente.
+        const conflicts = new Map(
+          sod.flatMap((f) => f.sodConflicts ?? []).map((c) => [JSON.stringify(c), c]),
+        )
         setSodBlock({
           body: plain,
-          conflicts: context?.sodConflicts ?? [],
-          reasonMinLength: context?.sodReasonMinLength,
-          maxHours: context?.sodMaxHours,
+          conflicts: [...conflicts.values()],
+          reasonMinLength: sod.find((f) => f.sodReasonMinLength)?.sodReasonMinLength,
+          maxHours: sod.find((f) => f.sodMaxHours)?.sodMaxHours,
         })
       },
     })
@@ -258,7 +296,7 @@ export function CapabilityGrantsSection({
     send({
       capability: selected.id,
       scope_type: scopeType,
-      scope_id: scopeId,
+      scope_ids: selectedIds,
       ...(trimmed ? { reason: trimmed } : {}),
     })
   }
@@ -380,6 +418,10 @@ export function CapabilityGrantsSection({
   )
 
   const confirmCancel = toRevoke?.status === 'pending'
+  const created = create.isSuccess ? create.data.grants[0] : undefined
+  const createdTargets = create.isSuccess
+    ? create.data.grants.map((grant) => grant.scope_name ?? `#${grant.scope_id}`).join(', ')
+    : ''
 
   return (
     <Card>
@@ -389,8 +431,9 @@ export function CapabilityGrantsSection({
             Capacidades puntuales
           </h2>
           <p className="text-sm text-muted-foreground">
-            Suman UNA capacidad sobre UN entorno o servidor sin cambiar el rol de {user.username}.
-            Se aplican al instante, sin pasar por «Guardar accesos», y esa pantalla no las toca.
+            Suman UNA capacidad sobre uno o varios entornos o servidores sin cambiar el rol de{' '}
+            {user.username}. Se aplican al instante, sin pasar por «Guardar accesos», y esa pantalla
+            no las toca.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -473,27 +516,79 @@ export function CapabilityGrantsSection({
                   touch()
                   // Un id de entorno no significa nada como id de servidor: se obliga a re-elegir.
                   setScopeType(option.value)
-                  setScopeId(0)
+                  setScopeIds([])
                 }}
                 itemToString={(option) => option.label}
                 itemToKey={(option) => option.value}
                 label="Tipo de destino"
                 disabled={blockedReason !== null}
               />
-              <Combobox<TargetOption>
-                items={targets}
-                value={target}
-                onChange={(option) => {
-                  touch()
-                  setScopeId(option?.id ?? 0)
-                }}
-                itemToString={(option) => option.label}
-                itemToKey={(option) => option.id}
-                label={`${SCOPE_TYPE_LABELS[scopeType]} de destino`}
-                placeholder="Elegí un destino"
-                disabled={blockedReason !== null}
-                isLoading={scopeType === 'environment' ? environments.isPending : servers.isPending}
-              />
+              <div className="flex flex-col gap-1.5">
+                <MultiCombobox<TargetOption>
+                  items={available}
+                  selectedItems={selectedTargets}
+                  onChange={(options) => {
+                    touch()
+                    setScopeIds(options.map((option) => option.id))
+                  }}
+                  itemToString={(option) => option.label}
+                  itemToKey={(option) => option.id}
+                  label={
+                    scopeType === 'environment' ? 'Entornos de destino' : 'Servidores de destino'
+                  }
+                  placeholder="Elegí uno o varios destinos"
+                  disabled={blockedReason !== null}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      blockedReason !== null ||
+                      available.length === 0 ||
+                      selectedIds.length === Math.min(available.length, CAPABILITY_GRANT_BULK_MAX)
+                    }
+                    onClick={() => {
+                      touch()
+                      setScopeIds(
+                        available.slice(0, CAPABILITY_GRANT_BULK_MAX).map((option) => option.id),
+                      )
+                    }}
+                  >
+                    Seleccionar todos ({Math.min(available.length, CAPABILITY_GRANT_BULK_MAX)})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={blockedReason !== null || selectedIds.length === 0}
+                    onClick={() => {
+                      touch()
+                      setScopeIds([])
+                    }}
+                  >
+                    Limpiar
+                  </Button>
+                  {(scopeType === 'environment' ? environments.isPending : servers.isPending) && (
+                    <span className="text-xs text-muted-foreground">Cargando destinos…</span>
+                  )}
+                </div>
+                {alreadyGranted > 0 && (
+                  <p id={duplicateId} role="status" className="text-xs text-muted-foreground">
+                    {alreadyGranted === 1
+                      ? '1 destino ya tiene'
+                      : `${alreadyGranted} destinos ya tienen`}{' '}
+                    esa capacidad (activa o pendiente de aprobación) y no se ofrece
+                    {alreadyGranted === 1 ? '' : 'n'}.
+                  </p>
+                )}
+                {tooMany && (
+                  <p role="status" className="text-xs text-error">
+                    Máximo {CAPABILITY_GRANT_BULK_MAX} destinos por vez.
+                  </p>
+                )}
+              </div>
             </div>
 
             <Textarea
@@ -509,18 +604,26 @@ export function CapabilityGrantsSection({
               className="min-h-16"
             />
 
-            {duplicate && (
-              <p id={duplicateId} role="status" className="text-sm text-warning">
-                {capabilityGrantBlockedMessage(CAPABILITY_GRANT_ERROR_CODES.grantDuplicate)}
-              </p>
-            )}
-
             {/* `role="alert"`: el error llega después de apretar y tiene que anunciarse. Va junto
                 al botón, no solo en el toast, que se cierra solo. */}
             {formError && (
               <p id={errorId} role="alert" className="text-sm text-error">
                 {formError}
               </p>
+            )}
+
+            {listedFailures.length > 0 && (
+              <ul className="flex list-disc flex-col gap-0.5 pl-5 text-sm text-error">
+                {listedFailures.map((failure) => (
+                  <li key={failure.scopeId}>
+                    <strong>
+                      {targets.find((option) => option.id === failure.scopeId)?.label ??
+                        `#${failure.scopeId}`}
+                    </strong>
+                    : {bulkFailureText(failure)}
+                  </li>
+                ))}
+              </ul>
             )}
 
             {sodBlock && (
@@ -542,18 +645,27 @@ export function CapabilityGrantsSection({
               />
             )}
 
-            {create.isSuccess && (
+            {create.isSuccess && created && (
               <p role="status" className="text-sm text-foreground">
-                {create.data.status === 'pending' ? (
+                {create.data.pending ? (
                   <>
-                    <strong>Solicitud enviada, todavía no concede acceso.</strong>{' '}
-                    {capabilityName(create.data.capability)} en {scopeLabel(create.data)} queda
-                    pendiente hasta que otra persona con access_admin la apruebe.
+                    <strong>
+                      {create.data.count === 1 ? 'Solicitud enviada' : 'Solicitudes enviadas'},
+                      todavía no conceden acceso.
+                    </strong>{' '}
+                    {capabilityName(created.capability)} en {createdTargets} queda
+                    {create.data.count === 1 ? '' : 'n'} pendiente
+                    {create.data.count === 1 ? '' : 's'} hasta que otra persona con access_admin la
+                    {create.data.count === 1 ? '' : 's'} apruebe.
                   </>
                 ) : (
                   <>
-                    <strong>Capacidad otorgada.</strong> {capabilityName(create.data.capability)} en{' '}
-                    {scopeLabel(create.data)} ya rige.
+                    <strong>
+                      {create.data.count === 1
+                        ? 'Capacidad otorgada.'
+                        : `Capacidad otorgada en ${create.data.count} destinos.`}
+                    </strong>{' '}
+                    {capabilityName(created.capability)} en {createdTargets} ya rige.
                   </>
                 )}
               </p>
@@ -565,7 +677,7 @@ export function CapabilityGrantsSection({
                 size="sm"
                 disabled={!canSubmit}
                 isLoading={create.isPending}
-                aria-describedby={blockedReason ? blockedId : duplicate ? duplicateId : undefined}
+                aria-describedby={blockedReason ? blockedId : undefined}
               >
                 Otorgar capacidad
               </Button>

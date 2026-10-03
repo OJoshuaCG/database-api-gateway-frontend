@@ -1161,6 +1161,19 @@ export interface GatewayUserErrorContext {
    */
   readonly sodReasonMinLength?: number
   readonly sodMaxHours?: number
+  /** `access.grant_bulk_failed` (409): cada destino que falló y por qué. No se otorgó nada. */
+  readonly grantBulkFailures?: ApiGrantBulkFailure[]
+}
+
+export interface ApiGrantBulkFailure {
+  readonly scopeId: number
+  /** Código `access.*` del destino (`grant_duplicate`, `grant_scope_not_found`, `sod_conflict`…). */
+  readonly code?: string
+  readonly message?: string
+  /** Solo en `access.sod_conflict`: las reglas violadas y los límites del break-glass. */
+  readonly sodConflicts?: ApiSodConflict[]
+  readonly sodReasonMinLength?: number
+  readonly sodMaxHours?: number
 }
 
 /**
@@ -1403,7 +1416,30 @@ function extractGatewayUserContext(
       (isRecord(publicContext.override)
         ? finiteNumber(publicContext.override.max_hours)
         : undefined),
+    grantBulkFailures: extractGrantBulkFailures(publicContext.failures),
   }
+}
+
+/** `public_context.failures` del 409 `access.grant_bulk_failed`. */
+function extractGrantBulkFailures(value: unknown): ApiGrantBulkFailure[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const failures = value.flatMap((row): ApiGrantBulkFailure[] => {
+    const scopeId = isRecord(row) ? finiteNumber(row.scope_id) : undefined
+    if (!isRecord(row) || scopeId === undefined) return []
+    const context = isRecord(row.context) ? row.context : {}
+    const override = isRecord(context.override) ? context.override : {}
+    return [
+      {
+        scopeId,
+        code: nonEmptyString(row.code),
+        message: nonEmptyString(row.message),
+        sodConflicts: extractSodConflicts(context.conflicts),
+        sodReasonMinLength: finiteNumber(override.reason_min_length),
+        sodMaxHours: finiteNumber(override.max_hours),
+      },
+    ]
+  })
+  return failures.length ? failures : undefined
 }
 
 /** `public_context.conflicts` del 409 `access.sod_conflict`. */

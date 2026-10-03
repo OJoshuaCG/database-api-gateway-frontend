@@ -142,6 +142,8 @@ const CAPABILITY_GRANT_COPY: Record<string, string> = {
     'El entorno o servidor elegido ya no existe. Refrescá la pantalla y elegí otro.',
   [CAPABILITY_GRANT_ERROR_CODES.grantDuplicate]:
     'Esa persona ya tiene esa capacidad sobre ese destino, activa o pendiente de aprobación.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantBulkFailed]:
+    'No se otorgó nada: al menos un destino no se puede otorgar. Corregí o quitá los que se detallan y volvé a intentar.',
   [CAPABILITY_GRANT_ERROR_CODES.grantNotFound]:
     'Esa capacidad ya no existe. Refrescá la lista para ver el estado actual.',
   [CAPABILITY_GRANT_ERROR_CODES.grantNotPending]:

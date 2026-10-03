@@ -173,16 +173,22 @@ describe('CapabilityGrantsSection', () => {
     mockBackend()
     let body: unknown = null
     server.use(
-      http.post(`${API}/gateway-users/7/capability-grants`, async ({ request }) => {
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, async ({ request }) => {
         body = await request.json()
         return HttpResponse.json(
           {
             data: {
-              ...ACTIVE,
-              id: 20,
-              capability: 'databases.write',
-              scope_id: 3,
-              scope_name: 'Producción',
+              count: 1,
+              pending: false,
+              grants: [
+                {
+                  ...ACTIVE,
+                  id: 20,
+                  capability: 'databases.write',
+                  scope_id: 3,
+                  scope_name: 'Producción',
+                },
+              ],
             },
           },
           { status: 201 },
@@ -193,7 +199,7 @@ describe('CapabilityGrantsSection', () => {
     await screen.findAllByText(WRITE)
 
     await pick('Capacidad', new RegExp(WRITE))
-    await pick('Entorno de destino', 'Producción')
+    await pick('Entornos de destino', 'Producción')
     await userEvent.type(screen.getByRole('textbox', { name: 'Motivo' }), '  guardia  ')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 
@@ -201,7 +207,7 @@ describe('CapabilityGrantsSection', () => {
     expect(body).toEqual({
       capability: 'databases.write',
       scope_type: 'environment',
-      scope_id: 3,
+      scope_ids: [3],
       reason: 'guardia',
     })
     expect(await within(form()).findByText('Capacidad otorgada.')).toBeInTheDocument()
@@ -215,10 +221,16 @@ describe('CapabilityGrantsSection', () => {
     mockBackend()
     let body: unknown = null
     server.use(
-      http.post(`${API}/gateway-users/7/capability-grants`, async ({ request }) => {
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, async ({ request }) => {
         body = await request.json()
         return HttpResponse.json(
-          { data: { ...PENDING, id: 21, scope_id: 10, scope_name: 'db-prod-02' } },
+          {
+            data: {
+              count: 1,
+              pending: true,
+              grants: [{ ...PENDING, id: 21, scope_id: 10, scope_name: 'db-prod-02' }],
+            },
+          },
           { status: 201 },
         )
       }),
@@ -233,13 +245,13 @@ describe('CapabilityGrantsSection', () => {
 
     await pick('Tipo de destino', 'Servidor')
     // Otro servidor: en db-prod-01 ya hay una pendiente igual y el envío se bloquea por duplicado.
-    await pick('Servidor de destino', 'db-prod-02')
+    await pick('Servidores de destino', 'db-prod-02')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 
     await waitFor(() => expect(body).not.toBeNull())
-    expect(body).toEqual({ capability: 'databases.drop', scope_type: 'server', scope_id: 10 })
+    expect(body).toEqual({ capability: 'databases.drop', scope_type: 'server', scope_ids: [10] })
     expect(
-      await within(form()).findByText('Solicitud enviada, todavía no concede acceso.'),
+      await within(form()).findByText('Solicitud enviada, todavía no conceden acceso.'),
     ).toBeInTheDocument()
     expect(within(form()).getByText(/queda pendiente hasta que otra persona/)).toBeInTheDocument()
   })
@@ -271,37 +283,97 @@ describe('CapabilityGrantsSection', () => {
     expect(revokes[0]).toBeEnabled()
   })
 
-  it('avisa si ya tiene una viva igual y no deja enviarla', async () => {
+  it('no ofrece los destinos donde ya tiene una viva igual y lo avisa', async () => {
     mockBackend()
     renderSection()
     await screen.findAllByText(WRITE)
 
     await pick('Capacidad', new RegExp(WRITE))
-    await pick('Entorno de destino', 'Desarrollo')
-    const hint = await within(form()).findByText(/ya tiene esa capacidad sobre ese destino/)
-    const submit = screen.getByRole('button', { name: 'Otorgar capacidad' })
-    expect(submit).toBeDisabled()
-    expect(submit).toHaveAttribute('aria-describedby', hint.id)
-
-    // En otro destino ya no hay duplicado.
-    await pick('Entorno de destino', 'Producción')
-    expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeEnabled()
-    expect(within(form()).queryByText(/ya tiene esa capacidad/)).not.toBeInTheDocument()
+    // ACTIVE ya es databases.write en Desarrollo: solo queda Producción para elegir.
+    const input = screen.getByRole('combobox', { name: 'Entornos de destino' })
+    await userEvent.click(
+      within(input.parentElement as HTMLElement).getByRole('button', { name: 'Abrir lista' }),
+    )
+    const options = await screen.findAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual(['Producción'])
+    expect(within(form()).getByText(/1 destino ya tiene esa capacidad/)).toBeInTheDocument()
   })
 
-  it('muestra el error del backend en el formulario con su copy fijo', async () => {
+  it('«Seleccionar todos» elige todos los ofrecibles y manda un solo lote', async () => {
+    mockBackend()
+    let body: unknown = null
+    server.use(
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              count: 2,
+              pending: false,
+              grants: [
+                {
+                  ...ACTIVE,
+                  id: 30,
+                  capability: 'databases.write',
+                  scope_id: 9,
+                  scope_type: 'server',
+                  scope_name: 'db-prod-01',
+                },
+                {
+                  ...ACTIVE,
+                  id: 31,
+                  capability: 'databases.write',
+                  scope_id: 10,
+                  scope_type: 'server',
+                  scope_name: 'db-prod-02',
+                },
+              ],
+            },
+          },
+          { status: 201 },
+        )
+      }),
+    )
+    renderSection()
+    await screen.findAllByText(WRITE)
+
+    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Tipo de destino', 'Servidor')
+    await userEvent.click(await screen.findByRole('button', { name: 'Seleccionar todos (2)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual({
+      capability: 'databases.write',
+      scope_type: 'server',
+      scope_ids: [9, 10],
+    })
+    expect(await within(form()).findByText('Capacidad otorgada en 2 destinos.')).toBeInTheDocument()
+    expect(within(form()).getByText(/db-prod-01, db-prod-02 ya rige/)).toBeInTheDocument()
+  })
+
+  it('un lote rechazado lista cada destino que falló y conserva lo elegido', async () => {
     mockBackend()
     server.use(
-      http.post(`${API}/gateway-users/7/capability-grants`, () =>
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, () =>
         HttpResponse.json(
           {
             detail: {
-              msg: 'El entorno o servidor indicado no existe.',
+              msg: 'No se otorgó nada: hay destinos que no se pueden otorgar.',
               type: 'AppHttpException',
-              public_context: { code: 'access.grant_scope_not_found' },
+              public_context: {
+                code: 'access.grant_bulk_failed',
+                failures: [
+                  {
+                    scope_id: 3,
+                    code: 'access.grant_scope_not_found',
+                    message: 'El entorno o servidor indicado no existe.',
+                  },
+                ],
+              },
             },
           },
-          { status: 404 },
+          { status: 409 },
         ),
       ),
     )
@@ -309,24 +381,30 @@ describe('CapabilityGrantsSection', () => {
     await screen.findAllByText(WRITE)
 
     await pick('Capacidad', new RegExp(WRITE))
-    await pick('Entorno de destino', 'Producción')
+    await pick('Entornos de destino', 'Producción')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 
     // En el formulario, no solo en el toast, que se cierra solo.
     const alert = await within(form()).findByRole('alert')
-    expect(alert).toHaveTextContent('El entorno o servidor elegido ya no existe.')
+    expect(alert).toHaveTextContent('No se otorgó nada')
+    // Cada destino que falló, con su motivo.
+    // «Producción» aparece dos veces: la ficha del destino elegido y el renglón del error.
+    expect(within(form()).getAllByText('Producción')).toHaveLength(2)
+    expect(
+      within(form()).getByText(/El entorno o servidor elegido ya no existe/),
+    ).toBeInTheDocument()
     // Lo elegido se conserva para corregir y reintentar.
     expect(screen.getByRole('combobox', { name: 'Capacidad' })).toHaveValue(WRITE)
 
     // Tocar un campo descarta el error: ya no habla de lo que hay en pantalla.
-    await pick('Entorno de destino', 'Desarrollo')
+    await userEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
     expect(within(form()).queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('un 403 usa el copy compartido de acceso en el formulario', async () => {
     mockBackend()
     server.use(
-      http.post(`${API}/gateway-users/7/capability-grants`, () =>
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, () =>
         HttpResponse.json(
           {
             detail: {
@@ -342,7 +420,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
     await pick('Capacidad', new RegExp(WRITE))
-    await pick('Entorno de destino', 'Producción')
+    await pick('Entornos de destino', 'Producción')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 
     expect(await within(form()).findByRole('alert')).toHaveTextContent(
