@@ -100,8 +100,8 @@ Credenciales portadoras para procesos automáticos. Todo detrás de `access.admi
 | v23.1 §3 | `GET /api-tokens` | ✅ | `ApiTokensPage` (`/api-tokens`), paginado |
 | v23.1 §3 | `POST /api-tokens` | ✅ | `ApiTokenFormModal` → entrega el bearer en `OneTimeSecretPanel`. Límite 10/min. La columna «Permisos» muestra los scopes **efectivos** que devolvió el servidor, nunca los pedidos: intersecta con el techo de agente. El formulario ofrece como chips los scopes `agent_allowed` del catálogo (los 7 de v30); si llega un 422 `scope_not_allowed`, manda el techo que informó el servidor |
 | v23.1 §3 | `DELETE /api-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer |
-
 | — | `PATCH /api-tokens/{token_pk}` | ✅ | `EditApiTokenScopesModal` (icono de lápiz en filas activas). Reemplaza la lista **completa** de scopes (mínimo uno: vacía es 422; se revoca en su lugar); el bearer no cambia y rige desde la llamada siguiente. Mismo selector de chips y techo de agente que el alta (`ScopesPicker`). 409 `already_revoked`, 404 `not_found`, 422 `scope_not_allowed` (con `allowed[]`). Exige step-up (transparente). ⚠️ Va el **`id`**, no el `token_id` |
+
 ## Auditoría (`/audit-log`)
 
 Lectura del rastro de `audit_log` (v29 §11). Solo `policy.admin`, que tiene solo `security_officer`:
