@@ -223,6 +223,150 @@ describe('ReadonlyCredentialPanel — acciones', () => {
   })
 })
 
+describe('ReadonlyCredentialPanel — generación automática', () => {
+  const PROVISION = `${API}/servers/42/readonly-credential/provision`
+
+  it('ofrece generar en missing, unverified y stale, y regenerar si está verificada', () => {
+    mockSession({ canAdmin: true })
+    const cases: Array<[Partial<ServerOut>, string]> = [
+      [{}, 'Generar credencial automáticamente 🔌'],
+      [{ has_readonly_credential: true }, 'Regenerar credencial 🔌'],
+      [
+        { has_readonly_credential: true, readonly_verified_at: utcDaysAgo(40) },
+        'Regenerar credencial 🔌',
+      ],
+      [
+        { has_readonly_credential: true, readonly_verified_at: utcDaysAgo(2) },
+        'Regenerar credencial 🔌',
+      ],
+    ]
+    for (const [overrides, label] of cases) {
+      const { unmount } = renderWithProviders(
+        <ReadonlyCredentialPanel server={serverWith(overrides)} />,
+      )
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
+      // El alta manual sigue disponible como alternativa.
+      expect(
+        screen.getByRole('button', { name: /Cargar credencial|Reemplazar credencial/ }),
+      ).toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('confirma antes de llamar y advierte que la credencial es por servidor', async () => {
+    mockSession({ canAdmin: true })
+    let calls = 0
+    server.use(
+      http.post(PROVISION, () => {
+        calls += 1
+        return HttpResponse.json({
+          data: serverWith({
+            has_readonly_credential: true,
+            readonly_verified_at: utcDaysAgo(0),
+          }),
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Generar credencial automáticamente 🔌' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(calls).toBe(0)
+    expect(
+      within(dialog).getByText(/TODAS las bases no internas de este servidor/),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/no quedan cubiertas hasta que la regeneres/),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText(/nunca se muestra/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/db\.example\.com:3306/)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Generar 🔌' }))
+    await waitFor(() => expect(calls).toBe(1))
+  })
+
+  it('cancelar el diálogo no llama al backend', async () => {
+    mockSession({ canAdmin: true })
+    let calls = 0
+    server.use(
+      http.post(PROVISION, () => {
+        calls += 1
+        return HttpResponse.json({ data: serverWith() })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Generar credencial automáticamente 🔌' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(calls).toBe(0)
+  })
+
+  it('un 422 de la sonda lista los grants de más', async () => {
+    mockSession({ canAdmin: true })
+    server.use(
+      http.post(PROVISION, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'La credencial de solo lectura tiene privilegios de escritura o de más.',
+              type: 'AppHttpException',
+              public_context: {
+                code: 'server.readonly_probe_failed',
+                violations: ['privilege:insert'],
+              },
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Generar credencial automáticamente 🔌' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Generar 🔌' }))
+
+    expect(await screen.findByText('La credencial no es de solo lectura')).toBeInTheDocument()
+    expect(screen.getByText(/Tiene el privilegio INSERT/)).toBeInTheDocument()
+  })
+
+  it('un 409 de cuenta protegida muestra copy claro y no reintenta', async () => {
+    mockSession({ canAdmin: true })
+    let calls = 0
+    server.use(
+      http.post(PROVISION, () => {
+        calls += 1
+        return HttpResponse.json(
+          {
+            detail: {
+              msg: 'cuenta protegida',
+              type: 'AppHttpException',
+              public_context: { code: 'engine_user.protected_account', reason: 'reserved_account' },
+            },
+          },
+          { status: 409 },
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Generar credencial automáticamente 🔌' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Generar 🔌' }))
+
+    expect(await screen.findByText(/cuenta reservada, la pseudo-root o un rol/)).toBeInTheDocument()
+    expect(calls).toBe(1)
+  })
+})
+
 describe('ReadonlyCredentialPanel — acceso', () => {
   it('sin `servers.admin` deshabilita las acciones y dice por qué', async () => {
     mockSession({ canAdmin: false })
@@ -236,5 +380,6 @@ describe('ReadonlyCredentialPanel — acceso', () => {
     expect(screen.getByRole('button', { name: 'Reemplazar credencial' })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Verificar/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Quitar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Regenerar credencial 🔌' })).toBeDisabled()
   })
 })

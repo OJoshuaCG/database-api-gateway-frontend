@@ -24,6 +24,7 @@ import {
 } from '../readonly-credential'
 import {
   useClearReadonlyCredential,
+  useProvisionReadonlyCredential,
   useTestReadonlyConnection,
 } from '../hooks/use-server-mutations'
 import { ReadonlyCredentialModal } from './ReadonlyCredentialModal'
@@ -55,9 +56,9 @@ interface ReadonlyCredentialPanelProps {
 
 /**
  * «Acceso de agentes (MCP)» en el detalle del servidor (api-reference-v30): estado de la credencial
- * de solo lectura, y cargarla, verificarla o quitarla.
+ * de solo lectura, y generarla automáticamente (v32), cargarla a mano, verificarla o quitarla.
  *
- * Las tres acciones son `servers.admin` + step-up. La guarda es una pista: si el acceso cambió, el
+ * Las acciones son `servers.admin` + step-up. La guarda es una pista: si el acceso cambió, el
  * 403 lo resuelve `notifyMutationError`, y el step-up lo pide `runRequest` al primer 403.
  */
 export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps) {
@@ -66,6 +67,7 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
   const [nowMs] = useState(() => Date.now())
   const [formOpen, setFormOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmProvision, setConfirmProvision] = useState(false)
 
   const guard = useCapabilityGuard(
     CAPABILITIES.serversAdmin,
@@ -73,13 +75,17 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
   )
   const verify = useTestReadonlyConnection(server.id)
   const clear = useClearReadonlyCredential(server.id)
+  const provision = useProvisionReadonlyCredential(server.id)
 
   const state = readonlyCredentialState(server, nowMs)
   const badge = STATE_BADGE[state]
   const hasCredential = state !== 'missing'
   const verifiedAt = server.readonly_verified_at ?? null
 
-  const probeError = verify.error ? toApiError(verify.error) : null
+  // La sonda corre en «Verificar» y también dentro del aprovisionamiento: los dos 422 se muestran
+  // en el mismo Callout. Gana el más reciente que haya fallado.
+  const failedMutationError = provision.error ?? verify.error
+  const probeError = failedMutationError ? toApiError(failedMutationError) : null
   const violations =
     probeError?.code === READONLY_PROBE_FAILED ? (probeError.readonlyProbeViolations ?? []) : []
 
@@ -102,7 +108,7 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
           <Callout tone="danger" title="La credencial no es de solo lectura">
             <p className="mb-2">
               El motor le permite escribir o tiene permisos de más. Pedile al DBA que quite estos
-              grants y volvé a verificar:
+              grants y volvé a verificar, o generá la credencial de nuevo:
             </p>
             {violations.length > 0 ? (
               <ul className="flex list-disc flex-col gap-1 pl-5">
@@ -120,6 +126,16 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
         )}
 
         <div className="flex flex-wrap gap-2">
+          {/* Primaria mientras el MCP no puede leer; si ya está verificada, regenerar rota la
+              contraseña y no es lo que se quiere por defecto. */}
+          <Button
+            variant={state === 'verified' ? 'outline' : 'primary'}
+            onClick={() => setConfirmProvision(true)}
+            disabled={!guard.allowed}
+            aria-describedby={guard.describedBy}
+          >
+            {hasCredential ? 'Regenerar credencial 🔌' : 'Generar credencial automáticamente 🔌'}
+          </Button>
           <Button
             variant="outline"
             onClick={() => setFormOpen(true)}
@@ -160,10 +176,63 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
           setFormOpen(false)
           // Una credencial nueva invalida el resultado de la sonda anterior.
           verify.reset()
+          provision.reset()
         }}
         serverId={server.id}
         replacing={hasCredential}
       />
+
+      <ConfirmDialog
+        open={confirmProvision}
+        onClose={() => setConfirmProvision(false)}
+        onConfirm={() => {
+          verify.reset()
+          // Se cierra al terminar, bien o mal: el resultado (toast o Callout) queda en el panel.
+          provision.mutate(undefined, { onSettled: () => setConfirmProvision(false) })
+        }}
+        title={
+          hasCredential
+            ? 'Regenerar la credencial de solo lectura'
+            : 'Generar la credencial de solo lectura'
+        }
+        description={`Se opera sobre el motor de «${server.name}» (${server.host}:${server.port}).`}
+        confirmLabel={hasCredential ? 'Regenerar 🔌' : 'Generar 🔌'}
+        tone="primary"
+        isLoading={provision.isPending}
+        confirmDisabled={!guard.allowed}
+      >
+        <Callout tone="warning" title="La credencial es por servidor, no por base de datos">
+          <p>
+            Alcanza TODAS las bases no internas de este servidor, no solo una. Las bases que se
+            creen después no quedan cubiertas hasta que la regeneres.
+          </p>
+        </Callout>
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-foreground">
+          <li>
+            El gateway usa la cuenta de administrador del servidor para crear
+            {hasCredential ? ' o rotar' : ''} la cuenta de solo lectura en el motor.
+          </li>
+          <li>
+            El nombre y el host de la cuenta salen de la configuración del gateway; no se eligen
+            acá.
+          </li>
+          <li>
+            La contraseña se genera y se guarda cifrada: nunca se muestra.
+            {hasCredential
+              ? ' Regenerar invalida la contraseña anterior.'
+              : ' Si la cuenta ya existía, se le rota la contraseña.'}
+          </li>
+          <li>
+            Los permisos son fijos y de solo lectura: SELECT, SHOW VIEW, TRIGGER y EVENT, más la
+            visibilidad de rutinas donde el motor lo soporta.
+          </li>
+          <li>Al terminar, el gateway verifica que la cuenta no pueda escribir.</li>
+        </ul>
+        <p className="text-sm text-muted-foreground">
+          Para elegir vos la cuenta, cerrá este aviso y usá «
+          {hasCredential ? 'Reemplazar credencial' : 'Cargar credencial'}».
+        </p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmClear}

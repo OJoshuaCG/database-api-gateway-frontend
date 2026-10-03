@@ -125,4 +125,17 @@ describe('extracción de `violations` en el ApiError', () => {
     })
     expect(readonlyCredentialErrorMessage(error)).toMatch(/no tiene credencial/)
   })
+
+  it('el 409 de cuenta protegida y el 429 tienen mensaje propio', () => {
+    const protectedError = normalizeApiError(409, {
+      detail: {
+        msg: 'protegida',
+        type: 'AppHttpException',
+        public_context: { code: 'engine_user.protected_account', reason: 'privileged_role' },
+      },
+    })
+    expect(readonlyCredentialErrorMessage(protectedError)).toMatch(/configurado en el gateway/)
+    const limited = normalizeApiError(429, { detail: { msg: 'rate', type: 'RateLimit' } })
+    expect(readonlyCredentialErrorMessage(limited)).toMatch(/Esperá un minuto/)
+  })
 })

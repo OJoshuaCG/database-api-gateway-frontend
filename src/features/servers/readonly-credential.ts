@@ -1,5 +1,6 @@
 import type { ApiError } from '@/lib/api/errors'
 import type { ServerOut } from '@/lib/contracts'
+import { ENGINE_USER_ERROR_CODES } from './engine-user-messages'
 
 /**
  * Credencial de SOLO LECTURA del servidor (api-reference-v30): la que usa el servidor MCP para leer
@@ -111,6 +112,14 @@ export function readonlyCredentialErrorMessage(error: ApiError): string | undefi
   }
   if (error.code === READONLY_PROBE_FAILED) {
     return 'La credencial puede escribir o tiene permisos de más. El MCP no la va a usar hasta que el DBA corrija sus grants.'
+  }
+  // Solo el aprovisionamiento automático lo emite: el nombre de la cuenta sale de la config del
+  // gateway, no de un formulario, así que el operador no lo corrige desde acá.
+  if (error.code === ENGINE_USER_ERROR_CODES.protectedAccount) {
+    return 'El nombre de la cuenta de solo lectura configurado en el gateway es una cuenta reservada, la pseudo-root o un rol con privilegios de administración, y el gateway no la toca. Pedile al administrador del gateway que cambie esa configuración, o cargá una credencial manualmente.'
+  }
+  if (error.isRateLimited) {
+    return 'Demasiados intentos seguidos. Esperá un minuto antes de volver a generar la credencial.'
   }
   return undefined
 }

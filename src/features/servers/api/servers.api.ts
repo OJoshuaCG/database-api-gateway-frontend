@@ -102,6 +102,15 @@ export function setReadonlyCredential(id: number, body: ReadonlyCredentialIn): P
   return mutateData('PUT', `${BASE}/${id}/readonly-credential`, serverOutSchema, { body })
 }
 
+/**
+ * `POST /servers/{id}/readonly-credential/provision` 🔌 (api-reference-v32) — sin cuerpo: el gateway
+ * crea (o rota) la cuenta de solo lectura con la pseudo-root, y nombre, host y grants los fija el
+ * backend. Deja la credencial ya verificada. Idempotente: repetirla rota la contraseña.
+ */
+export function provisionReadonlyCredential(id: number): Promise<ServerOut> {
+  return mutateData('POST', `${BASE}/${id}/readonly-credential/provision`, serverOutSchema)
+}
+
 /** `DELETE /servers/{id}/readonly-credential` — idempotente; deja el servidor fuera del MCP. */
 export function clearReadonlyCredential(id: number): Promise<ServerOut> {
   return mutateData('DELETE', `${BASE}/${id}/readonly-credential`, serverOutSchema)

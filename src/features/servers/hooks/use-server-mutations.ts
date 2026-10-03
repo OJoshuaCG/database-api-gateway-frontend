@@ -7,6 +7,7 @@ import {
   clearReadonlyCredential,
   createServer,
   deleteServer,
+  provisionReadonlyCredential,
   setReadonlyCredential,
   testConnection,
   updateServer,
@@ -113,6 +114,40 @@ export function useSetReadonlyCredential(id: number) {
     },
     onError: (error) =>
       notifyMutationError(toast, error, 'No se pudo guardar la credencial de solo lectura'),
+  })
+}
+
+/**
+ * Aprovisionamiento automático 🔌 (api-reference-v32): el gateway crea o rota la cuenta de solo
+ * lectura en el motor. Sin reintentos automáticos (`retry: false`): es una escritura sobre un
+ * motor de un tercero y repetirla rota otra vez la contraseña. Un 422 `readonly_probe_failed` no
+ * es un fallo de la UI: el panel lista sus `violations`; el servidor queda sin verificar.
+ */
+export function useProvisionReadonlyCredential(id: number) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: () => provisionReadonlyCredential(id),
+    retry: false,
+    onSuccess: (server) => {
+      queryClient.setQueryData(queryKeys.servers.detail(id), server)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
+      toast.success(
+        'Credencial de solo lectura generada',
+        'El motor confirmó que no puede escribir. El MCP ya puede leer todas las bases de este servidor.',
+      )
+    },
+    onError: (error) => {
+      // Un 422 deja la credencial registrada pero sin verificar: se refresca para reflejarlo.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo generar la credencial de solo lectura',
+        readonlyCredentialErrorMessage(apiError) ?? apiError.message,
+      )
+    },
   })
 }
 
