@@ -32,6 +32,7 @@ describe('getDatabaseActions', () => {
       expect(getDatabaseActions('managed-active', 'inventory', ALL_CAPS)).toEqual([
         'edit',
         'reassign',
+        'agent-access',
         'migrations',
         'compare',
         'clone',
@@ -44,6 +45,7 @@ describe('getDatabaseActions', () => {
       expect(getDatabaseActions('managed-active', 'physical', ALL_CAPS)).toEqual([
         'edit',
         'reassign',
+        'agent-access',
         'migrations',
         'compare',
         'clone',
@@ -56,6 +58,7 @@ describe('getDatabaseActions', () => {
       expect(getDatabaseActions('managed-active', 'detail', ALL_CAPS)).toEqual([
         'edit',
         'reassign',
+        'agent-access',
         'migrations',
         'compare',
         'clone',
@@ -81,6 +84,7 @@ describe('getDatabaseActions', () => {
           'provision',
           'edit',
           'reassign',
+          'agent-access',
           'remove-from-inventory',
         ])
       }
@@ -91,7 +95,13 @@ describe('getDatabaseActions', () => {
     it('ofrece Migraciones —la salida de la cuarentena— y no Aprovisionar', () => {
       for (const surface of SURFACES) {
         const actions = getDatabaseActions('managed-error', surface, ALL_CAPS)
-        expect(actions).toEqual(['edit', 'reassign', 'migrations', 'remove-from-inventory'])
+        expect(actions).toEqual([
+          'edit',
+          'reassign',
+          'agent-access',
+          'migrations',
+          'remove-from-inventory',
+        ])
         expect(actions).not.toContain('provision')
       }
     })
@@ -125,6 +135,7 @@ describe('getDatabaseActions', () => {
           'recreate',
           'edit',
           'reassign',
+          'agent-access',
           'remove-from-inventory',
         ])
       }

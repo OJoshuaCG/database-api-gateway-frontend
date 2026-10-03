@@ -27,6 +27,8 @@ function managedDatabase(overrides: Partial<ManagedDatabaseOut> = {}): ManagedDa
     server_id: 10,
     owner_id: 5,
     status: 'active',
+    agent_access_allowed: false,
+    agent_access_blocked: false,
     created_at: '2026-07-01T10:00:00Z',
     updated_at: '2026-07-01T10:00:00Z',
     ...overrides,

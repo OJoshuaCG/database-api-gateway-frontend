@@ -16,6 +16,8 @@ const DATABASE: ManagedDatabaseOut = {
   owner_id: 5,
   environment_id: 3,
   status: 'active',
+  agent_access_allowed: false,
+  agent_access_blocked: false,
   created_at: '2026-07-01T10:00:00Z',
   updated_at: '2026-07-01T10:00:00Z',
 }

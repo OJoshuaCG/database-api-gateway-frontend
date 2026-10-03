@@ -48,6 +48,8 @@ function makeManagedDb(overrides: Partial<ManagedDatabaseOut> = {}): ManagedData
     server_id: 1,
     owner_id: 1,
     status: 'active',
+    agent_access_allowed: false,
+    agent_access_blocked: false,
     created_at: '2026-01-01T00:00:00',
     updated_at: '2026-01-01T00:00:00',
     ...overrides,

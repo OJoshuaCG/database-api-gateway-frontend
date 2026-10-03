@@ -27,6 +27,7 @@ import {
   type DatabaseState,
 } from '../database-actions'
 import { AdoptDatabaseModal } from './AdoptDatabaseModal'
+import { AgentAccessModal } from './AgentAccessModal'
 import { DeleteManagedDatabaseDialog } from './DeleteManagedDatabaseDialog'
 import { ManagedDatabaseFormModal } from './ManagedDatabaseFormModal'
 import { ProvisionDatabaseDialog } from './ProvisionDatabaseDialog'
@@ -112,6 +113,8 @@ const PRESENTATION: Record<DatabaseActionId, ActionPresentation> = {
   adopt: { row: 'text', group: 'state' },
   edit: { icon: <PencilIcon />, row: 'icon', group: 'record' },
   reassign: { row: 'text', rowText: 'Reasignar', group: 'record' },
+  // Acción de dominio: con texto, no icono. `rowText` corto porque se repite en cada fila.
+  'agent-access': { row: 'text', rowText: 'Agentes', group: 'record' },
   // En la ficha es una pestaña (`DETAIL_TAB_ACTIONS`): su grupo no llega a pintarse.
   migrations: { row: 'text', group: 'operate' },
   compare: { icon: <CompareIcon />, row: 'icon', cardText: true, group: 'operate' },
@@ -364,6 +367,8 @@ export function DatabaseActionDialogs({
       )
     case 'reassign':
       return <ReassignOwnerModal database={managed} onClose={onClose} />
+    case 'agent-access':
+      return <AgentAccessModal database={managed} onClose={onClose} />
     case 'remove-from-inventory':
       return (
         <DeleteManagedDatabaseDialog

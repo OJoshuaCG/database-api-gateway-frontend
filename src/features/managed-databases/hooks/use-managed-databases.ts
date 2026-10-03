@@ -4,6 +4,7 @@ import { invalidateDatabaseViews } from '../invalidate'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type {
+  AgentAccessIn,
   EngineType,
   ManagedDatabaseCreate,
   ManagedDatabaseOut,
@@ -19,6 +20,7 @@ import {
   listManagedDatabases,
   provisionManagedDatabase,
   reassignOwner,
+  setAgentAccess,
   updateManagedDatabase,
 } from '../api/managed-databases.api'
 import { notifyMutationError } from '@/features/auth'
@@ -192,6 +194,24 @@ export function useDeleteManagedDatabase() {
       )
     },
     onError: (error) => notifyMutationError(toast, error, 'No se pudo quitar del inventario'),
+  })
+}
+
+/**
+ * Opt-in / veto de agentes de UNA base. Invalida las vistas de bases porque el estado vive en la
+ * propia fila (badge del listado y de la ficha).
+ */
+export function useSetAgentAccess(id: number) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: (body: AgentAccessIn) => setAgentAccess(id, body),
+    onSuccess: (db) => {
+      invalidateDatabaseViews(queryClient, db.server_id)
+      toast.success('Acceso de agentes actualizado', db.name)
+    },
+    onError: (error) =>
+      notifyMutationError(toast, error, 'No se pudo actualizar el acceso de agentes'),
   })
 }
 

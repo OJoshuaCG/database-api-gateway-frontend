@@ -83,6 +83,7 @@ export type DatabaseActionId =
   | 'adopt'
   | 'edit'
   | 'reassign'
+  | 'agent-access'
   | 'migrations'
   | 'compare'
   | 'clone'
@@ -106,6 +107,7 @@ export const DATABASE_ACTION_LABELS: Record<DatabaseActionId, string> = {
   adopt: 'Adoptar',
   edit: 'Editar',
   reassign: 'Reasignar propietario',
+  'agent-access': 'Acceso de agentes',
   migrations: 'Migraciones',
   compare: 'Comparar esquema',
   clone: 'Clonar',
@@ -192,14 +194,23 @@ export function getDatabaseActions(
           : surface === 'physical'
             ? dropFromEngine
             : ['remove-from-inventory', ...dropFromEngine]
-      return ['edit', 'reassign', 'migrations', 'compare', 'clone', 'export', ...destructive]
+      return [
+        'edit',
+        'reassign',
+        'agent-access',
+        'migrations',
+        'compare',
+        'clone',
+        'export',
+        ...destructive,
+      ]
     }
     case 'managed-unprovisioned':
-      return ['provision', 'edit', 'reassign', 'remove-from-inventory']
+      return ['provision', 'edit', 'reassign', 'agent-access', 'remove-from-inventory']
     case 'managed-error':
-      return ['edit', 'reassign', 'migrations', 'remove-from-inventory']
+      return ['edit', 'reassign', 'agent-access', 'migrations', 'remove-from-inventory']
     case 'managed-missing':
-      return ['recreate', 'edit', 'reassign', 'remove-from-inventory']
+      return ['recreate', 'edit', 'reassign', 'agent-access', 'remove-from-inventory']
     case 'managed-archived':
       return ['edit', 'export', 'remove-from-inventory']
     case 'managed-archived-unlisted':

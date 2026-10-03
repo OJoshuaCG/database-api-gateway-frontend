@@ -12,6 +12,8 @@ function database(overrides: Partial<ModelDatabaseStatus> = {}): ModelDatabaseSt
     model_version: '0001',
     environment_id: 10,
     status: 'active',
+    agent_access_allowed: false,
+    agent_access_blocked: false,
     pending_count: 0,
     pending_versions: [],
     has_partial_application: false,

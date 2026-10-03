@@ -37,6 +37,7 @@ import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { useManagedDatabases } from '../hooks/use-managed-databases'
 import { useOwnerDirectory } from '../hooks/use-owner-directory'
 import { resolveDatabaseState } from '../database-actions'
+import { AgentAccessBadge } from '../components/AgentAccessBadge'
 import { ProvisionStatusBadge } from '../components/ProvisionStatusBadge'
 import { ManagedDatabaseFormModal } from '../components/ManagedDatabaseFormModal'
 import {
@@ -156,7 +157,7 @@ export function ManagedDatabasesPage() {
         accessorKey: 'name',
         header: 'Nombre',
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Ficha unificada de la BD (grantees, resumen, migraciones, collation, comparar,
                 clonar): identidad física `(server_id, nombre)`, no el id de inventario. Enlaza
                 también en `pending`/`error`: la ficha distingue «todavía no existe en el motor»
@@ -181,6 +182,11 @@ export function ManagedDatabasesPage() {
               state={resolveEnvironmentState(row.original.environment_id, environmentMap)}
               className="shrink-0"
             />
+            {/* Mismo criterio que el entorno: en la celda del nombre, nunca como columna
+                ocultable. Es el estado de ESTA base frente a los agentes MCP. */}
+            <span className="shrink-0">
+              <AgentAccessBadge database={row.original} />
+            </span>
           </div>
         ),
       },

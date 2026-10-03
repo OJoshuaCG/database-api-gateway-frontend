@@ -248,6 +248,7 @@ Relación **N:M** contra `database_models`. No tocan ningún motor: ninguna fila
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
 | 34–39 | CRUD + `reassign-owner` | ✅ | `ManagedDatabasesPage` (`/managed-databases`); filtros por servidor, propietario, blueprint, estado y **entorno** (`environment_id` / `only_unassigned`, en un solo control para que la combinación ilegal sea inexpresable); borrado remoto exige reescribir el nombre. El nombre de cada fila enlaza a la ficha unificada `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database`). **Las acciones de fila salen de `DatabaseRowActions`**, el mismo componente que usa la pestaña «Bases de datos» del servidor, así que una base gestionada ofrece lo mismo en las dos listas: editar, reasignar, migraciones, comparar, clonar y exportar; la ficha tiene además todas ellas en su cabecera (ver «Una entidad, varias vistas» en `maintenance.md`). El `DELETE` sin `drop_remote` se llama **«Quitar del inventario»**, con su propio icono: compartía etiqueta, icono y color con el `DROP` físico de la otra lista, que hace lo contrario |
+| — | `PUT /managed-databases/{id}/agent-access` | ✅ | `AgentAccessModal` (acción «Acceso de agentes», con texto, en `DatabaseRowActions` y en la cabecera de la ficha, R1): dos `Switch`, «Permitir agentes» y «Bloqueo de emergencia» (este gana y no tiene override). Body con los **dos** campos obligatorios; `environments.write` (global, solo `security_officer`) + step-up. El estado (`agent_access_allowed` / `agent_access_blocked`, default `false` = falla cerrado) vuelve en `ManagedDatabaseOut` y se pinta en `AgentAccessBadge`, dentro de la celda del nombre (no columna ocultable) del inventario y en la ficha |
 | 62 | `POST /managed-databases/adopt` 🔌 | ✅ | `AdoptDatabaseModal`: incluye *stamp-on-adopt* (blueprint + versión de partida). Se abre tanto desde `ServerReconcilePanel` como desde el CTA "Adoptar" de `ServerDatabaseDetailPage` cuando la BD física todavía no está en el inventario |
 | 63 | `POST /managed-databases/{id}/provision` 🔌 | ✅ | `ProvisionDatabaseDialog`, desde el botón "Aprovisionar 🔌" que `ManagedDatabasesPage` muestra solo en filas `pending`/`error`, y desde el aviso "La base de datos no existe en el motor" de `ManagedDatabaseMigrationsContent`. Ejecuta el `CREATE DATABASE` que faltaba sobre una fila ya registrada — sin él la única salida era borrar el registro y rehacerlo, perdiendo notas, entorno, blueprint e historial. `allow_recreate` solo se manda desde `active` (base borrada por fuera del gateway) |
 | 54 | `GET .../migrations/status` 🔌 | ✅ | `ManagedDatabaseMigrationsContent`, compartido por la ruta de compatibilidad `ManagedDatabaseMigrationsPage` (`/managed-databases/:databaseId/migrations`) y por la pestaña "Migraciones" de `ServerDatabaseDetailPage` (`/servers/:serverId/databases/:database?tab=migrations`, solo si la BD está adoptada) (versión actual, pendientes y **banner de aplicación parcial**). Con `database_exists: false` la vista deja de pintar contadores que mienten —`pending_count` lista todo el blueprint porque no hay base— y muestra el CTA de aprovisionamiento, deshabilitando lo que toca el motor. **v25** suma `cached_version`, `orphan_version_tables[]` y `has_orphan_accounting`: con el flag en `true` la versión real vive en una tabla que el gateway no lee, así que `pending_versions` **no es de fiar** y la vista deja de pintar el contador — dice «Pendientes: no se puede determinar» y deja la lista colapsada tras un «no fiable», porque un número tachado se sigue leyendo como número, y el incidente empezó con alguien creyéndole a ese contador. «Aplicar» y «Revertir» quedan **deshabilitados** con el motivo como **texto visible** (un `title` no llega por teclado ni en táctil), y el `stamp` sigue habilitado porque es la vía de salida. Precedencia de un solo banner dominante: `database_exists:false` → huérfana → parcial. `false` **no** es «no se pudo comprobar»: la sonda del backend solo se dispara ante la firma exacta, así que una base nueva devuelve `[]` sin pagar una consulta |
@@ -558,19 +559,8 @@ Ver el checklist de [`deployment.md`](deployment.md#checklist-de-endurecimiento-
 
 ### Bloqueado por backend: lo que se ve construible desde el contrato y NO lo es
 
-Estas dos cosas parecen implementables leyendo el addendum de identidades y no lo son. Conviene
+Esto parece implementable leyendo el addendum de identidades y no lo es. Conviene
 saberlo **antes** de planificar la pantalla, no a mitad de camino.
-
-- 🔴 **El estado de acceso de agentes por base no es legible por ninguna vía.**
-  `PUT /managed-databases/{id}/agent-access` **escribe** `agent_access_allowed` y
-  `agent_access_blocked` —el opt-in por base del que depende todo el gate— pero esas dos columnas
-  **no aparecen en ninguna respuesta**: ni en `ManagedDatabaseOut`, ni en el `GET` de listado o
-  detalle, **ni en la respuesta del propio `PUT`**. Se puede escribir el estado, no leerlo.
-  Por eso **no hay pantalla de administración de agentes**: un toggle que no puede leer su propio
-  valor es peor que no tener toggle, porque afirma algo que no verificó. Lo único observable hoy es
-  indirecto y desde el otro lado (`list_databases` del MCP, con un token del proyecto, muestra las
-  bases que pasaron las cinco condiciones — sin decir cuál falló para las demás). Se destraba
-  agregando los dos campos a `ManagedDatabaseOut` y a la serialización del controller.
 
 - 🔴 **Un snapshot o un export puede venir incompleto sin que la respuesta lo diga.** Cuando el
   gateway no tiene privilegio sobre un catálogo del motor (`42501` de PostgreSQL, `1142`/`1227` de
@@ -608,9 +598,9 @@ saberlo **antes** de planificar la pantalla, no a mitad de camino.
 - **`POST /mcp` y sus tools** (`list_databases`, los códigos `mcp.*`). La SPA **no implementa un
   cliente MCP**: esos errores llegan como error de *tool* (`result` con `isError: true`) al agente
   que habla con el gateway, no a esta interfaz. Lo que sí toca a la SPA es lo que administra ese
-  canal, y está integrado: emitir y revocar los tokens (`/api-tokens`) y ver el flag
-  `allows_agent_access` del entorno. Lo que falta para cerrar el círculo —ver el opt-in por base—
-  está bloqueado por backend (arriba).
+  canal, y está integrado: emitir y revocar los tokens (`/api-tokens`) y administrar el
+  acceso de agentes: la puerta de cada entorno (`allows_agent_access`) y el opt-in por base
+  (`agent_access_allowed` / `agent_access_blocked`), ambos visibles y editables desde la SPA.
 
 ### v23 — el contrato de autorización, y lo que cambia en la superficie
 
@@ -674,7 +664,8 @@ un cliente en un entorno de desarrollo es divulgación.
 - **`environments.write`** (la 30.ª capacidad, solo `security_officer`, sin fallback a
   `gateway.admin`): reclasificar una base en `ManagedDatabaseForm` (edición) deshabilita el selector
   de entorno sin ella y explica cómo desbloquearlo (`ENVIRONMENTS_WRITE_UNBLOCK`). La pestaña
-  Entornos sigue de solo lectura, no hay CRUD ni toggle de agent-access en la SPA.
+  Entornos sigue sin CRUD: su única escritura es la puerta de agentes (`allows_agent_access`), con
+  esta misma capacidad, y el opt-in por base (`AgentAccessModal`) también la exige.
 - **Capa 2 derivada del catálogo** (`layer2CapabilityIds`): eje distinto de `global` y sin el rol
   `viewer`. Reemplaza la lista a mano de cuatro rutas. `useCapabilityGuard` recibe `scope` donde la
   pantalla conoce la base (migraciones, stamp, reconciliar, aprovisionar, asignar blueprint, borrar).

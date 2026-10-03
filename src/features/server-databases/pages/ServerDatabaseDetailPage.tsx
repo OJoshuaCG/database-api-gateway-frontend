@@ -22,6 +22,7 @@ import { useServerUserOptions } from '@/features/server-users/hooks/use-server-u
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
 import { resolveEnvironmentState, useEnvironmentMap } from '@/features/environments'
 import { ManagedDatabaseMigrationsContent } from '@/features/managed-databases/components/ManagedDatabaseMigrationsContent'
+import { AgentAccessBadge } from '@/features/managed-databases/components/AgentAccessBadge'
 import { ProvisionStatusBadge } from '@/features/managed-databases/components/ProvisionStatusBadge'
 import {
   DatabaseActionDialogs,
@@ -211,6 +212,9 @@ export function ServerDatabaseDetailPage() {
               {/* Junto a las acciones y no solo en «Resumen», que no es la pestaña por defecto:
                   es la etiqueta que dice «producción» al lado del «Eliminar del motor 🔌». */}
               {environment}
+              {/* Estado de agentes junto a las acciones: «Acceso de agentes» está en la cabecera
+                  (R1) y el operador tiene que ver el resultado sin abrir el diálogo. */}
+              <AgentAccessBadge database={managed} />
             </>
           ) : (
             <AdoptionBadge status="unmanaged" />

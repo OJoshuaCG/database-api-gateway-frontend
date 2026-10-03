@@ -1,5 +1,9 @@
 import type { z } from 'zod'
-import { capabilityDescriptorSchema, type CapabilityDescriptor } from '@/lib/contracts'
+import {
+  capabilityDescriptorSchema,
+  type CapabilityDescriptor,
+  type ManagedDatabaseOut,
+} from '@/lib/contracts'
 /**
  * Catálogo de capacidades tal como lo publica `GET /authz/catalog` (generado en 0b43532 con
  * `capability_matrix()` y alineado con c5edee5 del backend, donde `collation.execute` pasó a ser
@@ -564,5 +568,24 @@ export function serverFixture(id: number, name: string) {
     has_root_password: true,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
+  }
+}
+
+/** Una base de `GET /managed-databases`. Nace cerrada a agentes (el default del backend). */
+export function managedDatabaseFixture(
+  overrides: Partial<ManagedDatabaseOut> = {},
+): ManagedDatabaseOut {
+  return {
+    id: 11,
+    name: 'ventas_prod',
+    server_id: 1,
+    owner_id: 5,
+    environment_id: 3,
+    status: 'active',
+    agent_access_allowed: false,
+    agent_access_blocked: false,
+    created_at: '2026-07-01T10:00:00Z',
+    updated_at: '2026-07-01T10:00:00Z',
+    ...overrides,
   }
 }

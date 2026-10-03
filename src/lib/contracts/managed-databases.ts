@@ -56,6 +56,16 @@ export const managedDatabaseOutSchema = z.object({
   origin: databaseOriginSchema.optional(),
   engine: engineTypeSchema.optional(),
   notes: z.string().nullable().optional(),
+  /**
+   * Opt-in de ESTA base al acceso de agentes (MCP): una de las cinco condiciones del gate, y la
+   * única que se decide por base (el entorno abre la puerta, pero no abre ninguna base).
+   *
+   * `.optional().default(false)` falla CERRADO: un backend que todavía no manda el campo no debe
+   * leerse como «abierta a agentes».
+   */
+  agent_access_allowed: z.boolean().optional().default(false),
+  /** Bloqueo de emergencia: gana sobre `agent_access_allowed` y no tiene override. Falla cerrado. */
+  agent_access_blocked: z.boolean().optional().default(false),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -147,6 +157,16 @@ export const reassignOwnerInSchema = z.object({
   owner_id: z.number().int().min(1, 'Seleccioná un propietario'),
 })
 export type ReassignOwnerIn = z.infer<typeof reassignOwnerInSchema>
+
+/**
+ * `AgentAccessIn` — body de `PUT /managed-databases/{id}/agent-access`. Los DOS campos son
+ * obligatorios: el PUT reemplaza el estado completo, no hace merge. `blocked` gana sobre `allowed`.
+ */
+export const agentAccessInSchema = z.object({
+  allowed: z.boolean(),
+  blocked: z.boolean(),
+})
+export type AgentAccessIn = z.infer<typeof agentAccessInSchema>
 
 /**
  * `AdoptDatabaseIn` (Plan 09 §3) — registra una BD **ya existente** en el motor sin recrearla.

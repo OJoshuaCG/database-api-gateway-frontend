@@ -3,6 +3,7 @@ import {
   managedDatabaseOutSchema,
   managedDatabaseProvisionOutSchema,
   type AdoptDatabaseIn,
+  type AgentAccessIn,
   type ManagedDatabaseCreate,
   type ManagedDatabaseOut,
   type ManagedDatabaseProvisionOut,
@@ -76,6 +77,15 @@ export function deleteManagedDatabase(
   return mutateVoid('DELETE', `${BASE}/${id}`, {
     query: { drop_remote: options.dropRemote, confirm_name: options.confirmName },
   })
+}
+
+/**
+ * `PUT /managed-databases/{id}/agent-access` — opt-in y veto de ESTA base al acceso de agentes.
+ * Reemplaza el estado completo (los dos campos son obligatorios) y devuelve la base con el estado
+ * nuevo. Pide `environments.write` (global, solo security_officer) + step-up.
+ */
+export function setAgentAccess(id: number, body: AgentAccessIn): Promise<ManagedDatabaseOut> {
+  return mutateData('PUT', `${BASE}/${id}/agent-access`, managedDatabaseOutSchema, { body })
 }
 
 /** `provision=true` 🔌 revoca/otorga (o `ALTER OWNER` en PG). */
