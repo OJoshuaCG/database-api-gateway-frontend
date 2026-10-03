@@ -54,12 +54,12 @@ describe('ApiTokensPage — editar permisos', () => {
 
     // La página dibuja la tabla de escritorio y las tarjetas móviles a la vez (el CSS decide cuál
     // se ve), así que el mismo botón aparece dos veces en el DOM.
-    const [edit] = await screen.findAllByRole('button', { name: 'Editar permisos de ci-activo' })
+    const edits = await screen.findAllByRole('button', { name: 'Editar permisos de ci-activo' })
     expect(
       screen.queryByRole('button', { name: 'Editar permisos de ci-revocado' }),
     ).not.toBeInTheDocument()
 
-    await user.click(edit)
+    await user.click(edits[0] as HTMLElement)
     expect(await screen.findByText('Permisos de «ci-activo»')).toBeInTheDocument()
   })
 
