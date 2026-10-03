@@ -12,10 +12,11 @@ export function useServers(params: QueryParams) {
   })
 }
 
-/** Detalle de un servidor. */
-export function useServer(id: number) {
+/** Detalle de un servidor. `enabled` permite diferirlo hasta que la pantalla lo necesite. */
+export function useServer(id: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.servers.detail(id),
     queryFn: ({ signal }) => getServer(id, signal),
+    enabled,
   })
 }

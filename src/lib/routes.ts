@@ -11,6 +11,11 @@
  * o «@», que de otro modo romperían el segmento.
  */
 
+/** Ficha de un servidor: `/servers/:serverId` (ahí vive el panel de la credencial de solo lectura). */
+export function serverPath(serverId: number): string {
+  return `/servers/${serverId}`
+}
+
 /** Pestañas de la ficha de una base (`ServerDatabaseDetailPage`). */
 export type ServerDatabaseTab = 'grantees' | 'summary' | 'migrations' | 'collation'
 
