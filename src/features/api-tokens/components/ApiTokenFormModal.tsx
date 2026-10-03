@@ -1,16 +1,6 @@
 import { useState } from 'react'
-import {
-  Button,
-  Callout,
-  Combobox,
-  IconButton,
-  Input,
-  Modal,
-  Textarea,
-  XIcon,
-} from '@/components/ui'
+import { Button, Callout, Combobox, Input, Modal, Textarea } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import { useCapabilityCatalog } from '@/features/auth'
 import { useProjects } from '@/features/projects/hooks/use-projects'
 import {
   API_TOKEN_DEFAULT_SCOPE,
@@ -26,6 +16,8 @@ import {
 } from '@/lib/contracts'
 import { useCreateApiToken } from '../hooks/use-api-tokens'
 import { apiTokenErrorMessage } from '../messages'
+import { useAgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
+import { ScopesPicker } from './ScopesPicker'
 
 interface ApiTokenFormModalProps {
   open: boolean
@@ -40,25 +32,10 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
   const [name, setName] = useState('')
   const [project, setProject] = useState<ProjectOut | null>(null)
   const [scopes, setScopes] = useState<string[]>([])
-  const [scopeDraft, setScopeDraft] = useState('')
   const [ttlDays, setTtlDays] = useState(String(API_TOKEN_DEFAULT_TTL_DAYS))
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
-  /**
-   * Techo de agente que informó un 422 `scope_not_allowed`. Manda sobre el del catálogo porque es
-   * la respuesta del servidor a ESTE pedido: si el catálogo en caché quedó viejo, este no.
-   */
-  const [discoveredCeiling, setDiscoveredCeiling] = useState<string[] | null>(null)
-  /**
-   * Techo de agente según el catálogo (`agent_allowed`, `GET /authz/catalog`). Se ofrece desde el
-   * principio, así nadie tiene que adivinar un scope ni provocar el 422 para conocerlos. El campo
-   * libre se conserva: con un backend que no publica el catálogo es la única forma de pedir uno.
-   */
-  const catalog = useCapabilityCatalog()
-  const catalogCeiling = (catalog.data ?? [])
-    .filter((capability) => capability.agent_allowed)
-    .map((capability) => capability.id)
-  const offeredScopes = discoveredCeiling ?? (catalogCeiling.length > 0 ? catalogCeiling : null)
+  const ceiling = useAgentScopeCeiling()
 
   const nameTooShort = name.trim().length > 0 && name.trim().length < API_TOKEN_NAME_MIN
   const ttlNumber = Number(ttlDays)
@@ -68,13 +45,6 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
     ttlNumber < 1 ||
     ttlNumber > API_TOKEN_MAX_TTL_DAYS
   const canSubmit = name.trim().length >= API_TOKEN_NAME_MIN && project !== null && !ttlInvalid
-
-  const addScope = (value: string) => {
-    const scope = value.trim()
-    if (!scope || scopes.includes(scope)) return
-    setScopes((current) => [...current, scope])
-    setScopeDraft('')
-  }
 
   const submit = () => {
     setFormError(null)
@@ -92,7 +62,7 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
           const apiError = toApiError(error)
           if (apiError.code === API_TOKEN_ERROR_CODES.scopeNotAllowed) {
             const allowed = apiError.apiTokenContext?.allowed
-            if (allowed?.length) setDiscoveredCeiling(allowed)
+            if (allowed?.length) ceiling.discover(allowed)
           }
           // El proyecto elegido ya no existe: se suelta para que no se reenvíe el mismo id. El
           // hook ya invalidó el listado, así que el selector se refresca solo.
@@ -146,95 +116,19 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
           hint="Obligatorio: un token sin proyecto no alcanzaría ninguna base de datos."
         />
 
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium text-foreground">Permisos</span>
-            <p className="text-xs text-muted-foreground">
+        <ScopesPicker
+          value={scopes}
+          onChange={setScopes}
+          ceiling={ceiling}
+          description={
+            <>
               Si lo dejás vacío, el token se emite con{' '}
               <code className="font-mono">{API_TOKEN_DEFAULT_SCOPE}</code> — que NO es «sin
               permisos». El servidor además intersecta lo que pidas con el techo de agente, así que
               el token puede quedar con menos de lo que elijas.
-            </p>
-          </div>
-
-          {scopes.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
-              {scopes.map((scope) => (
-                <li
-                  key={scope}
-                  className="flex items-center gap-1 rounded-lg border border-border bg-surface-muted py-1 pl-2.5 pr-1 text-xs"
-                >
-                  <code className="font-mono text-foreground">{scope}</code>
-                  <IconButton
-                    type="button"
-                    label={`Quitar ${scope}`}
-                    icon={<XIcon />}
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setScopes((current) => current.filter((s) => s !== scope))}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Input
-                label="Añadir permiso"
-                className="font-mono"
-                autoComplete="off"
-                spellCheck={false}
-                value={scopeDraft}
-                onChange={(event) => setScopeDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return
-                  // Enter añade el chip, NO envía el formulario: emitir un token por un Enter de
-                  // más sería emitir un secreto de un solo uso sin querer.
-                  event.preventDefault()
-                  addScope(scopeDraft)
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => addScope(scopeDraft)}
-              disabled={scopeDraft.trim().length === 0}
-            >
-              Añadir
-            </Button>
-          </div>
-
-          {offeredScopes && (
-            <Callout
-              tone="info"
-              title={
-                discoveredCeiling
-                  ? 'Techo de agente informado por el servidor'
-                  : 'Permisos disponibles para agentes'
-              }
-            >
-              <p className="mb-2">
-                Estos son los permisos que el servidor admite. Tocá uno para añadirlo:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {offeredScopes.map((scope) => (
-                  <Button
-                    key={scope}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={scopes.includes(scope)}
-                    onClick={() => addScope(scope)}
-                  >
-                    {scope}
-                  </Button>
-                ))}
-              </div>
-            </Callout>
-          )}
-        </div>
+            </>
+          }
+        />
 
         <Input
           label="Vence en (días)"
