@@ -5,6 +5,7 @@ import {
   type ApiTokenCreate,
   type ApiTokenCreatedOut,
   type ApiTokenOut,
+  type ApiTokenScopesUpdate,
   type Page,
 } from '@/lib/contracts'
 
@@ -34,4 +35,18 @@ export function createApiToken(body: ApiTokenCreate): Promise<ApiTokenCreatedOut
  */
 export function revokeApiToken(tokenPk: number): Promise<ApiTokenOut> {
   return mutateData('DELETE', `${BASE}/${tokenPk}`, apiTokenOutSchema, {})
+}
+
+/**
+ * `PATCH /api-tokens/{token_pk}` — reemplaza los scopes de un token vivo; devuelve la fila
+ * actualizada. El bearer no cambia: los scopes viven en la fila, así que rige desde la llamada
+ * siguiente sin reemitir. Exige step-up (lo resuelve `client.ts`).
+ *
+ * ⚠️ Igual que el `DELETE`, `tokenPk` es el `id` numérico, NO el `token_id` del bearer.
+ */
+export function updateApiTokenScopes(
+  tokenPk: number,
+  body: ApiTokenScopesUpdate,
+): Promise<ApiTokenOut> {
+  return mutateData('PATCH', `${BASE}/${tokenPk}`, apiTokenOutSchema, { body })
 }

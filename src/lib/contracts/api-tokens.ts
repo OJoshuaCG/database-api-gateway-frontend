@@ -85,6 +85,17 @@ export const apiTokenCreateSchema = z.object({
 export type ApiTokenCreate = z.infer<typeof apiTokenCreateSchema>
 
 /**
+ * `ApiTokenUpdate` — `PATCH /api-tokens/{token_pk}`. Reemplaza la lista COMPLETA de scopes; no
+ * suma ni resta. Mínimo uno: un token sin permisos no sirve para nada y lo correcto es revocarlo,
+ * así que la lista vacía es un 422 y el formulario no deja enviarla. Nombre, vencimiento,
+ * proyecto y secreto no cambian, por eso el cuerpo es solo `scopes`.
+ */
+export const apiTokenScopesUpdateSchema = z.object({
+  scopes: z.array(z.string()).min(1, 'Elegí al menos un permiso'),
+})
+export type ApiTokenScopesUpdate = z.infer<typeof apiTokenScopesUpdateSchema>
+
+/**
  * Códigos de `detail.public_context.code` (§3).
  *
  * `ttlTooLong` trae `public_context.max_days`; `scopeNotAllowed` trae `public_context.allowed[]`

@@ -7,9 +7,11 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  IconButton,
   Modal,
   OneTimeSecretPanel,
   PageHeader,
+  PencilIcon,
   Pagination,
 } from '@/components/ui'
 import { ForbiddenState, isAccessForbidden, useCapabilities, useSession } from '@/features/auth'
@@ -21,6 +23,7 @@ import {
 } from '@/lib/contracts'
 import { formatDateTime } from '@/lib/utils'
 import { ApiTokenFormModal } from '../components/ApiTokenFormModal'
+import { EditApiTokenScopesModal } from '../components/EditApiTokenScopesModal'
 import { useApiTokens, useRevokeApiToken } from '../hooks/use-api-tokens'
 
 export function ApiTokensPage() {
@@ -29,6 +32,7 @@ export function ApiTokensPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [issued, setIssued] = useState<ApiTokenCreatedOut | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenOut | null>(null)
+  const [editTarget, setEditTarget] = useState<ApiTokenOut | null>(null)
 
   // Todo el módulo va detrás de `access.admin`. Sin ella la pantalla no ofrece emitir ni revocar
   // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403. Por eso el
@@ -111,7 +115,16 @@ export function ApiTokensPage() {
         enableHiding: false,
         cell: ({ row }) =>
           row.original.active ? (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2">
+              {/* Editar es universal y se repite por fila: va como icono. Solo en tokens activos,
+                  porque el backend rechaza editar uno revocado (409). */}
+              <IconButton
+                label={`Editar permisos de ${row.original.name}`}
+                icon={<PencilIcon />}
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setEditTarget(row.original)}
+              />
               {/* Acción de dominio e irreversible: conserva el texto, no se reduce a un icono. */}
               <Button variant="danger-soft" size="sm" onClick={() => setRevokeTarget(row.original)}>
                 Revocar
@@ -203,6 +216,10 @@ export function ApiTokensPage() {
             onDone={() => setIssued(null)}
           />
         </Modal>
+      )}
+
+      {editTarget && (
+        <EditApiTokenScopesModal open token={editTarget} onClose={() => setEditTarget(null)} />
       )}
 
       {revokeTarget && (

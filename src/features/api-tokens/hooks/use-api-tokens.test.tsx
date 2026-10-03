@@ -5,7 +5,12 @@ import type { ReactNode } from 'react'
 import { server } from '@/test/server'
 import { AllProviders, createTestQueryClient } from '@/test/utils'
 import { queryKeys } from '@/lib/api/query-keys'
-import { useApiTokens, useCreateApiToken, useRevokeApiToken } from './use-api-tokens'
+import {
+  useApiTokens,
+  useCreateApiToken,
+  useRevokeApiToken,
+  useUpdateApiTokenScopes,
+} from './use-api-tokens'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AllProviders queryClient={createTestQueryClient()}>{children}</AllProviders>
@@ -144,5 +149,93 @@ describe('useRevokeApiToken', () => {
     // El acceso ya estaba cortado, que es el estado que se buscaba: la mutación falla pero la UI
     // no lo presenta como un error del operador.
     await waitFor(() => expect(result.current.isError).toBe(true))
+  })
+})
+
+describe('useUpdateApiTokenScopes', () => {
+  it('manda PATCH a la PK numérica con solo los scopes e invalida el listado', async () => {
+    let calledPath: string | null = null
+    let received: unknown = null
+    server.use(
+      http.patch('http://localhost/api/v1/api-tokens/:pk', async ({ params, request }) => {
+        calledPath = String(params.pk)
+        received = await request.json()
+        return HttpResponse.json({
+          data: { ...tokenFixture, scopes: ['blueprints.read', 'catalogs.read'] },
+        })
+      }),
+    )
+    const queryClient = createTestQueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateApiTokenScopes(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <AllProviders queryClient={queryClient}>{children}</AllProviders>
+      ),
+    })
+    act(() => {
+      result.current.mutate({
+        tokenPk: 12,
+        body: { scopes: ['blueprints.read', 'catalogs.read'] },
+      })
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    // La PK (`id`), no el `token_id` del bearer; y el cuerpo es solo `scopes`.
+    expect(calledPath).toBe('12')
+    expect(received).toEqual({ scopes: ['blueprints.read', 'catalogs.read'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.apiTokens.all })
+  })
+
+  it('ante un 422 scope_not_allowed falla y deja pasar el techo en el error', async () => {
+    server.use(
+      http.patch('http://localhost/api/v1/api-tokens/:pk', () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'Permiso fuera del techo de agente.',
+              type: 'AppHttpException',
+              public_context: {
+                code: 'api_token.scope_not_allowed',
+                allowed: ['blueprints.read', 'catalogs.read'],
+              },
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useUpdateApiTokenScopes(), { wrapper })
+    act(() => {
+      result.current.mutate({ tokenPk: 12, body: { scopes: ['databases.drop'] } })
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+  })
+
+  it('ante un 409 «ya revocado» falla (no es éxito) e invalida el listado', async () => {
+    server.use(
+      http.patch('http://localhost/api/v1/api-tokens/:pk', () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'El token ya estaba revocado.',
+              type: 'AppHttpException',
+              public_context: { code: 'api_token.already_revoked' },
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    const queryClient = createTestQueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateApiTokenScopes(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <AllProviders queryClient={queryClient}>{children}</AllProviders>
+      ),
+    })
+    act(() => {
+      result.current.mutate({ tokenPk: 12, body: { scopes: ['blueprints.read'] } })
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.apiTokens.all })
   })
 })

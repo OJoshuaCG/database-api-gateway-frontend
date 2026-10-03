@@ -3,8 +3,18 @@ import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type { QueryParams } from '@/lib/api/client'
-import { API_TOKEN_ERROR_CODES, PROJECT_ERROR_CODES, type ApiTokenCreate } from '@/lib/contracts'
-import { createApiToken, listApiTokens, revokeApiToken } from '../api/api-tokens.api'
+import {
+  API_TOKEN_ERROR_CODES,
+  PROJECT_ERROR_CODES,
+  type ApiTokenCreate,
+  type ApiTokenScopesUpdate,
+} from '@/lib/contracts'
+import {
+  createApiToken,
+  listApiTokens,
+  revokeApiToken,
+  updateApiTokenScopes,
+} from '../api/api-tokens.api'
 import { apiTokenErrorMessage } from '../messages'
 import { notifyMutationError } from '@/features/auth'
 
@@ -78,6 +88,46 @@ export function useRevokeApiToken() {
         return
       }
       notifyMutationError(toast, error, ...errorToast('No se pudo revocar el token', error))
+    },
+  })
+}
+
+/**
+ * Edición de scopes. Sin toast de éxito propio del copy genérico: confirma qué quedó vigente con
+ * los scopes que devolvió el servidor, que pueden ser MENOS que los pedidos si intersectó con el
+ * techo de agente.
+ *
+ * El 409 `already_revoked` y el 404 también invalidan el listado: la fila que el operador tenía en
+ * pantalla ya no refleja la realidad, y seguir mostrándole «Editar» sobre ella invita a repetir el
+ * error. A diferencia de la revocación NO es un éxito: no se cambió nada, así que se informa como
+ * error. El 422 `scope_not_allowed` lo maneja el modal (necesita el techo para reofrecerlo).
+ */
+export function useUpdateApiTokenScopes() {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ tokenPk, body }: { tokenPk: number; body: ApiTokenScopesUpdate }) =>
+      updateApiTokenScopes(tokenPk, body),
+    onSuccess: (token) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.apiTokens.all })
+      toast.success(
+        'Permisos actualizados',
+        `${token.name} (${token.token_id}) ahora tiene: ${token.scopes.join(', ') || 'ninguno'}.`,
+      )
+    },
+    onError: (error) => {
+      const code = toApiError(error).code
+      if (
+        code === API_TOKEN_ERROR_CODES.alreadyRevoked ||
+        code === API_TOKEN_ERROR_CODES.notFound
+      ) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.apiTokens.all })
+      }
+      notifyMutationError(
+        toast,
+        error,
+        ...errorToast('No se pudieron actualizar los permisos', error),
+      )
     },
   })
 }
