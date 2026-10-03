@@ -443,9 +443,10 @@ describe('AgentAccessModal', () => {
         await screen.findByRole('button', { name: 'Permitir y generar credencial 🔌' }),
       )
 
-      expect(
-        await screen.findByText(/cuenta reservada, la pseudo-root o un rol/),
-      ).toBeInTheDocument()
+      // El mismo copy sale dos veces a propósito: en el aviso del modal («El acceso se concedió,
+      // pero la credencial no se generó») y en el toast de error del propio hook.
+      const copies = await screen.findAllByText(/cuenta reservada, la pseudo-root o un rol/)
+      expect(copies.length).toBeGreaterThanOrEqual(1)
     })
   })
 })
