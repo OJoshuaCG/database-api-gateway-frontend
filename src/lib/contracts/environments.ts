@@ -2,9 +2,10 @@ import { z } from 'zod'
 
 /**
  * Entornos de despliegue: clasifican cada BD gestionada y llevan la política que el backend
- * hace cumplir. Solo LECTURA — los entornos son un conjunto fijo de cuatro (`local`,
- * `development`, `staging`, `production`) y la administración es por API a propósito, así que
- * acá no hay schemas de create/update (ver `docs/api-coverage.md`, filas ⛔).
+ * hace cumplir. Los entornos son un conjunto fijo de cuatro (`local`, `development`, `staging`,
+ * `production`) y la administración es por API a propósito: la SPA solo escribe la puerta de
+ * agentes (`environmentUpdateSchema`); no hay schemas de create ni del resto del update (ver
+ * `docs/api-coverage.md`, filas ⛔).
  *
  * NO CONFUNDIR con el campo `environment` de `contracts/health.ts`: ese es el `APP_ENV` del
  * PROCESO del gateway (modo de despliegue), no la clasificación de una base de datos. Los dos
@@ -76,6 +77,18 @@ export const environmentOutSchema = z.object({
   updated_at: z.string(),
 })
 export type EnvironmentOut = z.infer<typeof environmentOutSchema>
+
+/**
+ * Body de `PATCH /environments/{id}`. Solo se declara lo que la SPA escribe: la puerta de agentes.
+ * El resto del PATCH (nombre, color, política de migraciones…) sigue siendo por API a propósito.
+ *
+ * ENCENDER (`false → true`) exige además `confirm_slug` como QUERY param, no en el body: ver
+ * `updateEnvironment`. Apagar no lo pide.
+ */
+export const environmentUpdateSchema = z.object({
+  allows_agent_access: z.boolean(),
+})
+export type EnvironmentUpdate = z.infer<typeof environmentUpdateSchema>
 
 /** Orden total de promoción: `(rank, id)`. `rank` no es único, así que el desempate importa. */
 export function compareEnvironments(a: EnvironmentOut, b: EnvironmentOut): number {

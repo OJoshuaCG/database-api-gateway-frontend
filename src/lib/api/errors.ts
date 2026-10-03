@@ -308,6 +308,13 @@ export class ApiError extends Error {
    */
   readonly missingDownSql?: string[]
   /**
+   * Confirmación pendiente al ENCENDER una puerta de un entorno (`public_context` del 422
+   * `environment.confirmation_required`): `expectedSlug` es lo que hay que repetir en
+   * `confirm_slug` y `weakened` lista qué se debilita. Se pide el slug del backend y no el que la
+   * UI ya conoce para que la confirmación siga siendo válida si ambos divergen.
+   */
+  readonly environmentConfirmation?: EnvironmentConfirmation
+  /**
    * Sentencias aplicadas sin reverso conocido (`public_context.unreversible_statements` del 409
    * de `reconcile-partial`, §9). El backend valida `force` ANTES de `dry_run`: este 409 llega
    * incluso en dry-run; la UI reintenta el dry-run con `force=true` para mostrar el plan.
@@ -492,6 +499,7 @@ export class ApiError extends Error {
     violations?: ManualLayoutViolation[]
     skippedTables?: ContextSkippedTable[]
     missingDownSql?: string[]
+    environmentConfirmation?: EnvironmentConfirmation
     unreversibleStatements?: string[]
     missingDependencies?: string[]
     suggestedItemIds?: number[]
@@ -533,6 +541,7 @@ export class ApiError extends Error {
     this.violations = args.violations
     this.skippedTables = args.skippedTables
     this.missingDownSql = args.missingDownSql
+    this.environmentConfirmation = args.environmentConfirmation
     this.unreversibleStatements = args.unreversibleStatements
     this.missingDependencies = args.missingDependencies
     this.suggestedItemIds = args.suggestedItemIds
@@ -675,6 +684,27 @@ function extractMissingDownSql(publicContext: unknown): string[] | undefined {
   if (!isRecord(publicContext) || !Array.isArray(publicContext.missing_down_sql)) return undefined
   const versions = publicContext.missing_down_sql.filter((v): v is string => typeof v === 'string')
   return versions.length > 0 ? versions : undefined
+}
+
+/** Confirmación que pide el 422 `environment.confirmation_required`. */
+export interface EnvironmentConfirmation {
+  expectedSlug: string
+  weakened: string[]
+}
+
+/**
+ * Extrae `public_context.expected_slug` y `weakened[]` del 422 `environment.confirmation_required`.
+ * Sin `expected_slug` no hay nada que confirmar, así que devuelve `undefined`; `weakened` ausente
+ * o mal formado queda en lista vacía (es informativo, no bloquea la confirmación).
+ */
+function extractEnvironmentConfirmation(
+  publicContext: unknown,
+): EnvironmentConfirmation | undefined {
+  if (!isRecord(publicContext) || typeof publicContext.expected_slug !== 'string') return undefined
+  const weakened = Array.isArray(publicContext.weakened)
+    ? publicContext.weakened.filter((w): w is string => typeof w === 'string')
+    : []
+  return { expectedSlug: publicContext.expected_slug, weakened }
 }
 
 /**
@@ -1642,6 +1672,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         violations: extractViolations(d.context),
         skippedTables: extractSkippedTables(d.context),
         missingDownSql: extractMissingDownSql(d.public_context),
+        environmentConfirmation: extractEnvironmentConfirmation(d.public_context),
         unreversibleStatements: extractUnreversibleStatements(d.public_context),
         missingDependencies: extractMissingDependencies(d.public_context),
         suggestedItemIds: extractSuggestedItemIds(d.public_context),

@@ -303,12 +303,15 @@ Clasifican cada BD gestionada y llevan la política que el backend hace cumplir
 en `EnvironmentsPanel` **siempre**, encendido o apagado: es una superficie de lectura sobre bases
 de terceros, y una fila que no dice nada se lee igual que una cerrada. Y se describe como
 condición **parcial**: es una de las cinco del gate de agentes, así que cada base necesita además
-su propio opt-in — que hoy **no es legible por ninguna vía** (ver «Pendiente…» al final).
+su propio opt-in, que se lee y se escribe desde la base (`agent_access_allowed` /
+`agent_access_blocked`, `AgentAccessModal` y su badge). `EnvironmentsPanel` ofrece «Permitir
+agentes» / «Cerrar a agentes» con `environments.write` + step-up; encender pide reescribir el slug.
+**Habilitar un entorno no abre ninguna base.**
 
 **Los entornos son un conjunto FIJO de cuatro** (`local`, `development`, `staging`, `production`)
 y la administración es **por API a propósito**: no hay pantalla de CRUD, y no es un olvido. La
 política se cambia editando una fila por API sin desplegar, cosa que sigue siendo posible; lo que
-no existe es la superficie de UI para mutarla. Ver las filas ⛔ de abajo.
+no existe es la superficie de UI para mutarla, salvo la puerta de agentes. Ver las filas de abajo.
 
 ⚠️ No confundir con el campo `environment` de `GET /health`: ese es el `APP_ENV` del **proceso**
 del gateway, no la clasificación de una base de datos.
@@ -318,7 +321,7 @@ del gateway, no la clasificación de una base de datos.
 | — | `GET /environments` | ✅ | `useEnvironmentOptions` / `useEnvironmentMap` (catálogo compartido por 5 consumidores, `staleTime` infinito): badge de entorno en `ManagedDatabasesPage`, selector en `ManagedDatabaseForm`, filtro «Entorno» del inventario y filtro del `ApplyMigrationsDialog`. Se pide **completo** (sin `only_active`): el selector filtra los activos en cliente, pero el badge tiene que poder resolver un entorno desactivado |
 | — | `POST /environments` | ⛔ | Los cuatro entornos son un conjunto fijo; crear uno nuevo es una decisión de política, no de operación diaria. Por API. |
 | — | `GET /environments/{id}` | ⛔ | El listado ya trae todos los campos (son 4 filas), así que un detalle no aportaría nada. |
-| — | `PATCH /environments/{id}` | ⛔ | Cambiar la política —y sobre todo **debilitarla**— exige repetir el slug (`confirm_slug`) y queda auditado con `record_intent`. Se hace por API a propósito: darlo por UI abarataría un gesto que el backend encareció deliberadamente. **`allows_agent_access` es la segunda palanca que cuenta como debilitamiento** y también exige `?confirm_slug=`; su 422 trae `expected_slug` (para prellenar el diálogo) y `weakened[]` (qué debilita esta llamada, que puede ser más de una cosa). Cuando se construya la UI, el diálogo debe enumerarlas todas. |
+| — | `PATCH /environments/{id}` | ✅ parcial | **Solo `allows_agent_access`**: botón «Permitir agentes» / «Cerrar a agentes» en `EnvironmentsPanel` (`useUpdateEnvironment`, que invalida `queryKeys.environments.all`); `environments.write` + step-up. **Encender** abre `ConfirmDialog` con `confirmWord={slug}` y manda `?confirm_slug=` (query, no body); **apagar** no confirma. El 422 `environment.confirmation_required` se muestra con `expected_slug` y `weakened[]` (`ApiError.environmentConfirmation`). El resto de la política (nombre, color, migraciones destructivas) sigue siendo **por API a propósito**. Antecedente, ya vigente para lo demás: cambiar la política —y sobre todo **debilitarla**— exige repetir el slug (`confirm_slug`) y queda auditado con `record_intent`. Se hace por API a propósito: darlo por UI abarataría un gesto que el backend encareció deliberadamente. **`allows_agent_access` es la segunda palanca que cuenta como debilitamiento** y también exige `?confirm_slug=`; su 422 trae `expected_slug` (para prellenar el diálogo) y `weakened[]` (qué debilita esta llamada, que puede ser más de una cosa). Cuando se construya la UI, el diálogo debe enumerarlas todas. |
 | — | `DELETE /environments/{id}` | ⛔ | Exige cero BDs asignadas (409 con el conteo) y no tiene `force`. Por API. |
 
 ## Catálogo de charset/collation
