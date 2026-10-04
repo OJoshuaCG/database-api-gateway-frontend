@@ -275,11 +275,11 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 32 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 34 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
- * 🔓 marca las seis que **divulgan** (`discloses: true`). Es un eje INDEPENDIENTE de `mutates` y de
+ * 🔓 marca las ocho que **divulgan** (`discloses: true`). Es un eje INDEPENDIENTE de `mutates` y de
  * `destructive`: todas exponen datos o credenciales, destruyan algo (`clones.execute`,
  * `sql_console.execute`) o no.
  */
@@ -343,6 +343,16 @@ export const CAPABILITIES = {
    * fallback a `access.admin`).
    */
   environmentsWrite: 'environments.write',
+
+  /**
+   * 🔓 — Leer FILAS de bases gestionadas mediante las tools parametrizadas del MCP. Es una de las
+   * dos únicas capacidades que divulgan y viven en el techo de agente (excepción cerrada del
+   * catálogo): solo `owner`, con step-up del EMISOR al darla a un token, sensible si se otorga
+   * suelta, y inerte mientras el kill switch del servidor esté apagado.
+   */
+  dataRead: 'data.read',
+  /** 🔓 — Ejecutar `SELECT` redactados por un agente (`run_select`). Misma excepción que `dataRead`. */
+  dataQuery: 'data.query',
 
   /**
    * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens

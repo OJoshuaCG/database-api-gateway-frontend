@@ -4,11 +4,13 @@ import { toApiError } from '@/lib/api/errors'
 import { useProjects } from '@/features/projects/hooks/use-projects'
 import {
   API_TOKEN_DEFAULT_SCOPE,
+  API_TOKEN_DATA_MAX_TTL_DAYS,
   API_TOKEN_DEFAULT_TTL_DAYS,
   API_TOKEN_ERROR_CODES,
   API_TOKEN_MAX_TTL_DAYS,
   API_TOKEN_NAME_MAX,
   API_TOKEN_NAME_MIN,
+  hasDataScope,
   PAGINATION,
   PROJECT_ERROR_CODES,
   type ApiTokenCreatedOut,
@@ -39,11 +41,15 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
 
   const nameTooShort = name.trim().length > 0 && name.trim().length < API_TOKEN_NAME_MIN
   const ttlNumber = Number(ttlDays)
+  // Con un scope de datos el tope baja (el servidor responde 422 `ttl_too_long` si no): se aplica
+  // acá para que el operador lo vea en el campo y no por el error. El default (90) no se achica
+  // solo: cambiar un vencimiento sin que se note sería peor que pedirlo.
+  const maxTtl = hasDataScope(scopes) ? API_TOKEN_DATA_MAX_TTL_DAYS : API_TOKEN_MAX_TTL_DAYS
   const ttlInvalid =
     ttlDays.trim().length === 0 ||
     !Number.isInteger(ttlNumber) ||
     ttlNumber < 1 ||
-    ttlNumber > API_TOKEN_MAX_TTL_DAYS
+    ttlNumber > maxTtl
   const canSubmit = name.trim().length >= API_TOKEN_NAME_MIN && project !== null && !ttlInvalid
 
   const submit = () => {
@@ -135,12 +141,16 @@ export function ApiTokenFormModal({ open, onClose, onCreated }: ApiTokenFormModa
           type="number"
           required
           min={1}
-          max={API_TOKEN_MAX_TTL_DAYS}
+          max={maxTtl}
           value={ttlDays}
           onChange={(event) => setTtlDays(event.target.value)}
           // El default visible es un NÚMERO, no un campo vacío: un vacío se lee como «no vence», y
           // el backend lo interpretaría como 90 días sin decirlo.
-          hint={`Entre 1 y ${API_TOKEN_MAX_TTL_DAYS} días. No existen tokens sin vencimiento.`}
+          hint={
+            hasDataScope(scopes)
+              ? `Entre 1 y ${maxTtl} días: con permisos de datos el máximo es menor.`
+              : `Entre 1 y ${maxTtl} días. No existen tokens sin vencimiento.`
+          }
           error={ttlInvalid && ttlDays.trim().length > 0 ? 'Fuera de rango' : undefined}
         />
 

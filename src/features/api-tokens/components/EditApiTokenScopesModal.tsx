@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { Button, Callout, Modal } from '@/components/ui'
 import { toApiError } from '@/lib/api/errors'
-import { API_TOKEN_ERROR_CODES, type ApiTokenOut } from '@/lib/contracts'
+import {
+  API_TOKEN_DATA_MAX_TTL_DAYS,
+  API_TOKEN_ERROR_CODES,
+  type ApiTokenOut,
+} from '@/lib/contracts'
+import { dataScopeTtlBlocked } from '../data-scopes'
 import { useUpdateApiTokenScopes } from '../hooks/use-api-tokens'
 import { apiTokenErrorMessage } from '../messages'
 import { useAgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
@@ -23,12 +28,17 @@ export function EditApiTokenScopesModal({ open, token, onClose }: EditApiTokenSc
   const ceiling = useAgentScopeCeiling()
   const [scopes, setScopes] = useState<string[]>(token.scopes)
   const [formError, setFormError] = useState<string | null>(null)
+  // El reloj se lee UNA vez (leerlo en render es impuro); el tope se mide en días.
+  const [nowMs] = useState(() => Date.now())
 
   // Lista vacía = 422: un token sin permisos no sirve, se revoca. Y sin cambios no hay nada que
   // enviar (y evita un paso de step-up y una fila de auditoría vacíos).
   const unchanged =
     scopes.length === token.scopes.length && scopes.every((scope) => token.scopes.includes(scope))
-  const canSubmit = scopes.length > 0 && !unchanged
+  // Agregar datos a un token que todavía vive más del tope lo dejaría leyendo filas todo ese tiempo:
+  // el servidor lo rechaza (422 `ttl_too_long`) y acá se avisa antes.
+  const ttlBlocked = dataScopeTtlBlocked(scopes, token.expires_at, nowMs)
+  const canSubmit = scopes.length > 0 && !unchanged && !ttlBlocked
 
   const submit = () => {
     setFormError(null)
@@ -74,6 +84,14 @@ export function EditApiTokenScopesModal({ open, token, onClose }: EditApiTokenSc
           ceiling={ceiling}
           description="Dejá al menos uno: un token sin permisos no sirve, y si ya no hace falta lo correcto es revocarlo. El servidor intersecta lo que pidas con el techo de agente, así que el token puede quedar con menos de lo que elijas."
         />
+
+        {ttlBlocked && (
+          <Callout tone="danger" title="Este token vive demasiado para leer datos">
+            Con permisos de datos un token vive como máximo {API_TOKEN_DATA_MAX_TTL_DAYS} días y a
+            este le queda más. Emití uno nuevo con un vencimiento menor, o quitá los permisos de
+            datos de la selección.
+          </Callout>
+        )}
 
         <Callout tone="warning" title="Ampliar un token ya repartido">
           Quien tenga este token va a poder hacer lo nuevo desde su próxima llamada, sin cambiar

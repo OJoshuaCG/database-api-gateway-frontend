@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Button, Callout, IconButton, Input, XIcon } from '@/components/ui'
+import { API_TOKEN_DATA_MAX_TTL_DAYS } from '@/lib/contracts'
+import { dataScopesOf } from '../data-scopes'
 import type { AgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
 
 interface ScopesPickerProps {
@@ -16,6 +18,8 @@ interface ScopesPickerProps {
  */
 export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPickerProps) {
   const [scopeDraft, setScopeDraft] = useState('')
+  const dataScopes = dataScopesOf(value)
+  const offersDataScopes = dataScopesOf(ceiling.offered ?? []).length > 0
 
   const addScope = (raw: string) => {
     const scope = raw.trim()
@@ -80,6 +84,27 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
         </Button>
       </div>
 
+      {dataScopes.length > 0 && (
+        <Callout tone="warning" title="Estos permisos leen datos de terceros">
+          <p className="mb-2">
+            {dataScopes.join(' y ')} permite{dataScopes.length > 1 ? 'n' : ''} que el agente lea
+            FILAS de las bases de su proyecto: lo que lee sale del gateway hacia el contexto de un
+            modelo.
+          </p>
+          <ul className="flex list-disc flex-col gap-1 pl-5">
+            <li>Al guardar se te pide la contraseña: sos vos quien responde por este token.</li>
+            <li>
+              El token vive como máximo {API_TOKEN_DATA_MAX_TTL_DAYS} días, y solo hereda lo que tu
+              usuario puede hacer.
+            </li>
+            <li>
+              Cada base tiene que abrirse aparte (credencial de datos y opt-in), y mientras el
+              gateway tenga la lectura de datos apagada el permiso queda guardado pero sin efecto.
+            </li>
+          </ul>
+        </Callout>
+      )}
+
       {ceiling.offered && (
         <Callout
           tone="info"
@@ -106,6 +131,13 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
               </Button>
             ))}
           </div>
+          {offersDataScopes && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <code className="font-mono">data.read</code> y{' '}
+              <code className="font-mono">data.query</code> leen filas de bases de terceros: al
+              añadirlos vas a ver el aviso con sus condiciones.
+            </p>
+          )}
         </Callout>
       )}
     </div>
