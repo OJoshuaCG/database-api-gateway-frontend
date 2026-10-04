@@ -1,9 +1,11 @@
 import { fetchData, fetchPage, mutateData, mutateVoid, type QueryParams } from '@/lib/api/client'
 import {
+  dataCredentialOutSchema,
   managedDatabaseOutSchema,
   managedDatabaseProvisionOutSchema,
   type AdoptDatabaseIn,
   type AgentAccessIn,
+  type DataCredentialOut,
   type ManagedDatabaseCreate,
   type ManagedDatabaseOut,
   type ManagedDatabaseProvisionOut,
@@ -86,6 +88,50 @@ export function deleteManagedDatabase(
  */
 export function setAgentAccess(id: number, body: AgentAccessIn): Promise<ManagedDatabaseOut> {
   return mutateData('PUT', `${BASE}/${id}/agent-access`, managedDatabaseOutSchema, { body })
+}
+
+// ── Lectura de DATOS por agentes (api-reference-v35 / v36) ──────────────────────
+
+/** `GET /managed-databases/{id}/data-credential` — estado de la credencial y del opt-in de datos. */
+export function getDataCredential(id: number, signal?: AbortSignal): Promise<DataCredentialOut> {
+  return fetchData(`${BASE}/${id}/data-credential`, dataCredentialOutSchema, { signal })
+}
+
+/**
+ * `POST .../data-credential/provision` 🔌 — sin cuerpo: el gateway crea (o re-converge) la cuenta
+ * del motor con `SELECT` sobre ESTA base y nada más. La credencial queda sin verificar. Pide
+ * `servers.admin` + step-up. Sin reintentos: rota la contraseña de una cuenta de un tercero.
+ */
+export function provisionDataCredential(id: number): Promise<DataCredentialOut> {
+  return mutateData('POST', `${BASE}/${id}/data-credential/provision`, dataCredentialOutSchema)
+}
+
+/**
+ * `POST .../data-credential/verify` 🔌 — la sonda negativa: conecta con la cuenta de datos y exige
+ * que no pueda más que `SELECT` sobre esta base. 422 `data_probe_failed` con `violations`.
+ */
+export function verifyDataCredential(id: number): Promise<DataCredentialOut> {
+  return mutateData('POST', `${BASE}/${id}/data-credential/verify`, dataCredentialOutSchema)
+}
+
+/** `DELETE .../data-credential` 🔌 — palanca de emergencia: borra la cuenta del motor. Idempotente. */
+export function clearDataCredential(id: number): Promise<DataCredentialOut> {
+  return mutateData('DELETE', `${BASE}/${id}/data-credential`, dataCredentialOutSchema)
+}
+
+/** `POST .../data-access/request` — pide abrir la lectura de datos (`data.read` en el entorno). */
+export function requestDataAccess(id: number): Promise<DataCredentialOut> {
+  return mutateData('POST', `${BASE}/${id}/data-access/request`, dataCredentialOutSchema)
+}
+
+/** `POST .../data-access/approve` — aprueba el pedido de OTRO owner (el propio da 403). */
+export function approveDataAccess(id: number): Promise<DataCredentialOut> {
+  return mutateData('POST', `${BASE}/${id}/data-access/approve`, dataCredentialOutSchema)
+}
+
+/** `DELETE .../data-access` — cierra el acceso o cancela el pedido. Inmediato e idempotente. */
+export function revokeDataAccess(id: number): Promise<DataCredentialOut> {
+  return mutateData('DELETE', `${BASE}/${id}/data-access`, dataCredentialOutSchema)
 }
 
 /** `provision=true` 🔌 revoca/otorga (o `ALTER OWNER` en PG). */

@@ -169,6 +169,47 @@ export const agentAccessInSchema = z.object({
 export type AgentAccessIn = z.infer<typeof agentAccessInSchema>
 
 /**
+ * Estado del opt-in de DATOS de una base: `closed` sin pedido, `pending` esperando a un segundo
+ * owner (production y bases sin entorno), `open` vigente. Abrirlo NO alcanza para leer: el gate
+ * del servidor exige además sonda verde reciente y el kill switch de datos encendido.
+ */
+export const dataAccessStateSchema = z.enum(['closed', 'pending', 'open'])
+export type DataAccessState = z.infer<typeof dataAccessStateSchema>
+
+/**
+ * `DataCredentialOut` (api-reference-v35 / v36) — estado de la credencial de DATOS de UNA base.
+ * NUNCA trae usuario, contraseña ni cifrado: solo si existe, si la sonda pasó y los códigos cortos
+ * que dejó. Los campos del opt-in llevan default CERRADO: un backend que no los manda no abre nada.
+ */
+export const dataCredentialOutSchema = z.object({
+  managed_database_id: z.number().int(),
+  has_data_credential: z.boolean(),
+  /** Última sonda exitosa (UTC sin zona). `null` = sin verificar: ninguna tool de datos la usa. */
+  verified_at: z.string().nullable().optional().default(null),
+  probed_at: z.string().nullable().optional().default(null),
+  probe_violations: z.array(z.string()).optional().default([]),
+  probe_warnings: z.array(z.string()).optional().default([]),
+  data_access_allowed: z.boolean().optional().default(false),
+  data_access_state: dataAccessStateSchema.optional().default('closed'),
+  /** Fail-closed: sin el dato se asume que el entorno exige segundo aprobador. */
+  data_access_second_approver_required: z.boolean().optional().default(true),
+})
+export type DataCredentialOut = z.infer<typeof dataCredentialOutSchema>
+
+/** Códigos de `public_context.code` de la credencial y del opt-in de datos. */
+export const DATA_ACCESS_ERROR_CODES = {
+  accountAlreadyExists: 'data_credential.account_already_exists',
+  provisionInProgress: 'data_credential.provision_in_progress',
+  databaseNotEligible: 'data_credential.database_not_eligible',
+  credentialMissing: 'data_credential.missing',
+  probeFailed: 'managed_database.data_probe_failed',
+  selfApproval: 'data_access.self_approval_forbidden',
+  notPending: 'data_access.not_pending',
+  alreadyOpen: 'data_access.already_open',
+  identityRequired: 'data_access.identity_required',
+} as const
+
+/**
  * `AdoptDatabaseIn` (Plan 09 §3) — registra una BD **ya existente** en el motor sin recrearla.
  * El gateway verifica que exista (solo lectura); exige un `owner_id` (ServerUser del mismo
  * servidor). `model_id` opcional para vincular un blueprint en el mismo paso.

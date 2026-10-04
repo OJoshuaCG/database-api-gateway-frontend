@@ -14,6 +14,7 @@ import { toApiError, type ApiError } from '@/lib/api/errors'
 import { CAPABILITIES, type ManagedDatabaseOut } from '@/lib/contracts'
 import { serverPath } from '@/lib/routes'
 import { useSetAgentAccess } from '../hooks/use-managed-databases'
+import { DataAccessSection } from './DataAccessSection'
 
 interface AgentAccessModalProps {
   /** Montar solo cuando hay una BD objetivo (estado fresco por apertura). */
@@ -31,6 +32,10 @@ interface AgentAccessModalProps {
  * El bloqueo gana sobre el permiso y no tiene override. Se deja el permiso editable aun con el
  * bloqueo encendido (no se lo apaga solo) para que quitar el bloqueo devuelva la base al estado
  * que el operador había decidido, y se avisa que mientras tanto no tiene efecto.
+ *
+ * La LECTURA DE FILAS (`data.read`) es otro permiso, con su propia credencial por base y su propio
+ * opt-in con segundo aprobador: vive en `DataAccessSection`, colapsada, y no se mezcla con este
+ * guardado (cambiar «Permitir agentes» no abre datos).
  *
  * `environments.write` es global (capa 1) y pide step-up: la guarda es una pista y el 403 lo
  * resuelve `notifyMutationError`.
@@ -139,7 +144,7 @@ export function AgentAccessModal({ database, onClose }: AgentAccessModalProps) {
           onCheckedChange={setAllowed}
           disabled={!guard.allowed}
           label="Permitir agentes"
-          hint="Opt-in de esta base. Los agentes solo podrán leerla, nunca modificarla."
+          hint="Opt-in de esta base. Los agentes leen su estructura y nunca la modifican; la lectura de filas se configura aparte, más abajo."
         />
         <Switch
           checked={blocked}
@@ -237,6 +242,8 @@ export function AgentAccessModal({ database, onClose }: AgentAccessModalProps) {
             </p>
           </Callout>
         )}
+
+        <DataAccessSection database={database} />
       </div>
     </Modal>
   )

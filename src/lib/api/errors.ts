@@ -832,16 +832,20 @@ function extractStaleOverrides(publicContext: unknown): string[] | undefined {
 }
 
 /**
- * Extrae `public_context.violations` del 422 `server.readonly_probe_failed` (api-reference-v30).
+ * Extrae `public_context.violations` del 422 `server.readonly_probe_failed` (api-reference-v30) y
+ * del `managed_database.data_probe_failed` de la credencial de datos (api-reference-v35).
  *
- * Se lee SOLO con ese código: `violations` es un nombre genérico, y tomarlo de cualquier error
+ * Se lee SOLO con esos códigos: `violations` es un nombre genérico, y tomarlo de cualquier error
  * haría que un 422 de otro módulo apareciera en pantalla como grants de más.
  */
 function extractReadonlyProbeViolations(
   code: string | undefined,
   publicContext: unknown,
 ): string[] | undefined {
-  if (code !== 'server.readonly_probe_failed') return undefined
+  // También la sonda de la credencial de DATOS por base: mismo `violations`, otro código.
+  if (code !== 'server.readonly_probe_failed' && code !== 'managed_database.data_probe_failed') {
+    return undefined
+  }
   if (!isRecord(publicContext) || !Array.isArray(publicContext.violations)) return undefined
   const reasons = publicContext.violations.filter(
     (reason): reason is string => typeof reason === 'string',

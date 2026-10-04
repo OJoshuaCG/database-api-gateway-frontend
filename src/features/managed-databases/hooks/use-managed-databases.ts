@@ -5,6 +5,7 @@ import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
 import type {
   AgentAccessIn,
+  DataCredentialOut,
   EngineType,
   ManagedDatabaseCreate,
   ManagedDatabaseOut,
@@ -14,16 +15,24 @@ import type {
 import { PAGINATION } from '@/lib/contracts'
 import type { QueryParams } from '@/lib/api/client'
 import {
+  approveDataAccess,
+  clearDataCredential,
   createManagedDatabase,
   deleteManagedDatabase,
+  getDataCredential,
   getManagedDatabase,
   listManagedDatabases,
+  provisionDataCredential,
   provisionManagedDatabase,
   reassignOwner,
+  requestDataAccess,
+  revokeDataAccess,
   setAgentAccess,
   updateManagedDatabase,
+  verifyDataCredential,
 } from '../api/managed-databases.api'
 import { notifyMutationError } from '@/features/auth'
+import { dataAccessErrorMessage } from '../data-access'
 
 export function useManagedDatabases(params: QueryParams) {
   return useQuery({
@@ -158,8 +167,7 @@ export function useUpdateManagedDatabase(id: number) {
       invalidateDatabaseViews(queryClient, db.server_id)
       toast.success('Base de datos actualizada', db.name)
     },
-    onError: (error) =>
-      notifyMutationError(toast, error, 'No se pudo actualizar la base de datos'),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo actualizar la base de datos'),
   })
 }
 
@@ -225,7 +233,130 @@ export function useReassignOwner(id: number) {
       invalidateDatabaseViews(queryClient, db.server_id)
       toast.success('Propietario reasignado', db.name)
     },
-    onError: (error) =>
-      notifyMutationError(toast, error, 'No se pudo reasignar el propietario'),
+    onError: (error) => notifyMutationError(toast, error, 'No se pudo reasignar el propietario'),
+  })
+}
+
+// ── Lectura de DATOS por agentes (api-reference-v35 / v36) ──────────────────────
+
+/**
+ * Estado de la credencial de datos y del opt-in de UNA base. `enabled` por parámetro: solo se
+ * consulta cuando la sección está abierta (no es un dato que el inventario necesite en cada fila).
+ */
+export function useDataCredential(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.managedDatabases.dataCredential(id),
+    queryFn: ({ signal }) => getDataCredential(id, signal),
+    enabled: enabled && Number.isFinite(id) && id > 0,
+  })
+}
+
+/**
+ * Mutación común de la credencial y del opt-in de datos. TODAS devuelven el estado nuevo, que se
+ * escribe en la caché de `useDataCredential` sin esperar un refetch. Sin reintentos automáticos
+ * (`retry: false`): aprovisionar y verificar tocan un motor real, y aprobar o revocar cambian quién
+ * puede leer filas; repetirlas a ciegas no es seguro.
+ *
+ * `invalidateOnError`: tras una sonda fallida (422) el backend BORRÓ `verified_at`, así que el
+ * estado en pantalla quedó viejo y se refresca para que no afirme una verificación que ya no rige.
+ */
+function useDataCredentialMutation(
+  id: number,
+  mutationFn: (id: number) => Promise<DataCredentialOut>,
+  copy: { success: [title: string, description?: string]; failure: string },
+  options: { invalidateOnError?: boolean } = {},
+) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: () => mutationFn(id),
+    retry: false,
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.managedDatabases.dataCredential(id), status)
+      toast.success(copy.success[0], copy.success[1])
+    },
+    onError: (error) => {
+      if (options.invalidateOnError) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.managedDatabases.dataCredential(id),
+        })
+      }
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        copy.failure,
+        dataAccessErrorMessage(apiError) ?? apiError.message,
+      )
+    },
+  })
+}
+
+/** 🔌 Crea o re-converge la cuenta SELECT-only de esta base. Queda sin verificar. */
+export function useProvisionDataCredential(id: number) {
+  return useDataCredentialMutation(id, provisionDataCredential, {
+    success: [
+      'Credencial de datos generada',
+      'Falta verificarla: hasta que la sonda pase, las tools de datos no la usan.',
+    ],
+    failure: 'No se pudo generar la credencial de datos',
+  })
+}
+
+/** 🔌 La sonda negativa. Un 422 deja la credencial sin verificar y lista sus motivos. */
+export function useVerifyDataCredential(id: number) {
+  return useDataCredentialMutation(
+    id,
+    verifyDataCredential,
+    {
+      success: [
+        'Credencial de datos verificada',
+        'El motor confirmó que solo puede leer esta base.',
+      ],
+      failure: 'No se pudo verificar la credencial de datos',
+    },
+    { invalidateOnError: true },
+  )
+}
+
+/** 🔌 Palanca de emergencia: borra la cuenta del motor y cierra el acceso. Idempotente. */
+export function useClearDataCredential(id: number) {
+  return useDataCredentialMutation(
+    id,
+    clearDataCredential,
+    {
+      success: ['Credencial de datos revocada', 'La cuenta se borró del motor.'],
+      failure: 'No se pudo revocar la credencial de datos',
+    },
+    { invalidateOnError: true },
+  )
+}
+
+export function useRequestDataAccess(id: number) {
+  return useDataCredentialMutation(id, requestDataAccess, {
+    success: ['Pedido de acceso a datos registrado'],
+    failure: 'No se pudo pedir el acceso a datos',
+  })
+}
+
+export function useApproveDataAccess(id: number) {
+  return useDataCredentialMutation(
+    id,
+    approveDataAccess,
+    {
+      success: [
+        'Acceso a datos aprobado',
+        'Las tools de datos aún exigen sonda verde y kill switch.',
+      ],
+      failure: 'No se pudo aprobar el acceso a datos',
+    },
+    { invalidateOnError: true },
+  )
+}
+
+export function useRevokeDataAccess(id: number) {
+  return useDataCredentialMutation(id, revokeDataAccess, {
+    success: ['Acceso a datos cerrado'],
+    failure: 'No se pudo cerrar el acceso a datos',
   })
 }

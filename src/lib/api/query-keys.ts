@@ -124,6 +124,8 @@ export const queryKeys = {
     all: ['managed-databases'] as const,
     list: (params: QueryParams) => ['managed-databases', 'list', params] as const,
     detail: (id: number) => ['managed-databases', 'detail', id] as const,
+    /** Credencial de DATOS y opt-in de una base (`GET .../data-credential`). */
+    dataCredential: (id: number) => ['managed-databases', id, 'data-credential'] as const,
     migrationStatus: (id: number) => ['managed-databases', id, 'migrations', 'status'] as const,
     migrationHistory: (id: number, params: QueryParams) =>
       ['managed-databases', id, 'migrations', 'history', params] as const,
