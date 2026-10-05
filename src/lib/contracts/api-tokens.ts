@@ -16,14 +16,14 @@ export const API_TOKEN_DEFAULT_TTL_DAYS = 90
 export const API_TOKEN_MAX_TTL_DAYS = 90
 
 /**
- * Scopes de DATOS: el token lee filas de un tercero. Exigen step-up fresco del emisor y una vida
- * más corta (`API_TOKEN_DATA_MAX_TTL_DAYS`); con el kill switch del servidor apagado quedan
- * guardados pero inertes. La autoridad sigue siendo el catálogo (`agent_allowed` + `discloses`).
+ * Scopes de DATOS: el token lee filas de un tercero. Exigen step-up fresco del emisor; con el kill
+ * switch del servidor apagado quedan guardados pero inertes. La autoridad sigue siendo el catálogo
+ * (`agent_allowed` + `discloses`). La vida del token usa el mismo tope que cualquier otro
+ * (`API_TOKEN_MAX_TTL_DAYS`): el backend puede fijar uno propio más corto con
+ * `MCP_DATA_TOKEN_MAX_TTL_DAYS`, pero no viaja al cliente, así que si lo hace la pantalla lo
+ * muestra por el 422 `ttl_too_long` (`public_context.max_days`) y no con un número fijo.
  */
 export const API_TOKEN_DATA_SCOPES = ['data.read', 'data.query'] as const
-
-/** Tope de `expires_in_days` con un scope de datos (`MCP_DATA_TOKEN_MAX_TTL_DAYS` del backend). */
-export const API_TOKEN_DATA_MAX_TTL_DAYS = 30
 
 /** ¿La lista pide algún scope de datos? */
 export function hasDataScope(scopes: readonly string[]): boolean {

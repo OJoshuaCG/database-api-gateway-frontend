@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
 import { Button, Callout, IconButton, Input, XIcon } from '@/components/ui'
-import { API_TOKEN_DATA_MAX_TTL_DAYS } from '@/lib/contracts'
 import { dataScopesOf } from '../data-scopes'
 import type { AgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
 
@@ -94,8 +93,8 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
           <ul className="flex list-disc flex-col gap-1 pl-5">
             <li>Al guardar se te pide la contraseña: sos vos quien responde por este token.</li>
             <li>
-              El token vive como máximo {API_TOKEN_DATA_MAX_TTL_DAYS} días, y solo hereda lo que tu
-              usuario puede hacer.
+              El token solo hereda lo que tu usuario puede hacer y lee hasta que venza: revocalo
+              si deja de hacer falta.
             </li>
             <li>
               Cada base tiene que abrirse aparte (credencial de datos y opt-in), y mientras el
