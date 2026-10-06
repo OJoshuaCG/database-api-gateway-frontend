@@ -353,6 +353,14 @@ export const CAPABILITIES = {
   dataRead: 'data.read',
   /** 🔓 — Ejecutar `SELECT` redactados por un agente (`run_select`). Misma excepción que `dataRead`. */
   dataQuery: 'data.query',
+  /**
+   * 🔓 — Leer el CÓDIGO de vistas, triggers, eventos y rutinas (`get_definition`). Tercera y última
+   * capacidad de la excepción de datos del techo de agente: solo `owner`, step-up del EMISOR,
+   * segundo aprobador si se otorga suelta e inerte con su kill switch
+   * (`MCP_SCHEMA_DEFINITIONS_ENABLED`) apagado. No lee filas, pero un cuerpo es texto de terceros
+   * que puede traer secretos y reglas de negocio.
+   */
+  dataDefinitions: 'data.definitions',
 
   /**
    * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens

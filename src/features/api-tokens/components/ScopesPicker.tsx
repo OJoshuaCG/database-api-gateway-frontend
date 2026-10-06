@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Button, Callout, IconButton, Input, XIcon } from '@/components/ui'
-import { dataScopesOf } from '../data-scopes'
+import { dataScopesOf, hasDefinitionsScope, rowScopesOf } from '../data-scopes'
 import type { AgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
 
 interface ScopesPickerProps {
@@ -18,7 +18,10 @@ interface ScopesPickerProps {
 export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPickerProps) {
   const [scopeDraft, setScopeDraft] = useState('')
   const dataScopes = dataScopesOf(value)
-  const offersDataScopes = dataScopesOf(ceiling.offered ?? []).length > 0
+  const rowScopes = rowScopesOf(value)
+  const definitionsRequested = hasDefinitionsScope(value)
+  const offeredRowScopes = rowScopesOf(ceiling.offered ?? [])
+  const offersDefinitions = hasDefinitionsScope(ceiling.offered ?? [])
 
   const addScope = (raw: string) => {
     const scope = raw.trim()
@@ -85,21 +88,41 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
 
       {dataScopes.length > 0 && (
         <Callout tone="warning" title="Estos permisos leen datos de terceros">
-          <p className="mb-2">
-            {dataScopes.join(' y ')} permite{dataScopes.length > 1 ? 'n' : ''} que el agente lea
-            FILAS de las bases de su proyecto: lo que lee sale del gateway hacia el contexto de un
-            modelo.
-          </p>
+          {rowScopes.length > 0 && (
+            <p className="mb-2">
+              {rowScopes.join(' y ')} permite{rowScopes.length > 1 ? 'n' : ''} que el agente lea
+              FILAS de las bases de su proyecto: lo que lee sale del gateway hacia el contexto de un
+              modelo.
+            </p>
+          )}
+          {definitionsRequested && (
+            <p className="mb-2">
+              <code className="font-mono">data.definitions</code> permite que el agente lea el
+              CÓDIGO de las vistas, triggers, eventos y rutinas de las bases de su proyecto. Esos
+              cuerpos son texto de terceros: pueden contener secretos (contraseñas, tokens, claves)
+              y reglas de negocio, y son contenido NO confiable, porque pueden traer instrucciones
+              pensadas para el modelo que los lee. Salen del gateway hacia su contexto.
+            </p>
+          )}
           <ul className="flex list-disc flex-col gap-1 pl-5">
             <li>Al guardar se te pide la contraseña: sos vos quien responde por este token.</li>
             <li>
-              El token solo hereda lo que tu usuario puede hacer y lee hasta que venza: revocalo
-              si deja de hacer falta.
+              El token solo hereda lo que tu usuario puede hacer y lee hasta que venza: revocalo si
+              deja de hacer falta.
             </li>
-            <li>
-              Cada base tiene que abrirse aparte (credencial de datos y opt-in), y mientras el
-              gateway tenga la lectura de datos apagada el permiso queda guardado pero sin efecto.
-            </li>
+            {rowScopes.length > 0 && (
+              <li>
+                Cada base tiene que abrirse aparte (credencial de datos y opt-in), y mientras el
+                gateway tenga la lectura de datos apagada el permiso queda guardado pero sin efecto.
+              </li>
+            )}
+            {definitionsRequested && (
+              <li>
+                <code className="font-mono">data.definitions</code> tiene su propio interruptor en
+                el gateway: mientras la lectura de definiciones esté apagada el permiso queda
+                guardado pero sin efecto.
+              </li>
+            )}
           </ul>
         </Callout>
       )}
@@ -130,11 +153,22 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
               </Button>
             ))}
           </div>
-          {offersDataScopes && (
+          {offeredRowScopes.length > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
-              <code className="font-mono">data.read</code> y{' '}
-              <code className="font-mono">data.query</code> leen filas de bases de terceros: al
-              añadirlos vas a ver el aviso con sus condiciones.
+              {offeredRowScopes.map((scope, index) => (
+                <Fragment key={scope}>
+                  {index > 0 && ' y '}
+                  <code className="font-mono">{scope}</code>
+                </Fragment>
+              ))}{' '}
+              leen filas de bases de terceros: al añadirlos vas a ver el aviso con sus condiciones.
+            </p>
+          )}
+          {offersDefinitions && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <code className="font-mono">data.definitions</code> lee el código (cuerpos) de vistas,
+              triggers, eventos y rutinas de bases de terceros, que puede contener secretos: al
+              añadirlo vas a ver el aviso con sus condiciones.
             </p>
           )}
         </Callout>

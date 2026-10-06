@@ -12,12 +12,21 @@ import { EditApiTokenScopesModal } from './EditApiTokenScopesModal'
 const API = 'http://localhost/api/v1'
 const DAY_MS = 24 * 60 * 60 * 1000
 
-function dataRow(id: 'data.read' | 'data.query') {
+const DATA_ROW_COPY = {
+  'data.read': { level: 'read', label: 'Leer filas mediante tools' },
+  'data.query': { level: 'query', label: 'Ejecutar SELECT de un agente' },
+  'data.definitions': {
+    level: 'definitions',
+    label: 'Leer definiciones de vistas, triggers, eventos y rutinas de bases gestionadas (MCP)',
+  },
+} as const
+
+function dataRow(id: keyof typeof DATA_ROW_COPY) {
   return {
     id,
     module: 'data',
-    level: id === 'data.read' ? 'read' : 'query',
-    label: id === 'data.read' ? 'Leer filas mediante tools' : 'Ejecutar SELECT de un agente',
+    level: DATA_ROW_COPY[id].level,
+    label: DATA_ROW_COPY[id].label,
     mutates: false,
     discloses: true,
     requires_step_up: true,
@@ -36,7 +45,12 @@ function mockBackend() {
     ),
     http.get(`${API}/authz/catalog`, () =>
       HttpResponse.json({
-        data: [...CATALOG_FIXTURE, dataRow('data.read'), dataRow('data.query')],
+        data: [
+          ...CATALOG_FIXTURE,
+          dataRow('data.read'),
+          dataRow('data.query'),
+          dataRow('data.definitions'),
+        ],
       }),
     ),
     http.get(`${API}/projects`, () => HttpResponse.json(pageOf([]))),
@@ -78,6 +92,39 @@ describe('ApiTokenFormModal — scopes de datos', () => {
     expect(screen.getByText(/lectura de datos apagada/)).toBeInTheDocument()
   })
 
+  it('ofrece data.definitions y su aviso de código no confiable aparece recién al añadirlo', async () => {
+    mockBackend()
+    const user = userEvent.setup()
+    renderWithProviders(<ApiTokenFormModal open onClose={() => {}} onCreated={() => {}} />)
+
+    expect(await screen.findByRole('button', { name: 'data.definitions' })).toBeEnabled()
+    expect(screen.getByText(/lee el código \(cuerpos\) de vistas/)).toBeInTheDocument()
+    expect(screen.queryByText('Estos permisos leen datos de terceros')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'data.definitions' }))
+
+    expect(await screen.findByText('Estos permisos leen datos de terceros')).toBeInTheDocument()
+    expect(screen.getByText(/pueden contener secretos/)).toBeInTheDocument()
+    expect(screen.getByText(/contenido NO confiable/)).toBeInTheDocument()
+    expect(screen.getByText(/lectura de definiciones esté apagada/)).toBeInTheDocument()
+    // Sin un scope de filas, no se promete lectura de filas ni la apertura por base de datos.
+    expect(screen.queryByText(/lea\s+FILAS/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/credencial de datos y opt-in/)).not.toBeInTheDocument()
+  })
+
+  it('con data.read y data.definitions juntos el aviso trae los dos textos', async () => {
+    mockBackend()
+    const user = userEvent.setup()
+    renderWithProviders(<ApiTokenFormModal open onClose={() => {}} onCreated={() => {}} />)
+
+    await user.click(await screen.findByRole('button', { name: 'data.read' }))
+    await user.click(screen.getByRole('button', { name: 'data.definitions' }))
+
+    expect(await screen.findByText(/lea\s+FILAS/)).toBeInTheDocument()
+    expect(screen.getByText(/pueden contener secretos/)).toBeInTheDocument()
+    expect(screen.getByText(/credencial de datos y opt-in/)).toBeInTheDocument()
+  })
+
   it('con un scope de datos el vencimiento por defecto (90) sigue siendo válido', async () => {
     mockBackend()
     const user = userEvent.setup()
@@ -96,7 +143,9 @@ describe('ApiTokenFormModal — scopes de datos', () => {
 
     await user.click(await screen.findByRole('button', { name: 'data.read' }))
 
-    expect(screen.getByText(/Entre 1 y 90 días\. No existen tokens sin vencimiento\./)).toBeVisible()
+    expect(
+      screen.getByText(/Entre 1 y 90 días\. No existen tokens sin vencimiento\./),
+    ).toBeVisible()
     expect(screen.queryByText(/el máximo es menor/)).not.toBeInTheDocument()
   })
 

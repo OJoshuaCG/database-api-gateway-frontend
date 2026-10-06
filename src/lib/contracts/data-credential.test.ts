@@ -39,15 +39,17 @@ describe('dataCredentialOutSchema', () => {
 })
 
 describe('scopes de datos', () => {
-  it('data.read y data.query están en el vocabulario de capacidades', () => {
+  it('data.read, data.query y data.definitions están en el vocabulario de capacidades', () => {
     expect(CAPABILITIES.dataRead).toBe('data.read')
     expect(CAPABILITIES.dataQuery).toBe('data.query')
-    expect([...API_TOKEN_DATA_SCOPES]).toEqual(['data.read', 'data.query'])
+    expect(CAPABILITIES.dataDefinitions).toBe('data.definitions')
+    expect([...API_TOKEN_DATA_SCOPES]).toEqual(['data.read', 'data.query', 'data.definitions'])
   })
 
-  it('hasDataScope detecta cualquiera de los dos y nada más', () => {
+  it('hasDataScope detecta cualquiera de los tres y nada más', () => {
     expect(hasDataScope(['blueprints.read', 'data.query'])).toBe(true)
     expect(hasDataScope(['data.read'])).toBe(true)
+    expect(hasDataScope(['data.definitions'])).toBe(true)
     expect(hasDataScope(['blueprints.read', 'databases.read'])).toBe(false)
     expect(hasDataScope([])).toBe(false)
   })
