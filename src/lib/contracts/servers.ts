@@ -26,6 +26,12 @@ export const serverOutSchema = z.object({
   has_readonly_credential: z.boolean().optional(),
   /** UTC sin zona. `null` = sin verificar: el MCP no la usa hasta que la sonda pase. */
   readonly_verified_at: z.string().nullable().optional(),
+  /**
+   * `SELECT ON mysql.proc` (SERVER-WIDE) habilitado para la credencial de solo lectura, que es lo
+   * único que deja al MCP leer el código de las rutinas en MariaDB < 11.3 y MySQL 5.7. Es un dato de
+   * riesgo, no un secreto. Opcional: un backend anterior no lo manda y eso equivale a `false`.
+   */
+  readonly_proc_grant: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -68,6 +74,47 @@ export const readonlyCredentialInSchema = z.object({
   password: z.string().min(1, 'Requerido'),
 })
 export type ReadonlyCredentialIn = z.infer<typeof readonlyCredentialInSchema>
+
+/**
+ * Texto de acknowledgement que `PUT /servers/{id}/readonly-credential/routine-bodies` exige,
+ * carácter por carácter, para HABILITAR la bandera (422 `ack_mismatch` si difiere). Deshabilitar no
+ * lo necesita. Es copia literal de `READONLY_PROC_ACK_TEXT` en `app/services/server_catalog.py` del
+ * backend: si cambia allá, cambia acá. El diálogo lo muestra tal cual y el usuario lo acepta con
+ * una casilla; el cliente lo reenvía sin tocarlo.
+ */
+export const READONLY_PROC_ACK_TEXT =
+  'Entiendo que SELECT ON mysql.proc es server-wide: expone el código de las rutinas de TODAS ' +
+  'las bases de datos de este servidor, incluidas las que están fuera del proyecto o excluidas, ' +
+  'y que solo el filtrado del gateway lo contiene.'
+
+/**
+ * Cuerpo de `PUT /servers/{id}/readonly-credential/routine-bodies`. El backend lo declara
+ * `extra="forbid"`: el cuerpo lleva exactamente estos dos campos. `acknowledgement` solo se manda al
+ * habilitar.
+ */
+export const readonlyProcGrantInSchema = z.object({
+  enabled: z.boolean(),
+  acknowledgement: z.string().nullable().optional(),
+})
+export type ReadonlyProcGrantIn = z.infer<typeof readonlyProcGrantInSchema>
+
+/**
+ * Qué pasó con los grants del motor al cambiar la bandera (`ReadonlyProcGrantOut.engine_grant`):
+ *
+ * - `converged`: la cuenta propia del gateway se re-aprovisionó y la sonda pasó.
+ * - `not_alterable`: la credencial se cargó a mano; el gateway NO toca sus grants y solo re-corrió
+ *   la sonda. Si el DBA no ajustó los grants, el servidor queda sin verificar.
+ * - `no_credential`: el servidor no tiene credencial de solo lectura; solo cambió la bandera.
+ */
+export const procGrantEngineStateSchema = z.enum(['converged', 'not_alterable', 'no_credential'])
+export type ProcGrantEngineState = z.infer<typeof procGrantEngineStateSchema>
+
+/** `ReadonlyProcGrantOut`: el servidor ya actualizado y qué pasó en el motor. */
+export const readonlyProcGrantOutSchema = z.object({
+  server: serverOutSchema,
+  engine_grant: procGrantEngineStateSchema,
+})
+export type ReadonlyProcGrantOut = z.infer<typeof readonlyProcGrantOutSchema>
 
 /** Con qué credencial corre `test-connection`: la pseudo-root (default) o la de solo lectura. */
 export type TestConnectionCredential = 'root' | 'readonly'

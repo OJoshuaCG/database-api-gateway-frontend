@@ -8,23 +8,27 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Checkbox,
   ConfirmDialog,
   type BadgeTone,
 } from '@/components/ui'
 import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import { toApiError } from '@/lib/api/errors'
-import { CAPABILITIES, type ServerOut } from '@/lib/contracts'
+import { CAPABILITIES, READONLY_PROC_ACK_TEXT, type ServerOut } from '@/lib/contracts'
 import { formatUtcDateTime } from '@/lib/utils'
 import {
   READONLY_MAX_AGE_DAYS,
   READONLY_PROBE_FAILED,
+  procGrantOutcome,
   readonlyCredentialState,
   readonlyViolationLabel,
+  showsProcGrantControl,
   type ReadonlyCredentialState,
 } from '../readonly-credential'
 import {
   useClearReadonlyCredential,
   useProvisionReadonlyCredential,
+  useSetReadonlyProcGrant,
   useTestReadonlyConnection,
 } from '../hooks/use-server-mutations'
 import { ReadonlyCredentialModal } from './ReadonlyCredentialModal'
@@ -68,6 +72,10 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
   const [formOpen, setFormOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmProvision, setConfirmProvision] = useState(false)
+  const [confirmProcGrantEnable, setConfirmProcGrantEnable] = useState(false)
+  const [confirmProcGrantDisable, setConfirmProcGrantDisable] = useState(false)
+  // La casilla de «Leí el aviso» arranca desmarcada CADA vez que se abre el diálogo.
+  const [procGrantAccepted, setProcGrantAccepted] = useState(false)
 
   const guard = useCapabilityGuard(
     CAPABILITIES.serversAdmin,
@@ -76,6 +84,14 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
   const verify = useTestReadonlyConnection(server.id)
   const clear = useClearReadonlyCredential(server.id)
   const provision = useProvisionReadonlyCredential(server.id)
+  const procGrant = useSetReadonlyProcGrant(server.id)
+
+  // Ausente (backend anterior) se lee como apagada: falla cerrado.
+  const procGrantEnabled = server.readonly_proc_grant === true
+  const procGrantOutcomeView =
+    procGrant.data && procGrant.variables
+      ? procGrantOutcome(procGrant.data.engine_grant, procGrant.variables.enabled)
+      : null
 
   const state = readonlyCredentialState(server, nowMs)
   const badge = STATE_BADGE[state]
@@ -168,6 +184,49 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
           )}
         </div>
         <CapabilityHint guard={guard} />
+
+        {showsProcGrantControl(server) && (
+          <section
+            aria-labelledby={`proc-grant-title-${server.id}`}
+            className="flex flex-col gap-3 border-t border-border pt-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 id={`proc-grant-title-${server.id}`} className="text-sm font-medium">
+                Lectura de cuerpos de rutinas
+              </h3>
+              <Badge tone={procGrantEnabled ? 'warning' : 'neutral'}>
+                {procGrantEnabled ? 'Habilitada' : 'Deshabilitada'}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              En MariaDB anterior a 11.3 y MySQL 5.7 el motor solo deja leer el código de las
+              rutinas con SELECT ON <code className="text-xs">mysql.proc</code>, y ese permiso es de
+              TODO el servidor, no de una base. En versiones más nuevas no hace falta y el motor lo
+              rechaza.
+            </p>
+            {procGrantOutcomeView?.tone === 'warning' && (
+              <Callout tone="warning" title={procGrantOutcomeView.title}>
+                <p>{procGrantOutcomeView.description}</p>
+              </Callout>
+            )}
+            <div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setProcGrantAccepted(false)
+                  if (procGrantEnabled) setConfirmProcGrantDisable(true)
+                  else setConfirmProcGrantEnable(true)
+                }}
+                disabled={!guard.allowed}
+                aria-describedby={guard.describedBy}
+              >
+                {procGrantEnabled
+                  ? 'Deshabilitar lectura de cuerpos 🔌'
+                  : 'Habilitar lectura de cuerpos 🔌'}
+              </Button>
+            </div>
+          </section>
+        )}
       </CardContent>
 
       <ReadonlyCredentialModal
@@ -231,6 +290,73 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
         <p className="text-sm text-muted-foreground">
           Para elegir vos la cuenta, cerrá este aviso y usá «
           {hasCredential ? 'Reemplazar credencial' : 'Cargar credencial'}».
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmProcGrantEnable}
+        onClose={() => setConfirmProcGrantEnable(false)}
+        onConfirm={() => {
+          verify.reset()
+          // Se manda EXACTAMENTE el texto que el diálogo muestra: el backend lo compara letra por
+          // letra. Se cierra al terminar, bien o mal; el resultado queda en un toast o en el panel.
+          procGrant.mutate(
+            { enabled: true, acknowledgement: READONLY_PROC_ACK_TEXT },
+            { onSettled: () => setConfirmProcGrantEnable(false) },
+          )
+        }}
+        title="Habilitar la lectura de cuerpos de rutinas"
+        description={`Se opera sobre el motor de «${server.name}» (${server.host}:${server.port}).`}
+        confirmLabel="Habilitar 🔌"
+        isLoading={procGrant.isPending}
+        confirmDisabled={!guard.allowed || !procGrantAccepted}
+      >
+        <Callout tone="danger" title="Este permiso es de TODO el servidor">
+          <p className="mb-2">
+            SELECT ON <code className="text-xs">mysql.proc</code> no se puede acotar a una base: la
+            credencial de solo lectura podrá leer el código de las rutinas de TODAS las bases de
+            este servidor, también las que están fuera del proyecto o excluidas. Solo el filtrado
+            del gateway lo contiene.
+          </p>
+          <p>
+            Ese código es texto de terceros y puede contener secretos. Con credencial generada por
+            el gateway, la cuenta se re-aprovisiona en el motor; con una cargada a mano, el gateway
+            no toca sus grants y el DBA tiene que agregar el permiso.
+          </p>
+        </Callout>
+        <blockquote className="border-l-2 border-border pl-3 text-sm text-foreground">
+          {READONLY_PROC_ACK_TEXT}
+        </blockquote>
+        <Checkbox
+          label="Leí el aviso y lo acepto"
+          checked={procGrantAccepted}
+          onChange={(event) => setProcGrantAccepted(event.target.checked)}
+          disabled={procGrant.isPending}
+        />
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmProcGrantDisable}
+        onClose={() => setConfirmProcGrantDisable(false)}
+        onConfirm={() => {
+          verify.reset()
+          procGrant.mutate(
+            { enabled: false },
+            { onSettled: () => setConfirmProcGrantDisable(false) },
+          )
+        }}
+        title="Deshabilitar la lectura de cuerpos de rutinas"
+        description={`Se opera sobre el motor de «${server.name}» (${server.host}:${server.port}).`}
+        confirmLabel="Deshabilitar 🔌"
+        tone="primary"
+        isLoading={procGrant.isPending}
+        confirmDisabled={!guard.allowed}
+      >
+        <p className="text-sm text-foreground">
+          El MCP deja de poder leer el código de las rutinas en este servidor. Con credencial
+          generada por el gateway se re-aprovisiona la cuenta sin SELECT ON{' '}
+          <code className="text-xs">mysql.proc</code>; con una cargada a mano, quitale ese permiso
+          en el motor.
         </p>
       </ConfirmDialog>
 

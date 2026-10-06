@@ -18,6 +18,7 @@ import {
   groupedEngineUsersOutSchema,
   knownPasswordSetOutSchema,
   passwordChangeBatchOutSchema,
+  readonlyProcGrantOutSchema,
   reconcileResultSchema,
   serverOutSchema,
   structureDumpSchema,
@@ -42,6 +43,8 @@ import {
   type Page,
   type PasswordChangeBatchOut,
   type ReadonlyCredentialIn,
+  type ReadonlyProcGrantIn,
+  type ReadonlyProcGrantOut,
   type ReconcileResult,
   type ServerCreate,
   type ServerOut,
@@ -109,6 +112,24 @@ export function setReadonlyCredential(id: number, body: ReadonlyCredentialIn): P
  */
 export function provisionReadonlyCredential(id: number): Promise<ServerOut> {
   return mutateData('POST', `${BASE}/${id}/readonly-credential/provision`, serverOutSchema)
+}
+
+/**
+ * `PUT /servers/{id}/readonly-credential/routine-bodies` 🔌 — enciende o apaga `SELECT ON mysql.proc`
+ * (SERVER-WIDE) para la credencial de solo lectura. `servers.admin` + step-up, 3/min. Habilitar
+ * exige el `acknowledgement` exacto (`READONLY_PROC_ACK_TEXT`). Responde el servidor actualizado y
+ * `engine_grant` (qué pasó en el motor).
+ */
+export function setReadonlyProcGrant(
+  id: number,
+  body: ReadonlyProcGrantIn,
+): Promise<ReadonlyProcGrantOut> {
+  return mutateData(
+    'PUT',
+    `${BASE}/${id}/readonly-credential/routine-bodies`,
+    readonlyProcGrantOutSchema,
+    { body },
+  )
 }
 
 /** `DELETE /servers/{id}/readonly-credential` — idempotente; deja el servidor fuera del MCP. */

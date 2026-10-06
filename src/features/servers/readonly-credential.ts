@@ -1,5 +1,5 @@
 import type { ApiError } from '@/lib/api/errors'
-import type { ServerOut } from '@/lib/contracts'
+import type { ProcGrantEngineState, ServerOut } from '@/lib/contracts'
 import { ENGINE_USER_ERROR_CODES } from './engine-user-messages'
 
 /**
@@ -16,6 +16,17 @@ import { ENGINE_USER_ERROR_CODES } from './engine-user-messages'
 export const READONLY_CREDENTIAL_MISSING = 'server.readonly_credential_missing'
 /** La credencial puede escribir (422); `ApiError.readonlyProbeViolations` dice por qué. */
 export const READONLY_PROBE_FAILED = 'server.readonly_probe_failed'
+
+/** El acknowledgement de `routine-bodies` no es el texto exacto (422): la bandera no cambió. */
+export const READONLY_PROC_GRANT_ACK_MISMATCH = 'server.readonly_proc_grant.ack_mismatch'
+/**
+ * El motor no necesita ni admite `SELECT ON mysql.proc` (422): PostgreSQL, MySQL >= 8.0, MariaDB >=
+ * 11.3 o una versión ilegible. La bandera no cambió.
+ */
+export const READONLY_PROC_GRANT_ENGINE_UNSUPPORTED =
+  'server.readonly_proc_grant.engine_unsupported'
+/** Ya hay un aprovisionamiento de la credencial de este servidor en curso (409): no cambió nada. */
+export const READONLY_PROVISION_IN_PROGRESS = 'readonly_provision.in_progress'
 
 /**
  * Antigüedad máxima de la verificación, en días. Es el default de `MCP_READONLY_MAX_AGE_DAYS` del
@@ -122,4 +133,84 @@ export function readonlyCredentialErrorMessage(error: ApiError): string | undefi
     return 'Demasiados intentos seguidos. Esperá un minuto antes de volver a generar la credencial.'
   }
   return undefined
+}
+
+/**
+ * Mensaje de los errores de `PUT .../routine-bodies`, o `undefined` si es de otra clase (lo resuelve
+ * `notifyMutationError` con el `msg` del backend). Los tres códigos dejan la bandera como estaba.
+ */
+export function readonlyProcGrantErrorMessage(error: ApiError): string | undefined {
+  if (error.code === READONLY_PROC_GRANT_ENGINE_UNSUPPORTED) {
+    return 'Este servidor no necesita ni admite SELECT ON mysql.proc: solo aplica a MariaDB anterior a 11.3 y a MySQL 5.7. No se cambió nada.'
+  }
+  if (error.code === READONLY_PROC_GRANT_ACK_MISMATCH) {
+    return 'Para habilitar la lectura de cuerpos de rutinas hay que aceptar el aviso completo. No se cambió nada.'
+  }
+  if (error.code === READONLY_PROVISION_IN_PROGRESS) {
+    return 'Ya hay un cambio de la credencial de solo lectura en curso para este servidor. Esperá a que termine y reintentá; no se cambió nada.'
+  }
+  if (error.isRateLimited) {
+    return 'Demasiados intentos seguidos. Esperá un minuto antes de volver a cambiar la lectura de cuerpos de rutinas.'
+  }
+  return undefined
+}
+
+/**
+ * ¿Mostrar el control de «lectura de cuerpos de rutinas»? La SPA no conoce la versión del motor
+ * (`ServerOut` no la trae), así que lo ofrece a toda la familia MySQL/MariaDB y deja que el backend
+ * decida: en una versión que no lo necesita responde 422 `engine_unsupported`. Si la bandera ya
+ * está encendida se muestra siempre —aunque el motor sea otro—, porque apagarla nunca debe quedar
+ * fuera de alcance. PostgreSQL no tiene `mysql.proc`: sin bandera, no hay control.
+ */
+export function showsProcGrantControl(
+  server: Pick<ServerOut, 'engine' | 'readonly_proc_grant'>,
+): boolean {
+  if (server.readonly_proc_grant === true) return true
+  return server.engine === 'mysql' || server.engine === 'mariadb'
+}
+
+/** Resultado del cambio de la bandera, en palabras del operador. */
+export interface ProcGrantOutcome {
+  tone: 'success' | 'warning'
+  title: string
+  description: string
+}
+
+/**
+ * Qué le cuenta la UI al operador según `engine_grant`. `not_alterable` es la que más importa: el
+ * gateway no toca grants de una credencial cargada a mano, así que el cambio NO llegó al motor y,
+ * si el DBA no ajusta los grants, el servidor queda sin verificar (el MCP cierra).
+ */
+export function procGrantOutcome(
+  engineGrant: ProcGrantEngineState,
+  enabled: boolean,
+): ProcGrantOutcome {
+  const appliedTitle = enabled
+    ? 'Lectura de cuerpos de rutinas habilitada'
+    : 'Lectura de cuerpos de rutinas deshabilitada'
+  switch (engineGrant) {
+    case 'converged':
+      return {
+        tone: 'success',
+        title: appliedTitle,
+        description: enabled
+          ? 'El gateway re-aprovisionó la cuenta de solo lectura con SELECT ON mysql.proc y la sonda pasó.'
+          : 'El gateway re-aprovisionó la cuenta de solo lectura sin SELECT ON mysql.proc y la sonda pasó.',
+      }
+    case 'not_alterable':
+      return {
+        tone: 'warning',
+        title: 'Falta ajustar los grants en el motor',
+        description: enabled
+          ? 'La credencial se cargó a mano y el gateway no toca sus grants: agregale SELECT ON mysql.proc en el motor. Hasta que la sonda pase, el servidor queda sin verificar y el MCP no lo usa.'
+          : 'La credencial se cargó a mano y el gateway no toca sus grants: quitale SELECT ON mysql.proc en el motor. Hasta que la sonda pase, el servidor queda sin verificar y el MCP no lo usa.',
+      }
+    case 'no_credential':
+      return {
+        tone: 'success',
+        title: appliedTitle,
+        description:
+          'El servidor no tiene credencial de solo lectura: solo cambió la bandera, que se aplicará cuando se genere una.',
+      }
+  }
 }

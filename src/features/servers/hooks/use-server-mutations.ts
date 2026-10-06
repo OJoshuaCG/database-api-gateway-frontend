@@ -2,18 +2,28 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/api/query-keys'
 import { toApiError } from '@/lib/api/errors'
 import { useToast } from '@/lib/toast/use-toast'
-import type { ReadonlyCredentialIn, ServerCreate, ServerUpdate } from '@/lib/contracts'
+import type {
+  ReadonlyCredentialIn,
+  ReadonlyProcGrantIn,
+  ServerCreate,
+  ServerUpdate,
+} from '@/lib/contracts'
 import {
   clearReadonlyCredential,
   createServer,
   deleteServer,
   provisionReadonlyCredential,
   setReadonlyCredential,
+  setReadonlyProcGrant,
   testConnection,
   updateServer,
 } from '../api/servers.api'
 import { serverRebindErrorMessage } from '../server-rebind'
-import { readonlyCredentialErrorMessage } from '../readonly-credential'
+import {
+  procGrantOutcome,
+  readonlyCredentialErrorMessage,
+  readonlyProcGrantErrorMessage,
+} from '../readonly-credential'
 import { notifyMutationError, scopeHasGrantsMessage } from '@/features/auth'
 
 export function useCreateServer() {
@@ -146,6 +156,39 @@ export function useProvisionReadonlyCredential(id: number) {
         error,
         'No se pudo generar la credencial de solo lectura',
         readonlyCredentialErrorMessage(apiError) ?? apiError.message,
+      )
+    },
+  })
+}
+
+/**
+ * Enciende o apaga `SELECT ON mysql.proc` 🔌 para la credencial de solo lectura. Sin reintentos
+ * automáticos (`retry: false`): con credencial propia re-aprovisiona la cuenta en el motor de un
+ * tercero. Un `engine_grant: 'not_alterable'` NO es un fallo: el cambio no llegó al motor y el
+ * panel lo explica con un Callout persistente, así que ese caso no lanza toast de éxito. Si el
+ * backend falla, la bandera queda como estaba y la credencial pudo quedar sin verificar: se
+ * refresca el servidor igual.
+ */
+export function useSetReadonlyProcGrant(id: number) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: (body: ReadonlyProcGrantIn) => setReadonlyProcGrant(id, body),
+    retry: false,
+    onSuccess: (result, body) => {
+      queryClient.setQueryData(queryKeys.servers.detail(id), result.server)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
+      const outcome = procGrantOutcome(result.engine_grant, body.enabled)
+      if (outcome.tone === 'success') toast.success(outcome.title, outcome.description)
+    },
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.servers.all })
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo cambiar la lectura de cuerpos de rutinas',
+        readonlyProcGrantErrorMessage(apiError) ?? apiError.message,
       )
     },
   })

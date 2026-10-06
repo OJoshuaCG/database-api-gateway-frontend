@@ -383,3 +383,220 @@ describe('ReadonlyCredentialPanel — acceso', () => {
     expect(screen.getByRole('button', { name: 'Regenerar credencial 🔌' })).toBeDisabled()
   })
 })
+
+describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)', () => {
+  const ROUTINE_BODIES = `${API}/servers/42/readonly-credential/routine-bodies`
+  const ACK_TEXT =
+    'Entiendo que SELECT ON mysql.proc es server-wide: expone el código de las rutinas de TODAS las bases de datos de este servidor, incluidas las que están fuera del proyecto o excluidas, y que solo el filtrado del gateway lo contiene.'
+
+  it('muestra el estado de la bandera y ofrece el control en MySQL y MariaDB', () => {
+    mockSession({ canAdmin: true })
+    const { unmount } = renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    expect(screen.getByText('Lectura de cuerpos de rutinas')).toBeInTheDocument()
+    expect(screen.getByText('Deshabilitada')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ })).toBeEnabled()
+    unmount()
+
+    renderWithProviders(
+      <ReadonlyCredentialPanel
+        server={serverWith({ engine: 'mariadb', readonly_proc_grant: true })}
+      />,
+    )
+    expect(screen.getByText('Habilitada')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Deshabilitar lectura de cuerpos/ })).toBeEnabled()
+  })
+
+  it('PostgreSQL con la bandera apagada no muestra el control', () => {
+    mockSession({ canAdmin: true })
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith({ engine: 'postgresql' })} />)
+
+    expect(screen.queryByText('Lectura de cuerpos de rutinas')).not.toBeInTheDocument()
+  })
+
+  it('sin `servers.admin` el control queda deshabilitado', async () => {
+    mockSession({ canAdmin: false })
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    expect(
+      await screen.findByText(/administrar la credencial de solo lectura del MCP/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ })).toBeDisabled()
+  })
+
+  it('habilitar advierte que es server-wide y exige aceptar el aviso antes de llamar', async () => {
+    mockSession({ canAdmin: true })
+    let received: unknown = null
+    server.use(
+      http.put(ROUTINE_BODIES, async ({ request }) => {
+        received = await request.json()
+        return HttpResponse.json({
+          data: {
+            server: serverWith({ readonly_proc_grant: true }),
+            engine_grant: 'converged',
+          },
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Este permiso es de TODO el servidor')).toBeInTheDocument()
+    expect(within(dialog).getByText(/TODAS las bases de este servidor/)).toBeInTheDocument()
+    expect(within(dialog).getByText(ACK_TEXT)).toBeInTheDocument()
+    const confirm = within(dialog).getByRole('button', { name: 'Habilitar 🔌' })
+    expect(confirm).toBeDisabled()
+
+    await user.click(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ }))
+    expect(confirm).toBeEnabled()
+    await user.click(confirm)
+
+    await waitFor(() => expect(received).toEqual({ enabled: true, acknowledgement: ACK_TEXT }))
+  })
+
+  it('cancelar no llama al backend y la casilla vuelve desmarcada al reabrir', async () => {
+    mockSession({ canAdmin: true })
+    let calls = 0
+    server.use(
+      http.put(ROUTINE_BODIES, () => {
+        calls += 1
+        return HttpResponse.json({ data: { server: serverWith(), engine_grant: 'converged' } })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+    let dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ }))
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ })).not.toBeChecked()
+    expect(calls).toBe(0)
+  })
+
+  it('deshabilitar no pide el aviso y manda solo `enabled: false`', async () => {
+    mockSession({ canAdmin: true })
+    let received: unknown = null
+    server.use(
+      http.put(ROUTINE_BODIES, async ({ request }) => {
+        received = await request.json()
+        return HttpResponse.json({ data: { server: serverWith(), engine_grant: 'converged' } })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(
+      <ReadonlyCredentialPanel server={serverWith({ readonly_proc_grant: true })} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Deshabilitar lectura de cuerpos/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Deshabilitar 🔌' }))
+
+    await waitFor(() => expect(received).toEqual({ enabled: false }))
+  })
+
+  it('not_alterable muestra un aviso persistente de que faltan los grants del motor', async () => {
+    mockSession({ canAdmin: true })
+    server.use(
+      http.put(ROUTINE_BODIES, () =>
+        HttpResponse.json({
+          data: {
+            server: serverWith({ has_readonly_credential: true, readonly_proc_grant: true }),
+            engine_grant: 'not_alterable',
+          },
+        }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(
+      <ReadonlyCredentialPanel server={serverWith({ has_readonly_credential: true })} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ }))
+    await user.click(within(dialog).getByRole('button', { name: 'Habilitar 🔌' }))
+
+    expect(await screen.findByText('Falta ajustar los grants en el motor')).toBeInTheDocument()
+    expect(screen.getByText(/agregale SELECT ON mysql\.proc en el motor/)).toBeInTheDocument()
+  })
+
+  it('un 422 engine_unsupported muestra un mensaje claro', async () => {
+    mockSession({ canAdmin: true })
+    server.use(
+      http.put(ROUTINE_BODIES, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'no necesita',
+              type: 'AppHttpException',
+              public_context: { code: 'server.readonly_proc_grant.engine_unsupported' },
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ }))
+    await user.click(within(dialog).getByRole('button', { name: 'Habilitar 🔌' }))
+
+    expect(
+      await screen.findByText(/no necesita ni admite SELECT ON mysql\.proc/),
+    ).toBeInTheDocument()
+  })
+
+  it('ante el 403 de step-up pide la contraseña y reenvía una sola vez', async () => {
+    mockSession({ canAdmin: true })
+    let calls = 0
+    server.use(
+      http.put(ROUTINE_BODIES, () => {
+        calls += 1
+        if (calls === 1) {
+          return HttpResponse.json(
+            {
+              detail: {
+                msg: 'Confirmá tu contraseña.',
+                type: 'AppHttpException',
+                public_context: { code: 'access.step_up_required', step_up_ttl_seconds: 300 },
+              },
+            },
+            { status: 403 },
+          )
+        }
+        return HttpResponse.json({
+          data: {
+            server: serverWith({ readonly_proc_grant: true }),
+            engine_grant: 'no_credential',
+          },
+        })
+      }),
+    )
+    let prompts = 0
+    setStepUpHandler(() => {
+      prompts += 1
+      return Promise.resolve(true)
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('checkbox', { name: /Leí el aviso/ }))
+    await user.click(within(dialog).getByRole('button', { name: 'Habilitar 🔌' }))
+
+    await waitFor(() => expect(calls).toBe(2))
+    expect(prompts).toBe(1)
+  })
+})
