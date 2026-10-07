@@ -180,11 +180,11 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    // Lee el rastro quien NO hace los cambios de acceso: `policy.admin` es solo de
+    // Lee el rastro quien NO hace los cambios de acceso: `audit.read` es solo de
     // `security_officer`, así que un `access_admin` a secas no la ve (v29 §11.2).
     to: '/audit-log',
     label: 'Auditoría',
-    anyOf: [CAPABILITIES.policyAdmin],
+    anyOf: [CAPABILITIES.auditRead],
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <rect x="5" y="3" width="14" height="18" rx="2" strokeWidth="1.6" />

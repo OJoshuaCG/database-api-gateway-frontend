@@ -9,7 +9,7 @@ import { AuditLogPage } from './AuditLogPage'
 
 const API = 'http://localhost/api/v1'
 
-/** Quien lee la auditoría: `security_officer` es la única global con `policy.admin`. */
+/** Quien lee la auditoría: `security_officer` es la única global con `audit.read`. */
 const OFFICER = meFixture({ role: 'viewer', global_capabilities: ['security_officer'] })
 
 const ROWS = [
@@ -230,6 +230,35 @@ describe('AuditLogPage', () => {
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('texto libre')).toBeInTheDocument()
     expect(within(dialog).getByText(/tocó el motor/)).toBeInTheDocument()
+  })
+
+  it('una entrada con el SQL enmascarado avisa que los valores se ocultaron', async () => {
+    const maskedRow = {
+      id: 900,
+      created_at: '2026-10-03T10:00:00',
+      actor_type: 'admin',
+      admin_username: 'ana',
+      action: 'query_console.execute',
+      touched_engine: true,
+      status: 'attempt',
+      detail: 'facturacion as app_rw (known) [medium]: UPDATE clientes SET email = ? WHERE id = ?',
+      detail_json: null,
+      detail_masked: true,
+    }
+    mockBackend()
+    server.use(http.get(`${API}/audit-log/900`, () => HttpResponse.json({ data: maskedRow })))
+    renderWithProviders(<AuditLogPage />, { route: '/audit-log?entrada=900' })
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText(/UPDATE clientes SET email = \?/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Los valores del SQL se ocultaron/)).toBeInTheDocument()
+  })
+
+  it('una entrada sin `detail_masked` (backend anterior) no muestra el aviso', async () => {
+    mockBackend()
+    renderWithProviders(<AuditLogPage />, { route: '/audit-log?entrada=811' })
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('texto libre')
+    expect(within(dialog).queryByText(/Los valores del SQL se ocultaron/)).not.toBeInTheDocument()
   })
 
   it('una entrada que no existe lo dice, sin «Reintentar»', async () => {

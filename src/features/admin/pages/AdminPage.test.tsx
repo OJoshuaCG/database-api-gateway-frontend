@@ -40,7 +40,7 @@ describe('AdminPage', () => {
     )
   })
 
-  it('sin `policy.admin` no ofrece «Cifrado» y arranca en «Privilegios»', async () => {
+  it('sin `crypto.rotate` no ofrece «Cifrado» y arranca en «Privilegios»', async () => {
     mockBackend(meFixture({ role: 'owner' }))
     renderWithProviders(<AdminPage />, { route: '/admin' })
     await waitFor(() =>
@@ -53,7 +53,7 @@ describe('AdminPage', () => {
     expect(screen.getByRole('tablist')).toHaveAccessibleName('Secciones de administración')
   })
 
-  it('con `policy.admin` (security_officer) arranca en «Cifrado»', async () => {
+  it('con `crypto.rotate` (security_officer) arranca en «Cifrado»', async () => {
     mockBackend(meFixture({ role: 'viewer', global_capabilities: ['security_officer'] }))
     renderWithProviders(<AdminPage />, { route: '/admin' })
     expect(await screen.findByRole('tab', { name: 'Cifrado' })).toHaveAttribute(
@@ -62,7 +62,7 @@ describe('AdminPage', () => {
     )
   })
 
-  it('access_admin no tiene `policy.admin`: no ofrece «Cifrado»', async () => {
+  it('access_admin no tiene `crypto.rotate`: no ofrece «Cifrado»', async () => {
     mockBackend(meFixture({ role: 'owner', global_capabilities: ['access_admin'] }))
     renderWithProviders(<AdminPage />, { route: '/admin' })
     await waitFor(() =>

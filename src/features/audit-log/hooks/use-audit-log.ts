@@ -5,7 +5,7 @@ import type { AuditLogEntry } from '@/lib/contracts'
 import { getAuditLogEntry, listAuditLog } from '../api/audit-log.api'
 
 /**
- * Página de la auditoría. `enabled` lo apaga quien no tiene `policy.admin` (sería un 403 seguro) y
+ * Página de la auditoría. `enabled` lo apaga quien no tiene `audit.read` (sería un 403 seguro) y
  * un rango de fechas invertido (sería un 422 seguro). `keepPreviousData`: cambiar de página o de
  * filtro no vacía la tabla mientras llega la siguiente.
  */

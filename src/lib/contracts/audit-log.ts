@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Lectura de la auditoría (api-reference-v29 §11.3–11.4). Solo `policy.admin`, que tiene solo
+ * Lectura de la auditoría (api-reference-v29 §11.3–11.4). Solo `audit.read`, que tiene solo
  * `security_officer`: quien hace los cambios de acceso (`access_admin`) no lee el rastro que los
  * registra. Los `GET` no piden step-up.
  */
@@ -37,6 +37,13 @@ export const auditLogEntrySchema = z.object({
   status: z.string(),
   detail: z.string().nullish(),
   detail_json: z.unknown().nullable().optional(),
+  /**
+   * `true` = `detail` es de una acción `query_console.*` y el servidor reemplazó los literales del
+   * SQL por `?` porque quien lee no puede ejecutar SQL en el destino. Ausente o nulo (backend
+   * anterior) equivale a `false`: se declara opcional y no con un default para no obligar a quien
+   * arma una entrada a mano a repetirlo.
+   */
+  detail_masked: z.boolean().nullish(),
   ip: z.string().nullish(),
   grantee: z.string().nullish(),
   privilege: z.string().nullish(),

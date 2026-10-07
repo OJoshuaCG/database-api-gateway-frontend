@@ -59,7 +59,7 @@ describe('Sidebar — entradas según capacidades', () => {
     expect(screen.queryByRole('link', { name: 'Tokens de agente' })).not.toBeInTheDocument()
   })
 
-  it('«Auditoría» solo con `policy.admin` (security_officer): lee el rastro quien no cambia accesos', async () => {
+  it('«Auditoría» solo con `audit.read` (security_officer): lee el rastro quien no cambia accesos', async () => {
     mockMe(meFixture({ role: 'viewer', global_capabilities: ['security_officer'] }))
     renderWithProviders(<Sidebar />)
     expect(await screen.findByRole('link', { name: 'Auditoría' })).toHaveAttribute(

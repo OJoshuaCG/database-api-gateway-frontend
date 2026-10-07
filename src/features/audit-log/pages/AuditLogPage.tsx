@@ -37,7 +37,7 @@ import { useAuditLog } from '../hooks/use-audit-log'
 /**
  * «Auditoría» (`/audit-log`, api-reference-v29 §11.3) — el rastro de quién hizo qué en el gateway.
  *
- * Solo `policy.admin`, que tiene solo `security_officer`: **lee el rastro quien no hace los cambios
+ * Solo `audit.read`, que tiene solo `security_officer`: **lee el rastro quien no hace los cambios
  * de acceso**. Un `access_admin` sin `security_officer` recibe el 403 compartido, a propósito. La
  * lectura no pide step-up.
  *
@@ -49,7 +49,7 @@ import { useAuditLog } from '../hooks/use-audit-log'
 export function AuditLogPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const state = parseAuditSearch(searchParams)
-  const canRead = useCapabilities().can(CAPABILITIES.policyAdmin)
+  const canRead = useCapabilities().can(CAPABILITIES.auditRead)
   // Antes de que llegue la sesión `can()` falla abierto: se espera para no pedir un 403 seguro.
   const { admin } = useSession()
   const invalidRange = isInvalidRange(state.filters)

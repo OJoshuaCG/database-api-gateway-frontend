@@ -152,7 +152,15 @@ function EntryDetail({
         <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           Detalle {json ? '(JSON)' : ''}
         </summary>
-        <div className="border-t border-border p-3">
+        <div className="flex flex-col gap-2 border-t border-border p-3">
+          {/* El servidor enmascara los literales del SQL de la consola para quien no puede
+              ejecutarlo: sin este aviso, los `?` parecerían un error de captura. */}
+          {entry.detail_masked && (
+            <p className="text-xs text-muted-foreground">
+              Los valores del SQL se ocultaron (<code className="font-mono">?</code>): tu rol no
+              puede ejecutar SQL en este destino.
+            </p>
+          )}
           {json ? (
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-muted p-3 font-mono text-xs text-foreground">
               {json}

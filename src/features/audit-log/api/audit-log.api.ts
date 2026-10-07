@@ -4,7 +4,7 @@ import { auditLogEntrySchema, type AuditLogEntry, type Page } from '@/lib/contra
 const BASE = '/audit-log'
 
 /**
- * `GET /audit-log` (v29 §11.3) — paginado, las más nuevas primero. `policy.admin`, sin step-up.
+ * `GET /audit-log` (v29 §11.3) — paginado, las más nuevas primero. `audit.read`, sin step-up.
  * `params` ya trae los nombres del backend (`from`/`to` incluidos): los arma `auditQueryParams`.
  */
 export function listAuditLog(

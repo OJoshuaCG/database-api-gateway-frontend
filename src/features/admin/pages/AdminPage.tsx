@@ -31,10 +31,10 @@ export function AdminPage() {
   // pestaña concreta y un valor desconocido cae en `crypto` en vez de dejar la página vacía.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  // Cifrado es `policy.admin` (solo de `security_officer`). Sin ella la pestaña no se ofrece y la
+  // Cifrado es `crypto.rotate` (solo de `security_officer`). Sin ella la pestaña no se ofrece y la
   // página arranca en la primera que sí sirve; un enlace directo a `?tab=crypto` muestra el 403
   // compartido.
-  const canRotate = useCapabilities().can(CAPABILITIES.policyAdmin)
+  const canRotate = useCapabilities().can(CAPABILITIES.cryptoRotate)
   const tab: Tab = isTab(tabParam) ? tabParam : canRotate ? 'crypto' : 'privileges'
   const setTab = (next: Tab) => {
     setSearchParams((previous) => {

@@ -203,7 +203,7 @@ export const router = createBrowserRouter([
           // `useBlocker` del data router para avisar de cambios sin guardar al salir.
           { path: 'gateway-users/:userId/accesos', element: <GatewayUserAccessPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
-          // Lectura de la auditoría (v29 §11.3): solo `policy.admin` (`security_officer`).
+          // Lectura de la auditoría (v29 §11.3): solo `audit.read` (`security_officer`).
           { path: 'audit-log', element: <AuditLogPage /> },
           { path: 'admin', element: <AdminPage /> },
           // Autoservicio de la propia sesión: «Mi acceso», «Mis sesiones» (que antes era una
