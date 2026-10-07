@@ -42,8 +42,8 @@ export const API_TOKEN_NAME_MAX = 128
  *
  * ⚠️ `id` y `token_id` NO son lo mismo, y confundirlos rompe el `DELETE`. `id` es la PK numérica
  * y es lo que va en `DELETE /api-tokens/{token_pk}`. `token_id` es la parte PÚBLICA del bearer
- * (`dbgw.<token_id>.<secreto>`) y es lo que aparece en el rastro de auditoría: sirve para cruzar
- * una fila `mcp.*` con el token que la originó, no para direccionar el recurso.
+ * (`datum.<token_id>.<secreto>`; el formato legado `dbgw.` sigue siendo válido) y es lo que
+ * aparece en el rastro de auditoría: sirve para cruzar una fila `mcp.*` con el token que la originó, no para direccionar el recurso.
  *
  * ⚠️ `scopes` son los EFECTIVOS, no el eco del request: el servidor intersecta lo pedido con el
  * techo de agente, así que puede traer MENOS de lo que se envió. La pantalla tiene que mostrar lo

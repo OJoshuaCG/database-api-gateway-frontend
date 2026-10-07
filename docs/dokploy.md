@@ -181,7 +181,7 @@ en la configuración de Dokploy antes de dar por resuelto un 504.
 
 ### El MCP no se ve afectado por el CSRF, pero sí por el ruteo
 
-El servidor MCP autentica con `Authorization: Bearer dbgw.<id>.<secreto>`, que produce un
+El servidor MCP autentica con `Authorization: Bearer datum.<id>.<secreto>` (el formato legado `dbgw.<id>.<secreto>` sigue siendo válido), que produce un
 actor `api_token`. El guard de CSRF corre **solo** para `actor.kind == "admin"`
 (`app/core/authz.py`), así que el MCP nunca pasa por ahí y la cookie le es indiferente.
 

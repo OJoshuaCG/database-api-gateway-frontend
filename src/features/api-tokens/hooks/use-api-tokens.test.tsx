@@ -54,7 +54,7 @@ describe('useCreateApiToken', () => {
       http.post('http://localhost/api/v1/api-tokens', () =>
         HttpResponse.json(
           {
-            data: { ...tokenFixture, token: 'dbgw.k3f9qm2x.secreto' },
+            data: { ...tokenFixture, token: 'datum.k3f9qm2x.secreto' },
             message: 'Token emitido.',
           },
           { status: 201 },
@@ -71,7 +71,7 @@ describe('useCreateApiToken', () => {
       })
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.token).toBe('dbgw.k3f9qm2x.secreto')
+    expect(result.current.data?.token).toBe('datum.k3f9qm2x.secreto')
     // ...y el servidor devuelve UNO: intersectó con el techo de agente. La pantalla tiene que
     // mostrar esto y nunca lo que eligió el operador.
     expect(result.current.data?.scopes).toEqual(['blueprints.read'])
