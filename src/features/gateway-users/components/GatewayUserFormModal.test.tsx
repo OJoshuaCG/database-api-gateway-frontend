@@ -41,7 +41,7 @@ beforeEach(() => mockActor('owner'))
 describe('GatewayUserFormModal — rol base', () => {
   it('resume qué otorga el rol elegido desde el catálogo, sin descripciones escritas a mano', async () => {
     renderWithProviders(<GatewayUserFormModal open onClose={() => undefined} />)
-    expect(await screen.findByText(/Otorga 12 de 32/)).toBeInTheDocument()
+    expect(await screen.findByText(/Otorga 12 de 35/)).toBeInTheDocument()
     // La frase vieja prometía que se podía «acotar o ampliar»: hoy no se cumple en todas las rutas.
     expect(screen.queryByText(/acotar o ampliar/)).not.toBeInTheDocument()
   })
@@ -49,7 +49,7 @@ describe('GatewayUserFormModal — rol base', () => {
   it('sin techo (C3): ofrece owner aunque quien crea sea operator, marcado como elevación', async () => {
     mockActor('operator')
     renderWithProviders(<GatewayUserFormModal open onClose={() => undefined} />)
-    await screen.findByText(/Otorga 12 de 32/)
+    await screen.findByText(/Otorga 12 de 35/)
     expect(screen.queryByText(/Solo podés asignar un rol base hasta/)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Abrir lista' }))

@@ -13,7 +13,7 @@ import {
  * api-reference-v29 §9.2–9.3.
  */
 
-/** `_SENSITIVE_POLICY` del backend: las 11 desde C3. */
+/** `_SENSITIVE_POLICY` del backend presente en el fixture: las 11 de C3 + `engine_users.grant_admin`. */
 const SENSITIVE_POLICY = [
   'engine_users.secrets',
   'engine_users.credentials',
@@ -26,6 +26,7 @@ const SENSITIVE_POLICY = [
   'blueprints.apply',
   'schema_diff.execute',
   'collation.execute',
+  'engine_users.grant_admin',
 ]
 
 describe('needsSecondApprover', () => {
@@ -56,7 +57,7 @@ describe('needsSecondApprover', () => {
 })
 
 describe('isSensitiveCapability', () => {
-  it('son exactamente las 11 de `_SENSITIVE_POLICY`: otorgables y exclusivas de owner', () => {
+  it('son exactamente las de `_SENSITIVE_POLICY`: otorgables y exclusivas de owner', () => {
     const sensitive = GRANTS_CATALOG_FIXTURE.filter((row) =>
       isSensitiveCapability(row.id, GRANTS_CATALOG_FIXTURE),
     ).map((row) => row.id)

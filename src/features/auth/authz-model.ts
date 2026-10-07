@@ -809,7 +809,11 @@ export const MODULE_LABELS: Record<string, string> = {
   environments: 'Entornos',
   // Eran un solo módulo (`gateway`) hasta que `gateway.admin` se partió en dos (v29).
   access: 'Accesos del gateway',
-  policy: 'Política del gateway',
+  // `policy` (`policy.admin`) se partió en `audit` + `crypto` (v41); `schema` es el código de los
+  // objetos de esquema (`schema.definitions`).
+  audit: 'Auditoría del gateway',
+  crypto: 'Cifrado del gateway',
+  schema: 'Código de objetos de esquema',
 }
 
 export function moduleLabel(module: string): string {

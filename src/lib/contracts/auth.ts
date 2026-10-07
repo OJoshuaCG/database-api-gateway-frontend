@@ -275,7 +275,7 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 35 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 39 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
@@ -310,6 +310,14 @@ export const CAPABILITIES = {
    * lo que no pone una contraseña elegida por el actor.
    */
   engineUsersCredentials: 'engine_users.credentials',
+  /**
+   * DELEGAR privilegios del motor: `WITH GRANT OPTION`, un privilegio sensible (el set GATE) y
+   * `provision=true` al reasignar el dueño de una base. Se exige ADEMÁS de `engineUsersWrite` (o de
+   * `databasesDrop` en el reassign). Solo `owner`, con step-up, y sensible si se otorga suelta.
+   * Restricción intencional: `operator` ya no otorga con `WITH GRANT OPTION` ni privilegios
+   * sensibles; los grants simples no cambian. Eje por servidor, como el resto de `engine_users.*`.
+   */
+  engineUsersGrantAdmin: 'engine_users.grant_admin',
 
   databasesRead: 'databases.read',
   databasesWrite: 'databases.write',
@@ -320,6 +328,15 @@ export const CAPABILITIES = {
   blueprintsApply: 'blueprints.apply',
   /** 🔓 */
   blueprintsCaptures: 'blueprints.captures',
+
+  /**
+   * El CÓDIGO de vistas, vistas materializadas, rutinas, triggers y eventos (snapshot de una base y
+   * comparaciones de esquema). La estructura sigue en `databasesRead` / `schemaDiffRead`. La tienen
+   * `operator` y `owner`, NO `viewer`: sin ella esos objetos llegan con `redacted: true` y sin cuerpo.
+   * No divulga ni pide step-up en el catálogo (lo fijan los invariantes, dado que `operator` la
+   * hereda); otorgada suelta no pide segundo aprobador. El scope del MCP es `dataDefinitions`.
+   */
+  schemaDefinitions: 'schema.definitions',
 
   schemaDiffRead: 'schema_diff.read',
   schemaDiffExecute: 'schema_diff.execute',
@@ -372,12 +389,20 @@ export const CAPABILITIES = {
 
   /**
    * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens
-   * de API de TODOS (los propios los cubre `tokensOwn`) y el reporte de preparación de alcances. Junto con `policyAdmin` reemplaza a la vieja
-   * `gateway.admin`, que tenían las dos globales: partida en dos, los conjuntos son disjuntos.
+   * de API de TODOS (los propios los cubre `tokensOwn`) y el reporte de preparación de alcances.
+   * Reemplazó a la vieja `gateway.admin`, que tenían las dos globales: partida en dos, los
+   * conjuntos son disjuntos.
    */
   accessAdmin: 'access.admin',
-  /** Solo `security_officer`: la política del gateway (hoy, la rotación del cifrado). */
-  policyAdmin: 'policy.admin',
+  /**
+   * Solo `security_officer`: LEER la auditoría (`GET /audit-log`). Es el revisor: quien rota las
+   * claves (`cryptoRotate`) y quien revisa el rastro son deberes distintos. Reemplazó, junto con
+   * `cryptoRotate`, a la vieja `policy.admin` (retirada). No divulga: el SQL de las acciones de la
+   * consola sale enmascarado para quien no puede ejecutarlo.
+   */
+  auditRead: 'audit.read',
+  /** Solo `security_officer`: rotar la clave de cifrado de las credenciales almacenadas. */
+  cryptoRotate: 'crypto.rotate',
 } as const
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES]
@@ -406,8 +431,9 @@ export const DESTRUCTIVE_CAPABILITIES = [
 /**
  * Los endpoints donde un PARÁMETRO, o una segunda capacidad, sube el requisito (§4 y §6.6).
  *
- * Son once. Cinco dependen de un parámetro (encender la captura, sembrar datos, los dos
- * `drop_remote` y el `provision` de reasignar el dueño), tres de que el payload traiga una
+ * Son trece. Cinco dependen de un parámetro (encender la captura, sembrar datos, los dos
+ * `drop_remote` y el `provision` de reasignar el dueño), dos de que el grant delegue privilegios
+ * (`WITH GRANT OPTION` o un privilegio sensible: `engine_users.grant_admin`), tres de que el payload traiga una
  * contraseña elegida por el actor (`engine_users.credentials`), uno de un flag del alta
  * (`apply_migrations`) y dos son acciones que crean una versión de blueprint DESDE OTRO MÓDULO y
  * por eso exigen `blueprints.write` además de la propia (adoptar un diff, registrar un lote de
@@ -447,9 +473,18 @@ export const CAPABILITY_ESCALATIONS = {
   /**
    * `provision=true` en `POST /managed-databases/{id}/reassign-owner`, EN la base: entregar el
    * control del motor (`ALTER DATABASE … OWNER TO`, o el re-GRANT de `ALL PRIVILEGES`) equivale a
-   * poder borrarla. Sin `provision` basta `databases.write`.
+   * poder borrarla (`databases.drop`) y a delegar privilegios (`engine_users.grant_admin`). Sin
+   * `provision` basta `databases.write`.
    */
-  reassignOwnerProvision: CAPABILITIES.databasesDrop,
+  reassignOwnerProvision: [CAPABILITIES.databasesDrop, CAPABILITIES.engineUsersGrantAdmin],
+  /** `with_grant_option: true` en `POST /server-users/{id}/grants` (y en los grants iniciales). */
+  grantWithGrantOption: CAPABILITIES.engineUsersGrantAdmin,
+  /**
+   * Un privilegio sensible (`is_sensitive` del catálogo de privilegios: el set GATE del backend)
+   * en `POST /server-users/{id}/grants`. Aplicar un perfil guardado NO lo exige: sus plantillas
+   * son política (`catalogs.write`).
+   */
+  grantSensitivePrivilege: CAPABILITIES.engineUsersGrantAdmin,
   /**
    * `POST .../collation-batches/{id}/blueprint-version`: además de `collation.execute`, crear la
    * versión (`blueprints.write`) y stampearla en cada base del blueprint (`blueprints.apply`).

@@ -43,11 +43,11 @@ describe('EffectiveAccessPanel', () => {
       />,
     )
     // El título no repite la procedencia: ya la dice el badge de al lado.
-    expect(screen.getByText('operator · 16 capacidades')).toBeInTheDocument()
+    expect(screen.getByText('operator · 17 capacidades')).toBeInTheDocument()
     expect(screen.getByText('Producción · viewer')).toBeInTheDocument()
     expect(screen.getByText('Permiso de entorno')).toBeInTheDocument()
     // Todo lo que pierde un rol por debajo del base es de capa 2: se recorta de verdad, sin salvedad.
-    const lost = screen.getByText(/Pierde 4:/)
+    const lost = screen.getByText(/Pierde 5:/)
     expect(lost).not.toHaveTextContent('no se recorta')
     expect(lost).not.toHaveTextContent('el resto no')
     // Solo recorta: la nota es informativa, no una alerta.
@@ -68,7 +68,7 @@ describe('EffectiveAccessPanel', () => {
         catalog={CATALOG_FIXTURE}
       />,
     )
-    expect(screen.getByText(/Suma 15:/)).toBeInTheDocument()
+    expect(screen.getByText(/Suma 17:/)).toBeInTheDocument()
     expect(
       screen.getByText(
         /en esas otras operaciones \(lecturas y capacidades globales\) tiene el rol/,
@@ -78,7 +78,7 @@ describe('EffectiveAccessPanel', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(SCOPE_ENFORCEMENT_NOTE)
     // Suma destructivas: la marca no depende solo del color (WCAG 1.4.1), y va en rojo.
     expect(screen.getByText('Suma destructivas')).toBeInTheDocument()
-    expect(screen.getByText(/Suma 15:/)).toHaveClass('text-error')
+    expect(screen.getByText(/Suma 17:/)).toHaveClass('text-error')
   })
 
   it('el cruce entorno × servidor dice que rige el más restrictivo', () => {

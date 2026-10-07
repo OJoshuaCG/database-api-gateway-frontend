@@ -9,8 +9,10 @@ import {
  * `capability_matrix()` y alineado con c5edee5 del backend, donde `collation.execute` pasó a ser
  * solo de `owner` y destructiva; con la llegada de `engine_users.credentials`: solo `owner`,
  * divulga, con step-up y, otorgada suelta, sensible; y con la partición de `gateway.admin` (v29)
- * en `access.admin`, solo de `access_admin`, y `policy.admin`, solo de `security_officer`), para
- * tests. **Solo fixtures**: la UI nunca lee esto, lo deriva del catálogo real. Si el backend
+ * en `access.admin`, solo de `access_admin`, y `policy.admin`, solo de `security_officer`, que luego
+ * se partió en `audit.read` y `crypto.rotate`, ambas solo de `security_officer`; y con
+ * `engine_users.grant_admin`, solo de `owner`; y con `schema.definitions`, de `operator` y `owner`),
+ * para tests. **Solo fixtures**: la UI nunca lee esto, lo deriva del catálogo real. Si el backend
  * cambia un rol, este archivo se regenera desde ahí.
  */
 const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
@@ -119,6 +121,20 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     global_capabilities: [],
   },
   {
+    id: 'engine_users.grant_admin',
+    module: 'engine_users',
+    level: 'grant_admin',
+    label:
+      'Otorgar con WITH GRANT OPTION, privilegios sensibles y entregar el control al reasignar dueño',
+    mutates: true,
+    discloses: false,
+    requires_step_up: true,
+    agent_allowed: false,
+    scope_axis: 'server',
+    roles: ['owner'],
+    global_capabilities: [],
+  },
+  {
     id: 'databases.read',
     module: 'databases',
     level: 'read',
@@ -207,6 +223,19 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     agent_allowed: false,
     scope_axis: 'environment',
     roles: ['owner'],
+    global_capabilities: [],
+  },
+  {
+    id: 'schema.definitions',
+    module: 'schema',
+    level: 'definitions',
+    label: 'Ver el código de vistas, rutinas, triggers y eventos de una base',
+    mutates: false,
+    discloses: false,
+    requires_step_up: false,
+    agent_allowed: false,
+    scope_axis: 'environment',
+    roles: ['operator', 'owner'],
     global_capabilities: [],
   },
   {
@@ -418,10 +447,23 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     global_capabilities: ['access_admin'],
   },
   {
-    id: 'policy.admin',
-    module: 'policy',
-    level: 'admin',
-    label: 'Administrar la política del gateway: rotación del cifrado y lectura de la auditoría',
+    id: 'audit.read',
+    module: 'audit',
+    level: 'read',
+    label: 'Leer la auditoría del gateway',
+    mutates: false,
+    discloses: false,
+    requires_step_up: false,
+    agent_allowed: false,
+    scope_axis: 'global',
+    roles: [],
+    global_capabilities: ['security_officer'],
+  },
+  {
+    id: 'crypto.rotate',
+    module: 'crypto',
+    level: 'rotate',
+    label: 'Rotar la clave de cifrado de las credenciales almacenadas',
     mutates: true,
     discloses: false,
     requires_step_up: true,

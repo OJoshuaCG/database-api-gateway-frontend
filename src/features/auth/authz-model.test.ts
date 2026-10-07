@@ -53,15 +53,17 @@ describe('derivación de roles y globales desde el catálogo', () => {
     const operator = roleCapabilityIds(catalog, 'operator')
     const owner = roleCapabilityIds(catalog, 'owner')
     expect(viewer).toHaveLength(12)
-    // 16: desde que `collation.execute` es solo de `owner` (backend c5edee5).
-    expect(operator).toHaveLength(16)
-    // 27: `engine_users.credentials` es solo de `owner` (elegir una contraseña divulga).
-    expect(owner).toHaveLength(27)
+    // 17: sin `collation.execute` (solo de `owner`, backend c5edee5) y con `schema.definitions`.
+    expect(operator).toHaveLength(17)
+    // 28: `engine_users.credentials` (elegir una contraseña divulga) y `engine_users.grant_admin`
+    // (delegar privilegios) son solo de `owner`.
+    expect(owner).toHaveLength(29)
     expect(viewer.every((id) => operator.includes(id))).toBe(true)
     expect(operator.every((id) => owner.includes(id))).toBe(true)
     // `owner` NO tiene las de política ni la de accesos: van en las globales.
     expect(owner).not.toContain('access.admin')
-    expect(owner).not.toContain('policy.admin')
+    expect(owner).not.toContain('audit.read')
+    expect(owner).not.toContain('crypto.rotate')
     expect(owner).not.toContain('servers.admin')
   })
 
@@ -72,7 +74,8 @@ describe('derivación de roles y globales desde el catálogo', () => {
       'servers.admin',
       'catalogs.write',
       'environments.write',
-      'policy.admin',
+      'audit.read',
+      'crypto.rotate',
     ])
     expect(catalogRoles(catalog)).toEqual(['viewer', 'operator', 'owner'])
     expect(catalogGlobalCapabilities(catalog)).toEqual(['access_admin', 'security_officer'])
@@ -219,7 +222,8 @@ describe('capacidades por destino', () => {
     })
     const atProd = capabilitiesAt(access, { serverId: 9, environmentId: PROD }, environments)
     expect(atProd).toContain('servers.admin')
-    expect(atProd).toContain('policy.admin')
+    expect(atProd).toContain('audit.read')
+    expect(atProd).toContain('crypto.rotate')
     expect(atProd).not.toContain('access.admin')
     expect(atProd).not.toContain('databases.drop')
   })
@@ -265,7 +269,7 @@ describe('resolveEffectiveAccess', () => {
     const resolved = resolveEffectiveAccess(input())
     expect(resolved.grants).toEqual([])
     expect(resolved.overlaps).toEqual([])
-    expect(resolved.baseCapabilities).toHaveLength(16)
+    expect(resolved.baseCapabilities).toHaveLength(17)
   })
 
   it('un permiso más bajo que el base dice qué pierde ahí', () => {
@@ -277,6 +281,7 @@ describe('resolveEffectiveAccess', () => {
       'engine_users.write',
       'databases.write',
       'blueprints.write',
+      'schema.definitions',
       'exports.execute',
     ])
   })
@@ -321,6 +326,8 @@ describe('capacidades con capa 2 (derivadas del catálogo)', () => {
     'engine_users.drop',
     'engine_users.secrets',
     'engine_users.credentials',
+    'engine_users.grant_admin',
+    'schema.definitions',
     'databases.write',
     'databases.drop',
     'blueprints.write',
@@ -404,7 +411,7 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
     expect(expandGrant(EXEC_SQL, CATALOG_FIXTURE)).toEqual([EXEC_SQL])
   })
 
-  it('las sensibles son las 11 de `_SENSITIVE_POLICY` (C3), con `engine_users.credentials`', () => {
+  it('las sensibles son las de `_SENSITIVE_POLICY` presentes en el fixture (C3 + `grant_admin`)', () => {
     const sensitive = grantsCatalog.filter((row) => row.sensitive).map((row) => row.id)
     expect([...sensitive].sort()).toEqual(
       [
@@ -420,6 +427,8 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
         'blueprints.apply',
         'schema_diff.execute',
         'collation.execute',
+        // Delegar privilegios es solo de owner (partición de `engine_users.write`).
+        'engine_users.grant_admin',
       ].sort(),
     )
     // Elegir una contraseña trae la lectura de los usuarios del motor, y nada más.
@@ -511,6 +520,8 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
     'gateway.admin',
     'access.admin',
     'policy.admin',
+    'audit.read',
+    'crypto.rotate',
     'environments.write',
     'self.read',
     'no.existe',
