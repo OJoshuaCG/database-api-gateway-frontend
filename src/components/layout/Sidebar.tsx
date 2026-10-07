@@ -169,7 +169,9 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: '/api-tokens',
     label: 'Tokens de agente',
-    anyOf: [CAPABILITIES.accessAdmin],
+    // `tokens.own` la tienen los tres roles: cualquiera ve sus propios tokens. `access.admin` ve
+    // los de todos. El servidor filtra por dueño; la entrada solo decide si se ofrece la pantalla.
+    anyOf: [CAPABILITIES.accessAdmin, CAPABILITIES.tokensOwn],
     icon: (
       <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
         <circle cx="7.5" cy="12" r="3.5" strokeWidth="1.6" />

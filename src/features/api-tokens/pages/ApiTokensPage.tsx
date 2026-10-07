@@ -34,18 +34,21 @@ export function ApiTokensPage() {
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenOut | null>(null)
   const [editTarget, setEditTarget] = useState<ApiTokenOut | null>(null)
 
-  // Todo el módulo va detrás de `access.admin`. Sin ella la pantalla no ofrece emitir ni revocar
-  // y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403. Por eso el
-  // listado ni se pide: sería un 403 seguro.
-  const canAdmin = useCapabilities().can(CAPABILITIES.accessAdmin)
+  // El módulo va detrás de `access.admin` (tokens de TODOS) o de `tokens.own` (solo los que emitió
+  // la propia persona; la tienen los tres roles). Sin ninguna la pantalla no ofrece emitir ni
+  // revocar y muestra el 403 compartido, sin «Reintentar»: el mismo pedido daría el mismo 403. Por
+  // eso el listado ni se pide: sería un 403 seguro.
+  const { can } = useCapabilities()
+  const canSeeAllTokens = can(CAPABILITIES.accessAdmin)
+  const canManage = canSeeAllTokens || can(CAPABILITIES.tokensOwn)
   // Antes de que llegue la sesión `can()` falla abierto: se espera para no pedir un 403 seguro.
   const { admin } = useSession()
   const { data, isLoading, isFetching, isError, error, refetch } = useApiTokens(
     { page, size },
-    admin !== null && canAdmin,
+    admin !== null && canManage,
   )
   const revoke = useRevokeApiToken()
-  const forbidden = !canAdmin || isAccessForbidden(error)
+  const forbidden = !canManage || isAccessForbidden(error)
 
   const columns = useMemo<ColumnDef<ApiTokenOut>[]>(
     () => [
@@ -140,7 +143,11 @@ export function ApiTokensPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Tokens de agente"
-        description="Credenciales portadoras para procesos automáticos. Cada token vive dentro de un proyecto y siempre tiene vencimiento."
+        description={
+          canSeeAllTokens
+            ? 'Credenciales portadoras para procesos automáticos. Cada token vive dentro de un proyecto y siempre tiene vencimiento.'
+            : 'Credenciales portadoras para procesos automáticos. Acá ves y administrás solo los tokens que emitiste vos. Cada token vive dentro de un proyecto y siempre tiene vencimiento.'
+        }
         actions={
           forbidden ? undefined : <Button onClick={() => setFormOpen(true)}>Emitir token</Button>
         }

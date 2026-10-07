@@ -275,7 +275,7 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 34 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 35 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
@@ -285,6 +285,14 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
  */
 export const CAPABILITIES = {
   selfRead: 'self.read',
+  /**
+   * Emitir, listar, editar los scopes y revocar SOLO los tokens de agente que la propia persona
+   * emitió. La tienen los tres roles (como `self.read`), así que nadie necesita que se la asignen;
+   * no es otorgable ni sensible, y no está en el techo de agente. `access.admin` sigue
+   * administrando los tokens de TODOS. El servidor filtra por dueño y un token ajeno responde el
+   * mismo 404 que uno inexistente: la SPA no filtra nada por su cuenta.
+   */
+  tokensOwn: 'tokens.own',
 
   serversRead: 'servers.read',
   /** Ni `owner` la tiene: editar un servidor puede re-apuntar un `server_id` a otro host. */
@@ -364,7 +372,7 @@ export const CAPABILITIES = {
 
   /**
    * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens
-   * de API y el reporte de preparación de alcances. Junto con `policyAdmin` reemplaza a la vieja
+   * de API de TODOS (los propios los cubre `tokensOwn`) y el reporte de preparación de alcances. Junto con `policyAdmin` reemplaza a la vieja
    * `gateway.admin`, que tenían las dos globales: partida en dos, los conjuntos son disjuntos.
    */
   accessAdmin: 'access.admin',

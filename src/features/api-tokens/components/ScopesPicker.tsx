@@ -1,5 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { Button, Callout, IconButton, Input, XIcon } from '@/components/ui'
+import { useCapabilities } from '@/features/auth'
+import { CAPABILITIES, type Capability } from '@/lib/contracts'
 import { dataScopesOf, hasDefinitionsScope, rowScopesOf } from '../data-scopes'
 import type { AgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
 
@@ -22,6 +24,14 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
   const definitionsRequested = hasDefinitionsScope(value)
   const offeredRowScopes = rowScopesOf(ceiling.offered ?? [])
   const offersDefinitions = hasDefinitionsScope(ceiling.offered ?? [])
+
+  // Quien administra tokens solo con `tokens.own` (sin `access.admin`) no puede darle a un token
+  // una capacidad que su propio rol no tiene: el servidor lo rechaza con 403. Se deshabilita el
+  // chip para no llevarlo hasta ese 403; es una PISTA, decide el servidor. `access.admin` conserva
+  // todos los chips (el servidor acepta, inerte, lo que su emisor no tiene).
+  const { can } = useCapabilities()
+  const isSelfService = !can(CAPABILITIES.accessAdmin)
+  const issuerMayOffer = (scope: string) => !isSelfService || can(scope as Capability)
 
   const addScope = (raw: string) => {
     const scope = raw.trim()
@@ -146,7 +156,12 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={value.includes(scope)}
+                disabled={value.includes(scope) || !issuerMayOffer(scope)}
+                title={
+                  issuerMayOffer(scope)
+                    ? undefined
+                    : 'Tu rol no tiene este permiso: un token no puede tener más que quien lo emite.'
+                }
                 onClick={() => addScope(scope)}
               >
                 {scope}

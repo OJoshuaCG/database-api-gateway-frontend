@@ -3,7 +3,8 @@ import { z } from 'zod'
 /**
  * Tokens de agente (addendum de identidades §3): credenciales portadoras con las que un proceso
  * automático —un pipeline de CI, un agente MCP— habla con el gateway sin sesión de usuario.
- * Todo el módulo va detrás de `access.admin`.
+ * Todo el módulo va detrás de `access.admin` (tokens de todos) o `tokens.own` (solo los que emitió
+ * la propia persona; el servidor filtra por dueño).
  */
 
 /** Scope efectivo cuando el alta manda la lista vacía. NO es «sin scopes». */

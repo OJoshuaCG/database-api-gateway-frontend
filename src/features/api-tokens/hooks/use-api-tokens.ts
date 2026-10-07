@@ -24,7 +24,7 @@ function errorToast(title: string, error: unknown): [string, string] {
   return [title, apiTokenErrorMessage(apiError) ?? apiError.message]
 }
 
-/** `enabled` en `false` sin `access.admin`: el pedido sería un 403 seguro. */
+/** `enabled` en `false` sin `access.admin` ni `tokens.own`: el pedido sería un 403 seguro. */
 export function useApiTokens(params: QueryParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.apiTokens.list(params),
