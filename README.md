@@ -1,6 +1,6 @@
-# Database API Gateway — Frontend
+# Datum — Frontend
 
-SPA en **React + TypeScript** que consume la API del **Database API Gateway**
+SPA en **React + TypeScript** que consume la API de **Datum**
 (`backend/`). Permite gestionar servidores de BD remotos, usuarios del motor, bases de
 datos gestionadas, blueprints y el catálogo de privilegios desde una única interfaz.
 

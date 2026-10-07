@@ -81,7 +81,7 @@ export function LoginPage() {
                 <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" strokeWidth="1.8" />
               </svg>
             </span>
-            <h1 className="text-lg font-semibold text-foreground">Database API Gateway</h1>
+            <h1 className="text-lg font-semibold text-foreground">Datum</h1>
             <p className="text-sm text-muted-foreground">Iniciá sesión como administrador</p>
           </div>
 

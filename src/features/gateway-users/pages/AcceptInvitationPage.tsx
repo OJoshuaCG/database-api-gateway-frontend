@@ -118,7 +118,7 @@ export function AcceptInvitationPage() {
             <div className="flex flex-col gap-2 text-center">
               <h1 className="text-lg font-semibold text-foreground">Activá tu cuenta</h1>
               <p className="text-sm text-muted-foreground">
-                Elegí tu contraseña para el Database API Gateway. Nadie más la conoce, ni siquiera
+                Elegí tu contraseña para Datum. Nadie más la conoce, ni siquiera
                 quien creó la cuenta.
               </p>
             </div>

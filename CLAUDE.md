@@ -1,8 +1,8 @@
-# Database API Gateway — Frontend
+# Datum — Frontend
 
 ## Qué es y por qué existe
 
-SPA de **React + TypeScript** que es la única interfaz del **Database API Gateway**. El gateway
+SPA de **React + TypeScript** que es la única interfaz de **Datum**. El gateway
 existe para que un administrador opere servidores de bases de datos remotos —MySQL, MariaDB y
 PostgreSQL— **sin entrar al motor a mano** (cliente SQL, SSH): crear y borrar bases y usuarios,
 otorgar privilegios, versionar esquemas y aplicarlos, comparar y clonar bases.

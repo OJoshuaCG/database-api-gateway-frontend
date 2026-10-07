@@ -251,7 +251,7 @@ export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: Sid
         ) : (
           <>
             {brandLogo}
-            <span className="text-sm font-semibold text-foreground">DB Gateway</span>
+            <span className="text-sm font-semibold text-foreground">Datum</span>
             {onToggleCollapse && (
               <button
                 type="button"
