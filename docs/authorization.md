@@ -19,11 +19,12 @@ deberes, §9 segundo aprobador, §10 siembra y ventana, §11 auditoría y sesion
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | Rol (cadena monotónica) | `viewer` ⊂ `operator` ⊂ `owner`    | `/auth/me` → `role` (unión), `base_role`, `scope_roles`                                     |
 | Capacidades globales    | `access_admin`, `security_officer` | `/auth/me` → `global_capabilities`                                                          |
-| Capacidades             | **32**, vocabulario cerrado        | `GET /authz/catalog` (`useCapabilityCatalog`); las efectivas en `/auth/me` → `capabilities` |
+| Capacidades             | **39**, vocabulario cerrado        | `GET /authz/catalog` (`useCapabilityCatalog`); las efectivas en `/auth/me` → `capabilities` |
 
 - **Las dos globales son disjuntas** (invariante 9 del catálogo): `access_admin` es exactamente
   `access.admin` (usuarios, accesos, capacidades puntuales, tokens, sesiones de otros);
-  `security_officer` es `policy.admin`, `servers.admin`, `catalogs.write` y `environments.write`.
+  `security_officer` es `audit.read`, `crypto.rotate`, `servers.admin`, `catalogs.write` y
+  `environments.write`.
   Ningún rol tiene una capacidad global, ni siquiera `owner`.
 - **`tokens.own` la tienen los tres roles** (como `self.read`: nadie necesita que se la asignen). No
   es global en el sentido de `access_admin`: es del eje `global` del catálogo, así que no es
@@ -34,10 +35,13 @@ deberes, §9 segundo aprobador, §10 siembra y ventana, §11 auditoría y sesion
   capacidades que quien lo emite: sin `access.admin`, `ScopesPicker` deshabilita los permisos que el
   rol de la persona no tiene (el servidor responde 403 si igual llegan). Entrada de menú, pantalla y
   `useApiTokens` se habilitan con cualquiera de las dos capacidades.
-- **`gateway.admin` está retirada** (v29 §1–§5) y el catálogo impide reintroducirla. La SPA pregunta
-  por `access.admin` o `policy.admin`, nunca por el nombre de la global.
+- **`gateway.admin` y `policy.admin` están retiradas** (v29 §1–§5 y v41) y el catálogo impide
+  reintroducirlas. `policy.admin` se partió en `audit.read` (revisor: lee el rastro) y
+  `crypto.rotate` (actor: rota las claves), las dos solo de `security_officer`: hoy no cambia nada
+  para nadie, pero quien rota y quien revisa son deberes distintos y se pueden separar sin otra
+  migración. La SPA pregunta por la capacidad concreta, nunca por el nombre de la global.
 - **Qué otorga cada rol sale del catálogo**, columnas `roles` y `global_capabilities`: hoy `viewer`
-  12, `operator` 16 y `owner` 27; las 5 restantes son de las globales. La intención de cada rol en
+  13, `operator` 18 y `owner` 33; las 6 restantes son de las globales. La intención de cada rol en
   una línea vive en `ROLE_PURPOSES` (`features/auth/authz-model.ts`). La lista `CAPABILITIES` de
   `lib/contracts/auth.ts` es solo tipado, no una segunda fuente de verdad.
 
@@ -106,7 +110,8 @@ Detalle en [`capability-grants.md`](capability-grants.md).
   no de una lista, así que `data.definitions` (v39, lee el CÓDIGO de vistas, triggers, eventos y
   rutinas) no necesitó lógica propia. El selector de scopes los avisa como datos de terceros
   (`API_TOKEN_DATA_SCOPES`, `ScopesPicker`). Esos tres no figuran en la lista de «11 exclusivas» de
-  arriba, que quedó atrás del catálogo (el backend cuenta 14 sensibles en v39): manda el catálogo.
+  arriba, que quedó atrás del catálogo (el backend cuenta 15 sensibles desde v41, con
+  `engine_users.grant_admin`): manda el catálogo.
 - **Elevaciones de acceso (C3):** dar `owner`, agregar una global o un `sod_override` desde el alta,
   la edición o «Guardar accesos» responde **`202 access.elevation_pending`**: lo que no eleva se
   aplica ya y la elevación queda en una solicitud. Las bajas nunca esperan. El espejo
@@ -171,8 +176,9 @@ sus elevaciones se aplican en el acto.
 
 ## 7. Auditoría y sesiones de otros
 
-- **Auditoría** (`/audit-log`): solo `policy.admin`, es decir `security_officer`. Lee el rastro quien
-  no hace los cambios de acceso. Sin step-up en los `GET`. Detalle en [`audit.md`](audit.md).
+- **Auditoría** (`/audit-log`): solo `audit.read`, es decir `security_officer`. Lee el rastro quien
+  no hace los cambios de acceso. Sin step-up en los `GET`. El SQL de las acciones `query_console.*`
+  llega con los literales enmascarados (`detail_masked`): `security_officer` nunca ejecuta SQL. Detalle en [`audit.md`](audit.md).
 - **Sesiones de otra persona:** sección «Sesiones activas» de `/gateway-users/:userId/accesos`
   (`GatewayUserSessionsSection`), con `access.admin`. «Cerrar todas las sesiones» pide confirmación y
   step-up; sobre la propia cuenta va deshabilitado y remite a «Mi cuenta». Quien la pierde ve «Un
@@ -208,6 +214,25 @@ Los códigos de los contratos viven en `lib/contracts/auth.ts` (`AUTH_*_ERROR_CO
   producción a desarrollo es divulgación.
 - **`engine_users.credentials` es aparte de `write`:** quien elige la contraseña de una cuenta del
   motor la conoce, así que divulga igual que revelarla.
+- **`schema.definitions` separa el CÓDIGO de la estructura (v41):** el cuerpo de vistas, vistas
+  materializadas, rutinas, triggers y eventos (snapshot de una base y comparaciones de esquema) lo
+  ven `operator` y `owner`; **`viewer` ya no** (restricción intencional: sigue viendo tablas,
+  columnas e índices). Sin ella el servidor devuelve esos objetos con el cuerpo vacío y
+  `redacted: true`, y la SPA muestra «Contenido oculto: tu rol no ve el código de este objeto»
+  (`RedactedDefinition`); nunca un vacío silencioso. No es el scope del MCP (`data.definitions`, sin
+  cambios). En el catálogo **no** está marcada `discloses` (lo fijan los invariantes: `operator` la
+  hereda), así que otorgarla suelta no pide segundo aprobador. No cierra las versiones de blueprint
+  creadas desde un snapshot (`blueprints.read` las expone).
+- **`engine_users.grant_admin` es aparte de `write` (v41):** DELEGAR privilegios —`WITH GRANT OPTION`,
+  un privilegio sensible (`is_sensitive` del catálogo de privilegios) o `provision=true` al
+  reasignar el dueño de una base— se exige ADEMÁS de `engine_users.write` (y de `databases.drop` en
+  el reassign). Solo `owner`, con step-up y sensible si se otorga suelta. **Restricción
+  intencional:** `operator` ya no otorga con `WITH GRANT OPTION` ni privilegios sensibles (los
+  grants simples no cambian; aplicar un perfil guardado tampoco lo exige: sus plantillas son política
+  de `catalogs.write`). `GrantPanel` y los permisos iniciales de `ServerUserForm` deshabilitan el
+  interruptor y esconden los privilegios sensibles con el motivo a la vista (`useCapabilityGuard`
+  con destino en el servidor); el 403 propio `engine_user.grant_admin_required` —que SÍ nombra la
+  capacidad, a diferencia del `access.forbidden` opaco— se traduce en `engine-user-messages.ts`.
 - **`owner` no tiene `servers.admin` ni `catalogs.write`:** editar un servidor puede re-apuntar un
   `server_id` a otro host, y toda fila que un guard lee es una frontera de privilegio.
 - **Se retiró el techo por tenencia:** obligaba a que quien administra accesos tuviera también cada
@@ -239,11 +264,12 @@ Los códigos de los contratos viven en `lib/contracts/auth.ts` (`AUTH_*_ERROR_CO
 - `ec703f6` operaciones de flota pasan a `blueprints.apply` (owner).
 - `5808aac`, `4e2e8c4` step-up: reintento tras el 403 y preflight antes de un `confirm_token`.
 - `ee1581f` `engine_users.credentials` para elegir la contraseña de una cuenta del motor.
-- `f1aca88` `access.admin` y `policy.admin` en lugar de `gateway.admin`.
+- `f1aca88` `access.admin` y `policy.admin` en lugar de `gateway.admin` (`policy.admin` se partió
+  después en `audit.read` + `crypto.rotate`).
 - `97197bb` separación de deberes: aviso previo, override, banner y reporte.
 - `51fe4c3` elevaciones con segundo aprobador (`202`) y bandeja única; se elimina el techo.
 - `f483a1f` banner de la ventana de arranque.
-- `8b1acc0` página de auditoría (`policy.admin`).
+- `8b1acc0` página de auditoría (hoy `audit.read`).
 - `2571ee4` ver y cerrar las sesiones de otra persona.
 
 ## Dónde vive cada cosa

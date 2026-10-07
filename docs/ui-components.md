@@ -224,6 +224,13 @@ numeración, copiar y expandir a pantalla completa. Props: `code`, `title?`, `ex
 sin la prop el visor no cambia).
 **Es la única forma correcta de mostrar SQL**: no montes un `<pre>` propio.
 
+### `RedactedDefinition`
+Aviso «Contenido oculto: tu rol no ve el código de este objeto» (`role="note"`). Va **en lugar de**
+un `CodeBlock` cuando el servidor marcó `redacted: true` (vista, rutina, trigger o evento sin
+`schema.definitions`): un bloque en blanco diría que el objeto no tiene definición. Props:
+`title?` (nombre del objeto, para el nombre accesible). Usado por `SnapshotModal`, el paso de
+vista previa del asistente de snapshot, `SqlStatementViewer` y `DependencyClosureNotice`.
+
 ### `SqlEditor` / `SqlField`
 Editor con resaltado *mientras se escribe*: un `<pre>` coloreado debajo y el `<textarea>`
 real encima, transparente. `SqlField` es el puente con react-hook-form (y cae a `CodeBlock`
@@ -441,7 +448,7 @@ nota de sesiones; salir con cambios sin guardar pide confirmación. `CheckIcon` 
 
 ## Auditoría (en `src/features/audit-log/components/`)
 
-Piezas de `AuditLogPage` (`/audit-log`, solo `policy.admin`). Flujo y criterios en
+Piezas de `AuditLogPage` (`/audit-log`, solo `audit.read`). Flujo y criterios en
 [`audit.md`](audit.md).
 
 ### `AuditFilterBar`

@@ -6,11 +6,14 @@ estado) vive en `audit-model.ts`, aparte de los componentes.
 
 ## Quién la ve, y por qué esa persona
 
-Solo `policy.admin`, que hoy tiene únicamente la global `security_officer`. Es separación de
+Solo `audit.read`, que hoy tiene únicamente la global `security_officer`. Es separación de
 deberes: **lee el rastro quien no hace los cambios de acceso**. Un `access_admin` sin
 `security_officer` no ve la entrada «Auditoría» en el `Sidebar` y, si llega por URL, recibe el
 `ForbiddenState` compartido sin «Reintentar» (el listado ni se pide). Los `GET` no piden step-up:
-la auditoría dice quién hizo qué, no entrega datos de terceros.
+la auditoría dice quién hizo qué, no entrega datos de terceros. Lo único que podía llevar literales
+de negocio es el SQL de las acciones `query_console.*`: el servidor lo enmascara (`?`) para quien no
+tiene `sql_console.execute` en el destino —siempre el caso de `security_officer`— y marca la fila con
+`detail_masked`; el detalle de la entrada muestra un aviso en ese caso.
 
 ## Filtros
 

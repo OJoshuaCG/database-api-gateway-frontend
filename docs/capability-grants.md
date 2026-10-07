@@ -18,7 +18,7 @@ del frontend**). Cobertura endpoint → pantalla en [`api-coverage.md`](api-cove
 - **Asignación por función (C3, v29 §9.6)**: `access_admin` otorga cualquier capacidad otorgable,
   tenga o no esa capacidad. Si la función de quien otorga no lo permite, `409
   access.not_assignable`. Las capacidades del eje global (`servers.admin`, `access.admin`,
-  `policy.admin`…) nunca se otorgan: el selector solo ofrece las filas del catálogo con
+  `audit.read`, `crypto.rotate`…) nunca se otorgan: el selector solo ofrece las filas del catálogo con
   `grantable`.
 - ~~**Techo**: quien otorga o aprueba tiene que tener la capacidad en ese alcance.~~ **Obsoleto
   desde C3.** El techo por tenencia y su código `access.grant_ceiling_exceeded` se retiraron en el
@@ -47,7 +47,8 @@ Otorgar (POST) ──┬─ no sensible ─────────────�
    (owner − operator): `databases.drop`, `engine_users.drop`, `engine_users.secrets`,
    `engine_users.credentials`, `blueprints.captures`, `clones.execute`, `exports.download`,
    `sql_console.execute` y, nuevas, `blueprints.apply`, `schema_diff.execute` y
-   `collation.execute`. Nacen `pending` —igual que cualquier alta que lleve `sod_override`— y **no
+   `collation.execute` (desde v41 también `engine_users.grant_admin`, que delega privilegios; el catálogo
+   manda sobre esta lista). Nacen `pending` —igual que cualquier alta que lleve `sod_override`— y **no
    conceden nada** hasta que OTRA persona con `access_admin` (ni quien la pidió ni la persona
    destino) la apruebe. El selector las marca con «Requiere segundo aprobador»
    (`isSensitiveCapability`, espejo de `is_sensitive`: otorgable y exclusiva de owner, derivado del
