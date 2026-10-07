@@ -1,6 +1,6 @@
 # Prompt para backend — un perfil de permisos recién creado no aparece en «Aplicar perfil»
 
-> Documento para pasar al equipo/agente de **backend** del Database API Gateway.
+> Documento para pasar al equipo/agente de **backend** de Datum.
 > Contiene: síntoma, endpoints involucrados, flujo de ejecución exacto del frontend, hipótesis
 > ordenadas por probabilidad con su comando de validación, y las preguntas concretas a responder.
 > Todo lo descrito aquí se verificó leyendo el código del frontend (rutas de archivo incluidas).

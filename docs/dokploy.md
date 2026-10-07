@@ -3,7 +3,7 @@
 Guía específica para desplegar este frontend en [Dokploy](https://dokploy.com/).
 Complementa [`deployment.md`](deployment.md) (conceptos generales de build/servido) y
 [`security.md`](security.md) (por qué importa el dominio/HTTPS). Este documento asume
-que el backend (Database API Gateway) vive en la **misma instancia de Dokploy pero
+que el backend (Datum) vive en la **misma instancia de Dokploy pero
 como una aplicación independiente** (despliegue propio, no un mismo compose).
 
 ## 1. Tipo de aplicación
