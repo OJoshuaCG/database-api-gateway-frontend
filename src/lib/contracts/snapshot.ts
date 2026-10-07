@@ -38,6 +38,13 @@ export const dumpStatementSchema = z.object({
   name: z.string(),
   ddl: z.string(),
   depends_on: z.array(z.string()).default([]),
+  /**
+   * `true` = el servidor VACIÓ `ddl` porque quien lee no tiene `schema.definitions` y el objeto es
+   * una vista, vista materializada, rutina, trigger o evento. Es la marca explícita de «oculto»: un
+   * `ddl` vacío sin ella sería un objeto sin definición. Ausente (backend anterior) equivale a
+   * `false`; las tablas nunca llegan redactadas.
+   */
+  redacted: z.boolean().optional(),
 })
 export type DumpStatement = z.infer<typeof dumpStatementSchema>
 

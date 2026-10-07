@@ -1,6 +1,14 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Badge, Button, CodeBlock, ErrorState, Modal, Spinner } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  CodeBlock,
+  ErrorState,
+  Modal,
+  RedactedDefinition,
+  Spinner,
+} from '@/components/ui'
 import { NON_PORTABLE_OBJECT_TYPES, type DumpObjectType, type DumpStatement } from '@/lib/contracts'
 import { toApiError } from '@/lib/api/errors'
 import {
@@ -95,14 +103,22 @@ export function SnapshotModal({ serverId, database, onClose }: SnapshotModalProp
                     {procedural && <Badge tone="warning">no portable</Badge>}
                   </summary>
                   <div className="mt-3 flex flex-col gap-3">
-                    {statements.map((stmt) => (
-                      <CodeBlock
-                        key={`${type}:${stmt.name}`}
-                        title={stmt.name}
-                        code={stmt.ddl}
-                        maxHeightClass="max-h-48"
-                      />
-                    ))}
+                    {statements.map((stmt) =>
+                      stmt.redacted ? (
+                        // Sin `schema.definitions` el servidor manda el código vacío y marcado.
+                        <div key={`${type}:${stmt.name}`} className="flex flex-col gap-1">
+                          <code className="font-mono text-xs text-foreground">{stmt.name}</code>
+                          <RedactedDefinition title={stmt.name} />
+                        </div>
+                      ) : (
+                        <CodeBlock
+                          key={`${type}:${stmt.name}`}
+                          title={stmt.name}
+                          code={stmt.ddl}
+                          maxHeightClass="max-h-48"
+                        />
+                      ),
+                    )}
                   </div>
                 </details>
               )

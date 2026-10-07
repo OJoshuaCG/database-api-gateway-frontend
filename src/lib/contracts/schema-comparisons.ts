@@ -152,6 +152,12 @@ export const schemaComparisonItemOutSchema = z.object({
   execution_status: schemaComparisonExecutionStatusSchema.nullable(),
   execution_error: z.string().nullable(),
   executed_at: z.string().nullable(),
+  /**
+   * `true` = `sql` y `down_sql` llegan VACÍOS porque el objeto es una vista, vista materializada,
+   * rutina, trigger o evento y quien lee no tiene `schema.definitions` (en origen y destino). Ausente
+   * (backend anterior) equivale a `false`: la estructura nunca se redacta.
+   */
+  redacted: z.boolean().optional(),
 })
 export type SchemaComparisonItemOut = z.infer<typeof schemaComparisonItemOutSchema>
 
@@ -187,6 +193,8 @@ export const resolvedSelectionAddedItemSchema = z.object({
   object_name: z.string(),
   change_type: schemaChangeTypeSchema,
   sql: z.string(),
+  /** Igual que en el ítem: `sql` vacío porque el lector no tiene `schema.definitions`. */
+  redacted: z.boolean().optional(),
 })
 export type ResolvedSelectionAddedItem = z.infer<typeof resolvedSelectionAddedItemSchema>
 

@@ -7,6 +7,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   IconButton,
+  RedactedDefinition,
   Spinner,
 } from '@/components/ui'
 import type { SchemaChangeType, SchemaComparisonItemOut } from '@/lib/contracts'
@@ -128,7 +129,12 @@ export function DependencyClosureNotice({
                   Requerida por: <strong>{reason}</strong>
                 </p>
               )}
-              {isExpanded && <CodeBlock code={addedItem.sql} maxHeightClass="max-h-56" />}
+              {isExpanded &&
+                (addedItem.redacted ? (
+                  <RedactedDefinition title={addedItem.object_name} />
+                ) : (
+                  <CodeBlock code={addedItem.sql} maxHeightClass="max-h-56" />
+                ))}
             </div>
           )
         })}

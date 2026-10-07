@@ -7,6 +7,7 @@ import {
   ErrorState,
   IconButton,
   Modal,
+  RedactedDefinition,
   Spinner,
   Switch,
 } from '@/components/ui'
@@ -189,7 +190,12 @@ export function PreviewStep({ wizard }: { wizard: SnapshotWizard }) {
         description="Solo lectura. El SQL de las versiones creadas se revisa en la vista de migraciones."
         size="lg"
       >
-        <CodeBlock code={ddlOf?.ddl ?? ''} maxHeightClass="max-h-[60vh]" />
+        {ddlOf?.redacted ? (
+          // Sin `schema.definitions` el servidor manda el código vacío y marcado.
+          <RedactedDefinition title={ddlOf.name} />
+        ) : (
+          <CodeBlock code={ddlOf?.ddl ?? ''} maxHeightClass="max-h-[60vh]" />
+        )}
       </Modal>
     </div>
   )
