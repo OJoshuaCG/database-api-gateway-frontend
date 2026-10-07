@@ -79,3 +79,56 @@ describe('engineUserErrorDescription', () => {
     )
   })
 })
+
+describe('engineUserErrorMessage: engine_user.grant_admin_required', () => {
+  /** El 403 tal como lo arma el backend (`grant_admin_required` en `engine_user_catalog.py`). */
+  function grantAdminRequired(reason?: string): ApiError {
+    return normalizeApiError(403, {
+      detail: {
+        msg: 'texto del backend',
+        type: 'AppHttpException',
+        public_context: {
+          code: 'engine_user.grant_admin_required',
+          required_capability: 'engine_users.grant_admin',
+          ...(reason ? { reason } : {}),
+        },
+      },
+    })
+  }
+
+  it('cada motivo nombra la capacidad y dice qué sí se puede hacer', () => {
+    expect(engineUserErrorMessage(grantAdminRequired('with_grant_option'))).toContain(
+      'WITH GRANT OPTION',
+    )
+    expect(engineUserErrorMessage(grantAdminRequired('sensitive_privilege'))).toContain(
+      'privilegio sensible',
+    )
+    expect(engineUserErrorMessage(grantAdminRequired('provision_reassign_owner'))).toContain(
+      'propietario',
+    )
+    for (const reason of ['with_grant_option', 'sensitive_privilege', 'provision_reassign_owner']) {
+      expect(engineUserErrorMessage(grantAdminRequired(reason))).toContain(
+        'engine_users.grant_admin',
+      )
+    }
+  })
+
+  it('un motivo ausente o desconocido igual nombra la capacidad', () => {
+    for (const error of [grantAdminRequired(), grantAdminRequired('motivo_nuevo')]) {
+      expect(engineUserErrorMessage(error)).toContain('engine_users.grant_admin')
+    }
+  })
+
+  it('no es un `access.forbidden`: el 403 con su código propio no se lee como acceso opaco', () => {
+    const error = grantAdminRequired('with_grant_option')
+    expect(error.status).toBe(403)
+    expect(error.code).toBe('engine_user.grant_admin_required')
+    expect(error.guardContext?.reason).toBe('with_grant_option')
+  })
+
+  it('engineUserErrorDescription usa ese texto en vez del `msg` del backend', () => {
+    expect(engineUserErrorDescription(grantAdminRequired('sensitive_privilege'))).toContain(
+      'privilegio sensible',
+    )
+  })
+})

@@ -259,15 +259,17 @@ export interface GrantErrorContext {
 /**
  * Datos accionables de los guards de ALCANCE Y PROTECCIÓN que comparten varios módulos:
  * `engine_user.protected_account`, `engine_user.protection_unverifiable`,
- * `engine_database.scope_not_allowed` y `server.credential_required_for_rebind`.
+ * `engine_user.grant_admin_required`, `engine_database.scope_not_allowed` y
+ * `server.credential_required_for_rebind`.
  *
  * Se agrupan en un solo campo porque son pocas claves, cada código trae solo las suyas y ninguna
- * colisiona de significado entre ellos. Solo se construye para esos cuatro códigos: un `reason` o
+ * colisiona de significado entre ellos. Solo se construye para esos cinco códigos: un `reason` o
  * un `fields` de cualquier otro endpoint no acaba disfrazado de este contexto.
  */
 export interface GuardErrorContext {
   /**
    * `protected_account`: `gateway_credential` | `reserved_account` | `privileged_role`.
+   * `grant_admin_required`: `with_grant_option` | `sensitive_privilege` | `provision_reassign_owner`.
    * `scope_not_allowed`: `system_database` | `gateway_metadata`.
    * `z.string()` y no un enum cerrado: un motivo nuevo degrada al mensaje genérico, no rompe.
    */
@@ -287,6 +289,7 @@ export interface GuardErrorContext {
 const GUARD_ERROR_CODES: ReadonlySet<string> = new Set([
   'engine_user.protected_account',
   'engine_user.protection_unverifiable',
+  'engine_user.grant_admin_required',
   'engine_database.scope_not_allowed',
   'server.credential_required_for_rebind',
 ])

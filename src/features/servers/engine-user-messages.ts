@@ -2,7 +2,7 @@ import { toApiError, type ApiError } from '@/lib/api/errors'
 
 /**
  * Copy de los rechazos de los guards de CUENTA PROTEGIDA del motor (usuarios del motor, no del
- * gateway).
+ * gateway) y del 403 de DELEGACIÓN de privilegios (`engine_user.grant_admin_required`).
  *
  * Los emiten todas las escrituras por identidad —alta con provisión, cambio y rotación de
  * contraseña, agregar host, eliminar del motor— y todo el módulo de grants (otorgar, revocar,
@@ -19,6 +19,8 @@ import { toApiError, type ApiError } from '@/lib/api/errors'
 export const ENGINE_USER_ERROR_CODES = {
   protectedAccount: 'engine_user.protected_account',
   protectionUnverifiable: 'engine_user.protection_unverifiable',
+  /** 403: el grant delega privilegios y falta `engine_users.grant_admin` (solo `owner`). */
+  grantAdminRequired: 'engine_user.grant_admin_required',
 } as const
 
 /** Motivo de `engine_user.protected_account` → texto. Vocabulario del backend. */
@@ -35,6 +37,24 @@ const PROTECTED_ACCOUNT_MESSAGES: Record<string, string> = {
 const PROTECTED_ACCOUNT_FALLBACK =
   'La cuenta está protegida y el gateway no la modifica. Gestionala fuera del gateway.'
 
+/**
+ * Motivo de `engine_user.grant_admin_required` → texto. A diferencia del 403 `access.forbidden`
+ * (opaco), este SÍ nombra la capacidad: quien lo recibe ya tiene `engine_users.write` y eligió el
+ * payload que delega, así que el texto no revela nada nuevo y le dice qué pedir.
+ */
+const GRANT_ADMIN_REQUIRED_MESSAGES: Record<string, string> = {
+  with_grant_option:
+    'Otorgar con WITH GRANT OPTION requiere la capacidad «engine_users.grant_admin», además de la de escribir usuarios del motor. Sin ella podés otorgar privilegios sin la opción de re-delegar.',
+  sensitive_privilege:
+    'Otorgar un privilegio sensible (por ejemplo ALL PRIVILEGES) requiere la capacidad «engine_users.grant_admin», además de la de escribir usuarios del motor. Sin ella podés otorgar privilegios no sensibles.',
+  provision_reassign_owner:
+    'Aplicar el cambio de propietario en el motor requiere la capacidad «engine_users.grant_admin», además de la de borrar bases. Sin ella podés reasignar solo el inventario.',
+}
+
+/** Motivo ausente o desconocido: nombra la capacidad sin afirmar cuál de los casos es. */
+const GRANT_ADMIN_REQUIRED_FALLBACK =
+  'Esta operación delega privilegios del motor y requiere la capacidad «engine_users.grant_admin». Pedíselo a quien administra los accesos.'
+
 export const PROTECTION_UNVERIFIABLE_MESSAGE =
   'No se pudo verificar en el motor si la cuenta tiene privilegios de administración; por seguridad la operación no se ejecuta. Reintentá cuando el servidor responda.'
 
@@ -50,6 +70,10 @@ export function engineUserErrorMessage(error: ApiError): string | null {
     }
     case ENGINE_USER_ERROR_CODES.protectionUnverifiable:
       return PROTECTION_UNVERIFIABLE_MESSAGE
+    case ENGINE_USER_ERROR_CODES.grantAdminRequired: {
+      const reason = error.guardContext?.reason
+      return (reason && GRANT_ADMIN_REQUIRED_MESSAGES[reason]) || GRANT_ADMIN_REQUIRED_FALLBACK
+    }
     default:
       return null
   }

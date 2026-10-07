@@ -28,7 +28,8 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
    * guardas llevan el destino. Solo inventario pide `databases.write`; `provision=true` SUBE a
    * `databases.drop` (v23 §4): en PostgreSQL el dueño de una base puede hacerle `DROP DATABASE`
    * y en MySQL/MariaDB el re-GRANT le da `ALL PRIVILEGES`, así que entregarla equivale a poder
-   * borrarla. Sin ella el switch queda apagado y deshabilitado con el motivo a la vista: el
+   * borrarla. Además exige `engine_users.grant_admin` (v41): es delegar privilegios.
+   * Sin ellas el switch queda apagado y deshabilitado con el motivo a la vista: el
    * cambio de inventario sigue disponible.
    */
   const target = { serverId: database.server_id, environmentId: database.environment_id ?? null }
@@ -38,7 +39,7 @@ export function ReassignOwnerModal({ database, onClose }: ReassignOwnerModalProp
     { scope: target },
   )
   const provisionGuard = useCapabilityGuard(
-    [CAPABILITIES.databasesWrite, CAPABILITY_ESCALATIONS.reassignOwnerProvision],
+    [CAPABILITIES.databasesWrite, ...CAPABILITY_ESCALATIONS.reassignOwnerProvision],
     'aplicar el cambio de propietario en el motor',
     { scope: target },
   )

@@ -32,6 +32,7 @@ import {
   verifyDataCredential,
 } from '../api/managed-databases.api'
 import { notifyMutationError } from '@/features/auth'
+import { engineUserErrorDescription } from '@/features/servers/engine-user-messages'
 import { dataAccessErrorMessage } from '../data-access'
 
 export function useManagedDatabases(params: QueryParams) {
@@ -233,7 +234,15 @@ export function useReassignOwner(id: number) {
       invalidateDatabaseViews(queryClient, db.server_id)
       toast.success('Propietario reasignado', db.name)
     },
-    onError: (error) => notifyMutationError(toast, error, 'No se pudo reasignar el propietario'),
+    // `engineUserErrorDescription` traduce el 403 `engine_user.grant_admin_required` (que nombra la
+    // capacidad que falta) y deja pasar el `msg` del backend en cualquier otro caso.
+    onError: (error) =>
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo reasignar el propietario',
+        engineUserErrorDescription(error),
+      ),
   })
 }
 

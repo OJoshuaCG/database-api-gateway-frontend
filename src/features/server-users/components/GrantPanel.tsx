@@ -17,6 +17,7 @@ import {
   Spinner,
   Switch,
 } from '@/components/ui'
+import { CAPABILITY_ESCALATIONS } from '@/lib/contracts'
 import type {
   EngineType,
   GrantLevel,
@@ -24,6 +25,7 @@ import type {
   PermissionProfileOut,
   ServerUserOut,
 } from '@/lib/contracts'
+import { useCapabilityGuard } from '@/features/auth'
 import { PrivilegeMultiSelect, grantLevelsForEngine } from '@/features/privileges'
 import {
   profileCompatibility,
@@ -110,6 +112,20 @@ export function GrantPanel({ user, engine }: GrantPanelProps) {
   const [databases, setDatabases] = useState<string[]>([])
   const [gateAcknowledged, setGateAcknowledged] = useState(false)
 
+  /*
+   * Delegar privilegios (WITH GRANT OPTION o un privilegio sensible) exige `engine_users.grant_admin`
+   * ADEMÁS de escribir usuarios del motor (solo `owner`). Se resuelve EN el servidor del usuario
+   * (capa 2). Sin ella el interruptor queda deshabilitado con el motivo a la vista y los privilegios
+   * sensibles salen de las opciones: el otorgamiento simple sigue disponible. Aplicar un perfil no
+   * lo exige (las plantillas son política: `catalogs.write`).
+   */
+  const grantAdminGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.grantWithGrantOption,
+    'otorgar con WITH GRANT OPTION o privilegios sensibles',
+    { scope: { serverId: user.server_id, environmentId: null } },
+  )
+  const delegationBlocked = !grantAdminGuard.allowed
+
   const profiles = usePermissionProfileOptions()
   const grantable = useCheckGrantable(user.server_id)
   const grantFanOut = useGrantPrivilegesToDatabases(user.id, user.server_id)
@@ -179,6 +195,9 @@ export function GrantPanel({ user, engine }: GrantPanelProps) {
       return 'Ningún nivel del perfil tiene su objeto completo: no se aplicaría ningún permiso.'
     }
     if (!isProfileMode && privileges.length === 0) return 'Seleccioná al menos un privilegio.'
+    if (mode === 'grant' && delegationBlocked && (withGrantOption || gatePrivileges.length > 0)) {
+      return 'Quitá WITH GRANT OPTION y los privilegios sensibles: tu acceso no permite delegar privilegios.'
+    }
     if (!isProfileMode && missingForLevel.length > 0) {
       return `Falta indicar: ${missingForLevel.join(', ')}.`
     }
@@ -378,6 +397,8 @@ export function GrantPanel({ user, engine }: GrantPanelProps) {
             <PrivilegeMultiSelect
               engine={engine}
               value={privileges}
+              sensitiveBlocked={mode === 'grant' && delegationBlocked}
+              blockedHint={grantAdminGuard.hint}
               onChange={(next) => {
                 setPrivileges(next)
                 // Cambiar la selección cambia qué privilegios sensibles hay: la confirmación
@@ -411,8 +432,15 @@ export function GrantPanel({ user, engine }: GrantPanelProps) {
                   setWithGrantOption(checked)
                   setGateAcknowledged(false)
                 }}
+                // Deshabilitado solo para ENCENDERLO: si quedara encendido con el acceso recién
+                // perdido, apagarlo tiene que seguir siendo posible.
+                disabled={!withGrantOption && delegationBlocked}
                 label="WITH GRANT OPTION"
-                hint="Permite al usuario re-delegar estos privilegios. Cuenta como privilegio sensible."
+                hint={
+                  delegationBlocked
+                    ? grantAdminGuard.hint
+                    : 'Permite al usuario re-delegar estos privilegios. Cuenta como privilegio sensible.'
+                }
               />
               <GrantableCheck
                 disabled={privileges.length === 0}

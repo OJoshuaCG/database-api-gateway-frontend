@@ -238,12 +238,27 @@ export function ServerUserForm({
   )
   const passwordBlocked = !passwordGuard.allowed
 
+  /*
+   * Los permisos iniciales también DELEGAN si llevan WITH GRANT OPTION o un privilegio sensible, y
+   * eso exige `engine_users.grant_admin` (solo `owner`) además de la contraseña elegida. Sin ella
+   * el interruptor sale deshabilitado con el motivo y los privilegios sensibles salen de las
+   * opciones; los permisos simples siguen disponibles.
+   */
+  const grantAdminGuard = useCapabilityGuard(
+    CAPABILITY_ESCALATIONS.grantWithGrantOption,
+    'otorgar con WITH GRANT OPTION o privilegios sensibles',
+    targetServerId ? { scope: { serverId: targetServerId, environmentId: null } } : {},
+  )
+  const delegationBlocked = !grantAdminGuard.allowed
+
   // Sin la capacidad no viaja ninguna contraseña ni se aprovisiona, aunque el valor dijera otra cosa.
   const submit = (values: ServerUserFormValues) =>
     onSubmit(
       passwordBlocked
         ? { ...values, password: '', provision: false, grant_enabled: false }
-        : values,
+        : delegationBlocked
+          ? { ...values, grant_with_grant_option: false }
+          : values,
       engine,
     )
 
@@ -439,6 +454,8 @@ export function ServerUserForm({
                       engine={engine}
                       value={field.value}
                       onChange={field.onChange}
+                      sensitiveBlocked={delegationBlocked}
+                      blockedHint={grantAdminGuard.hint}
                     />
                     {errors.grant_privileges && (
                       <p className="text-xs text-error">{errors.grant_privileges.message}</p>
@@ -453,8 +470,14 @@ export function ServerUserForm({
                   <Switch
                     checked={field.value}
                     onCheckedChange={field.onChange}
+                    // Deshabilitado solo para ENCENDERLO: apagarlo tiene que seguir siendo posible.
+                    disabled={!field.value && delegationBlocked}
                     label="WITH GRANT OPTION"
-                    hint="Permite al usuario re-delegar estos privilegios."
+                    hint={
+                      delegationBlocked
+                        ? grantAdminGuard.hint
+                        : 'Permite al usuario re-delegar estos privilegios.'
+                    }
                   />
                 )}
               />
