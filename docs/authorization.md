@@ -25,6 +25,15 @@ deberes, §9 segundo aprobador, §10 siembra y ventana, §11 auditoría y sesion
   `access.admin` (usuarios, accesos, capacidades puntuales, tokens, sesiones de otros);
   `security_officer` es `policy.admin`, `servers.admin`, `catalogs.write` y `environments.write`.
   Ningún rol tiene una capacidad global, ni siquiera `owner`.
+- **`tokens.own` la tienen los tres roles** (como `self.read`: nadie necesita que se la asignen). No
+  es global en el sentido de `access_admin`: es del eje `global` del catálogo, así que no es
+  otorgable ni sensible, y no está en el techo de agente. Con ella una persona emite, lista, edita
+  los scopes y revoca **solo los tokens de agente que emitió** (`/api-tokens`); `access.admin` sigue
+  administrando los de **todos**. El servidor filtra por dueño y responde el mismo 404 ante un token
+  ajeno que ante uno inexistente, así que la SPA no filtra ni distingue. Un token no puede tener más
+  capacidades que quien lo emite: sin `access.admin`, `ScopesPicker` deshabilita los permisos que el
+  rol de la persona no tiene (el servidor responde 403 si igual llegan). Entrada de menú, pantalla y
+  `useApiTokens` se habilitan con cualquiera de las dos capacidades.
 - **`gateway.admin` está retirada** (v29 §1–§5) y el catálogo impide reintroducirla. La SPA pregunta
   por `access.admin` o `policy.admin`, nunca por el nombre de la global.
 - **Qué otorga cada rol sale del catálogo**, columnas `roles` y `global_capabilities`: hoy `viewer`
