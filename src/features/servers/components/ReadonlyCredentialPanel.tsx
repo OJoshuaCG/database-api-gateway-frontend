@@ -88,6 +88,9 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
 
   // Ausente (backend anterior) se lee como apagada: falla cerrado.
   const procGrantEnabled = server.readonly_proc_grant === true
+  // Solo el valor INICIAL de la bandera decide si arranca abierto: después manda el usuario, así
+  // que habilitarla desde acá no pliega la sección bajo sus pies.
+  const [advancedOpen, setAdvancedOpen] = useState(procGrantEnabled)
   const procGrantOutcomeView =
     procGrant.data && procGrant.variables
       ? procGrantOutcome(procGrant.data.engine_grant, procGrant.variables.enabled)
@@ -186,46 +189,65 @@ export function ReadonlyCredentialPanel({ server }: ReadonlyCredentialPanelProps
         <CapabilityHint guard={guard} />
 
         {showsProcGrantControl(server) && (
-          <section
-            aria-labelledby={`proc-grant-title-${server.id}`}
-            className="flex flex-col gap-3 border-t border-border pt-4"
+          // Plegado por defecto: en MariaDB >= 11.3 y MySQL 8 no hace falta y el motor rechaza
+          // habilitarlo, así que mostrarlo abierto confundía a quien no lo necesita. Abre solo si la
+          // bandera ya está encendida, para que se pueda apagar. El contenido se monta recién al
+          // desplegar (mismo patrón que «SQL traducido» en ModelMigrationDetailPanel).
+          <details
+            className="rounded-lg border border-border p-3"
+            open={advancedOpen}
+            // El navegador ya abre y cierra el `<details>` al pulsar el `<summary>`; `onToggle`
+            // solo copia ese estado para decidir si se monta el contenido.
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 id={`proc-grant-title-${server.id}`} className="text-sm font-medium">
-                Lectura de cuerpos de rutinas
-              </h3>
-              <Badge tone={procGrantEnabled ? 'warning' : 'neutral'}>
-                {procGrantEnabled ? 'Habilitada' : 'Deshabilitada'}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              En MariaDB anterior a 11.3 y MySQL 5.7 el motor solo deja leer el código de las
-              rutinas con SELECT ON <code className="text-xs">mysql.proc</code>, y ese permiso es de
-              TODO el servidor, no de una base. En versiones más nuevas no hace falta y el motor lo
-              rechaza.
-            </p>
-            {procGrantOutcomeView?.tone === 'warning' && (
-              <Callout tone="warning" title={procGrantOutcomeView.title}>
-                <p>{procGrantOutcomeView.description}</p>
-              </Callout>
-            )}
-            <div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setProcGrantAccepted(false)
-                  if (procGrantEnabled) setConfirmProcGrantDisable(true)
-                  else setConfirmProcGrantEnable(true)
-                }}
-                disabled={!guard.allowed}
-                aria-describedby={guard.describedBy}
+            <summary className="cursor-pointer text-sm font-medium text-foreground">
+              Opciones avanzadas: servidores antiguos (MariaDB &lt; 11.3 o MySQL 5.7)
+            </summary>
+            {advancedOpen && (
+              <section
+                aria-labelledby={`proc-grant-title-${server.id}`}
+                className="mt-3 flex flex-col gap-3"
               >
-                {procGrantEnabled
-                  ? 'Deshabilitar lectura de cuerpos 🔌'
-                  : 'Habilitar lectura de cuerpos 🔌'}
-              </Button>
-            </div>
-          </section>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 id={`proc-grant-title-${server.id}`} className="text-sm font-medium">
+                    Lectura de cuerpos de rutinas
+                  </h3>
+                  <Badge tone={procGrantEnabled ? 'warning' : 'neutral'}>
+                    {procGrantEnabled ? 'Habilitada' : 'Deshabilitada'}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Solo hace falta si el servidor es MariaDB anterior a 11.3 o MySQL 5.7 (se
+                  comprueba con <code className="text-xs">SELECT VERSION()</code>). En versiones más
+                  nuevas el botón «Regenerar credencial» ya otorga lo necesario y habilitar esto es
+                  rechazado por el motor. En las antiguas, el código de las rutinas solo se puede
+                  leer con SELECT ON <code className="text-xs">mysql.proc</code>, y ese permiso es
+                  de TODO el servidor, no de una base.
+                </p>
+                {procGrantOutcomeView?.tone === 'warning' && (
+                  <Callout tone="warning" title={procGrantOutcomeView.title}>
+                    <p>{procGrantOutcomeView.description}</p>
+                  </Callout>
+                )}
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setProcGrantAccepted(false)
+                      if (procGrantEnabled) setConfirmProcGrantDisable(true)
+                      else setConfirmProcGrantEnable(true)
+                    }}
+                    disabled={!guard.allowed}
+                    aria-describedby={guard.describedBy}
+                  >
+                    {procGrantEnabled
+                      ? 'Deshabilitar lectura de cuerpos 🔌'
+                      : 'Habilitar lectura de cuerpos 🔌'}
+                  </Button>
+                </div>
+              </section>
+            )}
+          </details>
         )}
       </CardContent>
 

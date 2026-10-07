@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -384,14 +384,74 @@ describe('ReadonlyCredentialPanel — acceso', () => {
   })
 })
 
+const ADVANCED_SUMMARY = /Opciones avanzadas: servidores antiguos/
+
+/**
+ * Despliega «Opciones avanzadas» como lo haría el navegador al pulsar el `<summary>`: cambia `open`
+ * y emite `toggle`. La sección de `mysql.proc` nace plegada salvo que la bandera ya esté encendida.
+ */
+function openAdvancedOptions() {
+  const details = screen.getByText(ADVANCED_SUMMARY).closest('details')
+  if (!details) throw new Error('El resumen tiene que vivir dentro de un <details>')
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+}
+
 describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)', () => {
   const ROUTINE_BODIES = `${API}/servers/42/readonly-credential/routine-bodies`
   const ACK_TEXT =
     'Entiendo que SELECT ON mysql.proc es server-wide: expone el código de las rutinas de TODAS las bases de datos de este servidor, incluidas las que están fuera del proyecto o excluidas, y que solo el filtrado del gateway lo contiene.'
 
+  it('la sección nace plegada y nada de ella se monta hasta desplegarla', () => {
+    mockSession({ canAdmin: true })
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    const details = screen.getByText(ADVANCED_SUMMARY).closest('details')
+    expect(details).not.toBeNull()
+    expect(details).not.toHaveAttribute('open')
+    expect(screen.queryByText('Lectura de cuerpos de rutinas')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Habilitar lectura de cuerpos/ }),
+    ).not.toBeInTheDocument()
+    // «Regenerar credencial» sigue a la vista: es lo que alcanza en motores nuevos.
+    expect(screen.getByRole('button', { name: /Generar credencial automáticamente/ })).toBeEnabled()
+  })
+
+  it('desplegada explica para qué motores hace falta y cómo comprobar la versión', () => {
+    mockSession({ canAdmin: true })
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+
+    openAdvancedOptions()
+
+    expect(
+      screen.getByText(/Solo hace falta si el servidor es MariaDB anterior a 11\.3/),
+    ).toBeInTheDocument()
+    expect(screen.getByText('SELECT VERSION()')).toBeInTheDocument()
+    expect(screen.getByText(/«Regenerar credencial» ya otorga lo necesario/)).toBeInTheDocument()
+  })
+
+  it('con la bandera ya encendida nace desplegada, para poder apagarla', () => {
+    mockSession({ canAdmin: true })
+    renderWithProviders(
+      <ReadonlyCredentialPanel server={serverWith({ readonly_proc_grant: true })} />,
+    )
+
+    const details = screen.getByText(ADVANCED_SUMMARY).closest('details')
+    expect(details).toHaveAttribute('open')
+    expect(screen.getByText('Habilitada')).toBeInTheDocument()
+  })
+
+  it('PostgreSQL con la bandera apagada no muestra ni el desplegable', () => {
+    mockSession({ canAdmin: true })
+    renderWithProviders(<ReadonlyCredentialPanel server={serverWith({ engine: 'postgresql' })} />)
+
+    expect(screen.queryByText(ADVANCED_SUMMARY)).not.toBeInTheDocument()
+  })
+
   it('muestra el estado de la bandera y ofrece el control en MySQL y MariaDB', () => {
     mockSession({ canAdmin: true })
     const { unmount } = renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
     expect(screen.getByText('Lectura de cuerpos de rutinas')).toBeInTheDocument()
     expect(screen.getByText('Deshabilitada')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ })).toBeEnabled()
@@ -416,6 +476,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
   it('sin `servers.admin` el control queda deshabilitado', async () => {
     mockSession({ canAdmin: false })
     renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
 
     expect(
       await screen.findByText(/administrar la credencial de solo lectura del MCP/),
@@ -439,6 +500,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
     )
     const user = userEvent.setup()
     renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
 
     await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
 
@@ -467,6 +529,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
     )
     const user = userEvent.setup()
     renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
 
     await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
     let dialog = await screen.findByRole('dialog')
@@ -518,6 +581,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
     renderWithProviders(
       <ReadonlyCredentialPanel server={serverWith({ has_readonly_credential: true })} />,
     )
+    openAdvancedOptions()
 
     await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
     const dialog = await screen.findByRole('dialog')
@@ -546,6 +610,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
     )
     const user = userEvent.setup()
     renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
 
     await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
     const dialog = await screen.findByRole('dialog')
@@ -590,6 +655,7 @@ describe('ReadonlyCredentialPanel — lectura de cuerpos de rutinas (mysql.proc)
     })
     const user = userEvent.setup()
     renderWithProviders(<ReadonlyCredentialPanel server={serverWith()} />)
+    openAdvancedOptions()
 
     await user.click(screen.getByRole('button', { name: /Habilitar lectura de cuerpos/ }))
     const dialog = await screen.findByRole('dialog')
