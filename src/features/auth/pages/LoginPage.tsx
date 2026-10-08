@@ -7,6 +7,7 @@ import { toApiError } from '@/lib/api/errors'
 import { Button, Callout, Card, Input } from '@/components/ui'
 import { queryKeys } from '@/lib/api/query-keys'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
+import { BrandLogo } from '@/components/layout/BrandLogo'
 import { useSession } from '../hooks/use-session'
 import { useLogin } from '../hooks/use-login'
 import type { SessionEndReason } from '../messages'
@@ -69,19 +70,8 @@ export function LoginPage() {
       <Card clay className="w-full max-w-sm">
         <form onSubmit={onSubmit} className="flex flex-col gap-5 p-6" noValidate>
           <div className="flex flex-col items-center gap-2 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-6 w-6"
-                fill="none"
-                stroke="currentColor"
-                aria-hidden
-              >
-                <ellipse cx="12" cy="5.5" rx="7" ry="2.5" strokeWidth="1.8" />
-                <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" strokeWidth="1.8" />
-              </svg>
-            </span>
-            <h1 className="text-lg font-semibold text-foreground">Datum</h1>
+            <BrandLogo variant="full" className="h-14" />
+            <h1 className="sr-only">Datum</h1>
             <p className="text-sm text-muted-foreground">Iniciá sesión como administrador</p>
           </div>
 

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useCapabilities } from '@/features/auth/hooks/use-capabilities'
 import { CAPABILITIES, type Capability } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
+import { BrandLogo } from './BrandLogo'
 
 interface NavItem {
   to: string
@@ -218,14 +219,7 @@ interface SidebarProps {
   onToggleCollapse?: () => void
 }
 
-const brandLogo = (
-  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" aria-hidden>
-      <ellipse cx="12" cy="5.5" rx="7" ry="2.5" strokeWidth="1.8" />
-      <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" strokeWidth="1.8" />
-    </svg>
-  </span>
-)
+const brandIcon = <BrandLogo variant="icon" className="h-8" />
 
 export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: SidebarProps) {
   const { can } = useCapabilities()
@@ -245,15 +239,14 @@ export function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: Sid
               title="Expandir menú lateral"
               className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {brandLogo}
+              {brandIcon}
             </button>
           ) : (
-            brandLogo
+            brandIcon
           )
         ) : (
           <>
-            {brandLogo}
-            <span className="text-sm font-semibold text-foreground">Datum</span>
+            <BrandLogo variant="full" className="h-8" />
             {onToggleCollapse && (
               <button
                 type="button"
