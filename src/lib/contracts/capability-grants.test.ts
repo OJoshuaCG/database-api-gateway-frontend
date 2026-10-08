@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   adminOutSchema,
   capabilityDescriptorSchema,
+  CAPABILITY_GRANT_BULK_MAX,
+  capabilityGrantBulkCreateSchema,
   capabilityGrantCreateSchema,
+  capabilityGrantDecisionBulkResultSchema,
+  capabilityGrantDecisionBulkSchema,
   capabilityGrantSchema,
   effectiveAccessSchema,
   pendingCapabilityGrantSchema,
@@ -111,6 +115,130 @@ describe('capabilityGrantCreateSchema', () => {
     expect(capabilityGrantCreateSchema.safeParse({ ...base, scope_type: 'global' }).success).toBe(
       false,
     )
+  })
+})
+
+describe('capabilityGrantBulkCreateSchema', () => {
+  const base = { scope_type: 'server', scope_ids: [1, 2] }
+
+  it('acepta `capability` (una) o `capabilities` (varias), nunca las dos ni ninguna', () => {
+    expect(capabilityGrantBulkCreateSchema.safeParse({ ...base, capability: 'a.b' }).success).toBe(
+      true,
+    )
+    expect(
+      capabilityGrantBulkCreateSchema.safeParse({ ...base, capabilities: ['a.b', 'c.d'] }).success,
+    ).toBe(true)
+    expect(
+      capabilityGrantBulkCreateSchema.safeParse({
+        ...base,
+        capability: 'a.b',
+        capabilities: ['a.b'],
+      }).success,
+    ).toBe(false)
+    expect(capabilityGrantBulkCreateSchema.safeParse(base).success).toBe(false)
+  })
+
+  it('rechaza capacidades repetidas o vacías', () => {
+    expect(
+      capabilityGrantBulkCreateSchema.safeParse({ ...base, capabilities: ['a.b', 'a.b'] }).success,
+    ).toBe(false)
+    expect(capabilityGrantBulkCreateSchema.safeParse({ ...base, capabilities: [] }).success).toBe(
+      false,
+    )
+  })
+
+  it('el producto capacidades x destinos no pasa de 100', () => {
+    const fiftyOne = Array.from({ length: 51 }, (_, index) => index + 1)
+    const capabilities = ['a.b', 'c.d']
+    expect(
+      capabilityGrantBulkCreateSchema.safeParse({
+        scope_type: 'server',
+        scope_ids: fiftyOne,
+        capabilities,
+      }).success,
+    ).toBe(false)
+    expect(
+      capabilityGrantBulkCreateSchema.safeParse({
+        scope_type: 'server',
+        scope_ids: fiftyOne.slice(0, 50),
+        capabilities,
+      }).success,
+    ).toBe(true)
+    expect(CAPABILITY_GRANT_BULK_MAX).toBe(100)
+  })
+})
+
+describe('capabilityGrantDecisionBulkSchema', () => {
+  it('exige decisión válida y de 1 a 100 ids', () => {
+    expect(
+      capabilityGrantDecisionBulkSchema.safeParse({ decision: 'approve', ids: [1, 2] }).success,
+    ).toBe(true)
+    expect(
+      capabilityGrantDecisionBulkSchema.safeParse({ decision: 'maybe', ids: [1] }).success,
+    ).toBe(false)
+    expect(
+      capabilityGrantDecisionBulkSchema.safeParse({ decision: 'reject', ids: [] }).success,
+    ).toBe(false)
+    const tooMany = Array.from({ length: 101 }, (_, index) => index + 1)
+    expect(
+      capabilityGrantDecisionBulkSchema.safeParse({ decision: 'reject', ids: tooMany }).success,
+    ).toBe(false)
+  })
+
+  it('limita el motivo a 500 caracteres', () => {
+    expect(
+      capabilityGrantDecisionBulkSchema.safeParse({
+        decision: 'approve',
+        ids: [1],
+        reason: 'x'.repeat(501),
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('capabilityGrantDecisionBulkResultSchema', () => {
+  it('parsea ítems decididos y bloqueados en el orden pedido', () => {
+    const parsed = capabilityGrantDecisionBulkResultSchema.parse({
+      requested: 2,
+      succeeded: 1,
+      failed: 1,
+      results: [
+        { id: 5, ok: true, grant: { ...grant, status: 'active' }, code: null, message: null },
+        {
+          id: 6,
+          ok: false,
+          grant: null,
+          code: 'access.self_approval_forbidden',
+          message: 'No podés aprobar lo que pediste.',
+        },
+      ],
+    })
+    expect(parsed.results.map((item) => item.id)).toEqual([5, 6])
+    const [decided, blocked] = parsed.results
+    expect(decided?.ok && decided.grant.status).toBe('active')
+    expect(blocked?.ok === false && blocked.code).toBe('access.self_approval_forbidden')
+  })
+
+  it('un ítem `ok: true` sin `grant` no valida (el contrato lo exige)', () => {
+    expect(
+      capabilityGrantDecisionBulkResultSchema.safeParse({
+        requested: 1,
+        succeeded: 1,
+        failed: 0,
+        results: [{ id: 5, ok: true }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('tolera `code` y `message` nulos en un ítem bloqueado', () => {
+    expect(
+      capabilityGrantDecisionBulkResultSchema.safeParse({
+        requested: 1,
+        succeeded: 0,
+        failed: 1,
+        results: [{ id: 5, ok: false, code: null, message: null }],
+      }).success,
+    ).toBe(true)
   })
 })
 

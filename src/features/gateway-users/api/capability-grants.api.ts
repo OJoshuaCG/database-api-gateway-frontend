@@ -1,6 +1,7 @@
 import { fetchData, fetchList, mutateData } from '@/lib/api/client'
 import {
   capabilityGrantBulkResultSchema,
+  capabilityGrantDecisionBulkResultSchema,
   capabilityGrantSchema,
   effectiveAccessSchema,
   pendingCapabilityGrantSchema,
@@ -9,6 +10,8 @@ import {
   type CapabilityGrantBulkResult,
   type CapabilityGrantCreate,
   type CapabilityGrantDecision,
+  type CapabilityGrantDecisionBulk,
+  type CapabilityGrantDecisionBulkResult,
   type CapabilityGrantStatus,
   type EffectiveAccess,
   type PendingCapabilityGrant,
@@ -45,9 +48,9 @@ export function createCapabilityGrant(
 }
 
 /**
- * `POST /gateway-users/{id}/capability-grants/bulk` → 201. La misma capacidad sobre varios
- * destinos, todo o nada: un 409 `access.grant_bulk_failed` no deja ninguna fila y nombra cada
- * destino que falló (`ApiError.gatewayUserContext.grantBulkFailures`).
+ * `POST /gateway-users/{id}/capability-grants/bulk` → 201. Una o varias capacidades (`capability`
+ * XOR `capabilities`) sobre varios destinos, todo o nada: un 409 `access.grant_bulk_failed` no deja
+ * ninguna fila y nombra cada par que falló (`ApiError.gatewayUserContext.grantBulkFailures`).
  */
 export function createCapabilityGrantsBulk(
   userId: number,
@@ -103,4 +106,23 @@ export function rejectCapabilityGrant(
   return mutateData('POST', `/capability-grants/${grantId}/reject`, capabilityGrantSchema, {
     body,
   })
+}
+
+/**
+ * `POST /capability-grants/decisions` → 200 SIEMPRE, de mejor esfuerzo: cada solicitud se decide por
+ * su cuenta y el resultado de cada una viene en `results[]`. Solo falla entero con 403 (incluido
+ * `access.step_up_required`, que la capa de peticiones resuelve con UNA contraseña para todo el
+ * lote) o 429.
+ */
+export function decideCapabilityGrantsBulk(
+  body: CapabilityGrantDecisionBulk,
+): Promise<CapabilityGrantDecisionBulkResult> {
+  return mutateData(
+    'POST',
+    '/capability-grants/decisions',
+    capabilityGrantDecisionBulkResultSchema,
+    {
+      body,
+    },
+  )
 }

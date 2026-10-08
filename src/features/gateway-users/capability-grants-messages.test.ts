@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api/errors'
 import { CAPABILITY_GRANT_ERROR_CODES } from '@/lib/contracts'
 import {
   capabilityGrantBlockedMessage,
+  capabilityGrantDecisionItemMessage,
   capabilityGrantErrorMessage,
   NOT_ASSIGNABLE_MESSAGE,
   RATE_LIMIT_HINT,
@@ -87,6 +88,38 @@ describe('separación de deberes en las capacidades puntuales', () => {
     })
     expect(capabilityGrantErrorMessage(invalid)).toBe(
       'La excepción de emergencia no es válida: el motivo necesita al menos 30 caracteres y la duración va de 1 a 72 horas.',
+    )
+  })
+})
+
+describe('capabilityGrantDecisionItemMessage', () => {
+  it('un código con copy propio gana al mensaje del servidor', () => {
+    const message = capabilityGrantDecisionItemMessage(
+      'access.self_approval_forbidden',
+      'mensaje del servidor',
+    )
+    expect(message).toContain('pediste')
+  })
+
+  it('un código desconocido cae al mensaje del servidor, no al genérico de la bandeja', () => {
+    expect(capabilityGrantDecisionItemMessage('access.algo_nuevo', 'mensaje del servidor')).toBe(
+      'mensaje del servidor',
+    )
+  })
+
+  it('sin mensaje cae al código y, sin nada, a un texto fijo', () => {
+    expect(capabilityGrantDecisionItemMessage('access.algo_nuevo', null)).toBe('access.algo_nuevo')
+    expect(capabilityGrantDecisionItemMessage(null, undefined)).toBe(
+      'No se pudo decidir esta solicitud.',
+    )
+  })
+
+  it('`not_assignable` y `sod_conflict` usan los textos compartidos con la bandeja', () => {
+    expect(capabilityGrantDecisionItemMessage('access.not_assignable', 'x')).toBe(
+      NOT_ASSIGNABLE_MESSAGE,
+    )
+    expect(capabilityGrantDecisionItemMessage('access.sod_conflict', 'x')).toBe(
+      capabilityGrantBlockedMessage('access.sod_conflict'),
     )
   })
 })

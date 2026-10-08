@@ -1198,12 +1198,17 @@ export interface GatewayUserErrorContext {
    */
   readonly sodReasonMinLength?: number
   readonly sodMaxHours?: number
-  /** `access.grant_bulk_failed` (409): cada destino que falló y por qué. No se otorgó nada. */
+  /** `access.grant_bulk_failed` (409): cada par capacidad x destino que falló y por qué. No se otorgó nada. */
   readonly grantBulkFailures?: ApiGrantBulkFailure[]
 }
 
 export interface ApiGrantBulkFailure {
   readonly scopeId: number
+  /**
+   * Capacidad del par que falló. Siempre viene desde que el alta masiva admite varias capacidades;
+   * ausente solo con un backend anterior (que tenía una única capacidad por lote).
+   */
+  readonly capability?: string
   /** Código `access.*` del destino (`grant_duplicate`, `grant_scope_not_found`, `sod_conflict`…). */
   readonly code?: string
   readonly message?: string
@@ -1468,6 +1473,7 @@ function extractGrantBulkFailures(value: unknown): ApiGrantBulkFailure[] | undef
     return [
       {
         scopeId,
+        capability: nonEmptyString(row.capability),
         code: nonEmptyString(row.code),
         message: nonEmptyString(row.message),
         sodConflicts: extractSodConflicts(context.conflicts),

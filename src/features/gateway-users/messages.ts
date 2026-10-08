@@ -144,6 +144,10 @@ const CAPABILITY_GRANT_COPY: Record<string, string> = {
     'Esa persona ya tiene esa capacidad sobre ese destino, activa o pendiente de aprobación.',
   [CAPABILITY_GRANT_ERROR_CODES.grantBulkFailed]:
     'No se otorgó nada: al menos un destino no se puede otorgar. Corregí o quitá los que se detallan y volvé a intentar.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantBulkTooLarge]:
+    'Son demasiadas combinaciones de capacidades y destinos para una sola vez (máximo 100). Quitá capacidades o destinos y volvé a intentar.',
+  [CAPABILITY_GRANT_ERROR_CODES.grantDecisionFailed]:
+    'No se pudo procesar esta solicitud por un error del servidor. Intentá de nuevo en un momento.',
   [CAPABILITY_GRANT_ERROR_CODES.grantNotFound]:
     'Esa capacidad ya no existe. Refrescá la lista para ver el estado actual.',
   [CAPABILITY_GRANT_ERROR_CODES.grantNotPending]:
@@ -188,6 +192,31 @@ export function capabilityGrantBlockedMessage(code: string | null | undefined): 
   return (
     CAPABILITY_GRANT_COPY[code] ??
     'No podés decidir esta solicitud ahora. Consultá con otra persona con `access_admin`.'
+  )
+}
+
+/**
+ * Por qué UNA solicitud de una decisión masiva no se decidió (`results[].code` de
+ * `POST /capability-grants/decisions`; el lote responde 200 aunque haya bloqueadas).
+ *
+ * Un código con copy propio (los mismos de la bandeja y de las decisiones individuales) usa ese
+ * texto; uno desconocido cae al mensaje del servidor, que sí describe el caso, y no al genérico de
+ * `capabilityGrantBlockedMessage`, pensado para un botón deshabilitado.
+ */
+export function capabilityGrantDecisionItemMessage(
+  code: string | null | undefined,
+  serverMessage: string | null | undefined,
+): string {
+  const hasOwnCopy =
+    !!code &&
+    (code === CAPABILITY_GRANT_ERROR_CODES.notAssignable ||
+      code === CAPABILITY_GRANT_ERROR_CODES.sodConflict ||
+      code in CAPABILITY_GRANT_COPY)
+  return (
+    (hasOwnCopy ? capabilityGrantBlockedMessage(code) : null) ??
+    serverMessage ??
+    code ??
+    'No se pudo decidir esta solicitud.'
   )
 }
 

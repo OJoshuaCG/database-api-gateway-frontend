@@ -181,30 +181,115 @@ export const capabilityGrantCreateSchema = z.object({
 })
 export type CapabilityGrantCreate = z.infer<typeof capabilityGrantCreateSchema>
 
-/** Tope de destinos por alta masiva: el mismo que valida el backend. */
+/**
+ * Tope de una alta masiva: el mismo que valida el backend. Aplica a los destinos (`scope_ids`), a
+ * las capacidades (`capabilities`) y, sobre todo, al PRODUCTO de ambos (cada par capacidad x
+ * destino es una fila): pasarse responde 422 `access.grant_bulk_too_large`.
+ */
 export const CAPABILITY_GRANT_BULK_MAX = 100
 
+/** Tope de solicitudes por decisión masiva (`POST /capability-grants/decisions`). */
+export const CAPABILITY_GRANT_DECISION_BULK_MAX = 100
+
 /**
- * `POST /gateway-users/{id}/capability-grants/bulk`: la MISMA capacidad sobre varios destinos del
- * mismo tipo, todo o nada. El backend deduplica `scope_ids`; el mínimo y el máximo se validan acá
- * para no mandar un 422 genérico.
+ * `POST /gateway-users/{id}/capability-grants/bulk`: UNA o VARIAS capacidades sobre varios destinos
+ * del mismo tipo, todo o nada. Exactamente una de `capability` (la forma de siempre, se conserva
+ * cuando se elige una sola) o `capabilities` (varias, únicas). El backend deduplica `scope_ids`;
+ * los mínimos y máximos se validan acá para no mandar un 422 genérico.
  */
-export const capabilityGrantBulkCreateSchema = z.object({
-  capability: z.string().min(1),
-  scope_type: scopeTypeSchema,
-  scope_ids: z.array(z.number().int().min(1)).min(1).max(CAPABILITY_GRANT_BULK_MAX),
-  reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
-  sod_override: sodOverrideInSchema.optional(),
-})
+export const capabilityGrantBulkCreateSchema = z
+  .object({
+    capability: z.string().min(1).optional(),
+    capabilities: z.array(z.string().min(1)).min(1).max(CAPABILITY_GRANT_BULK_MAX).optional(),
+    scope_type: scopeTypeSchema,
+    scope_ids: z.array(z.number().int().min(1)).min(1).max(CAPABILITY_GRANT_BULK_MAX),
+    reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
+    sod_override: sodOverrideInSchema.optional(),
+  })
+  .superRefine((body, context) => {
+    const hasSingle = body.capability !== undefined
+    const hasMany = body.capabilities !== undefined
+    if (hasSingle === hasMany) {
+      context.addIssue({
+        code: 'custom',
+        message: "Indicá exactamente una: 'capability' o 'capabilities'.",
+      })
+    }
+    if (body.capabilities && new Set(body.capabilities).size !== body.capabilities.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['capabilities'],
+        message: 'Las capacidades no pueden repetirse.',
+      })
+    }
+    const capabilityCount = body.capabilities?.length ?? 1
+    if (capabilityCount * body.scope_ids.length > CAPABILITY_GRANT_BULK_MAX) {
+      context.addIssue({
+        code: 'custom',
+        message: `Máximo ${CAPABILITY_GRANT_BULK_MAX} combinaciones (capacidades x destinos).`,
+      })
+    }
+  })
 export type CapabilityGrantBulkCreate = z.infer<typeof capabilityGrantBulkCreateSchema>
 
-/** 201 del alta masiva: todas las filas nacieron con el mismo estado (`pending` si es sensible). */
+/**
+ * 201 del alta masiva. Con varias capacidades las filas NO nacen todas con el mismo estado (una
+ * sensible nace `pending`, una común `active`): `pending` es `true` si ALGUNA nació pendiente y el
+ * estado exacto se lee de `grants[].status`.
+ */
 export const capabilityGrantBulkResultSchema = z.object({
   count: z.number().int(),
   pending: z.boolean(),
   grants: z.array(capabilityGrantSchema),
 })
 export type CapabilityGrantBulkResult = z.infer<typeof capabilityGrantBulkResultSchema>
+
+// ── Decisión masiva (`POST /capability-grants/decisions`) ──────────────────────
+export const CAPABILITY_GRANT_DECISIONS = ['approve', 'reject'] as const
+export const capabilityGrantDecisionKindSchema = z.enum(CAPABILITY_GRANT_DECISIONS)
+export type CapabilityGrantDecisionKind = z.infer<typeof capabilityGrantDecisionKindSchema>
+
+/** Cuerpo: la MISMA decisión (y el mismo motivo opcional) para 1–100 solicitudes. */
+export const capabilityGrantDecisionBulkSchema = z.object({
+  decision: capabilityGrantDecisionKindSchema,
+  ids: z.array(z.number().int().min(1)).min(1).max(CAPABILITY_GRANT_DECISION_BULK_MAX),
+  reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
+})
+export type CapabilityGrantDecisionBulk = z.infer<typeof capabilityGrantDecisionBulkSchema>
+
+/**
+ * Resultado de UNA solicitud dentro del lote: decidida (`ok: true`, con la fila ya cerrada) o
+ * bloqueada (`ok: false`, con el código `access.*` y el mensaje del servidor). `code` y `message`
+ * van nullish: el backend los declara opcionales y un `null` no debe tumbar la respuesta entera.
+ */
+export const capabilityGrantDecisionItemSchema = z.discriminatedUnion('ok', [
+  z.object({
+    id: z.number().int(),
+    ok: z.literal(true),
+    grant: capabilityGrantSchema,
+  }),
+  z.object({
+    id: z.number().int(),
+    ok: z.literal(false),
+    code: z.string().nullish(),
+    message: z.string().nullish(),
+  }),
+])
+export type CapabilityGrantDecisionItem = z.infer<typeof capabilityGrantDecisionItemSchema>
+
+/**
+ * 200 SIEMPRE (mejor esfuerzo): un ítem bloqueado no frena ni revierte a los demás, así que hay
+ * que leer `results[]`, en el orden pedido, y no el status HTTP.
+ */
+export const capabilityGrantDecisionBulkResultSchema = z.object({
+  requested: z.number().int(),
+  succeeded: z.number().int(),
+  failed: z.number().int(),
+  results: z.array(capabilityGrantDecisionItemSchema),
+})
+export type CapabilityGrantDecisionBulkResult = z.infer<
+  typeof capabilityGrantDecisionBulkResultSchema
+>
 
 /** Cuerpo de aprobar o rechazar: el motivo es opcional. */
 export const capabilityGrantDecisionSchema = z.object({
@@ -234,10 +319,14 @@ export const CAPABILITY_GRANT_ERROR_CODES = {
   notAssignable: 'access.not_assignable',
   grantDuplicate: 'access.grant_duplicate',
   /**
-   * 409 del alta masiva: no se otorgó nada. `public_context.failures` lista `{scope_id, code,
-   * message}` de CADA destino que falló (ver `ApiGrantBulkFailure`).
+   * 409 del alta masiva: no se otorgó nada. `public_context.failures` lista `{scope_id,
+   * capability, code, message}` de CADA par que falló (ver `ApiGrantBulkFailure`).
    */
   grantBulkFailed: 'access.grant_bulk_failed',
+  /** 422 del alta masiva: capacidades x destinos supera el tope (`CAPABILITY_GRANT_BULK_MAX`). */
+  grantBulkTooLarge: 'access.grant_bulk_too_large',
+  /** Ítem de una decisión masiva que falló por un error inesperado del servidor. */
+  grantDecisionFailed: 'access.grant_decision_failed',
   grantNotFound: 'access.grant_not_found',
   grantNotPending: 'access.grant_not_pending',
   /** 409 del alta y de `approve`; también el `blocked_reason` de una pendiente (v29 §8.2). */

@@ -8,12 +8,14 @@ import type {
   CapabilityGrantBulkCreate,
   CapabilityGrantCreate,
   CapabilityGrantDecision,
+  CapabilityGrantDecisionBulk,
   CapabilityGrantStatus,
 } from '@/lib/contracts'
 import {
   approveCapabilityGrant,
   createCapabilityGrant,
   createCapabilityGrantsBulk,
+  decideCapabilityGrantsBulk,
   getEffectiveAccess,
   listCapabilityGrants,
   listPendingCapabilityGrants,
@@ -131,9 +133,11 @@ export function useCreateCapabilityGrant(userId: number) {
 }
 
 /**
- * Alta masiva: una capacidad sobre varios destinos, todo o nada. Todas las filas nacen con el
- * mismo estado, así que un solo toast alcanza. El 409 `access.grant_bulk_failed` no deja nada
- * creado; el detalle por destino lo muestra el formulario (`grantBulkFailures`).
+ * Alta masiva: una o varias capacidades sobre varios destinos, todo o nada. Con varias capacidades
+ * las filas pueden nacer con estados distintos (una sensible `pending`, una común `active`), así
+ * que el toast cuenta las pendientes en vez de asumir un estado único. El 409
+ * `access.grant_bulk_failed` no deja nada creado; el detalle por par lo muestra el formulario
+ * (`grantBulkFailures`).
  */
 export function useCreateCapabilityGrantsBulk(userId: number) {
   const toast = useToast()
@@ -142,15 +146,24 @@ export function useCreateCapabilityGrantsBulk(userId: number) {
     mutationFn: (body: CapabilityGrantBulkCreate) => createCapabilityGrantsBulk(userId, body),
     onSuccess: (result) => {
       refresh(userId)
-      const capability = result.grants[0]?.capability ?? ''
-      const targets = `${result.count} destino${result.count === 1 ? '' : 's'}`
-      if (result.pending) {
+      const capabilities = [...new Set(result.grants.map((grant) => grant.capability))]
+      const capabilityText =
+        capabilities.length === 1 ? (capabilities[0] ?? '') : `${capabilities.length} capacidades`
+      const targetCount = new Set(result.grants.map((grant) => grant.scope_id)).size
+      const targets = `${targetCount} destino${targetCount === 1 ? '' : 's'}`
+      const pendingCount = result.grants.filter((grant) => grant.status === 'pending').length
+      if (pendingCount === 0) {
+        toast.success('Capacidades otorgadas', `${capabilityText} en ${targets}.`)
+      } else if (pendingCount === result.grants.length) {
         toast.success(
           'Solicitudes enviadas',
-          `Falta que otra persona con access_admin apruebe «${capability}» en ${targets}.`,
+          `Falta que otra persona con access_admin apruebe «${capabilityText}» en ${targets}.`,
         )
       } else {
-        toast.success('Capacidades otorgadas', `${capability} en ${targets}.`)
+        toast.success(
+          'Capacidades otorgadas y solicitudes enviadas',
+          `${pendingCount} de ${result.grants.length} quedan pendientes de que otra persona con access_admin las apruebe; el resto ya rige.`,
+        )
       }
     },
     onError: (error) =>
@@ -222,5 +235,74 @@ export function useRejectCapabilityGrant() {
   return useDecideCapabilityGrant(rejectCapabilityGrant, {
     success: 'Solicitud rechazada',
     failure: 'No se pudo rechazar la solicitud',
+  })
+}
+
+/**
+ * Aprobar o rechazar VARIAS solicitudes con una sola llamada (`POST /capability-grants/decisions`).
+ *
+ * Mejor esfuerzo: la respuesta es 200 aunque haya bloqueadas, así que el éxito del `useMutation`
+ * NO significa que todo se decidió; el resumen por solicitud (`results[]`) lo pinta quien llama.
+ * Por eso el toast distingue tres casos: todas decididas (éxito), algunas (aviso) y ninguna (error).
+ *
+ * `retry: false`: una decisión no se repite sola. El step-up lo pide la capa de peticiones una vez
+ * para todo el lote (ventana de 5 minutos) y reintenta la llamada con la contraseña.
+ *
+ * Se refresca el árbol completo y `/auth/me` según las personas afectadas: se invalida por cada
+ * `user_id` decidido, no solo por la primera.
+ */
+export function useDecideCapabilityGrantsBulk() {
+  const toast = useToast()
+  const refresh = useRefreshAfterGrantChange()
+  const queryClient = useQueryClient()
+  return useMutation({
+    retry: false,
+    mutationFn: ({
+      decision,
+      ids,
+      reason,
+    }: {
+      decision: CapabilityGrantDecisionBulk['decision']
+      ids: number[]
+      reason?: string
+    }) =>
+      decideCapabilityGrantsBulk({
+        decision,
+        ids,
+        // Sin motivo no se manda el campo: una cadena vacía no es un motivo.
+        ...(reason?.trim() ? { reason: reason.trim() } : {}),
+      }),
+    onSuccess: (result, variables) => {
+      const decidedUserIds = result.results.flatMap((item) => (item.ok ? [item.grant.user_id] : []))
+      if (decidedUserIds.length > 0) {
+        for (const userId of new Set(decidedUserIds)) refresh(userId)
+      } else {
+        // Nada cambió, pero la causa suele ser que la bandeja quedó vieja (otra persona decidió).
+        void queryClient.invalidateQueries({ queryKey: queryKeys.capabilityGrants.pending() })
+      }
+      const verb = variables.decision === 'approve' ? 'aprobadas' : 'rechazadas'
+      const summary = `${result.succeeded} de ${result.requested} solicitudes ${verb}.`
+      if (result.failed === 0) {
+        toast.success(
+          variables.decision === 'approve' ? 'Capacidades aprobadas' : 'Solicitudes rechazadas',
+          summary,
+        )
+      } else if (result.succeeded > 0) {
+        toast.push({
+          variant: 'warning',
+          title: 'Decisión parcial',
+          description: `${summary} ${result.failed} con error: ver el detalle.`,
+          duration: 8000,
+        })
+      } else {
+        toast.error('No se decidió ninguna solicitud', 'Ver el detalle de cada una en la bandeja.')
+      }
+    },
+    onError: (error) =>
+      notifyMutationError(
+        toast,
+        error,
+        ...errorToast('No se pudieron decidir las solicitudes', error, true),
+      ),
   })
 }
