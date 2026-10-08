@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>Datum</title>
+    <!-- Favicon: el navegador elige según el tema del SISTEMA (la pestaña no ve el tema de la app). -->
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="/datum-favicon-light-512.png"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="/datum-favicon-dark-512.png"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="apple-touch-icon" href="/datum-favicon-light-512.png" />
     <script>
       // Anti-FOUC: apply the persisted (or system) theme before first paint.
       ;(() => {
