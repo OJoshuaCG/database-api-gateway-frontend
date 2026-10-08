@@ -118,7 +118,8 @@ describe('uncoveredSodConflicts', () => {
 describe('ownerOnlyCapabilityIds', () => {
   it('son las de owner que operator no tiene (`_OWNER - _OPERATOR`), leídas del catálogo', () => {
     const ids = ownerOnlyCapabilityIds(CATALOG_FIXTURE)
-    // Las once de api-reference-v29 §8.1.
+    // Las once de api-reference-v29 §8.1 más `engine_users.grant_admin` (api-reference-v41): dar
+    // WITH GRANT OPTION o privilegios sensibles en el motor es solo de owner.
     expect([...ids].sort()).toEqual([
       'blueprints.apply',
       'blueprints.captures',
@@ -127,6 +128,7 @@ describe('ownerOnlyCapabilityIds', () => {
       'databases.drop',
       'engine_users.credentials',
       'engine_users.drop',
+      'engine_users.grant_admin',
       'engine_users.secrets',
       'exports.download',
       'schema_diff.execute',
