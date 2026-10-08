@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { setStepUpHandler } from '@/lib/api/client'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/utils'
 import { GRANTS_CATALOG_FIXTURE, meFixture } from '@/test/fixtures/authz-catalog'
@@ -231,5 +232,294 @@ describe('PendingCapabilityGrantsCard', () => {
     )
     renderWithProviders(<PendingCapabilityGrantsCard />)
     expect(await screen.findByRole('button', { name: /Reintentar/ })).toBeInTheDocument()
+  })
+})
+
+// ── Decisión masiva ────────────────────────────────────────────────────────────
+const SECOND = {
+  ...DECIDABLE,
+  id: 14,
+  username: 'agarcia',
+  user_id: 9,
+  scope_id: 10,
+  scope_name: 'db-prod-02',
+}
+
+const THIRD = {
+  ...DECIDABLE,
+  id: 15,
+  username: 'rdiaz',
+  user_id: 10,
+  scope_id: 11,
+  scope_name: 'db-prod-03',
+}
+
+type BulkBody = { decision: string; ids: number[]; reason?: string }
+
+/** Casilla de la fila de `username` (la fila existe dos veces: tabla y tarjeta; ambas comparten estado). */
+async function rowCheckbox(username: string) {
+  await screen.findAllByText(DROP)
+  return (
+    await screen.findAllByRole('checkbox', {
+      name: new RegExp(`^Seleccionar: .* de ${username} en `),
+    })
+  )[0] as HTMLInputElement
+}
+
+function decidedItem(row: Row) {
+  return { id: row.id, ok: true, grant: { ...row, status: 'active' } }
+}
+
+/**
+ * Bandeja con estado: `POST /decisions` aplica `outcome` y saca de la lista a las decididas, como
+ * haría el backend, para comprobar que la fila sale y la que falló se queda.
+ */
+function mockBulkBackend(
+  rows: Row[],
+  outcome: (body: BulkBody) => { results: unknown[]; decidedIds: number[] },
+) {
+  const state = { rows, bodies: [] as BulkBody[] }
+  mockBackend([])
+  server.use(
+    http.get(`${API}/capability-grants/pending`, () => HttpResponse.json({ data: state.rows })),
+    http.post(`${API}/capability-grants/decisions`, async ({ request }) => {
+      const body = (await request.json()) as BulkBody
+      state.bodies.push(body)
+      const { results, decidedIds } = outcome(body)
+      state.rows = state.rows.filter((row) => !decidedIds.includes(row.id))
+      const succeeded = decidedIds.length
+      return HttpResponse.json({
+        data: {
+          requested: body.ids.length,
+          succeeded,
+          failed: body.ids.length - succeeded,
+          results,
+        },
+        message: `${succeeded} de ${body.ids.length} solicitudes decididas.`,
+      })
+    }),
+  )
+  return state
+}
+
+describe('PendingCapabilityGrantsCard: decisión masiva', () => {
+  afterEach(() => {
+    setStepUpHandler(null)
+  })
+
+  it('elegir una fila muestra la barra con el conteo y desmarcarla la esconde', async () => {
+    mockBulkBackend([DECIDABLE, SECOND], () => ({ results: [], decidedIds: [] }))
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    expect(screen.queryByRole('region', { name: /Acciones sobre las solicitudes/ })).toBeNull()
+    const box = await rowCheckbox('mlopez')
+    await userEvent.click(box)
+
+    const bar = screen.getByRole('region', { name: /Acciones sobre las solicitudes/ })
+    expect(within(bar).getByText('1 seleccionada')).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: 'Aprobar 1' })).toBeEnabled()
+    expect(within(bar).getByRole('button', { name: 'Rechazar 1' })).toBeEnabled()
+
+    await userEvent.click(box)
+    expect(screen.queryByRole('region', { name: /Acciones sobre las solicitudes/ })).toBeNull()
+  })
+
+  it('«Seleccionar todas» solo toma las que can_decide permite y las bloqueadas quedan deshabilitadas con su motivo', async () => {
+    mockBulkBackend([DECIDABLE, BLOCKED, SECOND], () => ({ results: [], decidedIds: [] }))
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+    await screen.findAllByText(DROP)
+
+    const all = await screen.findByRole('checkbox', { name: 'Seleccionar todas (2)' })
+    expect(screen.getByText('1 no se puede decidir y queda fuera.')).toBeInTheDocument()
+    await userEvent.click(all)
+
+    const bar = screen.getByRole('region', { name: /Acciones sobre las solicitudes/ })
+    expect(within(bar).getByText('2 seleccionadas')).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: 'Aprobar 2' })).toBeInTheDocument()
+
+    const blockedBox = (
+      await screen.findAllByRole('checkbox', { name: /^Seleccionar: .* de jperez en / })
+    )[0] as HTMLInputElement
+    expect(blockedBox).toBeDisabled()
+    expect(blockedBox).not.toBeChecked()
+    // El motivo visible es el mismo que el de los botones de la fila.
+    expect(blockedBox).toHaveAccessibleDescription(/No podés aprobar una capacidad que pediste vos/)
+  })
+
+  it('aprobar el lote pide UNA confirmación con el conteo, manda el cuerpo y resume «n de N»', async () => {
+    const state = mockBulkBackend([DECIDABLE, SECOND], (body) => ({
+      decidedIds: body.ids,
+      results: [decidedItem(DECIDABLE), decidedItem(SECOND)],
+    }))
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    await screen.findAllByText(DROP)
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar todas (2)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aprobar 2' }))
+
+    const dialog = await openDialog('¿Aprobar 2 capacidades?')
+    // El lote se nombra completo en el diálogo y el recordatorio de lo sensible está a la vista.
+    expect(within(dialog).getByText(/Son sensibles \(exclusivas de owner\)/)).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('list', { name: 'Solicitudes del lote' }).children,
+    ).toHaveLength(2)
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Motivo' }), ' ok ')
+    // Nada se manda hasta confirmar.
+    expect(state.bodies).toEqual([])
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Aprobar 2 capacidades' }))
+
+    await waitFor(() =>
+      expect(state.bodies).toEqual([{ decision: 'approve', ids: [12, 14], reason: 'ok' }]),
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('2 de 2 aprobadas')).toBeInTheDocument()
+    // Las decididas salieron de la lista y la selección se vació.
+    await waitFor(() =>
+      expect(screen.queryAllByRole('checkbox', { name: /^Seleccionar: / })).toHaveLength(0),
+    )
+    expect(screen.queryByRole('region', { name: /Acciones sobre las solicitudes/ })).toBeNull()
+  })
+
+  it('un resultado parcial lista cada fallo con su mensaje, se queda hasta cerrarlo y deja elegida la que falló', async () => {
+    mockBulkBackend([DECIDABLE, SECOND, THIRD], () => ({
+      decidedIds: [12],
+      results: [
+        decidedItem(DECIDABLE),
+        {
+          id: 14,
+          ok: false,
+          code: 'access.grant_not_pending',
+          message: 'mensaje crudo del servidor',
+        },
+        { id: 15, ok: false, code: 'access.algo_nuevo', message: 'Explicación del servidor.' },
+      ],
+    }))
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    await screen.findAllByText(DROP)
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar todas (3)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aprobar 3' }))
+    const dialog = await openDialog('¿Aprobar 3 capacidades?')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Aprobar 3 capacidades' }))
+
+    const summary = await screen.findByRole('alert')
+    expect(within(summary).getByText('1 de 3 aprobadas')).toBeInTheDocument()
+    expect(within(summary).getByText(/2 solicitudes no se pudieron decidir/)).toBeInTheDocument()
+    // Asunto como lo muestra la fila + mensaje con el copy propio, o el del servidor si no hay.
+    expect(within(summary).getByText(/de agarcia en Servidor · db-prod-02/)).toBeInTheDocument()
+    expect(within(summary).getByText(/Esa solicitud ya no está pendiente/)).toBeInTheDocument()
+    expect(within(summary).getByText(/de rdiaz en Servidor · db-prod-03/)).toBeInTheDocument()
+    expect(within(summary).getByText(/Explicación del servidor\./)).toBeInTheDocument()
+    expect(within(summary).queryByText(/mensaje crudo del servidor/)).toBeNull()
+
+    // La decidida salió; las que fallaron siguen en la bandeja y elegidas.
+    await waitFor(() =>
+      expect(screen.queryAllByRole('checkbox', { name: /de mlopez en / })).toHaveLength(0),
+    )
+    const bar = screen.getByRole('region', { name: /Acciones sobre las solicitudes/ })
+    expect(within(bar).getByText('2 seleccionadas')).toBeInTheDocument()
+
+    // El resumen sigue ahí tras el refresco, hasta que se cierra.
+    expect(screen.getByText('1 de 3 aprobadas')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cerrar resumen' }))
+    expect(screen.queryByText('1 de 3 aprobadas')).toBeNull()
+  })
+
+  it('rechazar el lote manda decision reject y el motivo', async () => {
+    const state = mockBulkBackend([DECIDABLE, SECOND], (body) => ({
+      decidedIds: body.ids,
+      results: [decidedItem(DECIDABLE), decidedItem(SECOND)],
+    }))
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    await screen.findAllByText(DROP)
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar todas (2)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Rechazar 2' }))
+    const dialog = await openDialog('¿Rechazar 2 solicitudes?')
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Motivo' }), 'no corresponde')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Rechazar 2 solicitudes' }))
+
+    await waitFor(() =>
+      expect(state.bodies).toEqual([
+        { decision: 'reject', ids: [12, 14], reason: 'no corresponde' },
+      ]),
+    )
+    expect(await screen.findByText('2 de 2 rechazadas')).toBeInTheDocument()
+  })
+
+  it('un error de la llamada entera (403) queda en el diálogo, sin resumen ni selección perdida', async () => {
+    mockBulkBackend([DECIDABLE], () => ({ results: [], decidedIds: [] }))
+    server.use(
+      http.post(`${API}/capability-grants/decisions`, () =>
+        HttpResponse.json(errorBody('access.forbidden', 'No tienes permiso.'), { status: 403 }),
+      ),
+    )
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    await userEvent.click(await rowCheckbox('mlopez'))
+    await userEvent.click(screen.getByRole('button', { name: 'Aprobar 1' }))
+    const dialog = await openDialog('¿Aprobar 1 capacidad?')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Aprobar 1 capacidad' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /Tu acceso actual no la incluye/,
+    )
+    expect(screen.queryByText(/de 1 aprobadas/)).toBeNull()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // La selección sigue: se puede reintentar.
+    expect(screen.getByRole('button', { name: 'Aprobar 1' })).toBeInTheDocument()
+  })
+
+  it('ante el 403 de step-up pide la contraseña UNA vez y reenvía el lote entero', async () => {
+    let calls = 0
+    const state = mockBulkBackend([DECIDABLE, SECOND], (body) => ({
+      decidedIds: body.ids,
+      results: [decidedItem(DECIDABLE), decidedItem(SECOND)],
+    }))
+    server.use(
+      http.post(`${API}/capability-grants/decisions`, async ({ request }) => {
+        calls += 1
+        if (calls === 1) {
+          return HttpResponse.json(
+            {
+              detail: {
+                msg: 'Confirmá tu contraseña.',
+                type: 'AppHttpException',
+                public_context: { code: 'access.step_up_required', step_up_ttl_seconds: 300 },
+              },
+            },
+            { status: 403 },
+          )
+        }
+        const body = (await request.json()) as BulkBody
+        state.bodies.push(body)
+        return HttpResponse.json({
+          data: {
+            requested: 2,
+            succeeded: 2,
+            failed: 0,
+            results: [decidedItem(DECIDABLE), decidedItem(SECOND)],
+          },
+        })
+      }),
+    )
+    let prompts = 0
+    setStepUpHandler(() => {
+      prompts += 1
+      return Promise.resolve(true)
+    })
+    renderWithProviders(<PendingCapabilityGrantsCard />)
+
+    await screen.findAllByText(DROP)
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar todas (2)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aprobar 2' }))
+    const dialog = await openDialog('¿Aprobar 2 capacidades?')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Aprobar 2 capacidades' }))
+
+    await waitFor(() => expect(calls).toBe(2))
+    expect(prompts).toBe(1)
+    expect(state.bodies).toEqual([{ decision: 'approve', ids: [12, 14] }])
+    expect(await screen.findByText('2 de 2 aprobadas')).toBeInTheDocument()
   })
 })

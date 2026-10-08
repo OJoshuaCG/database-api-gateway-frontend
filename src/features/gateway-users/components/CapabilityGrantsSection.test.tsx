@@ -103,10 +103,13 @@ function renderSection(
 
 /** Abre el combobox `name` y elige la opción cuyo texto cumple `option`. */
 async function pick(name: string, option: string | RegExp) {
-  const input = screen.getByRole('combobox', { name })
-  const box = input.parentElement
-  if (!box) throw new Error(`falta el combobox ${name}`)
-  await userEvent.click(within(box).getByRole('button', { name: 'Abrir lista' }))
+  // El multiselect queda abierto tras elegir: volver a tocar «Abrir lista» lo cerraría.
+  if (!screen.queryByRole('option', { name: option })) {
+    const input = screen.getByRole('combobox', { name })
+    const box = input.parentElement
+    if (!box) throw new Error(`falta el combobox ${name}`)
+    await userEvent.click(within(box).getByRole('button', { name: 'Abrir lista' }))
+  }
   await userEvent.click(await screen.findByRole('option', { name: option }))
 }
 
@@ -145,7 +148,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    const input = screen.getByRole('combobox', { name: 'Capacidad' })
+    const input = screen.getByRole('combobox', { name: 'Capacidades' })
     await userEvent.click(
       within(input.parentElement as HTMLElement).getByRole('button', { name: 'Abrir lista' }),
     )
@@ -198,7 +201,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(WRITE))
     await pick('Entornos de destino', 'Producción')
     await userEvent.type(screen.getByRole('textbox', { name: 'Motivo' }), '  guardia  ')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
@@ -213,7 +216,7 @@ describe('CapabilityGrantsSection', () => {
     expect(await within(form()).findByText('Capacidad otorgada.')).toBeInTheDocument()
     expect(within(form()).getByText(/ya rige/)).toBeInTheDocument()
     // El formulario queda listo para otra: nada elegido y el envío deshabilitado.
-    expect(screen.getByRole('combobox', { name: 'Capacidad' })).toHaveValue('')
+    expect(within(form()).queryByText(/combinaci/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeDisabled()
   })
 
@@ -238,7 +241,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    await pick('Capacidad', new RegExp(DROP))
+    await pick('Capacidades', new RegExp(DROP))
     expect(
       within(form()).getByText(/Queda pendiente y no concede acceso hasta que otra persona/),
     ).toBeVisible()
@@ -265,7 +268,7 @@ describe('CapabilityGrantsSection', () => {
     const submit = screen.getByRole('button', { name: 'Otorgar capacidad' })
     expect(submit).toBeDisabled()
     expect(submit).toHaveAttribute('aria-describedby', note.id)
-    expect(screen.getByRole('combobox', { name: 'Capacidad' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Capacidades' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Motivo' })).toBeDisabled()
     // La lista sigue ahí (es lectura), pero sin acciones.
     const revokes = await screen.findAllByRole('button', { name: /^Revocar: / })
@@ -277,7 +280,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection({ isActive: false })
     expect(await screen.findByText(/Esta cuenta está desactivada/)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeDisabled()
-    expect(screen.getByRole('combobox', { name: 'Capacidad' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Capacidades' })).toBeDisabled()
     // Revocar sí se puede: sacarle lo retenido a una cuenta inactiva no la beneficia.
     const revokes = await screen.findAllByRole('button', { name: /^Revocar: / })
     expect(revokes[0]).toBeEnabled()
@@ -288,7 +291,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(WRITE))
     // ACTIVE ya es databases.write en Desarrollo: solo queda Producción para elegir.
     const input = screen.getByRole('combobox', { name: 'Entornos de destino' })
     await userEvent.click(
@@ -337,7 +340,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(WRITE))
     await pick('Tipo de destino', 'Servidor')
     await userEvent.click(await screen.findByRole('button', { name: 'Seleccionar todos (2)' }))
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
@@ -380,7 +383,7 @@ describe('CapabilityGrantsSection', () => {
     renderSection()
     await screen.findAllByText(WRITE)
 
-    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(WRITE))
     await pick('Entornos de destino', 'Producción')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 
@@ -394,11 +397,167 @@ describe('CapabilityGrantsSection', () => {
       within(form()).getByText(/El entorno o servidor elegido ya no existe/),
     ).toBeInTheDocument()
     // Lo elegido se conserva para corregir y reintentar.
-    expect(screen.getByRole('combobox', { name: 'Capacidad' })).toHaveValue(WRITE)
+    // (ahora la capacidad elegida queda como ficha del multiselect, no como valor del input)
+    expect(within(form()).getByText(WRITE)).toBeInTheDocument()
 
     // Tocar un campo descarta el error: ya no habla de lo que hay en pantalla.
     await userEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
     expect(within(form()).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('con UNA capacidad el contador es singular y con varias el cuerpo lleva `capabilities` en el orden elegido', async () => {
+    mockBackend()
+    let body: unknown = null
+    server.use(
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              count: 2,
+              pending: true,
+              grants: [
+                { ...ACTIVE, id: 40, scope_id: 3, scope_name: 'Producción' },
+                {
+                  ...PENDING,
+                  id: 41,
+                  scope_type: 'environment',
+                  scope_id: 3,
+                  scope_name: 'Producción',
+                },
+              ],
+            },
+          },
+          { status: 201 },
+        )
+      }),
+    )
+    renderSection()
+    await screen.findAllByText(WRITE)
+
+    await pick('Capacidades', new RegExp(WRITE))
+    await pick('Entornos de destino', 'Producción')
+    expect(within(form()).getByText('1 capacidad x 1 destino = 1 combinación')).toBeInTheDocument()
+
+    await pick('Capacidades', new RegExp(DROP))
+    expect(
+      within(form()).getByText('2 capacidades x 1 destino = 2 combinaciones'),
+    ).toBeInTheDocument()
+    // Una de las dos es sensible: se avisa ANTES de enviar cuál queda pendiente.
+    expect(within(form()).getByText(/1 de las elegidas queda pendiente/)).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual({
+      capabilities: ['databases.write', 'databases.drop'],
+      scope_type: 'environment',
+      scope_ids: [3],
+    })
+    // Estados mezclados: se cuentan las pendientes en vez de asumir un estado único.
+    expect(
+      await within(form()).findByText(
+        'Se otorgaron 2 combinaciones: 1 ya rige y 1 queda pendiente.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(form()).getByText(/Pendientes de aprobación: 1 de 2/)).toBeInTheDocument()
+  })
+
+  it('no ofrece los destinos donde YA tiene alguna de las capacidades elegidas', async () => {
+    mockBackend()
+    renderSection()
+    await screen.findAllByText(WRITE)
+
+    // ACTIVE ya es databases.write en Desarrollo: con las dos elegidas ese entorno tampoco se ofrece.
+    await pick('Capacidades', new RegExp(DROP))
+    await pick('Capacidades', new RegExp(WRITE))
+    const input = screen.getByRole('combobox', { name: 'Entornos de destino' })
+    await userEvent.click(
+      within(input.parentElement as HTMLElement).getByRole('button', { name: 'Abrir lista' }),
+    )
+    const options = await screen.findAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual(['Producción'])
+    expect(
+      within(form()).getByText(/1 destino ya tiene al menos una de esas capacidades/),
+    ).toBeInTheDocument()
+  })
+
+  it('bloquea el envío por encima de 100 combinaciones y lo explica', async () => {
+    mockBackend()
+    const manyServers = Array.from({ length: 51 }, (_, index) =>
+      serverFixture(100 + index, `srv-${index}`),
+    )
+    server.use(http.get(`${API}/servers`, () => HttpResponse.json(pageOf(manyServers))))
+    const thirdLabel = GRANTS_CATALOG_FIXTURE.find((row) => row.id === 'exports.download')?.label
+    if (!thirdLabel) throw new Error('el fixture no trae exports.download')
+    renderSection()
+    await screen.findAllByText(WRITE)
+
+    await pick('Capacidades', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(DROP))
+    await pick('Tipo de destino', 'Servidor')
+    // Con 2 capacidades caben 50 destinos: «Seleccionar todos» respeta el producto, no solo los 51.
+    await userEvent.click(await screen.findByRole('button', { name: 'Seleccionar todos (50)' }))
+    expect(
+      within(form()).getByText('2 capacidades x 50 destinos = 100 combinaciones'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeEnabled()
+
+    await pick('Capacidades', new RegExp(thirdLabel))
+    const counter = within(form()).getByText(/3 capacidades x 50 destinos = 150 combinaciones/)
+    expect(counter).toHaveAttribute('role', 'alert')
+    expect(counter).toHaveTextContent(/Máximo 100 por vez/)
+    expect(screen.getByRole('button', { name: 'Otorgar capacidad' })).toBeDisabled()
+  })
+
+  it('un 409 del lote con varias capacidades lista cada par: capacidad, destino y motivo', async () => {
+    mockBackend()
+    server.use(
+      http.post(`${API}/gateway-users/7/capability-grants/bulk`, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              msg: 'No se otorgó nada: hay combinaciones que no se pueden otorgar.',
+              type: 'AppHttpException',
+              public_context: {
+                code: 'access.grant_bulk_failed',
+                failures: [
+                  {
+                    scope_id: 3,
+                    capability: 'databases.drop',
+                    code: 'access.grant_duplicate',
+                    message: 'Ya existe.',
+                  },
+                  {
+                    scope_id: 3,
+                    capability: 'databases.write',
+                    code: 'access.algo_nuevo',
+                    message: 'Explicación del servidor.',
+                  },
+                ],
+              },
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    renderSection()
+    await screen.findAllByText(WRITE)
+
+    await pick('Capacidades', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(DROP))
+    await pick('Entornos de destino', 'Producción')
+    await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
+
+    const alert = await within(form()).findByRole('alert')
+    expect(alert).toHaveTextContent('No se otorgó nada')
+    // Cada fallo nombra la capacidad Y el destino (las fichas elegidas no son `<strong>`).
+    const items = within(form()).getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent(`${DROP} en Producción: Esa persona ya tiene esa capacidad`)
+    expect(items[1]).toHaveTextContent(`${WRITE} en Producción: Explicación del servidor.`)
+    // Lo elegido se conserva para corregir y reintentar: la ficha y el renglón del error.
+    expect(within(form()).getAllByText(WRITE)).toHaveLength(2)
   })
 
   it('un 403 usa el copy compartido de acceso en el formulario', async () => {
@@ -419,7 +578,7 @@ describe('CapabilityGrantsSection', () => {
     )
     renderSection()
     await screen.findAllByText(WRITE)
-    await pick('Capacidad', new RegExp(WRITE))
+    await pick('Capacidades', new RegExp(WRITE))
     await pick('Entornos de destino', 'Producción')
     await userEvent.click(screen.getByRole('button', { name: 'Otorgar capacidad' }))
 

@@ -92,6 +92,11 @@ const STATUS_BADGES: Record<string, { label: string; tone: BadgeTone }> = {
   revoked: { label: 'Revocada', tone: 'neutral' },
 }
 
+/** «1 capacidad», «3 capacidades»: el sustantivo concuerda con el número. */
+function countLabel(count: number, singular: string, pluralForm: string): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`
+}
+
 /** Texto de un destino que falló en el alta masiva: copy propio si lo hay, si no el del backend. */
 function bulkFailureText(failure: ApiGrantBulkFailure): string {
   const known =
@@ -155,9 +160,10 @@ export function CapabilityGrantsSection({
   const duplicateId = `${ids}-duplicadas`
   const errorId = `${ids}-error`
   const detailId = `${ids}-detalle`
+  const counterId = `${ids}-contador`
 
   const [showHistory, setShowHistory] = useState(false)
-  const [capabilityId, setCapabilityId] = useState<string | null>(null)
+  const [capabilityIds, setCapabilityIds] = useState<string[]>([])
   const [scopeType, setScopeType] = useState<ScopeType>('environment')
   const [scopeIds, setScopeIds] = useState<number[]>([])
   const [reason, setReason] = useState('')
@@ -186,34 +192,51 @@ export function CapabilityGrantsSection({
     [catalog],
   )
 
-  const selected = capabilityId ? (grantable.find((row) => row.id === capabilityId) ?? null) : null
+  // Se conserva el orden en que se eligieron y se descarta lo que ya no es otorgable (el catálogo
+  // se refrescó): el cuerpo solo lleva ids que el selector todavía ofrece.
+  const selectedCapabilities = capabilityIds.flatMap((id) => {
+    const row = grantable.find((candidate) => candidate.id === id)
+    return row ? [row] : []
+  })
+  const selectedCapabilityIds = selectedCapabilities.map((row) => row.id)
+  const sensitiveSelected = selectedCapabilities.filter((row) =>
+    isSensitiveCapability(row.id, catalog),
+  )
   const targets: TargetOption[] =
     scopeType === 'environment'
       ? environments.selectable.map((env) => ({ id: env.id, label: env.name }))
       : (servers.data ?? []).map((server) => ({ id: server.id, label: server.name }))
 
-  // Destinos que ya tienen esta capacidad VIVA (activa o pendiente): no se ofrecen. Es una pista
-  // con la lista que ya está en pantalla; el `UNIQUE` del backend sigue siendo la verdad (el lote
-  // entero responde 409 `access.grant_bulk_failed` con `access.grant_duplicate` por destino).
+  // Destinos que ya tienen ALGUNA de las capacidades elegidas VIVA (activa o pendiente): no se
+  // ofrecen. El lote es el producto cartesiano capacidades x destinos y es todo o nada, así que un
+  // solo par repetido lo tumba entero. Es una pista con la lista que ya está en pantalla; el
+  // `UNIQUE` del backend sigue siendo la verdad (409 `access.grant_bulk_failed` con
+  // `access.grant_duplicate` por par).
   const liveTargetIds = useMemo(
     () =>
       new Set(
-        capabilityId
-          ? live
-              .filter(
-                (grant) => grant.capability === capabilityId && grant.scope_type === scopeType,
-              )
-              .map((grant) => grant.scope_id)
-          : [],
+        live
+          .filter(
+            (grant) => capabilityIds.includes(grant.capability) && grant.scope_type === scopeType,
+          )
+          .map((grant) => grant.scope_id),
       ),
-    [live, capabilityId, scopeType],
+    [live, capabilityIds, scopeType],
   )
   const available = targets.filter((option) => !liveTargetIds.has(option.id))
   const alreadyGranted = targets.length - available.length
   // Lo elegido que dejó de ser ofrecible (cambió la capacidad) se descarta sin tocar el estado.
   const selectedTargets = available.filter((option) => scopeIds.includes(option.id))
   const selectedIds = selectedTargets.map((option) => option.id)
-  const tooMany = selectedIds.length > CAPABILITY_GRANT_BULK_MAX
+  // Cada par capacidad x destino es una fila: el tope de 100 es sobre el PRODUCTO, no sobre cada
+  // lista (el backend lo rechaza con 422 `access.grant_bulk_too_large`).
+  const combinations = selectedCapabilityIds.length * selectedIds.length
+  const tooMany = combinations > CAPABILITY_GRANT_BULK_MAX
+  // Cuántos destinos caben con las capacidades elegidas: lo que «Seleccionar todos» puede marcar.
+  const maxTargetsForSelection = Math.floor(
+    CAPABILITY_GRANT_BULK_MAX / Math.max(1, selectedCapabilityIds.length),
+  )
+  const selectAllCount = Math.min(available.length, maxTargetsForSelection)
 
   // Los dos bloqueos son del DESTINO de la operación y el backend los rechaza antes que cualquier
   // otro chequeo: se explican acá, con el copy de siempre, en vez de dejar llegar a un 409.
@@ -224,7 +247,7 @@ export function CapabilityGrantsSection({
       : null
 
   const canSubmit =
-    selected !== null &&
+    selectedCapabilityIds.length >= 1 &&
     selectedIds.length >= 1 &&
     !tooMany &&
     blockedReason === null &&
@@ -265,7 +288,7 @@ export function CapabilityGrantsSection({
       onSuccess: () => {
         // Se limpia lo que se eligió pero se deja el tipo de destino: otorgar varias seguidas
         // sobre el mismo tipo es lo habitual.
-        setCapabilityId(null)
+        setCapabilityIds([])
         setScopeIds([])
         setReason('')
         setSodBlock(null)
@@ -291,10 +314,14 @@ export function CapabilityGrantsSection({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!canSubmit || !selected) return
+    if (!canSubmit) return
     const trimmed = reason.trim()
     send({
-      capability: selected.id,
+      // Con UNA capacidad se manda `capability` (la forma de siempre, compatible con un backend
+      // anterior); con varias, `capabilities`. El backend exige exactamente una de las dos.
+      ...(selectedCapabilityIds.length === 1
+        ? { capability: selectedCapabilityIds[0] }
+        : { capabilities: selectedCapabilityIds }),
       scope_type: scopeType,
       scope_ids: selectedIds,
       ...(trimmed ? { reason: trimmed } : {}),
@@ -418,10 +445,15 @@ export function CapabilityGrantsSection({
   )
 
   const confirmCancel = toRevoke?.status === 'pending'
-  const created = create.isSuccess ? create.data.grants[0] : undefined
-  const createdTargets = create.isSuccess
-    ? create.data.grants.map((grant) => grant.scope_name ?? `#${grant.scope_id}`).join(', ')
-    : ''
+  const createdGrants = create.isSuccess ? create.data.grants : []
+  const createdCapabilities = [...new Set(createdGrants.map((grant) => grant.capability))]
+  const createdCapabilitiesText = createdCapabilities.map(capabilityName).join(', ')
+  const createdTargets = [
+    ...new Set(createdGrants.map((grant) => grant.scope_name ?? `#${grant.scope_id}`)),
+  ].join(', ')
+  // Con varias capacidades las filas pueden nacer con estados distintos: se cuentan, no se asumen.
+  const createdPending = createdGrants.filter((grant) => grant.status === 'pending').length
+  const createdActive = createdGrants.length - createdPending
 
   return (
     <Card>
@@ -431,9 +463,9 @@ export function CapabilityGrantsSection({
             Capacidades puntuales
           </h2>
           <p className="text-sm text-muted-foreground">
-            Suman UNA capacidad sobre uno o varios entornos o servidores sin cambiar el rol de{' '}
-            {user.username}. Se aplican al instante, sin pasar por «Guardar accesos», y esa pantalla
-            no las toca.
+            Suman una o varias capacidades sobre uno o varios entornos o servidores sin cambiar el
+            rol de {user.username}. Se aplican al instante, sin pasar por «Guardar accesos», y esa
+            pantalla no las toca.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -457,12 +489,12 @@ export function CapabilityGrantsSection({
               Otorgar una capacidad
             </h3>
 
-            <Combobox<CapabilityDescriptor>
+            <MultiCombobox<CapabilityDescriptor>
               items={grantable}
-              value={selected}
-              onChange={(row) => {
+              selectedItems={selectedCapabilities}
+              onChange={(rows) => {
                 touch()
-                setCapabilityId(row?.id ?? null)
+                setCapabilityIds(rows.map((row) => row.id))
               }}
               itemToString={(row) => row.label}
               itemToKey={(row) => row.id}
@@ -476,31 +508,36 @@ export function CapabilityGrantsSection({
                   {isSensitiveCapability(row.id, catalog) && <SecondApproverBadge />}
                 </span>
               )}
-              label="Capacidad"
-              placeholder="Elegí una capacidad"
-              disabled={blockedReason !== null}
-              isLoading={isCatalogLoading}
-              hint={
-                !isCatalogLoading && grantable.length === 0
-                  ? 'No hay capacidades para otorgar de forma puntual: el catálogo no publicó ninguna.'
-                  : undefined
-              }
+              label="Capacidades"
+              placeholder="Elegí una o varias capacidades"
+              disabled={blockedReason !== null || isCatalogLoading}
             />
+            {isCatalogLoading && (
+              <span className="text-xs text-muted-foreground">Cargando capacidades…</span>
+            )}
+            {!isCatalogLoading && grantable.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No hay capacidades para otorgar de forma puntual: el catálogo no publicó ninguna.
+              </p>
+            )}
 
-            {selected && (
-              <div id={detailId} className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <code className="font-mono">{selected.id}</code>
-                {selected.implies.length > 0 && (
-                  <span>
-                    Incluye la lectura: {selected.implies.map(capabilityName).join(', ')}.
-                  </span>
-                )}
-                {isSensitiveCapability(selected.id, catalog) && (
+            {selectedCapabilities.length > 0 && (
+              <div id={detailId} className="flex flex-col gap-2 text-xs text-muted-foreground">
+                {selectedCapabilities.map((row) => (
+                  <div key={row.id} className="flex flex-col gap-1">
+                    <code className="font-mono">{row.id}</code>
+                    {row.implies.length > 0 && (
+                      <span>Incluye la lectura: {row.implies.map(capabilityName).join(', ')}.</span>
+                    )}
+                  </div>
+                ))}
+                {sensitiveSelected.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
                     <SecondApproverBadge />
                     <span>
-                      Queda pendiente y no concede acceso hasta que otra persona con access_admin la
-                      apruebe.
+                      {selectedCapabilities.length === 1
+                        ? 'Queda pendiente y no concede acceso hasta que otra persona con access_admin la apruebe.'
+                        : `${countLabel(sensitiveSelected.length, 'de las elegidas queda', 'de las elegidas quedan')} pendiente${sensitiveSelected.length === 1 ? '' : 's'} y no concede${sensitiveSelected.length === 1 ? '' : 'n'} acceso hasta que otra persona con access_admin la${sensitiveSelected.length === 1 ? '' : 's'} apruebe (${sensitiveSelected.map((row) => row.label).join(', ')}). Las demás rigen al instante.`}
                     </span>
                   </span>
                 )}
@@ -546,17 +583,15 @@ export function CapabilityGrantsSection({
                     size="sm"
                     disabled={
                       blockedReason !== null ||
-                      available.length === 0 ||
-                      selectedIds.length === Math.min(available.length, CAPABILITY_GRANT_BULK_MAX)
+                      selectAllCount === 0 ||
+                      selectedIds.length === selectAllCount
                     }
                     onClick={() => {
                       touch()
-                      setScopeIds(
-                        available.slice(0, CAPABILITY_GRANT_BULK_MAX).map((option) => option.id),
-                      )
+                      setScopeIds(available.slice(0, selectAllCount).map((option) => option.id))
                     }}
                   >
-                    Seleccionar todos ({Math.min(available.length, CAPABILITY_GRANT_BULK_MAX)})
+                    Seleccionar todos ({selectAllCount})
                   </Button>
                   <Button
                     type="button"
@@ -579,17 +614,33 @@ export function CapabilityGrantsSection({
                     {alreadyGranted === 1
                       ? '1 destino ya tiene'
                       : `${alreadyGranted} destinos ya tienen`}{' '}
-                    esa capacidad (activa o pendiente de aprobación) y no se ofrece
+                    {selectedCapabilityIds.length === 1
+                      ? 'esa capacidad'
+                      : 'al menos una de esas capacidades'}{' '}
+                    (activa o pendiente de aprobación) y no se ofrece
                     {alreadyGranted === 1 ? '' : 'n'}.
-                  </p>
-                )}
-                {tooMany && (
-                  <p role="status" className="text-xs text-error">
-                    Máximo {CAPABILITY_GRANT_BULK_MAX} destinos por vez.
                   </p>
                 )}
               </div>
             </div>
+
+            {/* Contador en vivo: cada par capacidad x destino es una fila y el lote pasa o falla
+                entero, así que se ve el producto ANTES de enviar y el motivo del bloqueo si pasa de
+                100. `role="status"` solo cuando hay bloqueo: un contador que anuncia cada
+                clic sería ruido. */}
+            {(selectedCapabilityIds.length > 0 || selectedIds.length > 0) && (
+              <p
+                id={counterId}
+                role={tooMany ? 'alert' : undefined}
+                className={tooMany ? 'text-sm text-error' : 'text-sm text-muted-foreground'}
+              >
+                {countLabel(selectedCapabilityIds.length, 'capacidad', 'capacidades')} x{' '}
+                {countLabel(selectedIds.length, 'destino', 'destinos')} ={' '}
+                {countLabel(combinations, 'combinación', 'combinaciones')}
+                {tooMany &&
+                  `. Máximo ${CAPABILITY_GRANT_BULK_MAX} por vez: quitá capacidades o destinos para poder otorgar.`}
+              </p>
+            )}
 
             <Textarea
               label="Motivo"
@@ -615,7 +666,12 @@ export function CapabilityGrantsSection({
             {listedFailures.length > 0 && (
               <ul className="flex list-disc flex-col gap-0.5 pl-5 text-sm text-error">
                 {listedFailures.map((failure) => (
-                  <li key={failure.scopeId}>
+                  <li key={`${failure.capability ?? ''}:${failure.scopeId}`}>
+                    {failure.capability && (
+                      <>
+                        <strong>{capabilityName(failure.capability)}</strong> en{' '}
+                      </>
+                    )}
                     <strong>
                       {targets.find((option) => option.id === failure.scopeId)?.label ??
                         `#${failure.scopeId}`}
@@ -645,15 +701,26 @@ export function CapabilityGrantsSection({
               />
             )}
 
-            {create.isSuccess && created && (
+            {create.isSuccess && createdGrants.length > 0 && (
               <p role="status" className="text-sm text-foreground">
-                {create.data.pending ? (
+                {createdPending === 0 ? (
+                  <>
+                    <strong>
+                      {createdCapabilities.length > 1
+                        ? `${countLabel(create.data.count, 'capacidad otorgada', 'capacidades otorgadas')}.`
+                        : create.data.count === 1
+                          ? 'Capacidad otorgada.'
+                          : `Capacidad otorgada en ${create.data.count} destinos.`}
+                    </strong>{' '}
+                    {createdCapabilitiesText} en {createdTargets} ya rige.
+                  </>
+                ) : createdActive === 0 ? (
                   <>
                     <strong>
                       {create.data.count === 1 ? 'Solicitud enviada' : 'Solicitudes enviadas'},
                       todavía no conceden acceso.
                     </strong>{' '}
-                    {capabilityName(created.capability)} en {createdTargets} queda
+                    {createdCapabilitiesText} en {createdTargets} queda
                     {create.data.count === 1 ? '' : 'n'} pendiente
                     {create.data.count === 1 ? '' : 's'} hasta que otra persona con access_admin la
                     {create.data.count === 1 ? '' : 's'} apruebe.
@@ -661,12 +728,18 @@ export function CapabilityGrantsSection({
                 ) : (
                   <>
                     <strong>
-                      {create.data.count === 1
-                        ? 'Capacidad otorgada.'
-                        : `Capacidad otorgada en ${create.data.count} destinos.`}
+                      Se otorgaron {createdGrants.length} combinaciones: {createdActive} ya{' '}
+                      {createdActive === 1 ? 'rige' : 'rigen'} y {createdPending}{' '}
+                      {createdPending === 1 ? 'queda pendiente' : 'quedan pendientes'}.
                     </strong>{' '}
-                    {capabilityName(created.capability)} en {createdTargets} ya rige.
+                    {createdCapabilitiesText} en {createdTargets}.
                   </>
+                )}
+                {createdPending > 0 && (
+                  <span className="mt-1 block text-muted-foreground">
+                    Pendientes de aprobación: {createdPending} de {createdGrants.length}. No
+                    conceden acceso hasta que otra persona con access_admin las apruebe.
+                  </span>
                 )}
               </p>
             )}
