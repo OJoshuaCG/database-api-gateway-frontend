@@ -43,6 +43,16 @@ Otorgar (POST) ──┬─ no sensible ─────────────�
 1. **Otorgar** vive en «Capacidades puntuales» de `/gateway-users/:userId/accesos`
    (`CapabilityGrantsSection`). Es inmediato: no pasa por «Guardar accesos» y `PUT /access` no las
    toca.
+   **Varias capacidades a la vez.** El selector «Capacidades» es un multiselect con búsqueda, igual
+   que el de destinos: se eligen N capacidades y M entornos o servidores y el lote es el producto
+   (`N capacidades x M destinos = K combinaciones`, contador en vivo). Sigue siendo **todo o nada** y
+   el tope es **100 combinaciones**: por encima, el envío queda bloqueado con el motivo a la vista
+   (el backend lo rechazaría con 422 `access.grant_bulk_too_large`). Con UNA capacidad el cuerpo lleva
+   `capability`; con varias, `capabilities`. «Seleccionar todos» respeta el tope según cuántas
+   capacidades hay elegidas, y un destino que ya tiene alguna de ellas viva no se ofrece (un solo par
+   repetido tumbaría el lote). Como las filas pueden nacer con estados distintos (las sensibles
+   `pending`, las demás `active`), el resultado cuenta las pendientes leyendo `grants[].status`. Un
+   409 `access.grant_bulk_failed` lista cada par fallido con su capacidad, su destino y el motivo.
 2. **Sensible = segundo aprobador.** Desde C3 son las **11** exclusivas de `owner` otorgables
    (owner − operator): `databases.drop`, `engine_users.drop`, `engine_users.secrets`,
    `engine_users.credentials`, `blueprints.captures`, `clones.execute`, `exports.download`,
@@ -60,6 +70,22 @@ Otorgar (POST) ──┬─ no sensible ─────────────�
    Con `can_decide: false` los dos botones van deshabilitados y el `blocked_reason` queda visible
    en la fila. Si otra persona decidió antes (409 `access.grant_not_pending`) o la fila desapareció
    (404), el diálogo lo dice y la bandeja se refresca sola.
+
+   **Aprobar o rechazar en lote.** Cada fila tiene una casilla y «Seleccionar todas» marca solo las
+   que el servidor deja decidir (`can_decide: true`, hasta 100); las bloqueadas llevan la casilla
+   deshabilitada con su motivo visible. Con al menos una elegida aparece la barra «Aprobar N» /
+   «Rechazar N», que abre UN diálogo para todo el lote (lista de lo elegido, recordatorio de que son
+   capacidades sensibles y motivo común opcional) y llama a `POST /capability-grants/decisions`
+   (`useDecideCapabilityGrantsBulk`). **El lote es de mejor esfuerzo y la respuesta es 200 aunque haya
+   bloqueadas**: cada solicitud aplica las mismas reglas que la individual (segundo aprobador,
+   separación de deberes…) y una bloqueada no frena ni revierte a las demás. Por eso el éxito del hook
+   no basta: la UI lee `results[]` y muestra el resumen «n de N aprobadas» (verde si todas, aviso si
+   hubo fallos) con cada fallo nombrado como la fila (capacidad, persona, alcance) y su motivo (el
+   copy propio del código y, si no lo hay, el mensaje del servidor). El resumen queda hasta cerrarlo;
+   las decididas salen de la bandeja y las que fallaron siguen en la lista y elegidas. Los botones
+   por fila siguen funcionando igual. **Step-up:** la llamada lo exige una sola vez para todo el lote
+   (ventana de 5 minutos): la capa de peticiones pide la contraseña, reintenta y las decisiones
+   siguientes dentro de la ventana no vuelven a pedirla.
 4. **Vencimiento a los 7 días.** Solo las pendientes vencen; al aprobarse el backend borra
    `expires_at`. El barrido es perezoso (corre al leer), así que una vencida puede verse un instante
    más hasta el próximo refresco.
@@ -141,7 +167,7 @@ con `sod_override`. Una pendiente que quedó en esa situación llega a la bandej
 |---|---|
 | Contratos Zod | `src/lib/contracts/capability-grants.ts` |
 | API y hooks | `features/gateway-users/api/capability-grants.api.ts`, `hooks/use-capability-grants.ts` |
-| Copy de errores y bloqueos | `features/gateway-users/messages.ts` (`capabilityGrantErrorMessage`, `capabilityGrantBlockedMessage`, `accessRequestErrorMessage`, `accessRequestBlockedMessage`, `ELEVATION_PENDING_MESSAGE`) |
+| Copy de errores y bloqueos | `features/gateway-users/messages.ts` (`capabilityGrantErrorMessage`, `capabilityGrantBlockedMessage`, `capabilityGrantDecisionItemMessage`, `accessRequestErrorMessage`, `accessRequestBlockedMessage`, `ELEVATION_PENDING_MESSAGE`) |
 | Otorgar / revocar | `components/CapabilityGrantsSection.tsx` |
 | Bandeja | `components/PendingRequestsInbox.tsx` → `PendingAccessRequestsCard.tsx` + `PendingCapabilityGrantsCard.tsx` (pestaña de `GatewayUsersPage`) |
 | Elevaciones: contratos, API y hooks | `src/lib/contracts/access-requests.ts`, `api/access-requests.api.ts`, `hooks/use-access-requests.ts` |

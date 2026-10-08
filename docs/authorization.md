@@ -122,7 +122,9 @@ Detalle en [`capability-grants.md`](capability-grants.md).
 - **Bandeja única:** `/gateway-users?tab=pending` («Solicitudes pendientes»,
   `PendingRequestsInbox`) junta «Elevaciones de acceso» (`PendingAccessRequestsCard`) y
   «Capacidades puntuales» (`PendingCapabilityGrantsCard`). `can_decide` y `blocked_reason` los
-  calcula el servidor. `?solicitud=<id>` destaca una solicitud con su estado actual.
+  calcula el servidor. `?solicitud=<id>` destaca una solicitud con su estado actual. Las capacidades
+  puntuales se pueden aprobar o rechazar en lote (`POST /capability-grants/decisions`, mejor
+  esfuerzo, un solo step-up); ver [`capability-grants.md`](capability-grants.md).
 
 ## 4. Separación de deberes
 
