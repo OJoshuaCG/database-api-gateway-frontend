@@ -104,14 +104,17 @@ Detalle en [`capability-grants.md`](capability-grants.md).
   `schema_diff.execute`, `clones.execute`, `collation.execute`, `exports.download`,
   `sql_console.execute`) nacen `pending` y no conceden nada hasta que **otro** `access_admin` las
   aprueba. Vencen a los 7 días sin decisión.
-- **Scopes de datos de agente (`data.read`, `data.query`, `data.definitions`):** la excepción cerrada
-  del techo de agente. Divulgan, son solo de `owner`, piden step-up del EMISOR al darlos a un token
-  y, si se otorgan sueltos, también segundo aprobador: se deriva del catálogo (`isSensitiveCapability`),
-  no de una lista, así que `data.definitions` (v39, lee el CÓDIGO de vistas, triggers, eventos y
-  rutinas) no necesitó lógica propia. El selector de scopes los avisa como datos de terceros
-  (`API_TOKEN_DATA_SCOPES`, `ScopesPicker`). Esos tres no figuran en la lista de «11 exclusivas» de
-  arriba, que quedó atrás del catálogo (el backend cuenta 15 sensibles desde v41, con
-  `engine_users.grant_admin`): manda el catálogo.
+- **Scopes de datos de agente (`data.read`, `data.query`, `data.definitions`, `data.blueprint_sql`):**
+  la excepción cerrada del techo de agente. Divulgan, son solo de `owner`, piden step-up del EMISOR
+  al darlos a un token y, si se otorgan sueltos, también segundo aprobador: se deriva del catálogo
+  (`isSensitiveCapability`), no de una lista, así que `data.definitions` (v39, lee el CÓDIGO de
+  vistas, triggers, eventos y rutinas) y `data.blueprint_sql` (v44, lee el SQL de las migraciones
+  de un blueprint) no necesitaron lógica propia de permisos. El selector de scopes los avisa como
+  datos de terceros (`API_TOKEN_DATA_SCOPES`, `ScopesPicker`); `data.blueprint_sql` tiene su propio
+  aviso porque no lee filas ni código de objetos, y `rowScopesOf` lo deja fuera del aviso de filas.
+  Esos cuatro no figuran en la lista de «11 exclusivas» de arriba, que quedó atrás del catálogo (el
+  backend cuenta 16 sensibles desde v44, con `engine_users.grant_admin` y `data.blueprint_sql`):
+  manda el catálogo.
 - **Elevaciones de acceso (C3):** dar `owner`, agregar una global o un `sod_override` desde el alta,
   la edición o «Guardar accesos» responde **`202 access.elevation_pending`**: lo que no eleva se
   aplica ya y la elevación queda en una solicitud. Las bajas nunca esperan. El espejo

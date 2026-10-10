@@ -2,7 +2,12 @@ import { Fragment, useState, type ReactNode } from 'react'
 import { Button, Callout, IconButton, Input, XIcon } from '@/components/ui'
 import { useCapabilities } from '@/features/auth'
 import { CAPABILITIES, type Capability } from '@/lib/contracts'
-import { dataScopesOf, hasDefinitionsScope, rowScopesOf } from '../data-scopes'
+import {
+  dataScopesOf,
+  hasBlueprintSqlScope,
+  hasDefinitionsScope,
+  rowScopesOf,
+} from '../data-scopes'
 import type { AgentScopeCeiling } from '../hooks/use-agent-scope-ceiling'
 
 interface ScopesPickerProps {
@@ -24,6 +29,8 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
   const definitionsRequested = hasDefinitionsScope(value)
   const offeredRowScopes = rowScopesOf(ceiling.offered ?? [])
   const offersDefinitions = hasDefinitionsScope(ceiling.offered ?? [])
+  const blueprintSqlRequested = hasBlueprintSqlScope(value)
+  const offersBlueprintSql = hasBlueprintSqlScope(ceiling.offered ?? [])
 
   // Quien administra tokens solo con `tokens.own` (sin `access.admin`) no puede darle a un token
   // una capacidad que su propio rol no tiene: el servidor lo rechaza con 403. Se deshabilita el
@@ -114,6 +121,18 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
               pensadas para el modelo que los lee. Salen del gateway hacia su contexto.
             </p>
           )}
+          {blueprintSqlRequested && (
+            <p className="mb-2">
+              <code className="font-mono">data.blueprint_sql</code> permite que el agente lea el SQL
+              (<code className="font-mono">up_sql</code> y{' '}
+              <code className="font-mono">down_sql</code>) de las migraciones de los blueprints de
+              su proyecto. Ese SQL es texto de terceros: puede traer datos semilla, cuerpos de
+              rutinas y credenciales escritas a mano, y es contenido NO confiable, porque puede
+              incluir instrucciones pensadas para el modelo que lo lee. El gateway lo redacta lo
+              mejor que puede, pero eso no garantiza que no quede nada sensible. Sale del gateway
+              hacia su contexto.
+            </p>
+          )}
           <ul className="flex list-disc flex-col gap-1 pl-5">
             <li>Al guardar se te pide la contraseña: sos vos quien responde por este token.</li>
             <li>
@@ -131,6 +150,13 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
                 <code className="font-mono">data.definitions</code> tiene su propio interruptor en
                 el gateway: mientras la lectura de definiciones esté apagada el permiso queda
                 guardado pero sin efecto.
+              </li>
+            )}
+            {blueprintSqlRequested && (
+              <li>
+                <code className="font-mono">data.blueprint_sql</code> nace apagado en el gateway y
+                tiene su propio interruptor: mientras la lectura del SQL de blueprints esté apagada
+                el permiso queda guardado pero sin efecto. Solo lo puede dar un owner.
               </li>
             )}
           </ul>
@@ -184,6 +210,13 @@ export function ScopesPicker({ value, onChange, ceiling, description }: ScopesPi
               <code className="font-mono">data.definitions</code> lee el código (cuerpos) de vistas,
               triggers, eventos y rutinas de bases de terceros, que puede contener secretos: al
               añadirlo vas a ver el aviso con sus condiciones.
+            </p>
+          )}
+          {offersBlueprintSql && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <code className="font-mono">data.blueprint_sql</code> lee el SQL de las migraciones de
+              los blueprints de tu proyecto, que puede traer datos semilla: al añadirlo vas a ver el
+              aviso con sus condiciones.
             </p>
           )}
         </Callout>

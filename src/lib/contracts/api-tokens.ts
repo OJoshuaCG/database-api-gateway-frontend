@@ -17,18 +17,31 @@ export const API_TOKEN_DEFAULT_TTL_DAYS = 90
 export const API_TOKEN_MAX_TTL_DAYS = 90
 
 /**
- * Scopes de DATOS: el token lee filas de un tercero (`data.read`, `data.query`) o el código de sus
- * vistas, triggers, eventos y rutinas (`data.definitions`). Exigen step-up fresco del emisor; con
+ * Scopes de DATOS: el token lee filas de un tercero (`data.read`, `data.query`), el código de sus
+ * vistas, triggers, eventos y rutinas (`data.definitions`) o el SQL de las migraciones de un
+ * blueprint (`data.blueprint_sql`). Exigen step-up fresco del emisor; con
  * el kill switch del servidor apagado quedan guardados pero inertes. La autoridad sigue siendo el catálogo
  * (`agent_allowed` + `discloses`). La vida del token usa el mismo tope que cualquier otro
  * (`API_TOKEN_MAX_TTL_DAYS`): el backend puede fijar uno propio más corto con
  * `MCP_DATA_TOKEN_MAX_TTL_DAYS`, pero no viaja al cliente, así que si lo hace la pantalla lo
  * muestra por el 422 `ttl_too_long` (`public_context.max_days`) y no con un número fijo.
  */
-export const API_TOKEN_DATA_SCOPES = ['data.read', 'data.query', 'data.definitions'] as const
+export const API_TOKEN_DATA_SCOPES = [
+  'data.read',
+  'data.query',
+  'data.definitions',
+  'data.blueprint_sql',
+] as const
 
 /** El scope que lee CÓDIGO (cuerpos), no filas: su aviso es distinto al de `data.read`/`data.query`. */
 export const API_TOKEN_DEFINITIONS_SCOPE = 'data.definitions'
+
+/**
+ * El scope que lee el SQL de las migraciones de un blueprint (`up_sql` y `down_sql`): tampoco lee
+ * filas, así que no comparte el aviso de `data.read`/`data.query`. Ese SQL puede traer datos
+ * semilla y cuerpos de rutinas, y es texto de terceros no confiable.
+ */
+export const API_TOKEN_BLUEPRINT_SQL_SCOPE = 'data.blueprint_sql'
 
 /** ¿La lista pide algún scope de datos? */
 export function hasDataScope(scopes: readonly string[]): boolean {

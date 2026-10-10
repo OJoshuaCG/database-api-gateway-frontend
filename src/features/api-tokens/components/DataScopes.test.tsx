@@ -19,6 +19,10 @@ const DATA_ROW_COPY = {
     level: 'definitions',
     label: 'Leer definiciones de vistas, triggers, eventos y rutinas de bases gestionadas (MCP)',
   },
+  'data.blueprint_sql': {
+    level: 'blueprint_sql',
+    label: 'Leer el SQL de las migraciones de un blueprint (MCP)',
+  },
 } as const
 
 function dataRow(id: keyof typeof DATA_ROW_COPY) {
@@ -37,7 +41,7 @@ function dataRow(id: keyof typeof DATA_ROW_COPY) {
   }
 }
 
-/** El catálogo del fixture MÁS las dos filas de datos, como las publica el backend nuevo. */
+/** El catálogo del fixture MÁS las filas de datos, como las publica el backend nuevo. */
 function mockBackend() {
   server.use(
     http.get(`${API}/auth/me`, () =>
@@ -50,6 +54,7 @@ function mockBackend() {
           dataRow('data.read'),
           dataRow('data.query'),
           dataRow('data.definitions'),
+          dataRow('data.blueprint_sql'),
         ],
       }),
     ),
@@ -122,6 +127,42 @@ describe('ApiTokenFormModal — scopes de datos', () => {
 
     expect(await screen.findByText(/lea\s+FILAS/)).toBeInTheDocument()
     expect(screen.getByText(/pueden contener secretos/)).toBeInTheDocument()
+    expect(screen.getByText(/credencial de datos y opt-in/)).toBeInTheDocument()
+  })
+
+  it('ofrece data.blueprint_sql y su aviso de SQL no confiable aparece recién al añadirlo', async () => {
+    mockBackend()
+    const user = userEvent.setup()
+    renderWithProviders(<ApiTokenFormModal open onClose={() => {}} onCreated={() => {}} />)
+
+    expect(await screen.findByRole('button', { name: 'data.blueprint_sql' })).toBeEnabled()
+    expect(screen.getByText(/lee el SQL de las migraciones de los blueprints/)).toBeInTheDocument()
+    expect(screen.queryByText('Estos permisos leen datos de terceros')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'data.blueprint_sql' }))
+
+    expect(await screen.findByText('Estos permisos leen datos de terceros')).toBeInTheDocument()
+    expect(screen.getByText(/datos semilla, cuerpos de rutinas y credenciales/)).toBeInTheDocument()
+    expect(screen.getByText(/contenido NO confiable/)).toBeInTheDocument()
+    expect(screen.getByText(/lectura del SQL de blueprints esté apagada/)).toBeInTheDocument()
+    // No lee filas ni código de objetos: ninguno de esos dos avisos corresponde a este scope.
+    expect(screen.queryByText(/lea\s+FILAS/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/credencial de datos y opt-in/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/lectura de definiciones esté apagada/)).not.toBeInTheDocument()
+  })
+
+  it('con data.read y data.blueprint_sql juntos el aviso de filas no nombra al de SQL', async () => {
+    mockBackend()
+    const user = userEvent.setup()
+    renderWithProviders(<ApiTokenFormModal open onClose={() => {}} onCreated={() => {}} />)
+
+    await user.click(await screen.findByRole('button', { name: 'data.read' }))
+    await user.click(screen.getByRole('button', { name: 'data.blueprint_sql' }))
+
+    const rowsNotice = await screen.findByText(/lea\s+FILAS/)
+    expect(rowsNotice.textContent).toContain('data.read')
+    expect(rowsNotice.textContent).not.toContain('data.blueprint_sql')
+    expect(screen.getByText(/datos semilla, cuerpos de rutinas y credenciales/)).toBeInTheDocument()
     expect(screen.getByText(/credencial de datos y opt-in/)).toBeInTheDocument()
   })
 

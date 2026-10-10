@@ -379,13 +379,22 @@ export const CAPABILITIES = {
   /** 🔓 — Ejecutar `SELECT` redactados por un agente (`run_select`). Misma excepción que `dataRead`. */
   dataQuery: 'data.query',
   /**
-   * 🔓 — Leer el CÓDIGO de vistas, triggers, eventos y rutinas (`get_definition`). Tercera y última
+   * 🔓 — Leer el CÓDIGO de vistas, triggers, eventos y rutinas (`get_definition`). Tercera
    * capacidad de la excepción de datos del techo de agente: solo `owner`, step-up del EMISOR,
    * segundo aprobador si se otorga suelta e inerte con su kill switch
    * (`MCP_SCHEMA_DEFINITIONS_ENABLED`) apagado. No lee filas, pero un cuerpo es texto de terceros
    * que puede traer secretos y reglas de negocio.
    */
   dataDefinitions: 'data.definitions',
+  /**
+   * 🔓 — Leer el SQL (`up_sql` y `down_sql`) de las migraciones de un blueprint
+   * (`get_blueprint_migration`). Cuarta y última capacidad de la excepción de datos del techo de
+   * agente, con las mismas condiciones que `dataDefinitions`: solo `owner`, step-up del EMISOR,
+   * segundo aprobador si se otorga suelta e inerte con su kill switch
+   * (`MCP_BLUEPRINT_SQL_ENABLED`, apagado por defecto). No lee filas, pero ese SQL puede traer
+   * datos semilla y cuerpos de rutinas.
+   */
+  dataBlueprintSql: 'data.blueprint_sql',
 
   /**
    * Solo `access_admin`: usuarios del gateway, sus accesos, las capacidades puntuales, los tokens
