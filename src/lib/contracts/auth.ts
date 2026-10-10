@@ -293,6 +293,13 @@ export const CAPABILITIES = {
    * mismo 404 que uno inexistente: la SPA no filtra nada por su cuenta.
    */
   tokensOwn: 'tokens.own',
+  /**
+   * Emitir, listar, editar y revocar SOLO los tokens de INTEGRACIÓN (`/integration-tokens`) que la
+   * propia persona emitió. Misma forma que `tokensOwn` pero para otro tipo de token: la tienen los
+   * tres roles, no es otorgable ni sensible, y `access.admin` ve y revoca los de todos. Es una
+   * pista de UI (ADR-0007): lo que un token puede llevar lo decide el techo del servidor.
+   */
+  integrationTokensOwn: 'integration_tokens.own',
 
   serversRead: 'servers.read',
   /** Ni `owner` la tiene: editar un servidor puede re-apuntar un `server_id` a otro host. */
