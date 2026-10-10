@@ -26,6 +26,13 @@ deberes, §9 segundo aprobador, §10 siembra y ventana, §11 auditoría y sesion
   `security_officer` es `audit.read`, `crypto.rotate`, `servers.admin`, `catalogs.write` y
   `environments.write`.
   Ningún rol tiene una capacidad global, ni siquiera `owner`.
+- **`integration_tokens.own` es la capacidad de los tokens de integración** (`/integration-tokens`),
+  independiente de `tokens.own`: son otro tipo de token, con otro vocabulario de scopes (12, en
+  lectura / escritura / destructivas) y otro techo. Qué roles la tienen sale del catálogo, no de
+  esta SPA. Con ella una persona emite, lista, edita y revoca **solo los tokens de integración que
+  emitió**; `access.admin` los ve y revoca todos, pero solo el dueño los edita. Es una pista de UI
+  (ADR-0007): la entrada del menú y la ruta se esconden sin ella, y el servidor decide. Lo que el
+  selector ofrece sale únicamente de `GET /integration-tokens/ceiling`, no de la capacidad.
 - **`tokens.own` la tienen los tres roles** (como `self.read`: nadie necesita que se la asignen). No
   es global en el sentido de `access_admin`: es del eje `global` del catálogo, así que no es
   otorgable ni sensible, y no está en el techo de agente. Con ella una persona emite, lista, edita
