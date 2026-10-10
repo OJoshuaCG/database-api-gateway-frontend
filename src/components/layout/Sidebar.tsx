@@ -181,6 +181,24 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: '/integration-tokens',
+    label: 'Tokens de integración',
+    // Pista de UI (ADR-0007): `integration_tokens.own` la dan los roles que el servidor decida;
+    // `access.admin` ve los de todos. El servidor filtra y autoriza.
+    anyOf: [CAPABILITIES.accessAdmin, CAPABILITIES.integrationTokensOwn],
+    icon: (
+      <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" aria-hidden>
+        <path
+          d="M9 8L5 12l4 4M15 8l4 4-4 4"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M13 6l-2 12" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     // Lee el rastro quien NO hace los cambios de acceso: `audit.read` es solo de
     // `security_officer`, así que un `access_admin` a secas no la ve (v29 §11.2).
     to: '/audit-log',
