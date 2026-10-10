@@ -1426,7 +1426,9 @@ function extractApiTokenContext(
   code: string | undefined,
   publicContext: unknown,
 ): ApiTokenErrorContext | undefined {
-  if (!code?.startsWith('api_token.') || !isRecord(publicContext)) return undefined
+  // `integration_token.ttl_too_long` trae el mismo `max_days` que el de agente: un solo extractor.
+  const belongs = code?.startsWith('api_token.') || code?.startsWith('integration_token.')
+  if (!belongs || !isRecord(publicContext)) return undefined
   return {
     allowed: stringList(publicContext.allowed),
     maxDays: finiteNumber(publicContext.max_days),

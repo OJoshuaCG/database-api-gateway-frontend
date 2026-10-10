@@ -280,4 +280,13 @@ export const queryKeys = {
     all: ['api-tokens'] as const,
     list: (params: QueryParams) => ['api-tokens', 'list', params] as const,
   },
+  /**
+   * Tokens de integración. Igual que los de agente, el bearer del alta NO se cachea. El techo cuelga
+   * de `all`: emitir o editar un token puede cambiar lo que el selector debe ofrecer.
+   */
+  integrationTokens: {
+    all: ['integration-tokens'] as const,
+    list: (params: QueryParams) => ['integration-tokens', 'list', params] as const,
+    ceiling: () => ['integration-tokens', 'ceiling'] as const,
+  },
 } as const
