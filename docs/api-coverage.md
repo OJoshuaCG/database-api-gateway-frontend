@@ -103,6 +103,37 @@ Credenciales portadoras para procesos automáticos. Todo detrás de `access.admi
 | v23.1 §3 | `DELETE /api-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer |
 | — | `PATCH /api-tokens/{token_pk}` | ✅ | `EditApiTokenScopesModal` (icono de lápiz en filas activas). Reemplaza la lista **completa** de scopes (mínimo uno: vacía es 422; se revoca en su lugar); el bearer no cambia y rige desde la llamada siguiente. Mismo selector de chips y techo de agente que el alta (`ScopesPicker`). 409 `already_revoked`, 404 `not_found`, 422 `scope_not_allowed` (con `allowed[]`). Exige step-up (transparente). **v36:** al agregar scopes de datos la pantalla ya no bloquea «Guardar» por la vida restante del token: si el backend fija un tope propio (`MCP_DATA_TOKEN_MAX_TTL_DAYS` >= 1) y al token le queda más, responde 422 `ttl_too_long` y se muestra con su `max_days`. ⚠️ Va el **`id`**, no el `token_id` |
 
+## Tokens de integración (`/integration-tokens`)
+
+Credenciales portadoras **por usuario** para que un proyecto web propio opere un conjunto cerrado de operaciones del gateway por REST. Es un tipo de token independiente del de agente (otro vocabulario de 12 scopes en tres niveles —lectura, escritura, destructivas—, otro techo y otra pantalla). Todo detrás de `access.admin` (ve los de todos, pero solo edita los propios) o de `integration_tokens.own` (solo los **propios**). Ambos guards son pistas de UI (ADR-0007): el servidor decide. Un token ajeno responde el mismo 404 que uno inexistente.
+
+| # | Endpoint | Estado | Dónde |
+|---|---|---|---|
+| — | `GET /integration-tokens` | ✅ | `IntegrationTokensPage` (`/integration-tokens`, entrada «Tokens de integración» del `Sidebar` con `anyOf: [access.admin, integration_tokens.own]`), paginado. La columna «Permisos» muestra los scopes **efectivos**, la insignia «Destructivo» marca las filas con `migrations.rollback` o `migrations.stamp` y los scopes suspendidos (guardados pero fuera del techo actual del dueño) salen como «suspendido» |
+| — | `GET /integration-tokens/ceiling` | ✅ | `useIntegrationScopeCeiling`. Es la **única** fuente de lo que ofrece el selector: un scope ausente no se dibuja ni deshabilitado. Trae `enabled`, el `tier` y `mutates` de cada scope y los topes de vida (90 lectura / 30 escritura / 7 destructivo). Con `enabled=false` la pantalla avisa y no deja emitir ni editar |
+| — | `POST /integration-tokens` | ✅ | `IntegrationTokenFormModal` → entrega el bearer en `OneTimeSecretPanel` (se muestra una sola vez). Lista de servidores obligatoria; lista de blueprints obligatoria con scopes destructivos, que además piden confirmación explícita en el formulario. El tope de «Vence en» baja con el tier más estricto elegido. Límite 10/min Con `ceiling.allow_non_expiring` el modal ofrece «Sin vencimiento» (manda `never_expires: true`, sin `expires_in_days`); se oculta al elegir un permiso destructivo, que siempre vence. Un token sin vencimiento llega con `expires_at: null` y el listado dice «Sin vencimiento». |
+| — | `PATCH /integration-tokens/{token_pk}` | ✅ | `EditIntegrationTokenModal` (icono de lápiz en filas activas **propias**). Solo viaja lo que cambió; `scopes` va como lista completa. El vencimiento no cambia: ampliar permisos de un token que vive más que el tope del nuevo nivel es 422 `ttl_too_long` con `max_days` |
+| — | `DELETE /integration-tokens/{token_pk}` | ✅ | «Revocar» con `ConfirmDialog` + re-tipeo del nombre. ⚠️ Va el **`id`** (PK numérica), no el `token_id` del bearer. Funciona aunque la API esté apagada |
+
+### API de integración (bearer): no la consume la SPA
+
+Los 12 endpoints bajo `/api/v1/integration/*` son la **machine API**: los llama el proyecto web del usuario con `Authorization: Bearer datumint.<id>.<secreto>`, no el navegador. No tienen pantalla ni hook; se listan para que el inventario de endpoints quede completo.
+
+| Endpoint | Estado | Dónde |
+|---|---|---|
+| `GET /integration/servers` | — | Machine API, not consumed by the SPA |
+| `GET /integration/databases` | — | Machine API, not consumed by the SPA |
+| `GET /integration/databases/{db_id}/blueprint` | — | Machine API, not consumed by the SPA |
+| `GET /integration/databases/{db_id}/migrations/version` | — | Machine API, not consumed by the SPA |
+| `POST /integration/databases` | — | Machine API, not consumed by the SPA |
+| `POST /integration/engine-users` | — | Machine API, not consumed by the SPA |
+| `POST /integration/engine-users/{user_id}/profiles/{profile_id}` | — | Machine API, not consumed by the SPA |
+| `POST /integration/engine-users/{user_id}/databases/{db_id}` | — | Machine API, not consumed by the SPA |
+| `PUT /integration/databases/{db_id}/blueprint` | — | Machine API, not consumed by the SPA |
+| `POST /integration/databases/{db_id}/migrations/apply` | — | Machine API, not consumed by the SPA |
+| `POST /integration/databases/{db_id}/migrations/rollback` | — | Machine API, not consumed by the SPA (scope destructivo) |
+| `POST /integration/databases/{db_id}/migrations/stamp` | — | Machine API, not consumed by the SPA (scope destructivo) |
+
 ## Auditoría (`/audit-log`)
 
 Lectura del rastro de `audit_log` (v29 §11). Solo `audit.read`, que tiene solo `security_officer`:
@@ -111,7 +142,7 @@ en [`audit.md`](audit.md).
 
 | # | Endpoint | Estado | Dónde |
 |---|---|---|---|
-| v29 §11.3 | `GET /audit-log` | ✅ | `AuditLogPage` (`/audit-log`, entrada «Auditoría» del `Sidebar` con `anyOf: [audit.read]`; `useAuditLog`). Paginado, las más nuevas primero. Filtros en la URL con los nombres del backend (`action` exacta o prefijo con `*` y presets, `actor_type`, `admin_username`, `status`, `request_id`, `from`/`to`; `admin_id`, `api_token_id`, `target_type`, `target_id` y `server_id` solo por URL). Las fechas se eligen en hora local y viajan en UTC con `Z`. `from >= to` se avisa sin pedir; el `422 audit.invalid_range` tiene copy propio. Sin la capacidad o ante un 403: `ForbiddenState` sin «Reintentar» |
+| v29 §11.3 | `GET /audit-log` | ✅ | `AuditLogPage` (`/audit-log`, entrada «Auditoría» del `Sidebar` con `anyOf: [audit.read]`; `useAuditLog`). Paginado, las más nuevas primero. Filtros en la URL con los nombres del backend (`action` exacta o prefijo con `*` y presets, `actor_type` (incluye `integration`, el token de integración), `admin_username`, `status`, `request_id`, `from`/`to`; `admin_id`, `api_token_id`, `target_type`, `target_id` y `server_id` solo por URL). Las fechas se eligen en hora local y viajan en UTC con `Z`. `from >= to` se avisa sin pedir; el `422 audit.invalid_range` tiene copy propio. Sin la capacidad o ante un 403: `ForbiddenState` sin «Reintentar» |
 | v29 §11.4 | `GET /audit-log/{id}` | ✅ | `AuditEntryDetailModal` (`useAuditLogEntry`), abierto por `?entrada=<id>` (enlace directo; con la fila de la página como `placeholderData`). `detail_json` (`unknown().nullable()`) se muestra con sangría en un `<details>` plegable; si es `null`, `detail` tal cual. «Ver todo el request» filtra por su `request_id`. `404 audit.not_found` con copy propio y sin «Reintentar» |
 
 ## Servidores
