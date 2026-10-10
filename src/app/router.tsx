@@ -101,6 +101,10 @@ const GatewayUserAccessPage = lazyPage(
   'GatewayUserAccessPage',
 )
 const ApiTokensPage = lazyPage(() => import('@/features/api-tokens'), 'ApiTokensPage')
+const IntegrationTokensPage = lazyPage(
+  () => import('@/features/integration-tokens'),
+  'IntegrationTokensPage',
+)
 const AuditLogPage = lazyPage(() => import('@/features/audit-log'), 'AuditLogPage')
 const MyAccountPage = lazyPage(() => import('@/features/account'), 'MyAccountPage')
 const AcceptInvitationPage = lazyPage(
@@ -203,6 +207,7 @@ export const router = createBrowserRouter([
           // `useBlocker` del data router para avisar de cambios sin guardar al salir.
           { path: 'gateway-users/:userId/accesos', element: <GatewayUserAccessPage /> },
           { path: 'api-tokens', element: <ApiTokensPage /> },
+          { path: 'integration-tokens', element: <IntegrationTokensPage /> },
           // Lectura de la auditoría (v29 §11.3): solo `audit.read` (`security_officer`).
           { path: 'audit-log', element: <AuditLogPage /> },
           { path: 'admin', element: <AdminPage /> },
