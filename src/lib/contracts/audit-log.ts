@@ -7,7 +7,13 @@ import { z } from 'zod'
  */
 
 /** Clases de actor que acepta el filtro `actor_type`. Otro valor → 422. */
-export const AUDIT_ACTOR_TYPES = ['admin', 'api_token', 'system', 'anonymous'] as const
+export const AUDIT_ACTOR_TYPES = [
+  'admin',
+  'api_token',
+  'integration',
+  'system',
+  'anonymous',
+] as const
 export type AuditActorType = (typeof AUDIT_ACTOR_TYPES)[number]
 
 /**

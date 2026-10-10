@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { PAGINATION, type AuditLogEntry } from '@/lib/contracts'
 import {
+  AUDIT_ACTION_PRESETS,
+  AUDIT_ACTOR_TYPE_LABELS,
   auditActorLabel,
   auditQueryParams,
   auditStatus,
@@ -136,6 +138,21 @@ describe('auditActorLabel', () => {
     ).toBe('Token #12')
   })
 
+  it('un token de integración se nombra por su username de auditoría o, sin él, con palabras', () => {
+    expect(
+      auditActorLabel(
+        entry({
+          actor_type: 'integration',
+          admin_id: null,
+          admin_username: 'integration:ab12cd34',
+        }),
+      ),
+    ).toBe('integration:ab12cd34')
+    expect(
+      auditActorLabel(entry({ actor_type: 'integration', admin_id: null, admin_username: null })),
+    ).toBe('Token de integración')
+  })
+
   it('sistema y anónimo se dicen con palabras', () => {
     expect(auditActorLabel(entry({ actor_type: 'system', admin_username: null }))).toBe('Sistema')
     expect(auditActorLabel(entry({ actor_type: 'anonymous', admin_username: null }))).toBe(
@@ -159,5 +176,32 @@ describe('auditTargetLabel y auditStatus', () => {
     expect(auditStatus('success')).toEqual({ label: 'Éxito', tone: 'success' })
     expect(auditStatus('denied').tone).toBe('warning')
     expect(auditStatus('throttled')).toEqual({ label: 'throttled', tone: 'neutral' })
+  })
+})
+
+describe('filtros de auditoría de integración', () => {
+  it('el tipo de actor «integration» tiene etiqueta propia', () => {
+    expect(AUDIT_ACTOR_TYPE_LABELS.integration).toBe('Token de integración')
+  })
+
+  it('ofrece los presets de gestión y de uso de la API de integración', () => {
+    expect(AUDIT_ACTION_PRESETS).toContainEqual({
+      value: 'integration_token.*',
+      label: 'Tokens de integración',
+    })
+    expect(AUDIT_ACTION_PRESETS).toContainEqual({
+      value: 'integration.*',
+      label: 'API de integración',
+    })
+  })
+
+  it('un actor_type=integration viaja en la URL y se vuelve a leer', () => {
+    const written = writeAuditSearch(new URLSearchParams(), {
+      filters: { actor_type: 'integration' },
+      page: 1,
+      size: PAGINATION.defaultSize,
+    })
+    expect(written.get('actor_type')).toBe('integration')
+    expect(parseAuditSearch(written).filters.actor_type).toBe('integration')
   })
 })

@@ -26,6 +26,8 @@ export const AUDIT_ACTION_PRESETS: readonly { value: string; label: string }[] =
   { value: 'capability_grant.*', label: 'Capacidades puntuales' },
   { value: 'access_request.*', label: 'Elevaciones' },
   { value: 'api_token.*', label: 'Tokens de agente' },
+  { value: 'integration_token.*', label: 'Tokens de integración' },
+  { value: 'integration.*', label: 'API de integración' },
 ]
 
 /** Topes del backend: un valor más largo es un 422, así que el input no deja escribirlo. */
@@ -161,6 +163,7 @@ export function utcToLocalInput(iso: string | undefined): string {
 export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
   admin: 'Usuario del gateway',
   api_token: 'Token de agente',
+  integration: 'Token de integración',
   system: 'Sistema',
   anonymous: 'Anónimo',
 }
@@ -176,6 +179,10 @@ export function auditActorLabel(entry: AuditLogEntry): string {
       return entry.api_token_id != null
         ? `Token #${entry.api_token_id}`
         : (entry.admin_username ?? 'Token de agente')
+    case 'integration':
+      // La fila no trae un PK de token de integración propio: se nombra por el username de
+      // auditoría que arma el servidor, nunca por el bearer.
+      return entry.admin_username ?? 'Token de integración'
     case 'system':
       return 'Sistema'
     case 'anonymous':
@@ -199,6 +206,7 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   environment: 'Entorno',
   project: 'Proyecto',
   api_token: 'Token',
+  integration_token: 'Token de integración',
   capability_grant: 'Capacidad puntual',
   access_request: 'Elevación',
   permission_profile: 'Perfil de permisos',
