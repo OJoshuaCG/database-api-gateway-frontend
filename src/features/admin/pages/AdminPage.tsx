@@ -15,11 +15,18 @@ import {
 import { PrivilegesPage } from '@/features/privileges'
 import { CharsetCollationOptionsPage } from '@/features/charset-collation-options'
 import { EnvironmentsPanel } from '@/features/environments'
+import { ReleaseChannelsPanel } from '@/features/release-channels'
 import { ForbiddenState, useCapabilities } from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
 import { useRotateCrypto } from '../hooks/use-crypto-rotation'
 
-const TABS = ['crypto', 'privileges', 'charset-collation', 'environments'] as const
+const TABS = [
+  'crypto',
+  'privileges',
+  'charset-collation',
+  'environments',
+  'release-channels',
+] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -76,6 +83,9 @@ export function AdminPage() {
         <TabButton active={tab === 'environments'} onClick={() => setTab('environments')}>
           Entornos
         </TabButton>
+        <TabButton active={tab === 'release-channels'} onClick={() => setTab('release-channels')}>
+          Canales de liberación
+        </TabButton>
       </div>
 
       {tab === 'crypto' && !canRotate && <ForbiddenState />}
@@ -111,6 +121,7 @@ export function AdminPage() {
       {tab === 'privileges' && <PrivilegesPage />}
       {tab === 'charset-collation' && <CharsetCollationOptionsPage />}
       {tab === 'environments' && <EnvironmentsPanel />}
+      {tab === 'release-channels' && <ReleaseChannelsPanel />}
 
       <ConfirmDialog
         open={confirmOpen}
