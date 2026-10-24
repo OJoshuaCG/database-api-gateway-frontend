@@ -178,6 +178,19 @@ export function useDeleteModelMigration(modelId: number) {
       // comentario de `useCreateModelMigration`. En v18 cubre además las BDs a las que el borrado
       // les movió el puntero (`stamped`): su versión aplicada cambió en el motor, no solo acá.
       invalidateDatabaseViews(queryClient, null)
+      // Borrar la versión a la que apunta un canal MUEVE ese puntero en el mismo commit (a la
+      // revisada más cercana por debajo, o a «sin versión»): el panel de canales mostraría una
+      // versión que ya no existe, o con otro número tras el renumerado.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.blueprintChannels.list(modelId) })
+      // El renumerado puede tocar el historial de cualquier canal del blueprint, no solo el movido.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.blueprintChannels.historyAll(modelId),
+      })
+      // La lectura en vivo abre una conexión por base y tiene rate limit: rancia, sin refetch.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.blueprintChannels.resolveAll(modelId),
+        refetchType: 'none',
+      })
       toast.success('Migración eliminada')
     },
     // SIN toast de error, a diferencia del resto de mutaciones de este archivo. El único llamador
@@ -202,6 +215,13 @@ export function useApplyAllMigrations(modelId: number) {
         // aplicada, y hasta ahora quedaba rancia después de un apply masivo. Bug preexistente
         // que esta feature vuelve visible al agregarle la columna de entorno.
         invalidateDatabaseViews(queryClient, null)
+
+        // La referencia de los canales (mínimo de las bases del entorno) sale de la caché del
+        // inventario, que este apply acaba de mover. Solo el listado: la lectura en vivo abre una
+        // conexión por base y no se refresca sola.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.blueprintChannels.list(modelId),
+        })
 
         // Y el catálogo de versiones, que este hook no invalidaba: el apply cambia `deletable`,
         // `block_reason` y `sql_frozen` de las versiones que acaba de aplicar. Sin esto, la ficha

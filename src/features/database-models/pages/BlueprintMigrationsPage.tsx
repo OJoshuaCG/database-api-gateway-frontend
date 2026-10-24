@@ -15,6 +15,7 @@ import {
 } from '@/components/ui'
 import { CapabilityCallout, joinWithNi, useCapabilityGuard } from '@/features/auth'
 import { BlueprintProjectsSection } from '@/features/projects'
+import { BlueprintChannelsPanel } from '@/features/release-channels'
 import {
   CAPABILITIES,
   MIGRATION_ERROR_CODES,
@@ -67,9 +68,9 @@ import { versionAlerts } from '../version-alerts'
  * Pestañas de la pantalla. El default (`versiones`) NO se escribe en la URL: se borra el
  * parámetro, para que la dirección compartida más corta sea la de la vista por defecto. Los otros
  * dos sí, porque `?tab=estado` ya se genera como deep-link desde `MigrationDeletePlanDialog`.
- * `buscar` sigue la misma regla: se escribe, para que una búsqueda se pueda enlazar a la pestaña.
+ * `buscar` y `canales` siguen la misma regla: se escriben, para poder enlazar a la pestaña.
  */
-type BlueprintTab = 'versiones' | 'estado' | 'contabilidad' | 'buscar'
+type BlueprintTab = 'versiones' | 'estado' | 'contabilidad' | 'buscar' | 'canales'
 
 export function BlueprintMigrationsPage() {
   const params = useParams()
@@ -89,7 +90,9 @@ export function BlueprintMigrationsPage() {
         ? 'contabilidad'
         : tabParam === 'buscar'
           ? 'buscar'
-          : 'versiones'
+          : tabParam === 'canales'
+            ? 'canales'
+            : 'versiones'
   const setTab = (next: BlueprintTab) =>
     setSearchParams((params) => {
       if (next === 'versiones') params.delete('tab')
@@ -443,6 +446,9 @@ export function BlueprintMigrationsPage() {
         <TabButton active={tab === 'contabilidad'} onClick={() => setTab('contabilidad')}>
           Contabilidad de versiones
         </TabButton>
+        <TabButton active={tab === 'canales'} onClick={() => setTab('canales')}>
+          Canales
+        </TabButton>
         <TabButton active={tab === 'buscar'} onClick={() => setTab('buscar')}>
           Buscar en el SQL
         </TabButton>
@@ -478,6 +484,11 @@ export function BlueprintMigrationsPage() {
            del gateway y no abre conexiones, mientras que esta lee CADA motor y es 10/min. Juntarlas
            obligaría a una de las dos a heredar el coste de la otra. */
         <VersionTablesReportPanel modelId={modelId} />
+      ) : tab === 'canales' ? (
+        /* Pestaña propia: describe qué versión sirve cada canal para ESTE blueprint, no una versión
+           concreta ni el estado de las bases. Recibe el catálogo completo que la página ya tiene
+           en memoria para ofrecer las versiones promovibles sin una petición más. */
+        <BlueprintChannelsPanel modelId={modelId} versions={catalogSorted} />
       ) : tab === 'buscar' ? (
         /* El enlace del visor navega a `?version=` en esta MISMA ruta, y la página solo lee ese
            parámetro al montar: por eso además se selecciona a mano con `selectVersion`, que salta

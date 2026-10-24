@@ -22,6 +22,7 @@ export const ENVIRONMENT_ERROR_CODES = [
   'environment.not_found',
   'environment.inactive',
   'environment.has_databases',
+  'environment.has_release_channels',
   'environment.name_taken',
   'environment.slug_taken',
   'environment.default_must_be_active',
@@ -38,6 +39,8 @@ const MESSAGES: Record<EnvironmentErrorCode, string> = {
   'environment.inactive': 'Ese entorno está inactivo y no se puede asignar.',
   'environment.has_databases':
     'El entorno todavía tiene bases de datos asignadas. Reasignalas antes de borrarlo, o desactivalo.',
+  'environment.has_release_channels':
+    'El entorno está enlazado por canales de liberación. Desvinculalo de ellos antes de borrarlo.',
   'environment.name_taken': 'Ya existe un entorno con ese nombre.',
   'environment.slug_taken': 'Ya existe un entorno con ese identificador.',
   'environment.default_must_be_active': 'Un entorno inactivo no puede ser el entorno por defecto.',

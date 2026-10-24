@@ -7,6 +7,7 @@ import { useCountdown } from '@/lib/utils/use-countdown'
 import {
   MIGRATION_ERROR_CODES,
   type MigrationAffectedPartialApplication,
+  type MigrationChannelMove,
   type MigrationDeletePlanOut,
   type MigrationDeleteResult,
   type MigrationRenumberStep,
@@ -84,8 +85,9 @@ function labelOf(row: { managed_database_id: number; database_name?: string }): 
  * Función pura y comparación por ids en orden, igual que el `blockingChanged` de
  * `MigrationEditOverrideDialog`. Se usa para desmarcar el reconocimiento tras re-planificar: lo
  * que el usuario aceptó describía otra lista de bases, y arrastrar ese «sí» a una lista distinta
- * convierte la casilla en un trámite. Solo mira `stamp_plan` y `blockers` porque son las dos
- * listas que hablan de BDs; el renumerado es metadata del blueprint y no cambia a quién se toca.
+ * convierte la casilla en un trámite. Mira `stamp_plan` y `blockers` (las listas que hablan de BDs)
+ * y `channel_moves`: que un canal deje de moverse, o se mueva a otra versión, también cambia lo que
+ * se aceptó. El renumerado es metadata del blueprint y no cambia a quién se toca.
  */
 function planConsequencesChanged(
   before: MigrationDeletePlanOut,
@@ -98,7 +100,22 @@ function planConsequencesChanged(
     left.length === right.length &&
     left.every((row, index) => row.managed_database_id === right[index]?.managed_database_id)
 
-  return !sameIds(before.stamp_plan, after.stamp_plan) || !sameIds(before.blockers, after.blockers)
+  const sameChannelMoves =
+    before.channel_moves.length === after.channel_moves.length &&
+    before.channel_moves.every((move, index) => {
+      const other = after.channel_moves[index]
+      return (
+        other !== undefined &&
+        move.release_channel_id === other.release_channel_id &&
+        move.to_version === other.to_version
+      )
+    })
+
+  return (
+    !sameIds(before.stamp_plan, after.stamp_plan) ||
+    !sameIds(before.blockers, after.blockers) ||
+    !sameChannelMoves
+  )
 }
 
 /**
@@ -254,7 +271,7 @@ export function MigrationDeletePlanDialog({
           if (apiError.code === MIGRATION_ERROR_CODES.renumberConfirmationRequired) {
             setError({
               title: 'Falta la confirmación de este borrado',
-              text: 'El borrado necesita mover punteros en bases reales y llegó sin autorización vigente. Volvé a comprobar el plan para obtener una nueva; estas son las bases en las que habría que escribir.',
+              text: 'El borrado necesita mover punteros (de bases o de canales) y llegó sin autorización vigente. Volvé a comprobar el plan para obtener una nueva; estas son las bases en las que habría que escribir.',
               replan: true,
               stampPlan: apiError.stampPlan,
               requestId,
@@ -317,13 +334,36 @@ export function MigrationDeletePlanDialog({
     )
   }
 
+  // Un borrado confirmado puede escribir en el motor (stamps), mover punteros de canal (solo
+  // gateway) o ambas cosas. Escribir en el motor es lo más grave, así que manda en el texto.
+  const writesToEngine = plan.stamp_plan.length > 0
+  const movesChannels = plan.channel_moves.length > 0
+
+  let confirmedTitle: string
+  let confirmedButtonLabel: string
+  let acknowledgementLead: string
+  if (writesToEngine && movesChannels) {
+    confirmedTitle = `Eliminar la versión ${version} — escribe en el motor 🔌`
+    confirmedButtonLabel = `Eliminar ${version} y mover los punteros 🔌`
+    acknowledgementLead = `Entiendo que esto escribe en ${plan.stamp_plan.length} base(s) de datos real(es), que además mueve punteros de canal, `
+  } else if (writesToEngine) {
+    confirmedTitle = `Eliminar la versión ${version} — escribe en el motor 🔌`
+    confirmedButtonLabel = `Eliminar ${version} y mover los punteros 🔌`
+    acknowledgementLead = `Entiendo que esto escribe en ${plan.stamp_plan.length} base(s) de datos real(es), `
+  } else {
+    confirmedTitle = `Eliminar la versión ${version} — mueve punteros de canal`
+    confirmedButtonLabel = `Eliminar ${version} y mover los canales`
+    acknowledgementLead =
+      'Entiendo que esto mueve punteros de canal y cambia lo que consumen las integraciones, '
+  }
+
   const title =
     step === 'result'
       ? `Versión ${version} eliminada`
       : !plan.deletable
         ? `No se puede eliminar la versión ${version}`
         : plan.requires_confirmation
-          ? `Eliminar la versión ${version} — escribe en el motor 🔌`
+          ? confirmedTitle
           : `Eliminar la versión ${version}`
 
   const countdownLabel = tokenAlive
@@ -360,9 +400,7 @@ export function MigrationDeletePlanDialog({
                   isLoading={deleteMigration.isPending}
                   onClick={submit}
                 >
-                  {needsToken
-                    ? `Eliminar ${version} y mover los punteros 🔌`
-                    : `Eliminar la versión ${version}`}
+                  {needsToken ? confirmedButtonLabel : `Eliminar la versión ${version}`}
                 </Button>
               )}
             </div>
@@ -516,7 +554,7 @@ export function MigrationDeletePlanDialog({
             {plan.renumber.length > 0 && <RenumberSection rows={plan.renumber} />}
 
             {/* 3 — Los stamps: esto SÍ toca el motor, y por eso va separado del renumerado. */}
-            {plan.stamp_plan.length > 0 && (
+            {writesToEngine && (
               <section className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
                   Se va a escribir en estas {plan.stamp_plan.length} base(s) 🔌
@@ -535,6 +573,10 @@ export function MigrationDeletePlanDialog({
               </section>
             )}
 
+            {/* 3b — Los punteros de canal: se mueven en el gateway, NO en el motor. Va aparte de los
+                stamps porque el riesgo es otro: cambia qué versión consumen las integraciones. */}
+            {movesChannels && <ChannelMovesSection rows={plan.channel_moves} />}
+
             {/* 4 — Reconocimiento explícito + reescritura de la versión. */}
             <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
               <input
@@ -544,8 +586,8 @@ export function MigrationDeletePlanDialog({
                 onChange={(event) => setAcknowledged(event.target.checked)}
               />
               <span className="text-muted-foreground">
-                Entiendo que esto escribe en {plan.stamp_plan.length} base(s) de datos real(es), que
-                las bases que ya aplicaron la versión {version} conservan sus objetos y que el
+                {acknowledgementLead}
+                que las bases que ya aplicaron la versión {version} conservan sus objetos y que el
                 borrado no los revierte.
               </span>
             </label>
@@ -617,11 +659,17 @@ export function MigrationDeletePlanDialog({
                   </section>
                 )}
 
-                {result.renumbered.length === 0 && result.stamped.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No hubo que renumerar ninguna versión ni mover ningún puntero.
-                  </p>
+                {result.channel_moves.length > 0 && (
+                  <ChannelMovesSection rows={result.channel_moves} done />
                 )}
+
+                {result.renumbered.length === 0 &&
+                  result.stamped.length === 0 &&
+                  result.channel_moves.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No hubo que renumerar ninguna versión ni mover ningún puntero.
+                    </p>
+                  )}
               </>
             )}
           </>
@@ -678,6 +726,54 @@ function RenumberSection({
             </code>
             <span className="text-muted-foreground">→</span>
             <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs">{row.to_version}</code>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/**
+ * Punteros de CANAL que se mueven porque la versión borrada era a la que apuntaban. Es una escritura
+ * local del gateway (no toca ningún motor) y por eso lleva su propio texto: mezclarla con los stamps
+ * haría creer que hay más bases afectadas de las que hay. `to_version: null` = no quedó ninguna
+ * versión liberada anterior, y el canal queda sin versión (las integraciones recibirán 409).
+ */
+function ChannelMovesSection({
+  rows,
+  done = false,
+}: {
+  rows: MigrationChannelMove[]
+  done?: boolean
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-sm font-semibold text-foreground">
+        {done
+          ? `Se movieron ${rows.length} puntero(s) de canal`
+          : `Se van a mover ${rows.length} puntero(s) de canal`}
+      </h3>
+      <p className="text-xs text-muted-foreground">
+        Es un cambio <strong className="text-foreground">local del gateway</strong>: no escribe en
+        ninguna base. Pero decide qué versión de este blueprint reciben las integraciones que piden
+        el canal, así que se registra en su historial.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <li
+            key={row.release_channel_id}
+            className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm"
+          >
+            <code className="font-medium text-foreground">{row.channel_slug}</code>
+            <span className="ml-auto flex items-center gap-2 text-xs">
+              <code className="rounded bg-surface-muted px-1.5 py-0.5">{row.from_version}</code>
+              <span className="text-muted-foreground">→</span>
+              {row.to_version ? (
+                <code className="rounded bg-surface-muted px-1.5 py-0.5">{row.to_version}</code>
+              ) : (
+                <span className="text-warning">sin versión liberada</span>
+              )}
+            </span>
           </li>
         ))}
       </ul>

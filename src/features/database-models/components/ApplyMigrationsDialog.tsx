@@ -8,6 +8,7 @@ import {
   useCapabilityGuard,
 } from '@/features/auth'
 import { CAPABILITIES } from '@/lib/contracts'
+import { ReleaseChannelCombobox } from '@/features/release-channels'
 import {
   Badge,
   Button,
@@ -28,6 +29,7 @@ import {
 import { useModelDatabases } from '../hooks/use-database-models'
 import { useAllModelMigrations, useApplyAllMigrations } from '../hooks/use-model-migrations'
 import { OnFailureSelect } from './OnFailureSelect'
+import { sortVersionsAscending } from '../version-nav'
 import { CAPTURE_UNREVIEWED_CODE, describeCaptureRejection, splitCaptureVersions } from '../capture'
 import {
   blockingEnvironments,
@@ -50,6 +52,31 @@ interface ApplyMigrationsDialogProps {
 }
 
 type TargetMode = 'all' | 'selection'
+
+/**
+ * Hasta qué versión se aplica. Eje ORTOGONAL a los destinos (qué bases): los tres valores son
+ * excluyentes entre sí y solo viaja el que está elegido, así que el 422
+ * `release_channel.target_conflict` (versión y canal a la vez) no se puede provocar desde acá.
+ */
+type LimitMode = 'head' | 'version' | 'channel'
+
+const LIMIT_OPTIONS = [
+  {
+    value: 'head' as const,
+    label: 'Hasta la última',
+    hint: 'Aplica todas las versiones pendientes.',
+  },
+  {
+    value: 'version' as const,
+    label: 'Hasta una versión',
+    hint: 'Aplica hasta la que elijas, inclusive.',
+  },
+  {
+    value: 'channel' as const,
+    label: 'Hasta la versión de un canal',
+    hint: 'La que el canal sirve hoy para este blueprint.',
+  },
+]
 
 const TARGET_OPTIONS = [
   {
@@ -89,6 +116,9 @@ export function ApplyMigrationsDialog({
   const [environment, setEnvironment] = useState<EnvironmentOut | null>(null)
   const [result, setResult] = useState<ApplyAllResult | null>(null)
   const [wasDryRun, setWasDryRun] = useState(false)
+  const [limitMode, setLimitMode] = useState<LimitMode>('head')
+  const [limitVersion, setLimitVersion] = useState<string | null>(null)
+  const [limitChannelSlug, setLimitChannelSlug] = useState<string | null>(null)
 
   const applyAll = useApplyAllMigrations(modelId)
   // `apply-all` es `blueprints.apply`, también en dry-run: es el mismo endpoint.
@@ -102,6 +132,10 @@ export function ApplyMigrationsDialog({
   const databases = useModelDatabases(modelId, open)
   const environments = useSelectableEnvironments()
   const environmentMap = useEnvironmentMap()
+  // Del más reciente al más antiguo: lo habitual es acotar hacia abajo desde la punta.
+  const limitVersions = sortVersionsAscending(migrations.data?.items ?? [])
+    .reverse()
+    .map((item) => item.version)
 
   // Predicado COMPARTIDO con la ficha de la BD (`features/database-models/capture`). Vivía
   // duplicado y las dos copias divergieron en el borde de `reviewed === undefined`.
@@ -128,12 +162,18 @@ export function ApplyMigrationsDialog({
         force,
         dryRun,
         onFailure,
+        // Solo viaja el tope elegido: ocultar un control no impide que su valor viaje.
+        targetVersion: limitMode === 'version' ? (limitVersion ?? undefined) : undefined,
+        channel: limitMode === 'channel' ? (limitChannelSlug ?? undefined) : undefined,
       },
       { onSuccess: (data) => setResult(data) },
     )
   }
 
-  const nothingSelected = mode === 'selection' && targets.length === 0
+  const nothingSelected =
+    (mode === 'selection' && targets.length === 0) ||
+    (limitMode === 'version' && limitVersion === null) ||
+    (limitMode === 'channel' && limitChannelSlug === null)
 
   /**
    * Aviso derivado de los DESTINOS, no del control.
@@ -221,6 +261,38 @@ export function ApplyMigrationsDialog({
               </span>
             )}
             placeholder="Añadir BD…"
+          />
+        )}
+
+        <RadioCardGroup
+          title="Hasta qué versión"
+          options={LIMIT_OPTIONS}
+          value={limitMode}
+          onChange={setLimitMode}
+          columns={3}
+          name="apply-all-limit"
+        />
+
+        {limitMode === 'version' && (
+          <Combobox<string>
+            items={limitVersions}
+            value={limitVersion}
+            onChange={setLimitVersion}
+            itemToString={(version) => version}
+            itemToKey={(version) => version}
+            label="Versión tope"
+            placeholder="Elegí una versión"
+            isLoading={migrations.isLoading}
+            hint="Las bases que ya están por encima de esta versión no se tocan ni retroceden."
+          />
+        )}
+
+        {limitMode === 'channel' && (
+          <ReleaseChannelCombobox
+            value={limitChannelSlug}
+            onChange={setLimitChannelSlug}
+            enabled={open}
+            hint="La versión se resuelve en vivo al ejecutar. Si el canal no tiene versión, no se aplica nada: no cae a «la última». Las bases por encima de ella no retroceden."
           />
         )}
 
@@ -383,6 +455,19 @@ function ApplyResult({ result, wasDryRun }: { result: ApplyAllResult; wasDryRun:
         */}
         {result.matched_databases || result.total_databases} BD(s) procesada(s)
       </p>
+      {/*
+        El tope REAL del lote. Con un canal es lo único que fija qué significaba «stable» al correr:
+        el canal es un puntero que se mueve, y sin esto nadie sabría después hasta dónde se aplicó.
+      */}
+      {result.target_version && (
+        <p className="text-xs text-muted-foreground">
+          Tope del lote: <code>{result.target_version}</code>
+          {result.resolved_channel
+            ? ` (el canal ${result.resolved_channel.slug} servía esa versión)`
+            : ''}
+          . Las bases que ya estaban por encima no se tocaron.
+        </p>
+      )}
       {/*
         Tres cubos, no dos. Con 6 bloqueadas y 2 falladas, ocho filas rojas idénticas obligan a
         leer ocho frases para saber cuáles necesitan acción.

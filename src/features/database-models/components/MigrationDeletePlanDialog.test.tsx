@@ -31,6 +31,7 @@ function plan(overrides: Partial<MigrationDeletePlanOut> = {}): MigrationDeleteP
     blockers: [],
     unstampable: [],
     partial_applications: [],
+    channel_moves: [],
     requires_confirmation: false,
     confirm_token: null,
     expires_at: null,
@@ -45,6 +46,7 @@ function deleteResult(overrides: Partial<MigrationDeleteResult> = {}): Migration
     version: '0007',
     renumbered: [{ from_version: '0008', to_version: '0007' }],
     stamped: [],
+    channel_moves: [],
     ...overrides,
   }
 }
@@ -194,6 +196,41 @@ describe('MigrationDeletePlanDialog', () => {
 
     // Las dos juntas, con el token vivo: recién ahí.
     await user.clear(screen.getByLabelText(/Escribí el número de versión/))
+    await confirmar(user)
+    expect(borrar).toBeEnabled()
+  })
+
+  it('un plan SOLO con `channel_moves` lista los canales como cambio local y no dice que escribe en el motor', async () => {
+    const { user } = mount({
+      initialPlan: plan({
+        requires_confirmation: true,
+        confirm_token: 'tok-123',
+        expires_at: expiresIn(120_000),
+        channel_moves: [
+          {
+            release_channel_id: 1,
+            channel_slug: 'stable',
+            from_version: '0007',
+            to_version: '0006',
+          },
+          {
+            release_channel_id: 2,
+            channel_slug: 'development',
+            from_version: '0007',
+            to_version: null,
+          },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('stable')).toBeInTheDocument()
+    expect(screen.getByText('development')).toBeInTheDocument()
+    expect(screen.getByText('sin versión liberada')).toBeInTheDocument()
+    expect(screen.getByText(/local del gateway/)).toBeInTheDocument()
+    expect(screen.queryByText(/escribe en el motor/)).not.toBeInTheDocument()
+
+    const borrar = screen.getByRole('button', { name: /Eliminar 0007 y mover los canales/ })
+    expect(borrar).toBeDisabled()
     await confirmar(user)
     expect(borrar).toBeEnabled()
   })

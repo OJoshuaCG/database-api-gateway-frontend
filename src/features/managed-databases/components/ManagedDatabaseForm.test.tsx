@@ -10,7 +10,7 @@ import {
   pageOf,
 } from '@/test/fixtures/authz-catalog'
 import { ENVIRONMENTS_WRITE_UNBLOCK } from '@/features/environments'
-import { ManagedDatabaseForm } from './ManagedDatabaseForm'
+import { ManagedDatabaseForm, toManagedDatabaseCreate } from './ManagedDatabaseForm'
 
 const API = 'http://localhost/api/v1'
 
@@ -56,5 +56,47 @@ describe('ManagedDatabaseForm: reclasificar', () => {
     const combo = await screen.findByRole('combobox', { name: /entorno/i })
     expect(combo).toBeEnabled()
     expect(screen.queryByText(ENVIRONMENTS_WRITE_UNBLOCK)).not.toBeInTheDocument()
+  })
+})
+
+describe('toManagedDatabaseCreate: canal y versión son excluyentes', () => {
+  const base = {
+    name: 'appdb',
+    server_id: 1,
+    owner_id: 2,
+    model_id: 3,
+    initialState: 'vacia' as const,
+    targetVersion: '0007',
+    channelSlug: 'stable',
+    environment_id: 4,
+    charsetCollation: undefined,
+    notes: '',
+  }
+
+  it('con «canal» manda el canal y NO la versión, aunque haya una escrita', () => {
+    const body = toManagedDatabaseCreate({ ...base, initialState: 'canal' })
+    expect(body.channel).toBe('stable')
+    expect(body.target_version).toBeNull()
+    expect(body.apply_migrations).toBe(true)
+  })
+
+  it('con «versión» manda la versión y NO el canal, aunque haya uno elegido', () => {
+    const body = toManagedDatabaseCreate({ ...base, initialState: 'version' })
+    expect(body.target_version).toBe('0007')
+    expect('channel' in body).toBe(false)
+  })
+
+  it('con «última» o «vacía» no manda ninguno de los dos', () => {
+    for (const initialState of ['ultima', 'vacia'] as const) {
+      const body = toManagedDatabaseCreate({ ...base, initialState })
+      expect(body.target_version).toBeNull()
+      expect('channel' in body).toBe(false)
+    }
+  })
+
+  it('sin blueprint no manda canal', () => {
+    const body = toManagedDatabaseCreate({ ...base, model_id: null, initialState: 'canal' })
+    expect('channel' in body).toBe(false)
+    expect(body.apply_migrations).toBe(false)
   })
 })

@@ -205,6 +205,17 @@ export interface ApplyAllOptions {
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (§9; solo MySQL/MariaDB). */
   onFailure?: OnFailureMode
+  /**
+   * Tope de versión (inclusive) para TODO el lote. Una BD ya por encima no se toca ni retrocede.
+   * Excluyente con `channel`: mandar los dos es 422 `release_channel.target_conflict`.
+   */
+  targetVersion?: string
+  /**
+   * Slug de un canal: el tope es la versión que el canal sirve hoy para el blueprint, resuelta en
+   * vivo. Si no resuelve responde 409 `release_channel.*` y no se aplica nada: NO cae a «hasta la
+   * última». Excluyente con `targetVersion`.
+   */
+  channel?: string
 }
 
 /** `POST .../migrations/apply-all` 🔌 — aplica a todas las BDs del blueprint (rate limit 3/min). */
@@ -220,6 +231,8 @@ export function applyAllMigrations(
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
+      target_version: options.targetVersion,
+      channel: options.channel,
     },
   })
 }

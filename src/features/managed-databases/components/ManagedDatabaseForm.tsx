@@ -17,6 +17,7 @@ import { useServerOptions } from '@/features/servers/hooks/use-server-options'
 import { useServerUserOptions } from '@/features/server-users/hooks/use-server-user-options'
 import { useDatabaseModelOptions } from '@/features/database-models/hooks/use-database-model-options'
 import { ENVIRONMENTS_WRITE_UNBLOCK, useSelectableEnvironments } from '@/features/environments'
+import { ReleaseChannelCombobox } from '@/features/release-channels'
 import { CapabilityHint, useCapabilityGuard } from '@/features/auth'
 import {
   CharsetCollationSelector,
@@ -34,11 +35,15 @@ export interface ManagedDatabaseFormValues {
    * era un `Input` de texto libre y NO ejecutaba nada: escribía el inventario sin tocar el
    * motor, así que la base quedaba vacía diciendo estar migrada.
    *
-   * `'vacia'` no aplica nada. `'ultima'` y `'version'` sí ejecutan DDL en el motor.
+   * `'vacia'` no aplica nada. `'ultima'`, `'version'` y `'canal'` sí ejecutan DDL en el motor.
+   * Son un solo selector a propósito: versión y canal son excluyentes (el backend responde 422
+   * `release_channel.target_conflict`), y así el formulario no puede producir los dos.
    */
-  initialState: 'vacia' | 'ultima' | 'version'
+  initialState: 'vacia' | 'ultima' | 'version' | 'canal'
   /** Solo con `initialState === 'version'`. */
   targetVersion: string
+  /** Slug del canal. Solo con `initialState === 'canal'`; se resuelve en el servidor al crear. */
+  channelSlug?: string | null
   /** `null` = sin clasificar. En `create` es obligatorio; ver `buildSchema`. */
   environment_id: number | null
   charsetCollation: CharsetCollationValue | null | undefined
@@ -52,37 +57,54 @@ const DEFAULTS: ManagedDatabaseFormValues = {
   model_id: null,
   initialState: 'vacia',
   targetVersion: '',
+  channelSlug: null,
   environment_id: null,
   charsetCollation: undefined,
   notes: '',
 }
 
 function buildSchema(mode: 'create' | 'edit') {
-  return z.object({
-    name:
-      mode === 'create'
-        ? z.string().min(1, 'Requerido').regex(IDENTIFIER_PATTERN, 'Identificador inválido')
-        : z.string(),
-    server_id:
-      mode === 'create' ? z.number().int().min(1, 'Seleccioná un servidor') : z.number().int(),
-    owner_id:
-      mode === 'create' ? z.number().int().min(1, 'Seleccioná un propietario') : z.number().int(),
-    model_id: z.number().int().min(1).nullable(),
-    initialState: z.enum(['vacia', 'ultima', 'version']),
-    targetVersion: z.string(),
-    // REQUERIDO en el alta a propósito: sin `environment_id` el backend asigna el entorno ACTIVO más
-    // protegido (ya no `development`), y un campo vacío *significaría* eso — la misma mentira que se corrigió con
-    // `model_version`. Una elección explícita cuesta un click y elimina toda la clase de fallo
-    // "nadie notó que se fue por default". En `edit` es nullable porque `null` desclasifica.
-    environment_id:
-      mode === 'create'
-        ? z.number().int().min(1, 'Seleccioná un entorno')
-        : z.number().int().min(1).nullable(),
-    // Sin validación propia: el selector solo produce valores válidos del catálogo, y en modo
-    // `edit` ni se muestra ni se envía.
-    charsetCollation: z.custom<CharsetCollationValue | null | undefined>(),
-    notes: z.string(),
-  })
+  return (
+    z
+      .object({
+        name:
+          mode === 'create'
+            ? z.string().min(1, 'Requerido').regex(IDENTIFIER_PATTERN, 'Identificador inválido')
+            : z.string(),
+        server_id:
+          mode === 'create' ? z.number().int().min(1, 'Seleccioná un servidor') : z.number().int(),
+        owner_id:
+          mode === 'create'
+            ? z.number().int().min(1, 'Seleccioná un propietario')
+            : z.number().int(),
+        model_id: z.number().int().min(1).nullable(),
+        initialState: z.enum(['vacia', 'ultima', 'version', 'canal']),
+        targetVersion: z.string(),
+        channelSlug: z.string().nullish(),
+        // REQUERIDO en el alta a propósito: sin `environment_id` el backend asigna el entorno ACTIVO más
+        // protegido (ya no `development`), y un campo vacío *significaría* eso — la misma mentira que se corrigió con
+        // `model_version`. Una elección explícita cuesta un click y elimina toda la clase de fallo
+        // "nadie notó que se fue por default". En `edit` es nullable porque `null` desclasifica.
+        environment_id:
+          mode === 'create'
+            ? z.number().int().min(1, 'Seleccioná un entorno')
+            : z.number().int().min(1).nullable(),
+        // Sin validación propia: el selector solo produce valores válidos del catálogo, y en modo
+        // `edit` ni se muestra ni se envía.
+        charsetCollation: z.custom<CharsetCollationValue | null | undefined>(),
+        notes: z.string(),
+      })
+      // Con blueprint y la opción «canal», sin canal elegido el backend rechazaría el alta: se avisa
+      // junto al selector en vez de dejar que llegue un 422 genérico.
+      .refine(
+        (values) =>
+          mode !== 'create' ||
+          values.model_id == null ||
+          values.initialState !== 'canal' ||
+          Boolean(values.channelSlug),
+        { path: ['channelSlug'], message: 'Elegí un canal' },
+      )
+  )
 }
 
 export function toManagedDatabaseCreate(values: ManagedDatabaseFormValues): ManagedDatabaseCreate {
@@ -98,6 +120,10 @@ export function toManagedDatabaseCreate(values: ManagedDatabaseFormValues): Mana
       values.model_id != null && values.initialState === 'version' && values.targetVersion.trim()
         ? values.targetVersion.trim()
         : null,
+    // Solo viaja con «canal»: la exclusión con `target_version` se garantiza acá, no en la UI.
+    ...(values.model_id != null && values.initialState === 'canal' && values.channelSlug
+      ? { channel: values.channelSlug }
+      : {}),
     environment_id: values.environment_id as number,
     charset: values.charsetCollation ? values.charsetCollation.charset : null,
     collation: values.charsetCollation ? values.charsetCollation.collation : null,
@@ -355,7 +381,7 @@ export function ManagedDatabaseForm({
           control={control}
           name="initialState"
           render={({ field }) => (
-            <RadioCardGroup<'vacia' | 'ultima' | 'version'>
+            <RadioCardGroup<'vacia' | 'ultima' | 'version' | 'canal'>
               title="Estado inicial de la base"
               options={[
                 {
@@ -375,6 +401,12 @@ export function ManagedDatabaseForm({
                   hint: 'Ejecuta las migraciones hasta la versión que elijas, inclusive.',
                   disabled: !migrateGuard.allowed,
                 },
+                {
+                  value: 'canal',
+                  label: 'Migrada a la versión de un canal 🔌',
+                  hint: 'Ejecuta las migraciones hasta la versión que el canal sirva en el momento de crear la base.',
+                  disabled: !migrateGuard.allowed,
+                },
               ]}
               value={field.value}
               onChange={field.onChange}
@@ -392,6 +424,22 @@ export function ManagedDatabaseForm({
           hint="Cuatro a diez dígitos. Se aplican todas las pendientes hasta ésta, inclusive."
           error={errors.targetVersion?.message}
           {...register('targetVersion')}
+        />
+      )}
+
+      {mode === 'create' && watchedModelId != null && watchedInitialState === 'canal' && (
+        <Controller
+          control={control}
+          name="channelSlug"
+          render={({ field, fieldState }) => (
+            <ReleaseChannelCombobox
+              value={field.value ?? null}
+              onChange={field.onChange}
+              enabled
+              error={fieldState.error?.message}
+              hint="La versión se resuelve al crear. Si el canal no tiene versión para este blueprint, la base no se crea: no cae a «la última»."
+            />
+          )}
         />
       )}
 
