@@ -5,6 +5,7 @@ import {
   IDENTIFIER_PATTERN,
   provisionStatusSchema,
 } from './common'
+import { resolvedChannelSchema } from './release-channels'
 
 /**
  * Origen de una BD gestionada (Plan 09): `provisioned` la creó el gateway, `adopted` ya existía
@@ -41,6 +42,12 @@ export const managedDatabaseOutSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Solo en el alta con `channel`: la versión que el canal sirvió en ese momento. El canal es un
+   * puntero que se mueve, así que sin este dato nadie sabría después qué significaba `stable` al
+   * crear la base. Ausente = el alta no pidió canal.
+   */
+  resolved_channel: resolvedChannelSchema.nullish(),
   /**
    * Entorno que clasifica esta BD; `null` = sin clasificar (y por lo tanto SIN la protección
    * del guard de migraciones destructivas). Llega como id crudo: el nombre y el color se
@@ -122,6 +129,13 @@ export const managedDatabaseCreateSchema = z.object({
     .regex(/^\d{4,10}$/, 'Cuatro a diez dígitos, como 0007')
     .nullable()
     .optional(),
+  /**
+   * Slug de un canal de liberación: alternativa EXCLUYENTE a `target_version`. La base se crea en
+   * la versión que el canal sirve hoy para el blueprint, resuelta en vivo y sin caer a la última
+   * si no resuelve (409 `release_channel.*`). Exige `apply_migrations`. Mandar los dos a la vez es
+   * 422 `release_channel.target_conflict`; el formulario lo previene por construcción.
+   */
+  channel: z.string().min(1).max(60).nullable().optional(),
   /** Requerido en el alta a propósito: ver el comentario de `ManagedDatabaseUpdate`. */
   environment_id: z.number().int().min(1, 'Seleccioná un entorno'),
   charset: charsetField,

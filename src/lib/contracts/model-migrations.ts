@@ -5,6 +5,7 @@ import {
   MIGRATION_VERSION_PATTERN,
   migrationStatusSchema,
 } from './common'
+import { resolvedChannelSchema } from './release-channels'
 
 /**
  * Migraciones de blueprint (§8): deltas SQL versionados por blueprint. CRUD de inventario;
@@ -356,6 +357,16 @@ export const applyAllResultSchema = z.object({
    */
   matched_databases: z.number().int().optional().default(0),
   processed: z.number().int(),
+  /**
+   * Tope aplicado a TODO el lote (pedido, o resuelto desde el canal); `null` = hasta la última.
+   * Una BD ya por encima del tope no se toca: reporta cero pendientes, sin rollback.
+   */
+  target_version: z.string().nullish(),
+  /**
+   * Solo con `channel`: qué versión significaba el canal al empezar el lote. El canal es un
+   * puntero que se mueve, así que esto es lo único que fija qué se aplicó.
+   */
+  resolved_channel: resolvedChannelSchema.nullish(),
   results: z.array(applyAllItemSchema),
 })
 export type ApplyAllResult = z.infer<typeof applyAllResultSchema>
@@ -578,6 +589,24 @@ export type MigrationAffectedPartialApplication = z.infer<
 >
 
 /**
+ * Un canal de liberación cuyo puntero apunta a la versión que se borra y adónde se moverá
+ * (`channel_moves[]` del plan y del resultado del borrado).
+ *
+ * `to_version` es la versión REVISADA más cercana por debajo, o `null` si no hay ninguna: en ese
+ * caso el canal queda sin versión liberada. Es una operación LOCAL del gateway (mueve el puntero
+ * del canal): no escribe en ningún motor, y por eso va aparte de `stamp_plan`. Nunca bloquea el
+ * borrado, pero si hay alguno el DELETE exige `confirm_token`.
+ */
+export const migrationChannelMoveSchema = z.object({
+  release_channel_id: z.number().int(),
+  channel_slug: z.string(),
+  from_version: z.string(),
+  to_version: z.string().nullish(),
+  to_migration_id: z.number().int().nullish(),
+})
+export type MigrationChannelMove = z.infer<typeof migrationChannelMoveSchema>
+
+/**
  * `MigrationDeletePlanOut` (v18 §2) — previsualización de borrar una versión **intermedia**.
  *
  * Es un GET que no modifica nada, pero **abre conexión a cada BD del blueprint**: por eso su
@@ -605,6 +634,8 @@ export const migrationDeletePlanOutSchema = z.object({
   deletable: z.boolean(),
   renumber: z.array(migrationRenumberStepSchema).default([]),
   stamp_plan: z.array(migrationStampStepSchema).default([]),
+  /** Punteros de canal que se mueven con el borrado. `default([])`: un gateway anterior no lo manda. */
+  channel_moves: z.array(migrationChannelMoveSchema).default([]),
   blockers: z.array(blockingDatabaseSchema).default([]),
   unstampable: z.array(migrationUnstampableDatabaseSchema).default([]),
   partial_applications: z.array(migrationAffectedPartialApplicationSchema).default([]),
@@ -628,6 +659,8 @@ export const migrationDeleteResultSchema = z.object({
   version: z.string(),
   renumbered: z.array(migrationRenumberStepSchema).default([]),
   stamped: z.array(migrationStampStepSchema).default([]),
+  /** Punteros de canal que se movieron (quedan en el historial de cada canal). */
+  channel_moves: z.array(migrationChannelMoveSchema).default([]),
 })
 export type MigrationDeleteResult = z.infer<typeof migrationDeleteResultSchema>
 

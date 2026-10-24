@@ -275,7 +275,7 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>
 
 // ── El vocabulario de capacidades (§5) ─────────────────────────────────────────
 /**
- * Las 39 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
+ * Las 44 capacidades, para que la UI no use strings sueltos. La **autoridad sigue siendo el
  * catálogo del servidor** (`GET /authz/catalog`): esto es una comodidad de tipado y un punto único
  * donde corregir si el vocabulario cambia, no una segunda fuente de verdad.
  *
@@ -333,6 +333,11 @@ export const CAPABILITIES = {
   blueprintsRead: 'blueprints.read',
   blueprintsWrite: 'blueprints.write',
   blueprintsApply: 'blueprints.apply',
+  /**
+   * Mover el puntero de un canal de liberación (`stable`…): decide qué versión consumen las
+   * integraciones. Solo `owner`; sensible al otorgarse suelta (segundo aprobador).
+   */
+  blueprintsPromote: 'blueprints.promote',
   /** 🔓 */
   blueprintsCaptures: 'blueprints.captures',
 
@@ -375,6 +380,13 @@ export const CAPABILITIES = {
    * fallback a `access.admin`).
    */
   environmentsWrite: 'environments.write',
+
+  releaseChannelsRead: 'release_channels.read',
+  /**
+   * Solo `security_officer`: crear, editar y borrar canales de liberación. Mismo criterio que
+   * `environments.write`: sin nadie con `security_officer` esas escrituras quedan BLOQUEADAS.
+   */
+  releaseChannelsWrite: 'release_channels.write',
 
   /**
    * 🔓 — Leer FILAS de bases gestionadas mediante las tools parametrizadas del MCP. Es una de las

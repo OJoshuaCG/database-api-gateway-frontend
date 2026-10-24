@@ -152,6 +152,31 @@ export const queryKeys = {
     all: ['environments'] as const,
     list: (params: QueryParams) => ['environments', 'list', params] as const,
   },
+  /**
+   * Catálogo de canales de liberación. Todo el catálogo cuelga de `all`: crear, editar o borrar un
+   * canal invalida lista y futuros selectores con una sola llamada.
+   */
+  releaseChannels: {
+    all: ['release-channels'] as const,
+    list: (params: QueryParams) => ['release-channels', 'list', params] as const,
+  },
+  /**
+   * Punteros de canal de UN blueprint. Raíz propia y no bajo `['database-models']`: borrar una
+   * versión mueve punteros y esa mutación invalida listado e historial; ninguna mutación debe
+   * REFETCHEAR la lectura en vivo (`resolve`), que abre una conexión por base: solo se marca rancia.
+   */
+  blueprintChannels: {
+    list: (modelId: number) => ['blueprint-channels', modelId, 'list'] as const,
+    resolve: (modelId: number, slug: string) =>
+      ['blueprint-channels', modelId, 'resolve', slug] as const,
+    /** Prefijo de TODAS las lecturas en vivo del blueprint, para marcarlas rancias sin refetch. */
+    resolveAll: (modelId: number) => ['blueprint-channels', modelId, 'resolve'] as const,
+    history: (modelId: number, slug: string, params: QueryParams) =>
+      ['blueprint-channels', modelId, 'history', slug, params] as const,
+    historyForSlug: (modelId: number, slug: string) =>
+      ['blueprint-channels', modelId, 'history', slug] as const,
+    historyAll: (modelId: number) => ['blueprint-channels', modelId, 'history'] as const,
+  },
   charsetCollationOptions: {
     all: ['charset-collation-options'] as const,
     list: (params: QueryParams) => ['charset-collation-options', 'list', params] as const,
