@@ -210,6 +210,7 @@ sus elevaciones se aplican en el acto.
 | `access.not_assignable` · `access.self_modification_forbidden` · `access.self_approval_forbidden` · `access.last_admin_protected` | 409       | `gatewayUserErrorMessage`, `capabilityGrantErrorMessage`, `accessRequestErrorMessage`                                                                           |
 | `access.grant_*`, `access.request_*`                                                                                              | 404 · 409 | `capabilityGrantErrorMessage`, `accessRequestErrorMessage` y sus `*BlockedMessage`                                                                              |
 | `access.scope_has_grants`                                                                                                         | 409       | `scopeHasGrantsMessage` (`features/auth/messages.ts`)                                                                                                           |
+| `destructive_approval.*` (13 códigos) · `environment.destructive_blocked` | 403 · 404 · 409 · 410 · 422 | `destructiveApprovalMessage` / `destructiveBlockedMessage` (`features/destructive-approvals/messages.ts`); `access.self_approval_forbidden` usa `ApiError.selfApprovalRule` (`creator` / `last_editor`) para decir quién no puede aprobar |
 
 Los códigos de los contratos viven en `lib/contracts/auth.ts` (`AUTH_*_ERROR_CODES`,
 `ACCESS_FORBIDDEN_CODE`) y el contexto de cada error en `lib/api/errors.ts`.
@@ -252,6 +253,13 @@ Los códigos de los contratos viven en `lib/contracts/auth.ts` (`AUTH_*_ERROR_CO
   aprobador cubre el mismo riesgo (crear un «títere» `owner`).
 - **La siembra ya no es `owner` + `access_admin` + `security_officer`:** una cuenta con todo era el
   caso que la separación de deberes prohíbe. La ventana de arranque resuelve el arranque sin ella.
+- **Aprobar y ejecutar SQL destructivo son dos capacidades distintas, las dos solo de `owner`:**
+  `blueprints.approve_destructive` (aprueba una versión en una dirección, con step-up; revocar NO
+  lo pide) y `blueprints.apply_destructive` (ejecuta lo ya aprobado en un entorno protegido). Ninguna
+  la tiene un agente ni una integración. El botón «Aprobar» no se renderiza sin la primera, a
+  diferencia del resto de la SPA, que deshabilita con el motivo a la vista: la regla de cuatro ojos
+  ya impide que muchos aprueben sus propias versiones, y un botón que nunca va a funcionar solo
+  invita a pedir un acceso que quizá no corresponde. Ver `features/destructive-approvals`.
 - **La SPA deriva, no enumera:** capa 2, destructivas, sensibles y roles salen del catálogo, para
   que un cambio de política en el backend no exija desplegar el frontend.
 - **Guardas con destino fallan cerrado; sin datos del backend, abierto:** con `scope`, prometer un
