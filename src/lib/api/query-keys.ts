@@ -165,6 +165,16 @@ export const queryKeys = {
    * versión mueve punteros y esa mutación invalida listado e historial; ninguna mutación debe
    * REFETCHEAR la lectura en vivo (`resolve`), que abre una conexión por base: solo se marca rancia.
    */
+  /**
+   * Versiones destructivas de un blueprint con su estado de aprobación. `forDatabase` evalúa el
+   * estado PARA una base (cuenta también la aprobación por base); sin base solo cuentan las de
+   * alcance blueprint. `byModel` es el prefijo: aprobar o revocar invalida ambas variantes.
+   */
+  destructiveApprovals: {
+    byModel: (modelId: number) => ['destructive-approvals', modelId] as const,
+    versions: (modelId: number, managedDatabaseId: number | null) =>
+      ['destructive-approvals', modelId, 'versions', managedDatabaseId] as const,
+  },
   blueprintChannels: {
     list: (modelId: number) => ['blueprint-channels', modelId, 'list'] as const,
     resolve: (modelId: number, slug: string) =>

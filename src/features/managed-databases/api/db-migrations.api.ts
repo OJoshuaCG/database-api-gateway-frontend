@@ -32,6 +32,13 @@ export interface ApplyOptions {
   dryRun?: boolean
   /** Manejo del fallo a mitad de una migración multi-sentencia (solo MySQL/MariaDB). Default: `auto`. */
   onFailure?: OnFailureMode
+  /**
+   * Token del dry-run (TTL 300 s). Solo hace falta cuando el entorno bloquea lo destructivo y hay
+   * versiones destructivas aprobadas por ejecutar; sin él, 409 `confirmation_required`.
+   */
+  confirmToken?: string
+  /** Nombre de la base re-tipeado. Debe ser igual al `confirm_name_expected` del plan. */
+  confirmName?: string
 }
 
 /** `POST .../migrations/apply` 🔌 — aplica las pendientes (o hasta `version`); dry-run opcional (§9). */
@@ -45,15 +52,26 @@ export function applyMigrations(
       force: options.force,
       dry_run: options.dryRun,
       on_failure: options.onFailure,
+      confirm_token: options.confirmToken,
+      confirm_name: options.confirmName,
     },
   })
 }
 
 export interface RollbackOptions {
-  /** Versión ACTUAL (doble confirmación de operación destructiva). */
-  confirmVersion: string
+  /**
+   * Versión ACTUAL (doble confirmación de operación destructiva). Es opcional SOLO con `dryRun`:
+   * planificar no revierte nada, así que no hay nada que confirmar todavía.
+   */
+  confirmVersion?: string
   /** Destino: revierte secuencialmente hasta esta versión. Omitir = solo la última. */
   targetVersion?: string
+  /** Planifica sin revertir. Devuelve el plan destructivo y, si todo está aprobado, el token. */
+  dryRun?: boolean
+  /** Token del dry-run (TTL 300 s); ver `ApplyOptions.confirmToken`. */
+  confirmToken?: string
+  /** Nombre de la base re-tipeado; ver `ApplyOptions.confirmName`. */
+  confirmName?: string
 }
 
 /**
@@ -68,6 +86,9 @@ export function rollbackMigration(
     query: {
       confirm_version: options.confirmVersion,
       target_version: options.targetVersion,
+      dry_run: options.dryRun,
+      confirm_token: options.confirmToken,
+      confirm_name: options.confirmName,
     },
   })
 }

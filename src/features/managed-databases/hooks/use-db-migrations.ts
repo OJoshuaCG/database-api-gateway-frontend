@@ -23,6 +23,7 @@ import {
 import { getSelectResults, purgeSelectResults } from '../api/select-results.api'
 import { handleUncertainRun } from '../uncertain-run'
 import { notifyMutationError } from '@/features/auth'
+import { destructiveApprovalMessage } from '@/features/destructive-approvals/messages'
 
 export function useMigrationStatus(dbId: number, enabled: boolean) {
   return useQuery({
@@ -103,7 +104,13 @@ export function useApplyMigrations(dbId: number) {
       ) {
         return
       }
-      notifyMutationError(toast, error, 'No se pudieron aplicar las migraciones')
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudieron aplicar las migraciones',
+        destructiveApprovalMessage(apiError.code, apiError.selfApprovalRule) ?? undefined,
+      )
     },
   })
 }
@@ -114,6 +121,8 @@ export function useRollbackMigration(dbId: number) {
   return useMutation({
     mutationFn: (options: RollbackOptions) => rollbackMigration(dbId, options),
     onSuccess: (result) => {
+      // Un dry-run planifica y no revierte nada: ni se invalida ni se anuncia un rollback.
+      if (result.dry_run) return
       invalidateAfterRun(queryClient)
       if (result.failed || result.quarantined) {
         toast.error(
@@ -137,15 +146,22 @@ export function useRollbackMigration(dbId: number) {
         )
       }
     },
-    onError: (error) => {
+    onError: (error, options) => {
       if (
+        !options.dryRun &&
         handleUncertainRun(error, toast, 'Sin respuesta del rollback', () =>
           invalidateAfterRun(queryClient),
         )
       ) {
         return
       }
-      notifyMutationError(toast, error, 'No se pudo revertir la migración')
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo revertir la migración',
+        destructiveApprovalMessage(apiError.code, apiError.selfApprovalRule) ?? undefined,
+      )
     },
   })
 }

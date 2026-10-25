@@ -31,6 +31,8 @@ import {
   type MigrationSearchFilters,
 } from '../migration-search'
 import { notifyMutationError } from '@/features/auth'
+import { destructiveApprovalMessage } from '@/features/destructive-approvals/messages'
+import { toApiError } from '@/lib/api/errors'
 
 export function useModelMigrations(modelId: number, params: QueryParams, enabled = true) {
   return useQuery({
@@ -281,7 +283,13 @@ export function useApplyAllMigrations(modelId: number) {
       ) {
         return
       }
-      notifyMutationError(toast, error, 'No se pudo ejecutar la aplicación masiva')
+      const apiError = toApiError(error)
+      notifyMutationError(
+        toast,
+        error,
+        'No se pudo ejecutar la aplicación masiva',
+        destructiveApprovalMessage(apiError.code, apiError.selfApprovalRule) ?? undefined,
+      )
     },
   })
 }

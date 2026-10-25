@@ -216,6 +216,13 @@ export interface ApplyAllOptions {
    * última». Excluyente con `targetVersion`.
    */
   channel?: string
+  /**
+   * Token del dry-run del lote (TTL 300 s). Hace falta cuando algún destino vive en un entorno
+   * protegido con versiones destructivas aprobadas; sin él, 409 `confirmation_required`.
+   */
+  confirmToken?: string
+  /** Slug del ÚNICO entorno protegido del lote, re-tipeado (`destructive_confirmation.environment_slug`). */
+  confirmPhrase?: string
 }
 
 /** `POST .../migrations/apply-all` 🔌 — aplica a todas las BDs del blueprint (rate limit 3/min). */
@@ -233,6 +240,8 @@ export function applyAllMigrations(
       on_failure: options.onFailure,
       target_version: options.targetVersion,
       channel: options.channel,
+      confirm_token: options.confirmToken,
+      confirm_phrase: options.confirmPhrase,
     },
   })
 }

@@ -465,6 +465,11 @@ export class ApiError extends Error {
   /** Contexto del módulo de entornos; ver `extractEnvironmentContext`. */
   readonly environmentContext?: EnvironmentErrorContext
   /**
+   * `public_context.rule` del 409 `access.self_approval_forbidden`: `creator` o `last_editor`.
+   * Decide si el mensaje dice «la creó vos» o «editaste su SQL».
+   */
+  readonly selfApprovalRule?: string
+  /**
    * Contexto de los blueprints (v25 §6): el 409 del slug en uso y los cinco del renombrado.
    * Ver `extractDatabaseModelContext`.
    */
@@ -528,6 +533,7 @@ export class ApiError extends Error {
     apiTokenContext?: ApiTokenErrorContext
     gatewayUserContext?: GatewayUserErrorContext
     environmentContext?: EnvironmentErrorContext
+    selfApprovalRule?: string
     databaseModelContext?: DatabaseModelErrorContext
     collationContext?: CollationErrorContext
     guardContext?: GuardErrorContext
@@ -570,6 +576,7 @@ export class ApiError extends Error {
     this.apiTokenContext = args.apiTokenContext
     this.gatewayUserContext = args.gatewayUserContext
     this.environmentContext = args.environmentContext
+    this.selfApprovalRule = args.selfApprovalRule
     this.databaseModelContext = args.databaseModelContext
     this.collationContext = args.collationContext
     this.guardContext = args.guardContext
@@ -1250,6 +1257,10 @@ export interface EnvironmentErrorContext {
   environmentSlug?: string
   /** Versiones frenadas por política. */
   blockedVersions?: string[]
+  /** Versiones destructivas que sí tenían aprobación (`environment.destructive_blocked`). */
+  approvedVersions?: string[]
+  /** Sentido de la operación bloqueada: `up` (apply) o `down` (rollback). */
+  direction?: string
   /** BDs del lote que no pertenecen al entorno pedido (`...databases_outside_environment`). */
   databaseIdsOutside?: number[]
 }
@@ -1536,8 +1547,23 @@ function extractEnvironmentContext(
   return {
     environmentSlug: nonEmptyString(publicContext.environment_slug),
     blockedVersions: stringList(publicContext.blocked_versions),
+    approvedVersions: stringList(publicContext.approved_versions),
+    direction: nonEmptyString(publicContext.direction),
     databaseIdsOutside: ids?.length ? ids : undefined,
   }
+}
+
+/**
+ * Contexto de la regla de cuatro ojos: `rule` de `access.self_approval_forbidden` (`creator` o
+ * `last_editor`), para decir a quién le toca ceder. Los códigos `destructive_approval.*` no traen
+ * más contexto público que `code`, así que solo este 409 devuelve algo.
+ */
+function extractSelfApprovalRule(
+  code: string | undefined,
+  publicContext: unknown,
+): string | undefined {
+  if (code !== 'access.self_approval_forbidden' || !isRecord(publicContext)) return undefined
+  return nonEmptyString(publicContext.rule)
 }
 
 /** Una fila de `RenameSlugDatabase`, descartada entera si le falta algo obligatorio. */
@@ -1713,6 +1739,7 @@ export function normalizeApiError(status: number, body: unknown, requestId?: str
         apiTokenContext: extractApiTokenContext(code, d.public_context),
         gatewayUserContext: extractGatewayUserContext(code, d.public_context),
         environmentContext: extractEnvironmentContext(code, d.public_context),
+        selfApprovalRule: extractSelfApprovalRule(code, d.public_context),
         databaseModelContext: extractDatabaseModelContext(code, d.public_context),
         collationContext: extractCollationContext(code, d.public_context),
         guardContext: extractGuardContext(code, d.context, d.public_context),

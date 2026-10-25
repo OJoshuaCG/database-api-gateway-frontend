@@ -226,6 +226,32 @@ const CATALOG_RAW: z.input<typeof capabilityDescriptorSchema>[] = [
     global_capabilities: [],
   },
   {
+    id: 'blueprints.approve_destructive',
+    module: 'blueprints',
+    level: 'approve_destructive',
+    label: 'Aprobar una migración destructiva para entornos protegidos',
+    mutates: true,
+    discloses: false,
+    requires_step_up: true,
+    agent_allowed: false,
+    scope_axis: 'environment',
+    roles: ['owner'],
+    global_capabilities: [],
+  },
+  {
+    id: 'blueprints.apply_destructive',
+    module: 'blueprints',
+    level: 'apply_destructive',
+    label: 'Ejecutar una migración destructiva ya aprobada en un entorno protegido',
+    mutates: true,
+    discloses: false,
+    requires_step_up: true,
+    agent_allowed: false,
+    scope_axis: 'environment',
+    roles: ['owner'],
+    global_capabilities: [],
+  },
+  {
     id: 'blueprints.captures',
     module: 'blueprints',
     level: 'captures',
@@ -536,6 +562,7 @@ export const DESTRUCTIVE_CAPABILITY_IDS: readonly string[] = [
   'clones.execute',
   'collation.execute',
   'sql_console.execute',
+  'blueprints.apply_destructive',
 ]
 
 /**

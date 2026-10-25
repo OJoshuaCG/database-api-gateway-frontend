@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { migrationStatusSchema } from './common'
+import { destructivePlanSchema } from './destructive-approvals'
 
 /**
  * Migraciones sobre una BD gestionada (§9): aplica/revierte/consulta las migraciones del
@@ -174,6 +175,11 @@ export const migrationApplyOutSchema = z.object({
    * INFORMATIVO — el dry-run no falla, justamente para que se pueda ver qué frena el apply.
    */
   blocked_by: z.array(z.string()).optional().default([]),
+  /**
+   * Plan destructivo de esta base. Solo si el entorno bloquea lo destructivo y hay versiones
+   * destructivas pendientes; en un dry-run lleva el `confirm_token` cuando todo está aprobado.
+   */
+  destructive_plan: destructivePlanSchema.nullish(),
   current_version: z.string().nullable().optional(),
   pending_count: z.number().int().optional(),
   /**
@@ -226,6 +232,14 @@ export const migrationRollbackResultSchema = z.object({
   failed: z.boolean().optional().default(false),
   quarantined: z.boolean().optional().default(false),
   results: z.array(migrationRunItemSchema).optional().default([]),
+  /** `true` = solo planificó (el rollback ahora tiene dry-run); no revirtió nada. */
+  dry_run: z.boolean().optional().default(false),
+  /** Versiones que el rollback revertiría, de la más reciente a la más antigua. */
+  rollback_path_versions: z.array(z.string()).optional().default([]),
+  environment_slug: z.string().nullish(),
+  /** Versiones que el entorno bloquea por no estar aprobadas. */
+  blocked_by: z.array(z.string()).optional().default([]),
+  destructive_plan: destructivePlanSchema.nullish(),
   /** Ver `migrationApplyOutSchema` — idénticos en `rollback` (api-reference-v9 §3.3). */
   captured_select_count: z.number().int().optional().default(0),
   /** Versiones en las que ESTE rollback escribió capturas (para enlazar sin adivinar). */

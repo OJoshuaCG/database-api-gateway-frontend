@@ -16,6 +16,7 @@ import {
 import { CapabilityCallout, joinWithNi, useCapabilityGuard } from '@/features/auth'
 import { BlueprintProjectsSection } from '@/features/projects'
 import { BlueprintChannelsPanel } from '@/features/release-channels'
+import { DestructiveApprovalsPanel } from '@/features/destructive-approvals'
 import {
   CAPABILITIES,
   MIGRATION_ERROR_CODES,
@@ -70,7 +71,7 @@ import { versionAlerts } from '../version-alerts'
  * dos sí, porque `?tab=estado` ya se genera como deep-link desde `MigrationDeletePlanDialog`.
  * `buscar` y `canales` siguen la misma regla: se escriben, para poder enlazar a la pestaña.
  */
-type BlueprintTab = 'versiones' | 'estado' | 'contabilidad' | 'buscar' | 'canales'
+type BlueprintTab = 'versiones' | 'estado' | 'contabilidad' | 'buscar' | 'canales' | 'aprobaciones'
 
 export function BlueprintMigrationsPage() {
   const params = useParams()
@@ -92,7 +93,9 @@ export function BlueprintMigrationsPage() {
           ? 'buscar'
           : tabParam === 'canales'
             ? 'canales'
-            : 'versiones'
+            : tabParam === 'aprobaciones'
+              ? 'aprobaciones'
+              : 'versiones'
   const setTab = (next: BlueprintTab) =>
     setSearchParams((params) => {
       if (next === 'versiones') params.delete('tab')
@@ -449,6 +452,9 @@ export function BlueprintMigrationsPage() {
         <TabButton active={tab === 'canales'} onClick={() => setTab('canales')}>
           Canales
         </TabButton>
+        <TabButton active={tab === 'aprobaciones'} onClick={() => setTab('aprobaciones')}>
+          Aprobaciones
+        </TabButton>
         <TabButton active={tab === 'buscar'} onClick={() => setTab('buscar')}>
           Buscar en el SQL
         </TabButton>
@@ -489,6 +495,11 @@ export function BlueprintMigrationsPage() {
            concreta ni el estado de las bases. Recibe el catálogo completo que la página ya tiene
            en memoria para ofrecer las versiones promovibles sin una petición más. */
         <BlueprintChannelsPanel modelId={modelId} versions={catalogSorted} />
+      ) : tab === 'aprobaciones' ? (
+        /* Pestaña propia: aprobar vale para TODAS las bases protegidas del blueprint (alcance
+           `blueprint`, incluidas las futuras). La aprobación de UNA base se hace desde la ficha de
+           esa base, que usa el mismo panel con alcance `database`. */
+        <DestructiveApprovalsPanel modelId={modelId} modelName={model.data.name} />
       ) : tab === 'buscar' ? (
         /* El enlace del visor navega a `?version=` en esta MISMA ruta, y la página solo lee ese
            parámetro al montar: por eso además se selecciona a mano con `selectVersion`, que salta

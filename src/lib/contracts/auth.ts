@@ -338,6 +338,13 @@ export const CAPABILITIES = {
    * integraciones. Solo `owner`; sensible al otorgarse suelta (segundo aprobador).
    */
   blueprintsPromote: 'blueprints.promote',
+  /**
+   * Aprobar una migración destructiva para entornos protegidos (cuatro ojos). Solo `owner`, con
+   * step-up salvo REVOCAR. Un agente nunca la tiene.
+   */
+  blueprintsApproveDestructive: 'blueprints.approve_destructive',
+  /** Ejecutar una migración destructiva YA aprobada en un entorno protegido. Solo `owner`. */
+  blueprintsApplyDestructive: 'blueprints.apply_destructive',
   /** 🔓 */
   blueprintsCaptures: 'blueprints.captures',
 
@@ -454,6 +461,7 @@ export const DESTRUCTIVE_CAPABILITIES = [
   CAPABILITIES.clonesExecute,
   CAPABILITIES.collationExecute,
   CAPABILITIES.sqlConsoleExecute,
+  CAPABILITIES.blueprintsApplyDestructive,
 ] as const satisfies readonly Capability[]
 
 /**

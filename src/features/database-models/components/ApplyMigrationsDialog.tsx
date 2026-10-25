@@ -10,6 +10,12 @@ import {
 import { CAPABILITIES } from '@/lib/contracts'
 import { ReleaseChannelCombobox } from '@/features/release-channels'
 import {
+  DestructiveConfirmDialog,
+  destructiveApprovalMessage,
+  requiresNewDryRun,
+} from '@/features/destructive-approvals'
+import { toApiError } from '@/lib/api/errors'
+import {
   Badge,
   Button,
   Callout,
@@ -22,6 +28,7 @@ import {
 } from '@/components/ui'
 import {
   type ApplyAllResult,
+  type DestructiveConfirmation,
   type ModelDatabaseStatus,
   type OnFailureMode,
   type EnvironmentOut,
@@ -119,6 +126,7 @@ export function ApplyMigrationsDialog({
   const [limitMode, setLimitMode] = useState<LimitMode>('head')
   const [limitVersion, setLimitVersion] = useState<string | null>(null)
   const [limitChannelSlug, setLimitChannelSlug] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   const applyAll = useApplyAllMigrations(modelId)
   // `apply-all` es `blueprints.apply`, también en dry-run: es el mismo endpoint.
@@ -149,8 +157,10 @@ export function ApplyMigrationsDialog({
     onClose()
   }
 
-  const run = (dryRun: boolean) => {
+  const run = (dryRun: boolean, confirmation?: { token: string; phrase: string }) => {
     setWasDryRun(dryRun)
+    // Planificar de nuevo descarta el resultado anterior: su token (y su plan) ya no valen.
+    if (dryRun) setResult(null)
     applyAll.mutate(
       {
         // Las guardas van ACÁ y no en el JSX: ocultar un control no impide que su valor viaje.
@@ -165,10 +175,29 @@ export function ApplyMigrationsDialog({
         // Solo viaja el tope elegido: ocultar un control no impide que su valor viaje.
         targetVersion: limitMode === 'version' ? (limitVersion ?? undefined) : undefined,
         channel: limitMode === 'channel' ? (limitChannelSlug ?? undefined) : undefined,
+        // Solo en la ejecución confirmada: el token es del dry-run que la precede.
+        confirmToken: confirmation?.token,
+        confirmPhrase: confirmation?.phrase,
       },
-      { onSuccess: (data) => setResult(data) },
+      {
+        onSuccess: (data) => {
+          setConfirming(false)
+          setResult(data)
+        },
+        onError: () => setConfirming(false),
+      },
     )
   }
+
+  /**
+   * Rechazo del flujo de aprobación en la ÚLTIMA llamada (token vencido, falta de permiso, lote en
+   * dos entornos…). Se pinta acá y no solo en el toast: con el toast solo, quien tarda en leer
+   * queda sin saber que tiene que volver a planificar.
+   */
+  const rejection = applyAll.isError ? toApiError(applyAll.error) : null
+  const rejectionText = rejection
+    ? destructiveApprovalMessage(rejection.code, rejection.selfApprovalRule)
+    : null
 
   const nothingSelected =
     (mode === 'selection' && targets.length === 0) ||
@@ -421,9 +450,132 @@ export function ApplyMigrationsDialog({
           <CapabilityHint guard={applyGuard} className="basis-full" />
         </div>
 
+        {rejectionText && (
+          <Callout
+            tone="danger"
+            title={
+              requiresNewDryRun(rejection?.code)
+                ? 'Hay que volver a planificar'
+                : 'No se ejecutó el lote'
+            }
+          >
+            <p>{rejectionText}</p>
+          </Callout>
+        )}
+
+        {result && wasDryRun && result.destructive_confirmation && (
+          <DestructiveBatchPlan
+            confirmation={result.destructive_confirmation}
+            isBusy={applyAll.isPending}
+            onConfirm={() => setConfirming(true)}
+          />
+        )}
+
         {result && <ApplyResult result={result} wasDryRun={wasDryRun} />}
       </div>
+
+      {confirming && result?.destructive_confirmation?.environment_slug && (
+        <DestructiveConfirmDialog
+          title="Aplicar migraciones destructivas al lote"
+          description={`Se va a ejecutar SQL destructivo en las bases de «${result.destructive_confirmation.environment_slug}». No se puede deshacer.`}
+          confirmWord={result.destructive_confirmation.environment_slug}
+          confirmLabel="Aplicar el lote"
+          isLoading={applyAll.isPending}
+          onConfirm={() => {
+            const confirmation = result.destructive_confirmation
+            if (!confirmation?.confirm_token || !confirmation.environment_slug) return
+            run(false, { token: confirmation.confirm_token, phrase: confirmation.environment_slug })
+          }}
+          onClose={() => setConfirming(false)}
+        />
+      )}
     </Modal>
+  )
+}
+
+interface DestructiveBatchPlanProps {
+  confirmation: DestructiveConfirmation
+  isBusy: boolean
+  onConfirm: () => void
+}
+
+/**
+ * Qué falta para ejecutar un lote que toca entornos protegidos con SQL destructivo.
+ *
+ * El lote es TODO O NADA para las bases protegidas: si una sola tiene una versión sin aprobar, no
+ * se ejecuta ninguna. Y el token es UNO para el lote entero y se re-tipea el slug del entorno, no
+ * un nombre de base; por eso un lote que alcanza dos entornos protegidos no tiene token y hay que
+ * acotarlo a uno.
+ */
+function DestructiveBatchPlan({ confirmation, isBusy, onConfirm }: DestructiveBatchPlanProps) {
+  const multiEnvironment = confirmation.environment_slugs.length > 1
+  const hasUnapproved = !confirmation.all_approved
+  const canConfirm =
+    !multiEnvironment &&
+    !hasUnapproved &&
+    confirmation.executor_allowed &&
+    Boolean(confirmation.confirm_token) &&
+    Boolean(confirmation.environment_slug)
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-warning/50 bg-warning/5 p-3">
+      <p className="text-sm font-medium text-foreground">
+        Plan destructivo del lote
+        {confirmation.environment_slugs.length > 0 && (
+          <> · entorno(s): {confirmation.environment_slugs.join(', ')}</>
+        )}
+      </p>
+
+      {multiEnvironment && (
+        <Callout tone="warning" title="El lote alcanza más de un entorno protegido">
+          <p>
+            Un lote destructivo se confirma contra UN solo entorno. Elegí el entorno en el filtro
+            «Entorno (opcional)» y volvé a planificar.
+          </p>
+        </Callout>
+      )}
+
+      {hasUnapproved && (
+        <Callout tone="warning" title="Faltan aprobaciones: no se ejecuta ninguna base protegida">
+          <p>Estas bases tienen versiones destructivas sin aprobar:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {confirmation.unapproved_databases.map((database) => (
+              <li key={database.managed_database_id}>
+                <Link
+                  to={`/managed-databases/${database.managed_database_id}/migrations`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Base #{database.managed_database_id}
+                </Link>
+                : {database.versions.join(', ')}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1">
+            Una segunda persona las aprueba desde la pestaña «Aprobaciones» del blueprint (para
+            todas las bases) o desde la ficha de cada base.
+          </p>
+        </Callout>
+      )}
+
+      {!hasUnapproved && !confirmation.executor_allowed && (
+        <Callout tone="warning" title="No podés ejecutar este lote">
+          <p>
+            Está aprobado, pero ejecutarlo pide <code>blueprints.apply_destructive</code> en cada
+            base protegida y una sesión de persona. Pedile a un owner que lo ejecute.
+          </p>
+        </Callout>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="danger" size="sm" disabled={!canConfirm || isBusy} onClick={onConfirm}>
+          Aplicar con confirmación…
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          La confirmación vale 5 minutos desde que planificaste.
+        </span>
+      </div>
+    </div>
   )
 }
 

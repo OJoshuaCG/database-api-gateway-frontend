@@ -27,6 +27,9 @@ const SENSITIVE_POLICY = [
   'schema_diff.execute',
   'collation.execute',
   'engine_users.grant_admin',
+  // Cuatro ojos de las migraciones destructivas: aprobar y ejecutar son solo de owner.
+  'blueprints.approve_destructive',
+  'blueprints.apply_destructive',
 ]
 
 describe('needsSecondApprover', () => {

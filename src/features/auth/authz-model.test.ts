@@ -243,7 +243,7 @@ describe('capacidades por destino', () => {
 })
 
 describe('isDestructive', () => {
-  it('con la marca del catálogo decide la marca: son las siete del backend', () => {
+  it('con la marca del catálogo decide la marca: son las ocho del backend', () => {
     const ids = GRANTS_CATALOG_FIXTURE.filter(isDestructive).map((row) => row.id)
     expect([...ids].sort()).toEqual([...DESTRUCTIVE_CAPABILITY_IDS].sort())
     expect(ids).toContain('collation.execute')
@@ -332,6 +332,8 @@ describe('capacidades con capa 2 (derivadas del catálogo)', () => {
     'databases.drop',
     'blueprints.write',
     'blueprints.apply',
+    'blueprints.approve_destructive',
+    'blueprints.apply_destructive',
     'blueprints.captures',
     'schema_diff.execute',
     'clones.execute',
@@ -429,6 +431,8 @@ describe('capacidades puntuales (espejo de capability_resolution.py)', () => {
         'collation.execute',
         // Delegar privilegios es solo de owner (partición de `engine_users.write`).
         'engine_users.grant_admin',
+        'blueprints.approve_destructive',
+        'blueprints.apply_destructive',
       ].sort(),
     )
     // Elegir una contraseña trae la lectura de los usuarios del motor, y nada más.

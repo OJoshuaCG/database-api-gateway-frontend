@@ -122,6 +122,8 @@ describe('ownerOnlyCapabilityIds', () => {
     // WITH GRANT OPTION o privilegios sensibles en el motor es solo de owner.
     expect([...ids].sort()).toEqual([
       'blueprints.apply',
+      'blueprints.apply_destructive',
+      'blueprints.approve_destructive',
       'blueprints.captures',
       'clones.execute',
       'collation.execute',

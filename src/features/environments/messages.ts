@@ -15,7 +15,7 @@
  *    está `describeItemRejection`.
  */
 
-import { ACCESS_FORBIDDEN_CODE } from '@/lib/contracts'
+import { ACCESS_FORBIDDEN_CODE, DESTRUCTIVE_APPROVAL_ERROR_CODES } from '@/lib/contracts'
 
 /** Códigos que el backend emite para este módulo. */
 export const ENVIRONMENT_ERROR_CODES = [
@@ -80,8 +80,15 @@ export function classifyItem(item: { ok: boolean; error_code?: string | null }):
   if (item.ok) return 'ok'
   // `access.forbidden` por ítem = la capa 2 omitió esta base: no se intentó nada y no es un fallo.
   if (item.error_code === ACCESS_FORBIDDEN_CODE) return 'forbidden'
-  return item.error_code === 'environment.destructive_blocked' ? 'blocked' : 'failed'
+  // Faltar la confirmación o el permiso de ejecutar también es política funcionando, no un fallo.
+  return BLOCKED_ITEM_CODES.has(item.error_code ?? '') ? 'blocked' : 'failed'
 }
+
+const BLOCKED_ITEM_CODES: ReadonlySet<string> = new Set([
+  'environment.destructive_blocked',
+  DESTRUCTIVE_APPROVAL_ERROR_CODES.confirmationRequired,
+  DESTRUCTIVE_APPROVAL_ERROR_CODES.executorForbidden,
+])
 
 export const OUTCOME_LABEL: Record<ItemOutcome, string> = {
   ok: 'Aplicada',

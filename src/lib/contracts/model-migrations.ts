@@ -6,6 +6,7 @@ import {
   migrationStatusSchema,
 } from './common'
 import { resolvedChannelSchema } from './release-channels'
+import { destructiveConfirmationSchema, destructivePlanSchema } from './destructive-approvals'
 
 /**
  * Migraciones de blueprint (§8): deltas SQL versionados por blueprint. CRUD de inventario;
@@ -324,6 +325,8 @@ export const applyAllItemSchema = z.object({
    * real acompaña al rechazo. `default_factory=list` en el backend, nunca `null`.
    */
   blocked_by: z.array(z.string()).optional().default([]),
+  /** Plan destructivo de esta base. Sin token: el token es del lote entero. */
+  destructive_plan: destructivePlanSchema.nullish(),
   /**
    * Paridad con el apply por BD (api-reference-v11 §3). Sin estos campos, tras un apply
    * masivo no había forma de saber en qué BDs quedaron capturas ni cómo llegar a ellas.
@@ -368,6 +371,11 @@ export const applyAllResultSchema = z.object({
    */
   resolved_channel: resolvedChannelSchema.nullish(),
   results: z.array(applyAllItemSchema),
+  /**
+   * Confirmación del LOTE (un único token para todas las bases). Solo viene si algún destino vive
+   * en un entorno protegido con versiones destructivas pendientes.
+   */
+  destructive_confirmation: destructiveConfirmationSchema.nullish(),
 })
 export type ApplyAllResult = z.infer<typeof applyAllResultSchema>
 

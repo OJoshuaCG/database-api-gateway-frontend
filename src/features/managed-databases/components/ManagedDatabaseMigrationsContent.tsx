@@ -55,6 +55,13 @@ import { ManagedDatabaseFormModal } from './ManagedDatabaseFormModal'
 import { historyStatusSpec } from '../history-badges'
 import { MigrationHistoryPanel } from './MigrationHistoryPanel'
 import { ReconcilePartialSection } from './ReconcilePartialSection'
+import {
+  DatabaseDestructiveSection,
+  DestructiveApprovalsPanel,
+  destructiveApprovalMessage,
+  destructiveBlockedMessage,
+  scrollToApprovals,
+} from '@/features/destructive-approvals'
 
 /** Motivo único para los `title` de los controles que el backend rechazaría con 409. */
 const NOT_PROVISIONED_HINT =
@@ -158,7 +165,11 @@ export function ManagedDatabaseMigrationsContent({
   const [environmentGate, setEnvironmentGate] = useState<{
     slug: string | null
     versions: string[]
+    direction: string | null
   } | null>(null)
+  // Rechazo del flujo de aprobación (`destructive_approval.*`, p. ej. falta la confirmación). El
+  // mensaje sale del código, nunca del texto del servidor.
+  const [destructiveGateMsg, setDestructiveGateMsg] = useState<string | null>(null)
   // 409 de captura sin revisar / falta de consentimiento (api-reference-v9 §3.0), compartido por
   // apply y rollback: `public_context.unreviewed_capture` (contrato v13 §2).
   const [captureGate, setCaptureGate] = useState<{
@@ -460,13 +471,21 @@ export function ManagedDatabaseMigrationsContent({
    */
   const readEnvironmentGate409 = (
     err: unknown,
-  ): { slug: string | null; versions: string[] } | null => {
+  ): { slug: string | null; versions: string[]; direction: string | null } | null => {
     const apiError = toApiError(err)
     if (apiError.status !== 409 || apiError.code !== 'environment.destructive_blocked') return null
     return {
       slug: apiError.environmentContext?.environmentSlug ?? null,
       versions: apiError.environmentContext?.blockedVersions ?? [],
+      direction: apiError.environmentContext?.direction ?? null,
     }
+  }
+
+  /** Rechazos del flujo de aprobación que NO son `destructive_blocked` (que ya tiene su aviso). */
+  const readDestructiveApprovalGate = (err: unknown): string | null => {
+    const apiError = toApiError(err)
+    if (apiError.code === 'environment.destructive_blocked') return null
+    return destructiveApprovalMessage(apiError.code, apiError.selfApprovalRule)
   }
 
   /**
@@ -495,6 +514,7 @@ export function ManagedDatabaseMigrationsContent({
         onSuccess: (result) => {
           setBaselineGateMsg(null)
           setEnvironmentGate(null)
+          setDestructiveGateMsg(null)
           if (isDryRunResult(result)) {
             setPreview(result)
           } else {
@@ -507,6 +527,7 @@ export function ManagedDatabaseMigrationsContent({
           setBaselineGateMsg(isBaselineGate409(err))
           setCaptureGate(readCaptureGate409(err))
           setEnvironmentGate(readEnvironmentGate409(err))
+          setDestructiveGateMsg(readDestructiveApprovalGate(err))
         },
       },
     )
@@ -1146,14 +1167,29 @@ export function ManagedDatabaseMigrationsContent({
                         🔒 No se intentó: no se ejecutó ningún DDL.
                       </p>
                       <p className="mt-1 text-muted-foreground">
-                        El entorno <strong>{environmentGate.slug ?? 'de esta base'}</strong> bloquea
-                        las migraciones destructivas
-                        {environmentGate.versions.length > 0 && (
-                          <> y las versiones {environmentGate.versions.join(', ')} las contienen</>
-                        )}
-                        . Las salidas son reclasificar la base o separar las sentencias destructivas
-                        de esa versión.
+                        El entorno <strong>{environmentGate.slug ?? 'de esta base'}</strong>.{' '}
+                        {destructiveBlockedMessage(
+                          environmentGate.direction,
+                          environmentGate.versions,
+                        )}{' '}
+                        Aprobá las versiones en el panel de aprobaciones y ejecutá con «Planificar»;
+                        <code>force</code> no lo habilita.{' '}
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={scrollToApprovals}
+                        >
+                          Ir a las aprobaciones →
+                        </button>
                       </p>
+                    </div>
+                  )}
+                  {destructiveGateMsg && (
+                    <div className="rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm">
+                      <p className="font-medium text-foreground">
+                        🔒 No se intentó: no se ejecutó ningún DDL.
+                      </p>
+                      <p className="mt-1 text-muted-foreground">{destructiveGateMsg}</p>
                     </div>
                   )}
                   {baselineGateMsg && (
@@ -1503,6 +1539,33 @@ export function ManagedDatabaseMigrationsContent({
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Camino con confirmación para entornos que bloquean lo destructivo, y el
+                      panel donde se aprueba para ESTA base. Van después del rollback porque son
+                      lo que se abre al toparse con su 409; no reemplazan a los botones de arriba. */}
+                  <DatabaseDestructiveSection
+                    databaseId={databaseId}
+                    serverId={database.server_id}
+                    environmentId={database.environment_id ?? null}
+                    currentVersion={currentVersion}
+                    rollbackTarget={rollbackTarget}
+                    blockedReason={
+                      notProvisioned
+                        ? NOT_PROVISIONED_HINT
+                        : hasOrphanAccounting
+                          ? ORPHAN_BLOCK_REASON
+                          : null
+                    }
+                  />
+                  <DestructiveApprovalsPanel
+                    modelId={modelId}
+                    database={{
+                      id: database.id,
+                      name: database.name,
+                      serverId: database.server_id,
+                      environmentId: database.environment_id ?? null,
+                    }}
+                  />
                 </>
               )}
             </div>
